@@ -1,0 +1,12 @@
+[명령어: 이 작업은 `admin_web/` 디렉토리를 생성한 뒤 수행하세요. 사전에 `00_master_prompt.md`의 규칙을 숙지했다고 가정합니다.]
+
+당신의 임무는 React (Vite) 기반의 관리자 웹 프론트엔드를 구축하는 것입니다.
+
+## [실행 단계 - Step by Step]
+1. **초기화**: `stock_app/` 루트에서 `npm create vite@latest admin_web -- --template react-ts` 명령어로 프로젝트를 생성하세요.
+2. **라이브러리 셋업**: `cd admin_web` 후, `TailwindCSS`, `Tremor` (대시보드 UI용), `TipTap` (에디터용), `echarts-for-react`, `zustand`, `@tanstack/react-query`를 설치하세요.
+3. **레이아웃 및 상태 관리**: `zustand`를 사용하여 전역 상태(로그인 여부, 사이드바 토글)를 관리하는 스토어를 구성하고 좌측 사이드바(회원관리, 블로그 관리, 통계) 레이아웃을 작성하세요.
+4. **블로그 에디터 구현**: '블로그 관리' 페이지에서 `TipTap` 위지윅 에디터를 구현하세요.
+5. **[핵심] 차트 스냅샷 기능**: 에디터에 '차트 삽입' 버튼을 만드세요. 임의의 종목 모의 데이터를 `echarts-for-react`로 띄운 뒤, `echartsInstance.getDataURL()` API를 호출하여 Base64 이미지로 변환하고, 이를 TipTap 본문에 `<img>` 태그로 삽입하는 로직을 구현하세요.
+6. **API 연동**: `react-query`를 사용하여 작성된 블로그 데이터를 백엔드 `/api/v1/admin/blogs` 로 POST 전송하는 코드를 작성하세요.
+7. **검증**: `npm run dev` 실행 후 터미널 에러가 없는지 자가 점검하세요.

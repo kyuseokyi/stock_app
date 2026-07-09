@@ -1,0 +1,36 @@
+# =============================================================================
+# Stock App Backend - Python Dependencies
+# 참고: 이 프로젝트는 `uv`(pyproject.toml + uv.lock)를 정본으로 관리합니다.
+#       이 파일은 기획서에 명시된 필수 라이브러리의 가독성 있는 목록(참고용)입니다.
+#       설치 시:  uv sync   (권장)   또는   pip install -r requirements.txt
+# =============================================================================
+
+# --- API Server (FastAPI) ---
+fastapi
+uvicorn[standard]
+pydantic
+pydantic-settings
+
+# --- Database / ORM (PostgreSQL) ---
+sqlalchemy
+asyncpg              # 비동기 드라이버 (API 서버용)
+psycopg2-binary      # 동기 드라이버 (Alembic 마이그레이션용)
+alembic
+
+# --- Time-series (ClickHouse) ---
+clickhouse-connect
+
+# --- Worker / Task Queue (Celery + Redis) ---
+celery
+redis
+
+# --- Data Pipeline (지표 연산) ---
+pandas
+pandas-ta            # MA, Bollinger Bands, RSI 등 보조지표 계산
+
+# --- Auth / External API (소셜 로그인, KIS API 통신) ---
+httpx                # 토큰 검증 및 한국투자증권 API 호출
+pyjwt                # 자체 JWT Access/Refresh 토큰 발급
+
+# --- Utils ---
+python-dotenv        # .env.development / .env.production 로딩

@@ -1,0 +1,32 @@
+# ===== Python (backend) =====
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+wheels/
+.venv/
+venv/
+
+# ===== Node (mobile / admin_web / web_client) =====
+node_modules/
+.expo/
+dist/
+build/
+*.log
+
+# ===== Env / Secrets =====
+.env
+.env.*
+!.env.example
+
+# ===== OS / Editor =====
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# ===== Docker / DB volumes (로컬 데이터) =====
+pg_data/
+clickhouse_data/
+redis_data/
