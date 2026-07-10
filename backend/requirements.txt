@@ -25,7 +25,7 @@ celery
 redis
 
 # --- Data Pipeline (지표 연산) ---
-pandas
+pandas>=2.3.2,<3.0   # pandas-ta 호환을 위해 3.x 미만으로 고정 (numba→numpy<2.3 제약)
 pandas-ta            # MA, Bollinger Bands, RSI 등 보조지표 계산
 
 # --- Auth / External API (소셜 로그인, KIS API 통신) ---
