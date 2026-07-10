@@ -13,10 +13,13 @@
 
 ```text
 stock_app/
-├── backend/               # FastAPI 및 Celery 통합 코드베이스
-│   ├── api/               # REST API 라우터
-│   ├── worker/            # Celery Task (수집, 알림 등)
-│   └── shared/            # DB 모델 및 설정 공유
+├── backend/               # FastAPI 및 Celery 백엔드 워크스페이스
+│   ├── apps/              # 용도별 독립 배포가 가능한 마이크로서비스(앱) 모음
+│   │   ├── auth/          # 인증 서버 (Users, OAuth, JWT 발급)
+│   │   ├── blog/          # 블로그/커뮤니티 서버 (게시판, 댓글)
+│   │   ├── stock_api/     # 주식 API 서버 (스크리너 조회, 차트 데이터 전송)
+│   │   └── collector/     # 데이터 수집 워커 서버 (시세/재무 수집, 알림 발송 - Celery)
+│   └── shared/            # 공통 DB 모델(SQLAlchemy), 유틸리티, 설정 공유
 ├── mobile/                # React Native (Expo) - 모바일 앱
 ├── web_client/            # React (Vite) - 일반 유저용 웹 서비스
 ├── admin_web/             # React (Vite) - 사내 관리자용 어드민
@@ -45,19 +48,26 @@ stock_app/
 
 ---
 
-## 📡 3. 백엔드 역할 분리 설계 (API vs Worker)
+## 📡 3. 백엔드 용도별 독립 배포 설계 (MSA 지향형 모듈러 모노리스)
+클라우드 환경에서 각 기능의 부하(트래픽)에 따라 서버를 개별적으로 스케일아웃(확장)하고 배포할 수 있도록 도메인(용도)별로 서버를 분리합니다. 하나의 코드베이스(`backend/`)를 공유하지만, Docker 배포 시에는 완전히 별개의 컨테이너로 독립 실행됩니다.
 
-### 🟢 API Server (FastAPI)
-**역할**: 오직 클라이언트(모바일/웹)의 HTTP 요청을 받고 응답하는 가벼운 작업만 수행합니다. (빠른 응답 속도 보장)
-*   `/api/v1/auth/*`: 로그인 및 JWT 발급
-*   `/api/v1/stocks/*`: ClickHouse에서 스크리너 결과 및 차트 데이터 조회
-*   `/api/v1/boards/*`: 동적 게시판(메뉴) 목록 조회 및 생성/수정/삭제
-*   `/api/v1/blogs/*`: 특정 `board_id`에 속하는 블로그 게시글 조회 및 저장
-*   `/api/v1/admin/push/*`: 푸시 알림 템플릿 CRUD 및 수동 발송(Trigger) API
+### 🟢 1. 주식 API 서버 (Stock API Server)
+**역할**: 가장 트래픽이 많고 빠른 속도가 요구되는 조회 전용 서버. ClickHouse와 주로 통신합니다.
+*   `/api/v1/stocks/*`: 스크리너 검색 결과, 실시간 호가, 차트 데이터 조회.
 
-### 🟡 Worker Server (Celery + Redis Broker)
-**역할**: 시간이 오래 걸리는 무거운 작업(Heavy I/O & CPU Bound)을 백그라운드에서 비동기로 전담합니다.
+### 🟢 2. 커뮤니티 및 블로그 서버 (Blog & Board Server)
+**역할**: 사용자가 직접 글을 쓰고 읽는 커뮤니티 전담 서버. PostgreSQL과 통신합니다.
+*   `/api/v1/boards/*`: 동적 게시판(메뉴) 목록 관리.
+*   `/api/v1/blogs/*`: 블로그 게시글 CRUD 및 댓글 관리.
+
+### 🟢 3. 인증 서버 (Auth Server)
+**역할**: 소셜 로그인, JWT 토큰 발급 및 검증, 권한 관리 전담.
+*   `/api/v1/auth/*`: 토큰 발급, 갱신, 로그아웃.
+
+### 🟡 4. 데이터 수집 및 워커 서버 (Collector & Worker Server)
+**역할**: 클라이언트의 요청을 받지 않고, 백그라운드에서 무거운 연산과 데이터 수집만 전담합니다. (FastAPI가 아닌 Celery 기반 구동)
 1.  **시세 및 재무 데이터 수집 (Data Pipeline)**: 
+
     *   `celery-beat`를 통해 매일 정해진 시간에 수집 Task 트리거.
     *   한국투자증권 OpenAPI를 통해 일봉 시세 및 재무 데이터(PER, PBR, ROE 등)를 수집합니다. (유지보수성을 위해 `mojito2`, `pykis` 등 기존 오픈소스 라이브러리와 공식 문서를 참조하여, 파이썬 `requests`와 `websockets`를 기반으로 **자체 커스텀 API 클라이언트를 직접 구현**합니다.)
     *   `pandas-ta`로 보조지표 연산 후 ClickHouse에 Bulk Insert.
