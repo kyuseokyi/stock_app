@@ -59,7 +59,7 @@ stock_app/
 **역할**: 시간이 오래 걸리는 무거운 작업(Heavy I/O & CPU Bound)을 백그라운드에서 비동기로 전담합니다.
 1.  **시세 및 재무 데이터 수집 (Data Pipeline)**: 
     *   `celery-beat`를 통해 매일 정해진 시간에 수집 Task 트리거.
-    *   한국투자증권 API(또는 OpenDart) 호출 후 일봉 시세 및 재무 데이터(PER, PBR, ROE 등) 수집.
+    *   한국투자증권 OpenAPI를 통해 일봉 시세 및 재무 데이터(PER, PBR, ROE 등)를 수집합니다. (유지보수성을 위해 `mojito2`, `pykis` 등 기존 오픈소스 라이브러리와 공식 문서를 참조하여, 파이썬 `requests`와 `websockets`를 기반으로 **자체 커스텀 API 클라이언트를 직접 구현**합니다.)
     *   `pandas-ta`로 보조지표 연산 후 ClickHouse에 Bulk Insert.
 2.  **푸시 알림 (Push Notifications)**:
     *   **자동 발송**: API 서버에서 새 글 등록 시 Celery로 발송 Task 위임.
