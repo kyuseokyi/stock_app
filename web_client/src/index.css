@@ -1,0 +1,33 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  @apply bg-slate-50 text-slate-800 antialiased;
+}
+
+/* 게시글 본문(관리자 HTML) 기본 서식 */
+.post-content h2 {
+  @apply mb-2 mt-5 text-xl font-bold text-slate-900;
+}
+.post-content h3 {
+  @apply mb-2 mt-4 text-lg font-semibold text-slate-900;
+}
+.post-content p {
+  @apply my-3 leading-relaxed;
+}
+.post-content ul {
+  @apply my-3 list-disc pl-6;
+}
+.post-content ol {
+  @apply my-3 list-decimal pl-6;
+}
+.post-content blockquote {
+  @apply my-3 border-l-4 border-slate-300 pl-4 text-slate-600;
+}
+.post-content a {
+  @apply text-indigo-600 underline;
+}
+.post-content img {
+  @apply my-4 max-w-full rounded-lg;
+}

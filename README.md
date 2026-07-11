@@ -14,6 +14,7 @@ backend/
 ├── shared/          # 공통 DB 모델·세션·JWT 검증·보안
 └── alembic/         # DB 마이그레이션
 admin_web/           # 관리자 웹 (React + Vite + TailwindCSS)             (포트 5173)
+web_client/          # 일반 유저 웹 (React + Vite + Tailwind + Zustand)   (포트 3000)
 docs/                # 아키텍처·기획·프롬프트 문서
 docker-compose.dev.yml
 ```
@@ -53,6 +54,15 @@ cd admin_web
 npm install
 npm run dev        # http://localhost:5173
 ```
+
+### 4. 일반 유저 웹 (web_client)
+일반 사용자(B2C)용 반응형 웹. 블로그/커뮤니티 조회 + SSE 실시간 알림(현재 댓글은 읽기 전용).
+```bash
+cd web_client
+npm install
+npm run dev        # http://localhost:3000
+```
+> blog 서비스(8000)만 있으면 조회가 동작합니다. (`VITE_API_BASE_URL` 로 API 주소 오버라이드)
 
 ## ⚙️ 주요 환경변수
 
