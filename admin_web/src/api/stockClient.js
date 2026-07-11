@@ -19,8 +19,18 @@ const SEARCH_STOCKS = gql`
 `
 
 const GET_CHART_DATA = gql`
-  query GetChartData($symbol: String!, $startDate: String!, $endDate: String!) {
-    getChartData(symbol: $symbol, startDate: $startDate, endDate: $endDate) {
+  query GetChartData(
+    $symbol: String!
+    $startDate: String!
+    $endDate: String!
+    $bbStdDev: Float
+  ) {
+    getChartData(
+      symbol: $symbol
+      startDate: $startDate
+      endDate: $endDate
+      bbStdDev: $bbStdDev
+    ) {
       symbol
       name
       market
@@ -35,6 +45,21 @@ const GET_CHART_DATA = gql`
       }
       ma5
       ma20
+      ma50
+      ma120
+      maOrder
+      bollinger {
+        period
+        stdDev
+        mid
+        upper
+        lower
+      }
+      volumeProfile {
+        priceLow
+        priceHigh
+        volume
+      }
     }
   }
 `
@@ -44,7 +69,12 @@ export async function searchStocks(query) {
   return data.searchStocks
 }
 
-export async function getChartData(symbol, startDate, endDate) {
-  const data = await client.request(GET_CHART_DATA, { symbol, startDate, endDate })
+export async function getChartData(symbol, startDate, endDate, bbStdDev = 2.0) {
+  const data = await client.request(GET_CHART_DATA, {
+    symbol,
+    startDate,
+    endDate,
+    bbStdDev,
+  })
   return data.getChartData
 }

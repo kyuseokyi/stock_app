@@ -19,9 +19,43 @@ const MARKET_BADGE = {
   INDEX: 'bg-emerald-50 text-emerald-600',
 }
 
+const MA_ORDER_BADGE = {
+  PERFECT: { label: '정배열', cls: 'bg-red-50 text-red-600' },
+  REVERSE: { label: '역배열', cls: 'bg-blue-50 text-blue-600' },
+  MIXED: { label: '혼조', cls: 'bg-slate-100 text-slate-500' },
+}
+
+// 매물대(Volume Profile): 우측에 가격대별 누적 거래량을 반투명 가로막대로 렌더
+function volumeProfileSeries(vp) {
+  const maxVol = Math.max(1, ...vp.map((b) => b.volume))
+  return {
+    name: '매물대',
+    type: 'custom',
+    z: 1,
+    silent: true,
+    data: vp.map((b) => b.volume),
+    renderItem: (params, api) => {
+      const bin = vp[params.dataIndex]
+      const yHigh = api.coord([0, bin.priceHigh])[1]
+      const yLow = api.coord([0, bin.priceLow])[1]
+      const cs = params.coordSys
+      const rightEdge = cs.x + cs.width
+      const w = (bin.volume / maxVol) * (cs.width * 0.28)
+      const top = Math.min(yHigh, yLow)
+      const h = Math.max(1, Math.abs(yLow - yHigh) - 1)
+      return {
+        type: 'rect',
+        shape: { x: rightEdge - w, y: top, width: w, height: h },
+        style: { fill: 'rgba(100,116,139,0.28)' },
+      }
+    },
+  }
+}
+
 function buildOption(chart) {
   const dates = chart.candles.map((c) => c.date.slice(5)) // MM-DD
   const candles = chart.candles.map((c) => [c.open, c.close, c.low, c.high])
+  const bb = chart.bollinger
   return {
     animation: false,
     grid: { left: 55, right: 20, top: 45, bottom: 30 },
@@ -31,7 +65,12 @@ function buildOption(chart) {
       textStyle: { fontSize: 14 },
     },
     tooltip: { trigger: 'axis', axisPointer: { type: 'cross' } },
-    legend: { data: ['캔들', 'MA5', 'MA20'], top: 22, right: 10 },
+    legend: {
+      data: ['캔들', 'MA5', 'MA20', 'MA50', 'MA120', 'BB상단', 'BB하단', '매물대'],
+      top: 22,
+      right: 10,
+      type: 'scroll',
+    },
     xAxis: {
       type: 'category',
       data: dates,
@@ -40,6 +79,7 @@ function buildOption(chart) {
     },
     yAxis: { scale: true, splitLine: { lineStyle: { color: '#f1f5f9' } } },
     series: [
+      volumeProfileSeries(chart.volumeProfile),
       {
         name: '캔들',
         type: 'candlestick',
@@ -51,21 +91,31 @@ function buildOption(chart) {
           borderColor0: '#3b82f6',
         },
       },
+      { name: 'MA5', type: 'line', data: chart.ma5, smooth: true, showSymbol: false, lineStyle: { width: 1, color: '#f59e0b' } },
+      { name: 'MA20', type: 'line', data: chart.ma20, smooth: true, showSymbol: false, lineStyle: { width: 1, color: '#8b5cf6' } },
+      { name: 'MA50', type: 'line', data: chart.ma50, smooth: true, showSymbol: false, lineStyle: { width: 1, color: '#10b981' } },
+      { name: 'MA120', type: 'line', data: chart.ma120, smooth: true, showSymbol: false, lineStyle: { width: 1, color: '#64748b' } },
       {
-        name: 'MA5',
+        name: 'BB상단',
         type: 'line',
-        data: chart.ma5,
-        smooth: true,
+        data: bb?.upper ?? [],
         showSymbol: false,
-        lineStyle: { width: 1, color: '#f59e0b' },
+        lineStyle: { width: 1, type: 'dashed', color: '#0ea5e9' },
       },
       {
-        name: 'MA20',
+        name: 'BB중심',
         type: 'line',
-        data: chart.ma20,
-        smooth: true,
+        data: bb?.mid ?? [],
         showSymbol: false,
-        lineStyle: { width: 1, color: '#8b5cf6' },
+        lineStyle: { width: 1, type: 'dotted', color: '#0ea5e9', opacity: 0.6 },
+      },
+      {
+        name: 'BB하단',
+        type: 'line',
+        data: bb?.lower ?? [],
+        showSymbol: false,
+        lineStyle: { width: 1, type: 'dashed', color: '#0ea5e9' },
+        areaStyle: undefined,
       },
     ],
   }
@@ -77,6 +127,7 @@ export default function ChartSnapshotModal({ open, onClose, onInsert }) {
   const [results, setResults] = useState([])
   const [selected, setSelected] = useState(null)
   const [range, setRange] = useState(defaultRange)
+  const [bbStdDev, setBbStdDev] = useState(2.0)
   const [chart, setChart] = useState(null)
   const [searching, setSearching] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -98,11 +149,11 @@ export default function ChartSnapshotModal({ open, onClose, onInsert }) {
     return () => clearTimeout(t)
   }, [query])
 
-  const loadChart = async (stock, r) => {
+  const loadChart = async (stock, r, std) => {
     setLoading(true)
     setError('')
     try {
-      const data = await getChartData(stock.symbol, r.start, r.end)
+      const data = await getChartData(stock.symbol, r.start, r.end, std)
       if (!data || data.candles.length === 0) {
         setChart(null)
         setError('해당 기간의 데이터가 없습니다.')
@@ -120,13 +171,18 @@ export default function ChartSnapshotModal({ open, onClose, onInsert }) {
     setSelected(stock)
     setResults([])
     setQuery(stock.name)
-    loadChart(stock, range)
+    loadChart(stock, range, bbStdDev)
   }
 
   const handleRangeChange = (field, val) => {
     const next = { ...range, [field]: val }
     setRange(next)
-    if (selected) loadChart(selected, next)
+    if (selected) loadChart(selected, next, bbStdDev)
+  }
+
+  const handleBbChange = (val) => {
+    setBbStdDev(val)
+    if (selected) loadChart(selected, range, val)
   }
 
   const option = useMemo(() => (chart ? buildOption(chart) : null), [chart])
@@ -190,22 +246,49 @@ export default function ChartSnapshotModal({ open, onClose, onInsert }) {
           )}
         </div>
 
-        {/* 기간 */}
-        <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
-          <label className="text-slate-500">기간</label>
-          <input
-            type="date"
-            value={range.start}
-            onChange={(e) => handleRangeChange('start', e.target.value)}
-            className="rounded-lg border border-slate-300 px-2 py-1"
-          />
-          <span className="text-slate-400">~</span>
-          <input
-            type="date"
-            value={range.end}
-            onChange={(e) => handleRangeChange('end', e.target.value)}
-            className="rounded-lg border border-slate-300 px-2 py-1"
-          />
+        {/* 기간 + 볼린저 편차 + 정배열/역배열 */}
+        <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
+          <div className="flex items-center gap-2">
+            <label className="text-slate-500">기간</label>
+            <input
+              type="date"
+              value={range.start}
+              onChange={(e) => handleRangeChange('start', e.target.value)}
+              className="rounded-lg border border-slate-300 px-2 py-1"
+            />
+            <span className="text-slate-400">~</span>
+            <input
+              type="date"
+              value={range.end}
+              onChange={(e) => handleRangeChange('end', e.target.value)}
+              className="rounded-lg border border-slate-300 px-2 py-1"
+            />
+          </div>
+
+          <div className="flex items-center gap-2">
+            <label className="text-slate-500">볼린저 σ</label>
+            <input
+              type="range"
+              min="1"
+              max="3"
+              step="0.1"
+              value={bbStdDev}
+              onChange={(e) => handleBbChange(Number(e.target.value))}
+              className="accent-sky-500"
+            />
+            <span className="w-8 tabular-nums text-slate-600">{bbStdDev.toFixed(1)}</span>
+          </div>
+
+          {chart && (
+            <span
+              className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                MA_ORDER_BADGE[chart.maOrder]?.cls || MA_ORDER_BADGE.MIXED.cls
+              }`}
+              title="MA5·20·50·120 배열 상태"
+            >
+              {MA_ORDER_BADGE[chart.maOrder]?.label || '혼조'}
+            </span>
+          )}
         </div>
 
         {error && (
