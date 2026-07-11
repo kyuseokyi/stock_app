@@ -1,15 +1,13 @@
-import { NavLink, Outlet, useNavigate } from 'react-router-dom'
+import { Outlet, useNavigate } from 'react-router-dom'
 import { getUser, logout } from '../api/auth'
+import { useUiStore } from '../store/ui'
+import Sidebar from './Sidebar'
 import NotificationToaster from './NotificationToaster'
-
-const navClass = ({ isActive }) =>
-  `px-4 py-2 rounded-lg text-sm font-medium transition ${
-    isActive ? 'bg-indigo-600 text-white' : 'text-slate-600 hover:bg-slate-100'
-  }`
 
 export default function Layout() {
   const navigate = useNavigate()
   const user = getUser()
+  const toggleSidebar = useUiStore((s) => s.toggleSidebar)
 
   const onLogout = () => {
     logout()
@@ -17,25 +15,26 @@ export default function Layout() {
   }
 
   return (
-    <div className="min-h-screen">
-      <header className="border-b border-slate-200 bg-white">
-        <div className="mx-auto flex max-w-5xl flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6 sm:py-4">
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+    <div className="flex min-h-screen flex-col">
+      {/* 상단 바 */}
+      <header className="sticky top-0 z-30 border-b border-slate-200 bg-white">
+        <div className="flex items-center justify-between px-4 py-3 sm:px-6">
+          <div className="flex items-center gap-2">
+            {/* 모바일 햄버거 */}
+            <button
+              onClick={toggleSidebar}
+              className="rounded-lg p-1.5 text-slate-600 hover:bg-slate-100 lg:hidden"
+              aria-label="메뉴"
+            >
+              ☰
+            </button>
             <h1 className="text-lg font-bold text-slate-900">
               📈 StockApp <span className="text-indigo-600">Admin</span>
             </h1>
-            <nav className="flex gap-2">
-              <NavLink to="/boards" className={navClass}>
-                게시판 관리
-              </NavLink>
-              <NavLink to="/blogs" className={navClass}>
-                게시글 관리
-              </NavLink>
-            </nav>
           </div>
-          <div className="flex items-center justify-between gap-3 sm:justify-end">
+          <div className="flex items-center gap-3">
             {user && (
-              <span className="truncate text-sm text-slate-500">
+              <span className="hidden truncate text-sm text-slate-500 sm:inline">
                 {user.nickname || user.email}
                 <span className="ml-1 rounded-full bg-indigo-50 px-2 py-0.5 text-xs text-indigo-600">
                   {user.role}
@@ -51,9 +50,17 @@ export default function Layout() {
           </div>
         </div>
       </header>
-      <main className="mx-auto max-w-5xl px-4 py-6 sm:px-6 sm:py-8">
-        <Outlet />
-      </main>
+
+      {/* 본문 = 사이드바 + 콘텐츠 */}
+      <div className="flex flex-1">
+        <Sidebar />
+        <main className="min-w-0 flex-1 px-4 py-6 sm:px-6 sm:py-8">
+          <div className="mx-auto max-w-4xl">
+            <Outlet />
+          </div>
+        </main>
+      </div>
+
       <NotificationToaster />
     </div>
   )

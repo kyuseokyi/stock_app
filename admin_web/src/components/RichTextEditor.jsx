@@ -1,7 +1,11 @@
-import { useEffect } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import Link from '@tiptap/extension-link'
+import Image from '@tiptap/extension-image'
+
+// echarts 번들이 무거우므로 차트 모달은 필요할 때만 지연 로딩
+const ChartSnapshotModal = lazy(() => import('./ChartSnapshotModal'))
 
 // 툴바 버튼 공통 스타일
 const btn = (active) =>
@@ -9,7 +13,7 @@ const btn = (active) =>
     active ? 'bg-indigo-600 text-white' : 'text-slate-600 hover:bg-slate-100'
   }`
 
-function Toolbar({ editor }) {
+function Toolbar({ editor, onChartClick }) {
   if (!editor) return null
 
   const addLink = () => {
@@ -51,6 +55,9 @@ function Toolbar({ editor }) {
       <button type="button" onClick={addLink} className={btn(editor.isActive('link'))}>
         링크
       </button>
+      <button type="button" onClick={onChartClick} className={btn(false)}>
+        📈 차트 삽입
+      </button>
       <span className="mx-1 h-4 w-px bg-slate-300" />
       <button type="button" onClick={() => editor.chain().focus().undo().run()} className={btn(false)}>
         ↶
@@ -63,10 +70,12 @@ function Toolbar({ editor }) {
 }
 
 export default function RichTextEditor({ value, onChange }) {
+  const [chartOpen, setChartOpen] = useState(false)
   const editor = useEditor({
     extensions: [
       StarterKit,
       Link.configure({ openOnClick: false, autolink: true }),
+      Image.configure({ inline: false, HTMLAttributes: { class: 'rounded-lg' } }),
     ],
     content: value || '',
     onUpdate: ({ editor }) => onChange(editor.getHTML()),
@@ -86,10 +95,23 @@ export default function RichTextEditor({ value, onChange }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value, editor])
 
+  const insertChart = (dataURL) => {
+    editor?.chain().focus().setImage({ src: dataURL, alt: '차트 스냅샷' }).run()
+  }
+
   return (
     <div className="overflow-hidden rounded-lg border border-slate-300 focus-within:border-indigo-500">
-      <Toolbar editor={editor} />
+      <Toolbar editor={editor} onChartClick={() => setChartOpen(true)} />
       <EditorContent editor={editor} />
+      {chartOpen && (
+        <Suspense fallback={null}>
+          <ChartSnapshotModal
+            open={chartOpen}
+            onClose={() => setChartOpen(false)}
+            onInsert={insertChart}
+          />
+        </Suspense>
+      )}
     </div>
   )
 }

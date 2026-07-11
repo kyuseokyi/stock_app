@@ -34,6 +34,12 @@ body {
 .ProseMirror a {
   @apply text-indigo-600 underline;
 }
+.ProseMirror img {
+  @apply my-3 max-w-full rounded-lg;
+}
+.ProseMirror img.ProseMirror-selectednode {
+  @apply outline outline-2 outline-indigo-400;
+}
 .ProseMirror p.is-editor-empty:first-child::before {
   content: '본문을 입력하세요…';
   @apply pointer-events-none float-left h-0 text-slate-400;
