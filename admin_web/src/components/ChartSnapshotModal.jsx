@@ -263,6 +263,8 @@ export default function ChartSnapshotModal({ open, onClose, onInsert }) {
   const [textInput, setTextInput] = useState(null) // { px, py, xi, price }
   const toolRef = useRef(tool)
   toolRef.current = tool
+  const dragStartRef = useRef(null) // 사각형 드래그 시작점
+  const chPtsRef = useRef([]) // 채널 3클릭 진행 점들
 
   // 검색어 debounce → searchStocks
   useEffect(() => {
@@ -321,91 +323,86 @@ export default function ChartSnapshotModal({ open, onClose, onInsert }) {
     [chart, shapes, preview, channelPreview],
   )
 
-  // 차트 위 드로잉: zrender 이벤트로 클릭/드래그 → 데이터 좌표 도형 추가
-  useEffect(() => {
-    const inst = chartRef.current?.getEchartsInstance?.()
-    if (!inst || !chart) return
+  // 차트 인스턴스 준비 시 zrender 드로잉 핸들러 바인딩(마운트마다 1회)
+  const handleChartReady = (inst) => {
     const zr = inst.getZr()
 
+    // zrender 이벤트는 offsetX/offsetY 또는 zrX/zrY 로 좌표를 준다(버전차 폴백)
     const toData = (e) => {
-      const p = inst.convertFromPixel({ gridIndex: 0 }, [e.offsetX, e.offsetY])
+      const px = e.offsetX ?? e.zrX
+      const py = e.offsetY ?? e.zrY
+      if (px == null || py == null) return null
+      const p = inst.convertFromPixel({ gridIndex: 0 }, [px, py])
       if (!p || Number.isNaN(p[0]) || Number.isNaN(p[1])) return null
-      return p // [xIndex, price]
+      return { xi: p[0], price: p[1], px, py }
     }
-    let dragStart = null
-    let chPts = [] // 채널 3클릭 진행 점들
 
-    const onClick = (e) => {
+    zr.on('click', (e) => {
       const t = toolRef.current
-      if (t !== 'channel' && chPts.length) {
-        chPts = []
+      if (t !== 'channel' && chPtsRef.current.length) {
+        chPtsRef.current = []
         setChannelPreview(null)
       }
       if (!t || t === 'rect') return
       const p = toData(e)
       if (!p) return
-      if (t === 'hline') addShape({ type: 'hline', price: p[1] })
+      if (t === 'hline') addShape({ type: 'hline', price: p.price })
       else if (t === 'text')
-        setTextInput({ px: e.offsetX, py: e.offsetY, xi: p[0], price: p[1] })
+        setTextInput({ px: p.px, py: p.py, xi: p.xi, price: p.price })
       else if (t === 'channel') {
-        chPts.push({ xi: p[0], price: p[1] })
-        if (chPts.length === 3) {
+        const pts = [...chPtsRef.current, { xi: p.xi, price: p.price }]
+        chPtsRef.current = pts
+        if (pts.length === 3) {
           addShape({
             type: 'channel',
-            x1: chPts[0].xi, y1: chPts[0].price,
-            x2: chPts[1].xi, y2: chPts[1].price,
-            x3: chPts[2].xi, y3: chPts[2].price,
+            x1: pts[0].xi, y1: pts[0].price,
+            x2: pts[1].xi, y2: pts[1].price,
+            x3: pts[2].xi, y3: pts[2].price,
           })
-          chPts = []
+          chPtsRef.current = []
           setChannelPreview(null)
         }
       }
-    }
-    const onDown = (e) => {
+    })
+
+    zr.on('mousedown', (e) => {
       if (toolRef.current !== 'rect') return
       const p = toData(e)
       if (!p) return
-      dragStart = { xi: p[0], price: p[1] }
+      dragStartRef.current = { xi: p.xi, price: p.price }
       setPreview(null)
-    }
-    const onMove = (e) => {
+    })
+
+    zr.on('mousemove', (e) => {
       const t = toolRef.current
       const p = toData(e)
       if (!p) return
-      if (t === 'rect' && dragStart) {
-        setPreview({ type: 'rect', xi1: dragStart.xi, y1: dragStart.price, xi2: p[0], y2: p[1] })
-      } else if (t === 'channel' && chPts.length) {
-        // 1점: 기준선 미리보기(dy=0), 2점: 커서를 P3로 채널 미리보기
-        const a = chPts[0]
-        const b = chPts.length >= 2 ? chPts[1] : { xi: p[0], price: p[1] }
+      const drag = dragStartRef.current
+      if (t === 'rect' && drag) {
+        setPreview({ type: 'rect', xi1: drag.xi, y1: drag.price, xi2: p.xi, y2: p.price })
+      } else if (t === 'channel' && chPtsRef.current.length) {
+        const pts = chPtsRef.current
+        const a = pts[0]
+        const b = pts.length >= 2 ? pts[1] : { xi: p.xi, price: p.price }
         setChannelPreview({
           x1: a.xi, y1: a.price,
           x2: b.xi, y2: b.price,
-          x3: p[0], y3: p[1],
+          x3: p.xi, y3: p.price,
         })
       }
-    }
-    const onUp = (e) => {
-      if (toolRef.current !== 'rect' || !dragStart) return
+    })
+
+    zr.on('mouseup', (e) => {
+      const drag = dragStartRef.current
+      if (toolRef.current !== 'rect' || !drag) return
       const p = toData(e)
       if (p) {
-        addShape({ type: 'rect', xi1: dragStart.xi, y1: dragStart.price, xi2: p[0], y2: p[1] })
+        addShape({ type: 'rect', xi1: drag.xi, y1: drag.price, xi2: p.xi, y2: p.price })
       }
-      dragStart = null
+      dragStartRef.current = null
       setPreview(null)
-    }
-
-    zr.on('click', onClick)
-    zr.on('mousedown', onDown)
-    zr.on('mousemove', onMove)
-    zr.on('mouseup', onUp)
-    return () => {
-      zr.off('click', onClick)
-      zr.off('mousedown', onDown)
-      zr.off('mousemove', onMove)
-      zr.off('mouseup', onUp)
-    }
-  }, [chart, addShape])
+    })
+  }
 
   if (!open) return null
 
@@ -616,6 +613,7 @@ export default function ChartSnapshotModal({ open, onClose, onInsert }) {
               option={option}
               notMerge
               lazyUpdate={false}
+              onChartReady={handleChartReady}
               style={{ height: 320, width: '100%' }}
             />
           ) : (
