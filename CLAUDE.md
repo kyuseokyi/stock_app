@@ -16,6 +16,9 @@
 
 ### 1. Backend (FastAPI / Celery) — 용도별 독립 서비스(apps/)
 ```bash
+# 모든 백엔드 작업 전 Conda 가상환경 활성화 필수
+conda activate stock_app
+
 cd backend
 uv sync                     # 의존성 설치 및 동기화
 
