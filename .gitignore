@@ -30,3 +30,6 @@ Thumbs.db
 pg_data/
 clickhouse_data/
 redis_data/
+
+# Antigravity Agents
+.agents/
