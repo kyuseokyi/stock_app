@@ -13,6 +13,7 @@
 - Backend: Python FastAPI, Celery (Worker 분리 구조)
 - Database: PostgreSQL (일반 데이터), ClickHouse (시계열 데이터), Redis (Celery Broker)
 - Mobile Client: React Native (Expo), NativeWind, Zustand
+- User Web Client: React (Vite), TailwindCSS, Zustand (반응형 UI 필수)
 - Admin Client: React (Vite), TailwindCSS, Tremor, TipTap
 - Deploy: Docker Compose (Local), Kubernetes (Prod)
 
@@ -22,11 +23,11 @@
    - **Backend**: `Router`(엔드포인트) -> `Service/UseCase`(비즈니스 로직) -> `Repository`(DB 접근) -> `Domain/Model` 구조를 철저히 지키며, Router에 DB 접근이나 복잡한 로직을 직접 넣지 마세요.
    - **Frontend**: API 통신(`services`), 상태 관리(`stores/hooks`), 그리고 순수 UI 렌더링(`components`)을 완벽하게 분리하세요.
 3. 로컬 파일 경로는 절대 하드코딩하지 않고 환경 변수나 상대 경로를 사용합니다.
-4. Git 모노레포 구조(`backend/`, `mobile/`, `admin_web/`)를 엄격하게 지켜 코드를 배치하세요.
+4. Git 모노레포 구조(`backend/`, `mobile/`, `web_client/`, `admin_web/`)를 엄격하게 지켜 코드를 배치하세요.
 5. **Micro-Step Development**: 토큰 소모와 컨텍스트 초과를 막기 위해, 한 번의 턴에 거대한 코드를 모두 작성하지 마세요. 파일을 하나씩 생성하고 단위별로 테스트하며 점진적으로 완성하세요.
 
 ## [자동화 테스트 및 QA (Quality Assurance) 전략]
 항상 코드를 작성한 후에는 각 환경의 QA 도구에 맞춘 단위/UI 자동화 테스트를 작성하세요.
 - **Backend**: `pytest` (API 로직 검증 및 `unittest.mock`을 활용한 KIS 파이프라인 방어)
 - **Mobile (React Native)**: `Maestro` (실제 유저 행동 기반 UI 자동화 E2E 테스트), `Jest` (단위)
-- **Admin Web (React/Vite)**: `Playwright` (웹 시나리오 E2E 녹화 테스트), `Vitest` (단위)
+- **User Web & Admin Web (React/Vite)**: `Playwright` (웹 시나리오 E2E 녹화 테스트), `Vitest` (단위)
