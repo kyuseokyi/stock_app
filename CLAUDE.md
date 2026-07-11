@@ -14,13 +14,22 @@
 ## 💻 Common Commands
 코드를 수정하거나 검증할 때 아래의 명령어를 활용하세요.
 
-### 1. Backend (FastAPI / Celery)
+### 1. Backend (FastAPI / Celery) — 용도별 독립 서비스(apps/)
 ```bash
 cd backend
 uv sync                     # 의존성 설치 및 동기화
-uv run uvicorn api.main:app --reload  # API 서버 실행
-uv run celery -A worker.celery_app worker --loglevel=info  # 워커 실행
-uv run celery -A worker.celery_app beat --loglevel=info    # 스케줄러 실행
+
+# 각 마이크로서비스는 독립 포트로 실행 (운영은 Nginx 리버스 프록시로 통합)
+uv run uvicorn apps.auth.main:app      --reload --port 8001  # 인증 서버
+uv run uvicorn apps.blog.main:app      --reload --port 8000  # 블로그(게시판/댓글) 서버
+uv run uvicorn apps.stock_api.main:app --reload --port 8002  # 주식 API 서버(스켈레톤)
+
+# 데이터 수집/알림 워커 (Celery)
+uv run celery -A apps.collector.celery_app worker --loglevel=info  # 워커 실행
+uv run celery -A apps.collector.celery_app beat --loglevel=info    # 스케줄러 실행
+
+# 관리자 시드 (최초 1회)
+uv run python -m apps.auth.seed_admin   # admin@stock.app / admin1234
 ```
 
 ### 2. Mobile App (Expo)

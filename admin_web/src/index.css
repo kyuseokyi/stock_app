@@ -1,0 +1,40 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  @apply bg-slate-50 text-slate-800 antialiased;
+}
+
+/* TipTap 에디터 본문 서식 (Tailwind preflight 초기화 보정) */
+.ProseMirror {
+  line-height: 1.6;
+}
+.ProseMirror:focus {
+  outline: none;
+}
+.ProseMirror h2 {
+  @apply mb-2 mt-4 text-xl font-bold text-slate-900;
+}
+.ProseMirror h3 {
+  @apply mb-2 mt-3 text-lg font-semibold text-slate-900;
+}
+.ProseMirror p {
+  @apply my-2;
+}
+.ProseMirror ul {
+  @apply my-2 list-disc pl-6;
+}
+.ProseMirror ol {
+  @apply my-2 list-decimal pl-6;
+}
+.ProseMirror blockquote {
+  @apply my-2 border-l-4 border-slate-300 pl-4 text-slate-600;
+}
+.ProseMirror a {
+  @apply text-indigo-600 underline;
+}
+.ProseMirror p.is-editor-empty:first-child::before {
+  content: '본문을 입력하세요…';
+  @apply pointer-events-none float-left h-0 text-slate-400;
+}

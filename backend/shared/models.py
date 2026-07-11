@@ -87,12 +87,15 @@ class User(Base, TimestampMixin):
     nickname: Mapped[str | None] = mapped_column(String(100))
     profile_image_url: Mapped[str | None] = mapped_column(String(512))
 
-    # 소셜 로그인
-    provider: Mapped[AuthProvider] = mapped_column(
-        SAEnum(AuthProvider, name="auth_provider"), nullable=False
+    # 소셜 로그인 (LOCAL 관리자 계정은 provider/provider_id 없이 email+password 사용)
+    provider: Mapped[AuthProvider | None] = mapped_column(
+        SAEnum(AuthProvider, name="auth_provider"), nullable=True
     )
-    provider_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    provider_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
     social_token: Mapped[str | None] = mapped_column(Text)  # 공급자 Access/ID 토큰
+
+    # 이메일/비밀번호 로그인용 해시 (관리자/스태프 계정). 소셜 유저는 NULL.
+    password_hash: Mapped[str | None] = mapped_column(String(255))
 
     # 푸시 알림
     fcm_token: Mapped[str | None] = mapped_column(String(512))
@@ -104,9 +107,8 @@ class User(Base, TimestampMixin):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
     # 관계
-    posts: Mapped[list["BlogPost"]] = relationship(
-        back_populates="author", cascade="all, delete-orphan"
-    )
+    # author_id 가 nullable(SET NULL)이므로 delete-orphan 대신 연결만 관리.
+    posts: Mapped[list["BlogPost"]] = relationship(back_populates="author")
     comments: Mapped[list["BlogComment"]] = relationship(
         back_populates="author", cascade="all, delete-orphan"
     )
@@ -139,8 +141,9 @@ class BlogPost(Base, TimestampMixin):
     board_id: Mapped[int] = mapped_column(
         ForeignKey("boards.id", ondelete="CASCADE"), nullable=False, index=True
     )
-    author_id: Mapped[int] = mapped_column(
-        ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    # 인증 슬라이스 이전에는 작성자 없이도 글을 생성할 수 있도록 nullable.
+    author_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
     )
 
     title: Mapped[str] = mapped_column(String(255), nullable=False)
