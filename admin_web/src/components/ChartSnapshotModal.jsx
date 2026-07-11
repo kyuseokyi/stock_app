@@ -33,7 +33,9 @@ function volumeProfileSeries(vp) {
     type: 'custom',
     z: 1,
     silent: true,
-    data: vp.map((b) => b.volume),
+    // y축(가격) 범위를 왜곡하지 않도록 데이터는 '가격값'으로 둔다.
+    // (거래량은 아래 renderItem에서 클로저의 vp로 읽음)
+    data: vp.map((b) => b.priceHigh),
     renderItem: (params, api) => {
       const bin = vp[params.dataIndex]
       const yHigh = api.coord([0, bin.priceHigh])[1]
