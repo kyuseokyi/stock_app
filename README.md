@@ -9,7 +9,7 @@ backend/
 ├── apps/
 │   ├── auth/        # 인증 서비스 — 로그인/JWT 발급·검증, 관리자 시드   (포트 8001)
 │   ├── blog/        # 블로그 서비스 — 게시판/게시글/댓글 CRUD, SSE 알림 (포트 8000)
-│   ├── stock_api/   # 주식 API 서비스 — 스크리너/차트 (스켈레톤)         (포트 8002)
+│   ├── stock_api/   # 주식 API 서비스 — GraphQL 종목검색/차트(온더플라이) (포트 8002)
 │   └── collector/   # 수집·알림 워커 (Celery) — 새 글 FCM 푸시(Mock)
 ├── shared/          # 공통 DB 모델·세션·JWT 검증·보안
 └── alembic/         # DB 마이그레이션
@@ -38,7 +38,7 @@ uv run python -m apps.auth.seed_admin     # 관리자 시드 (최초 1회)
 # 각 서비스는 개별 포트로 실행 (필요한 것만 띄우면 됩니다)
 uv run uvicorn apps.auth.main:app      --reload --port 8001   # 인증(로그인)
 uv run uvicorn apps.blog.main:app      --reload --port 8000   # 블로그(게시판/글/댓글/SSE)
-uv run uvicorn apps.stock_api.main:app --reload --port 8002   # 주식 API(스켈레톤)
+uv run uvicorn apps.stock_api.main:app --reload --port 8002   # 주식 API(GraphQL /graphql)
 
 # 데이터 수집/알림 워커 (Celery)
 uv run celery -A apps.collector.celery_app worker --loglevel=info
@@ -76,6 +76,7 @@ npm run dev        # http://localhost:3000
 | `CORS_ORIGINS` | backend | (localhost 기본 허용) | 콤마 구분 추가 오리진 |
 | `VITE_API_BASE_URL` | admin_web | `http://localhost:8000/api/v1` | 블로그 API |
 | `VITE_AUTH_BASE_URL` | admin_web | `http://localhost:8001/api/v1` | 인증 API |
+| `VITE_STOCK_API_URL` | admin_web | `http://localhost:8002/graphql` | 주식 API(GraphQL) — 차트 삽입 종목검색/차트 |
 
 ## 🔔 알림 아키텍처
 - **웹(SSE)**: 블로그 서비스의 `GET /api/v1/notifications/stream` 에 EventSource 로 연결 → 새 글 작성 시 Redis pub/sub 로 즉시 토스트 알림.
