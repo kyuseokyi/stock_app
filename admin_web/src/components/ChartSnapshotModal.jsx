@@ -123,11 +123,53 @@ function volumeProfileSeries(vp) {
   }
 }
 
-function buildOption(chart, shapes = [], preview = null) {
+// 이중 추세선(평행 채널): 기준선 P1-P2, P3로 평행 폭 지정 → 기준/평행/중심 3선.
+// 각 선을 캔들 인덱스 구간 [iL,iR]에만 값이 있는 line 시리즈로 만든다(구간 밖 null).
+function computeChannelLines(ch, dates) {
+  const n = dates.length
+  const { x1, y1, x2, y2, x3, y3 } = ch
+  if (Math.abs(x2 - x1) < 0.5) return null // 수직/퇴화 방지
+  const m = (y2 - y1) / (x2 - x1)
+  const base = (i) => y1 + m * (i - x1)
+  const dy = y3 - base(x3)
+  const iL = clampIdx(Math.min(x1, x2), n)
+  const iR = clampIdx(Math.max(x1, x2), n)
+
+  const mk = (offset) =>
+    dates.map((_, i) => (i >= iL && i <= iR ? Math.round((base(i) + offset) * 100) / 100 : null))
+  return { baseLine: mk(0), parallel: mk(dy), center: mk(dy / 2) }
+}
+
+function channelSeries(chart, channels, previewChannel) {
+  const dates = chart.candles.map((c) => c.date.slice(5))
+  const all = previewChannel ? [...channels, previewChannel] : channels
+  const out = []
+  all.forEach((ch, idx) => {
+    const lines = computeChannelLines(ch, dates)
+    if (!lines) return
+    const seg = (suffix, data, type) => ({
+      name: `_ch${idx}_${suffix}`, // legend.data 에 없으므로 범례엔 숨김
+      type: 'line',
+      data,
+      showSymbol: false,
+      silent: true,
+      connectNulls: false,
+      lineStyle: { color: '#2563eb', width: 1.3, type },
+    })
+    out.push(seg('base', lines.baseLine, 'solid'))
+    out.push(seg('par', lines.parallel, 'solid'))
+    out.push(seg('mid', lines.center, 'dashed'))
+  })
+  return out
+}
+
+function buildOption(chart, shapes = [], preview = null, channelPreview = null) {
   const dates = chart.candles.map((c) => c.date.slice(5)) // MM-DD
   const candles = chart.candles.map((c) => [c.open, c.close, c.low, c.high])
   const bb = chart.bollinger
   const { markLine, markArea, markPoint } = buildMarks(chart, shapes, preview)
+  const channels = shapes.filter((s) => s.type === 'channel')
+  const chSeries = channelSeries(chart, channels, channelPreview)
   return {
     animation: false,
     grid: { left: 55, right: 20, top: 45, bottom: 30 },
@@ -192,6 +234,7 @@ function buildOption(chart, shapes = [], preview = null) {
         lineStyle: { width: 1, type: 'dashed', color: '#0ea5e9' },
         areaStyle: undefined,
       },
+      ...chSeries,
     ],
   }
 }
@@ -212,6 +255,7 @@ export default function ChartSnapshotModal({ open, onClose, onInsert }) {
   const { tool, toggleTool, setTool, shapes, addShape, removeShape, clearAll } =
     useChartDrawings()
   const [preview, setPreview] = useState(null) // 사각형 드래그 미리보기
+  const [channelPreview, setChannelPreview] = useState(null) // 채널 3클릭 미리보기
   const [textInput, setTextInput] = useState(null) // { px, py, xi, price }
   const toolRef = useRef(tool)
   toolRef.current = tool
@@ -269,8 +313,8 @@ export default function ChartSnapshotModal({ open, onClose, onInsert }) {
   }
 
   const option = useMemo(
-    () => (chart ? buildOption(chart, shapes, preview) : null),
-    [chart, shapes, preview],
+    () => (chart ? buildOption(chart, shapes, preview, channelPreview) : null),
+    [chart, shapes, preview, channelPreview],
   )
 
   // 차트 위 드로잉: zrender 이벤트로 클릭/드래그 → 데이터 좌표 도형 추가
@@ -285,15 +329,33 @@ export default function ChartSnapshotModal({ open, onClose, onInsert }) {
       return p // [xIndex, price]
     }
     let dragStart = null
+    let chPts = [] // 채널 3클릭 진행 점들
 
     const onClick = (e) => {
       const t = toolRef.current
+      if (t !== 'channel' && chPts.length) {
+        chPts = []
+        setChannelPreview(null)
+      }
       if (!t || t === 'rect') return
       const p = toData(e)
       if (!p) return
       if (t === 'hline') addShape({ type: 'hline', price: p[1] })
       else if (t === 'text')
         setTextInput({ px: e.offsetX, py: e.offsetY, xi: p[0], price: p[1] })
+      else if (t === 'channel') {
+        chPts.push({ xi: p[0], price: p[1] })
+        if (chPts.length === 3) {
+          addShape({
+            type: 'channel',
+            x1: chPts[0].xi, y1: chPts[0].price,
+            x2: chPts[1].xi, y2: chPts[1].price,
+            x3: chPts[2].xi, y3: chPts[2].price,
+          })
+          chPts = []
+          setChannelPreview(null)
+        }
+      }
     }
     const onDown = (e) => {
       if (toolRef.current !== 'rect') return
@@ -303,10 +365,21 @@ export default function ChartSnapshotModal({ open, onClose, onInsert }) {
       setPreview(null)
     }
     const onMove = (e) => {
-      if (toolRef.current !== 'rect' || !dragStart) return
+      const t = toolRef.current
       const p = toData(e)
       if (!p) return
-      setPreview({ type: 'rect', xi1: dragStart.xi, y1: dragStart.price, xi2: p[0], y2: p[1] })
+      if (t === 'rect' && dragStart) {
+        setPreview({ type: 'rect', xi1: dragStart.xi, y1: dragStart.price, xi2: p[0], y2: p[1] })
+      } else if (t === 'channel' && chPts.length) {
+        // 1점: 기준선 미리보기(dy=0), 2점: 커서를 P3로 채널 미리보기
+        const a = chPts[0]
+        const b = chPts.length >= 2 ? chPts[1] : { xi: p[0], price: p[1] }
+        setChannelPreview({
+          x1: a.xi, y1: a.price,
+          x2: b.xi, y2: b.price,
+          x3: p[0], y3: p[1],
+        })
+      }
     }
     const onUp = (e) => {
       if (toolRef.current !== 'rect' || !dragStart) return
@@ -346,6 +419,8 @@ export default function ChartSnapshotModal({ open, onClose, onInsert }) {
     onInsert(dataURL)
     clearAll()
     setTool(null)
+    setPreview(null)
+    setChannelPreview(null)
     onClose()
   }
 
@@ -453,6 +528,7 @@ export default function ChartSnapshotModal({ open, onClose, onInsert }) {
             <span className="text-slate-500">그리기</span>
             {[
               { key: 'hline', label: '수평선 ─' },
+              { key: 'channel', label: '이중추세선 ⧉' },
               { key: 'rect', label: '사각형 ▭' },
               { key: 'text', label: '텍스트 T' },
             ].map((b) => (
@@ -479,6 +555,7 @@ export default function ChartSnapshotModal({ open, onClose, onInsert }) {
             {tool && (
               <span className="text-xs text-slate-400">
                 {tool === 'hline' && '차트를 클릭해 수평선을 추가'}
+                {tool === 'channel' && '3번 클릭: 기준선 2점 → 평행 폭 1점 (중심선 자동)'}
                 {tool === 'rect' && '드래그해 사각형 영역을 지정'}
                 {tool === 'text' && '클릭한 위치에 텍스트를 입력'}
               </span>
@@ -495,6 +572,7 @@ export default function ChartSnapshotModal({ open, onClose, onInsert }) {
                 className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600"
               >
                 {s.type === 'hline' && `수평선 ${i + 1}`}
+                {s.type === 'channel' && `추세선 ${i + 1}`}
                 {s.type === 'rect' && `사각형 ${i + 1}`}
                 {s.type === 'text' && `텍스트: ${s.text}`}
                 <button
