@@ -72,6 +72,7 @@ docker-compose -f docker-compose.dev.yml up -d  # Postgres, ClickHouse, Redis �
 3. **Clean Architecture 적용**: 코드를 짤 때 API 라우터에 비즈니스 로직을 몰아넣지 마세요. 반드시 Router -> Service(UseCase) -> Repository 패턴으로 레이어를 분리하세요. 프론트엔드도 UI와 상태/통신 계층을 분리하세요.
 4. **에러 해결**: 에러 발생 시 로그를 면밀히 분석하고 스스로 수정안을 적용해 재시도하세요.
 5. **절대 경로 금지**: 모든 파일 경로는 환경 변수나 상대 경로를 활용하여 Windows/macOS 간 호환성을 보장하세요.
+6. **README 지속 업데이트 (필수 유지보수)**: 새로운 마이크로서비스(앱), 서버, 클라이언트를 구현하거나 배포 구조를 바꿀 때마다, **반드시 루트 폴더의 `README.md` 파일에 로컬 기동 방법(실행 명령어), 환경변수 세팅법, 배포 정보를 지속적으로 업데이트**하세요.
 
 ## 🧩 Micro-Step Development (토큰 최적화 개발 컨벤션)
 대규모 파일 변경이나 복잡한 아키텍처 설계를 한 번의 프롬프트나 턴(Turn)에 모두 생성하려고 시도하지 마세요. (토큰 초과 및 Context 윈도우 한계 방지)

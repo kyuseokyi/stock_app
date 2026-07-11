@@ -10,6 +10,8 @@ from shared.database import get_db
 from shared.models import User
 
 from .. import crud, schemas
+from ..events import publish_event
+from ..notifications import notify_new_post
 
 router = APIRouter(prefix="/api/v1/blogs", tags=["blogs"])
 
@@ -37,7 +39,19 @@ async def create_blog(
         )
     # 작성자는 항상 인증된 관리자로 연결한다.
     payload.author_id = admin.id
-    return await crud.create_blog(db, payload)
+    post = await crud.create_blog(db, payload)
+    # (모바일) 새 글 알림을 Celery 워커로 위임 — FCM 발송
+    notify_new_post(post.id)
+    # (웹) SSE 스트림으로 즉시 알림 이벤트 발행
+    await publish_event(
+        {
+            "type": "new_post",
+            "post_id": post.id,
+            "board_id": post.board_id,
+            "title": post.title,
+        }
+    )
+    return post
 
 
 @router.get("/{blog_id}", response_model=schemas.BlogOut)

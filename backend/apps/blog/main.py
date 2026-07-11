@@ -13,7 +13,7 @@ import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from .routers import blogs, boards, comments
+from .routers import blogs, boards, comments, notifications
 
 app = FastAPI(title="Stock App - Blog Service", version="0.1.0")
 
@@ -40,6 +40,7 @@ app.add_middleware(
 app.include_router(boards.router)
 app.include_router(blogs.router)
 app.include_router(comments.router)
+app.include_router(notifications.router)
 
 
 @app.get("/health", tags=["health"])

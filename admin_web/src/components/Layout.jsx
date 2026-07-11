@@ -1,5 +1,6 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { getUser, logout } from '../api/auth'
+import NotificationToaster from './NotificationToaster'
 
 const navClass = ({ isActive }) =>
   `px-4 py-2 rounded-lg text-sm font-medium transition ${
@@ -53,6 +54,7 @@ export default function Layout() {
       <main className="mx-auto max-w-5xl px-4 py-6 sm:px-6 sm:py-8">
         <Outlet />
       </main>
+      <NotificationToaster />
     </div>
   )
 }

@@ -23,7 +23,7 @@ celery_app = Celery(
     "stock_app",
     broker=REDIS_URL,
     backend=REDIS_URL,
-    include=[],  # 예: "apps.collector.tasks.pipeline" (후속 단계에서 등록)
+    include=["apps.collector.tasks.notifications"],
 )
 
 celery_app.conf.update(
