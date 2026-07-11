@@ -6,9 +6,9 @@
 본 프로젝트는 **한국투자증권 API** 기반의 주식 시계열 데이터 파이프라인, 모바일 큐레이션 앱, 그리고 관리자 웹페이지를 포함하는 풀스택 주식 애플리케이션 모노레포입니다.
 
 ## 📂 Directory Structure & Tech Stack
-*   `backend/`: Python FastAPI (API Server) & Celery (Data Pipeline/Workers). PostgreSQL & ClickHouse 사용. (패키지 매니저: `uv`)
-*   `mobile/`: React Native (Expo). 주식 스크리너 및 차트(`react-native-echarts`) 표시.
-*   `admin_web/`: React (Vite) + TailwindCSS. 블로그 작성 및 차트 캡처 기능 포함.
+*   `backend/`: Python FastAPI (API Server), Strawberry (GraphQL), Celery. PostgreSQL & ClickHouse 사용. (`uv`)
+*   `mobile/`: React Native (Expo). 주식 차트(`react-native-echarts`) 및 GraphQL(`graphql-request`).
+*   `admin_web/`, `web_client/`: React (Vite) + TailwindCSS. REST/GraphQL 혼용.
 *   `docs/prompts/`: 각 기능별 세부 구현 지시서(AI 프롬프트) 모음.
 
 ## 💻 Common Commands

@@ -2,10 +2,12 @@
 
 당신의 임무는 블로그(커뮤니티) 게시판 관리와 실시간 알림 기능이 포함된 풀스택 어플리케이션을 개발하는 것입니다. 다음 작업들을 순차적으로 수행해 줘.
 
-### 🟢 1단계: Backend Blog API 및 SSE 알림 구현 (FastAPI)
-1. `backend/apps/blog/` 디렉토리에 블로그 전용 독립 서버를 구축해 줘. (`main.py`, `routers/`, `schemas.py`, `crud.py`)
+### 🟢 1단계: Backend Blog API 및 SSE 알림 구현 (FastAPI + Strawberry)
+1. `backend/apps/blog/` 디렉토리에 블로그 전용 독립 서버를 구축해 줘. (`main.py`, `routers/`, `schemas.py`, `graphql/`, `crud.py`)
 2. `backend/shared/models.py`에 게시판(`boards`)과 블로그 게시글(`blog_posts`)을 위한 SQLAlchemy 모델을 정의해 줘.
-3. 어드민 페이지에서 사용할 수 있도록 게시판/게시글 CRUD API를 구현해 줘. (`/api/v1/boards`, `/api/v1/blogs`)
+3. **[REST & GraphQL 하이브리드]** 
+   - **조회(Query)**: 어드민 및 웹 클라이언트에서 복잡한 구조(게시글, 작성자, 댓글 목록 등)를 한 번에 조회할 수 있도록 **`Strawberry`** 라이브러리를 이용하여 GraphQL 쿼리(`graphql/schema.py`, `graphql/resolvers.py`)로 구현해 줘.
+   - **작성/수정/삭제(Mutation)**: 상태 변경 및 파일 업로드가 포함될 수 있는 생성/수정 로직은 일반적인 REST API (`/api/v1/blogs`) 라우터로 구현해 줘.
 4. **[중요]** 프론트엔드 웹 클라이언트를 위한 **SSE(Server-Sent Events)** 알림 엔드포인트(`/api/v1/notifications/stream`)를 구현해 줘. 관리자가 새 글을 쓰거나 알림 발송을 요청하면 이 스트림을 통해 클라이언트(웹)로 즉시 데이터가 푸시되도록 비동기 제너레이터를 작성해야 해. (모바일용 FCM 푸시 발송 로직은 지금 당장 제외해도 됨)
 5. 프론트엔드에서 API를 호출하고 SSE를 수신할 수 있도록 `main.py`에 CORS 설정(localhost 허용)을 반드시 추가해 줘.
 

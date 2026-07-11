@@ -10,18 +10,18 @@
 4. **패키지 매니저**: Python(`backend/`) 환경에서는 무조건 `uv`를 사용합니다. (예: `uv add fastapi`, `uv run uvicorn`)
 
 ## [기술 스택 및 아키텍처]
-- Backend: Python FastAPI, Celery (Worker 분리 구조)
+- Backend: Python FastAPI, Celery, **Strawberry (GraphQL)**
 - Database: PostgreSQL (일반 데이터), ClickHouse (시계열 데이터), Redis (Celery Broker)
-- Mobile Client: React Native (Expo), NativeWind, Zustand
-- User Web Client: React (Vite), TailwindCSS, Zustand (반응형 UI 필수)
-- Admin Client: React (Vite), TailwindCSS, Tremor, TipTap
+- Mobile Client: React Native (Expo), NativeWind, Zustand, **graphql-request**
+- User Web Client: React (Vite), TailwindCSS, Zustand, **graphql-request**
+- Admin Client: React (Vite), TailwindCSS, Tremor, TipTap, **graphql-request**
 - Deploy: Docker Compose (Local), Kubernetes (Prod)
 
 ## [공통 코딩 규칙 (토큰 최적화 및 클린 아키텍처)]
 1. 모든 API 통신은 JSON을 사용하며, FastAPI에서 Pydantic 모델을 엄격하게 적용하여 입출력을 검증합니다.
-2. **Clean Architecture (클린 아키텍처) 엄수**: 모든 코드는 관심사를 분리하여 작성합니다.
-   - **Backend**: `Router`(엔드포인트) -> `Service/UseCase`(비즈니스 로직) -> `Repository`(DB 접근) -> `Domain/Model` 구조를 철저히 지키며, Router에 DB 접근이나 복잡한 로직을 직접 넣지 마세요.
-   - **Frontend**: API 통신(`services`), 상태 관리(`stores/hooks`), 그리고 순수 UI 렌더링(`components`)을 완벽하게 분리하세요.
+2. **Hybrid Architecture (REST + GraphQL) 및 Clean Architecture 엄수**:
+   - **Backend**: 단순 상태 변경(인증, 알림) 및 외부 통신은 REST Router로 구현하고, 복잡한 데이터 조회(게시판, 주식 차트 등)는 `Strawberry`를 이용한 GraphQL Resolver로 분리하세요.
+   - **Frontend**: `react-query`의 Fetcher로 API 성격에 맞춰 `axios`(REST)와 `graphql-request`(GraphQL)를 혼용하여 사용하세요. UI 렌더링 컴포넌트 내부에 통신 로직을 직접 넣지 마세요.
 3. 로컬 파일 경로는 절대 하드코딩하지 않고 환경 변수나 상대 경로를 사용합니다.
 4. Git 모노레포 구조(`backend/`, `mobile/`, `web_client/`, `admin_web/`)를 엄격하게 지켜 코드를 배치하세요.
 5. **Micro-Step Development**: 토큰 소모와 컨텍스트 초과를 막기 위해, 한 번의 턴에 거대한 코드를 모두 작성하지 마세요. 파일을 하나씩 생성하고 단위별로 테스트하며 점진적으로 완성하세요.
