@@ -123,21 +123,30 @@ function volumeProfileSeries(vp) {
   }
 }
 
-// 이중 추세선(평행 채널): 첫 선 P1-P2(한쪽 가장자리, 각도 결정) + P3(반대편 위치)로 간격 지정.
-// 대칭 평행선 = base+dy, 중심선 = base+dy/2. 구간 [iL,iR]에만 값(밖은 null).
+// 이중 추세선: 첫 선 P1-P2(고정) + 두 번째 선 P3-P4(각도·위치 자유) + 중심선(두 선 평균).
+// 두 번째 선이 아직 없으면(그리는 중) 첫 선만 반환. 값은 두 선의 x 범위 [iL,iR]에만.
 function computeChannelLines(ch, dates) {
   const n = dates.length
-  const { x1, y1, x2, y2, x3, y3 } = ch
-  if (Math.abs(x2 - x1) < 0.5) return null // 수직/퇴화 방지
-  const m = (y2 - y1) / (x2 - x1)
-  const base = (i) => y1 + m * (i - x1)
-  const dy = y3 - base(x3) // 첫 선 대비 P3의 세로 간격
-  const iL = clampIdx(Math.min(x1, x2), n)
-  const iR = clampIdx(Math.max(x1, x2), n)
+  const { x1, y1, x2, y2, x3, y3, x4, y4 } = ch
+  if (x1 == null || x2 == null || Math.abs(x2 - x1) < 0.5) return null // 첫 선 필수·수직 방지
+  const m1 = (y2 - y1) / (x2 - x1)
+  const l1 = (i) => y1 + m1 * (i - x1)
 
-  const mk = (offset) =>
-    dates.map((_, i) => (i >= iL && i <= iR ? Math.round((base(i) + offset) * 100) / 100 : null))
-  return { baseLine: mk(0), parallel: mk(dy), center: mk(dy / 2) }
+  const hasSecond = x3 != null && x4 != null && Math.abs(x4 - x3) >= 0.5
+  const m2 = hasSecond ? (y4 - y3) / (x4 - x3) : 0
+  const l2 = hasSecond ? (i) => y3 + m2 * (i - x3) : null
+
+  const xs = hasSecond ? [x1, x2, x3, x4] : [x1, x2]
+  const iL = clampIdx(Math.min(...xs), n)
+  const iR = clampIdx(Math.max(...xs), n)
+  const r2 = (v) => Math.round(v * 100) / 100
+  const mk = (fn) => dates.map((_, i) => (i >= iL && i <= iR ? r2(fn(i)) : null))
+
+  return {
+    line1: mk(l1),
+    line2: l2 ? mk(l2) : null,
+    center: l2 ? mk((i) => (l1(i) + l2(i)) / 2) : null,
+  }
 }
 
 function channelSeries(chart, channels, previewChannel) {
@@ -156,9 +165,9 @@ function channelSeries(chart, channels, previewChannel) {
       connectNulls: false,
       lineStyle: { color: '#2563eb', width: 1.3, type },
     })
-    out.push(seg('base', lines.baseLine, 'solid'))
-    out.push(seg('par', lines.parallel, 'solid'))
-    out.push(seg('mid', lines.center, 'dashed'))
+    out.push(seg('l1', lines.line1, 'solid'))
+    if (lines.line2) out.push(seg('l2', lines.line2, 'solid'))
+    if (lines.center) out.push(seg('mid', lines.center, 'dashed'))
   })
   return out
 }
@@ -373,15 +382,16 @@ export default function ChartSnapshotModal({ open, onClose, onInsert }) {
       else if (t === 'text')
         setTextInput({ px: p.px, py: p.py, xi: p.xi, price: p.price })
       else if (t === 'channel') {
-        // 1·2번 클릭: 첫 선(가장자리), 3번 클릭: 대칭 평행선 위치(간격)
+        // 1·2번: 첫 선(고정), 3·4번: 두 번째 선(각도·위치 자유)
         const pts = [...chPtsRef.current, { xi: p.xi, price: p.price }]
         chPtsRef.current = pts
-        if (pts.length === 3) {
+        if (pts.length === 4) {
           addShape({
             type: 'channel',
             x1: pts[0].xi, y1: pts[0].price,
             x2: pts[1].xi, y2: pts[1].price,
             x3: pts[2].xi, y3: pts[2].price,
+            x4: pts[3].xi, y4: pts[3].price,
           })
           chPtsRef.current = []
           setChannelPreview(null)
@@ -405,15 +415,22 @@ export default function ChartSnapshotModal({ open, onClose, onInsert }) {
       if (t === 'rect' && drag) {
         setPreview({ type: 'rect', xi1: drag.xi, y1: drag.price, xi2: p.xi, y2: p.price })
       } else if (t === 'channel' && chPtsRef.current.length) {
-        // 1점: 커서를 끝점으로 첫 선 미리보기 / 2점: 커서를 P3로 채널(간격) 미리보기
         const pts = chPtsRef.current
-        const a = pts[0]
-        const b = pts.length >= 2 ? pts[1] : { xi: p.xi, price: p.price }
-        setChannelPreview({
-          x1: a.xi, y1: a.price,
-          x2: b.xi, y2: b.price,
-          x3: p.xi, y3: p.price,
-        })
+        if (pts.length === 1) {
+          // 첫 선 그리는 중: P1 → 커서
+          setChannelPreview({ x1: pts[0].xi, y1: pts[0].price, x2: p.xi, y2: p.price })
+        } else if (pts.length === 2) {
+          // 첫 선 고정, 두 번째 선 시작 전: 첫 선만 표시
+          setChannelPreview({ x1: pts[0].xi, y1: pts[0].price, x2: pts[1].xi, y2: pts[1].price })
+        } else if (pts.length === 3) {
+          // 두 번째 선 그리는 중: Q1 → 커서 (좌우상하로 각도·위치)
+          setChannelPreview({
+            x1: pts[0].xi, y1: pts[0].price,
+            x2: pts[1].xi, y2: pts[1].price,
+            x3: pts[2].xi, y3: pts[2].price,
+            x4: p.xi, y4: p.price,
+          })
+        }
       }
     })
 
@@ -594,7 +611,7 @@ export default function ChartSnapshotModal({ open, onClose, onInsert }) {
             {tool && (
               <span className="text-xs text-slate-400">
                 {tool === 'hline' && '차트를 클릭해 수평선을 추가'}
-                {tool === 'channel' && '3번 클릭: 첫 선 2점 → 대칭선 위치 1점 (중심선 자동)'}
+                {tool === 'channel' && '4번 클릭: 첫 선 2점(고정) → 두 번째 선 2점(각도·위치 자유), 중심선 자동'}
                 {tool === 'rect' && '드래그해 사각형 영역을 지정'}
                 {tool === 'text' && '클릭한 위치에 텍스트를 입력'}
               </span>
