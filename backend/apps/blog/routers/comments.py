@@ -51,8 +51,14 @@ async def create_comment(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    if await crud.get_blog(db, blog_id) is None:
+    post = await crud.get_blog(db, blog_id)
+    if post is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "게시글을 찾을 수 없습니다.")
+    board = await crud.get_board(db, post.board_id)
+    if board is not None and not board.comments_enabled:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN, "댓글이 비활성화된 게시판입니다."
+        )
     comment = await crud.create_comment(
         db, post_id=blog_id, author_id=user.id, content=payload.content
     )

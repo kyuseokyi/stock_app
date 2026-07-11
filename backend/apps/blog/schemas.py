@@ -16,6 +16,7 @@ class BoardBase(BaseModel):
     name: str = Field(..., max_length=100, description="게시판 이름")
     order_index: int = Field(0, description="정렬 순서")
     is_active: bool = Field(True, description="활성 여부")
+    comments_enabled: bool = Field(True, description="댓글 허용 여부")
     min_role_required: UserRole = Field(
         UserRole.FREE, description="접근 최소 권한"
     )
@@ -29,6 +30,7 @@ class BoardUpdate(BaseModel):
     name: str | None = Field(None, max_length=100)
     order_index: int | None = None
     is_active: bool | None = None
+    comments_enabled: bool | None = None
     min_role_required: UserRole | None = None
 
 

@@ -12,6 +12,7 @@ export default function BlogDetailPage() {
   const { id } = useParams()
   const [post, setPost] = useState(null)
   const [boardName, setBoardName] = useState('')
+  const [commentsEnabled, setCommentsEnabled] = useState(true)
   const [comments, setComments] = useState([])
   const [newComment, setNewComment] = useState('')
   const [error, setError] = useState('')
@@ -31,7 +32,9 @@ export default function BlogDetailPage() {
         const p = await getBlog(id)
         setPost(p)
         const boards = await listBoards()
-        setBoardName(boards.find((b) => b.id === p.board_id)?.name ?? '-')
+        const b = boards.find((bd) => bd.id === p.board_id)
+        setBoardName(b?.name ?? '-')
+        setCommentsEnabled(b?.comments_enabled ?? true)
         await loadComments()
       } catch {
         setError('게시글을 불러오지 못했습니다.')
@@ -140,20 +143,26 @@ export default function BlogDetailPage() {
           )}
         </ul>
 
-        <form onSubmit={onAddComment} className="flex gap-2">
-          <input
-            value={newComment}
-            onChange={(e) => setNewComment(e.target.value)}
-            placeholder="댓글을 입력하세요"
-            className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none"
-          />
-          <button
-            type="submit"
-            className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
-          >
-            등록
-          </button>
-        </form>
+        {commentsEnabled ? (
+          <form onSubmit={onAddComment} className="flex gap-2">
+            <input
+              value={newComment}
+              onChange={(e) => setNewComment(e.target.value)}
+              placeholder="댓글을 입력하세요"
+              className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none"
+            />
+            <button
+              type="submit"
+              className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
+            >
+              등록
+            </button>
+          </form>
+        ) : (
+          <p className="rounded-lg bg-slate-50 px-4 py-3 text-center text-sm text-slate-400">
+            이 게시판은 댓글이 비활성화되어 있습니다.
+          </p>
+        )}
       </section>
     </div>
   )

@@ -123,6 +123,10 @@ class Board(Base, TimestampMixin):
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     order_index: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    # 게시판별 댓글 허용 여부 (관리자 토글)
+    comments_enabled: Mapped[bool] = mapped_column(
+        Boolean, default=True, server_default="true", nullable=False
+    )
     min_role_required: Mapped[UserRole] = mapped_column(
         role_enum, default=UserRole.FREE, server_default=UserRole.FREE.value, nullable=False
     )

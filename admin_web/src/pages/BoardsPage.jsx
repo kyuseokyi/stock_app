@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { createBoard, deleteBoard, listBoards } from '../api/boards'
+import { createBoard, deleteBoard, listBoards, updateBoard } from '../api/boards'
 
 export default function BoardsPage() {
   const [boards, setBoards] = useState([])
@@ -45,6 +45,15 @@ export default function BoardsPage() {
     }
   }
 
+  const onToggleComments = async (board) => {
+    try {
+      await updateBoard(board.id, { comments_enabled: !board.comments_enabled })
+      load()
+    } catch {
+      setError('댓글 설정 변경에 실패했습니다.')
+    }
+  }
+
   return (
     <div>
       <h2 className="mb-6 text-2xl font-bold text-slate-900">게시판 관리</h2>
@@ -81,19 +90,20 @@ export default function BoardsPage() {
               <th className="px-4 py-3 font-medium">이름</th>
               <th className="px-4 py-3 font-medium">순서</th>
               <th className="px-4 py-3 font-medium">활성</th>
+              <th className="px-4 py-3 font-medium">댓글</th>
               <th className="px-4 py-3 text-right font-medium">작업</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
             {loading ? (
               <tr>
-                <td colSpan={5} className="px-4 py-8 text-center text-slate-400">
+                <td colSpan={6} className="px-4 py-8 text-center text-slate-400">
                   불러오는 중…
                 </td>
               </tr>
             ) : boards.length === 0 ? (
               <tr>
-                <td colSpan={5} className="px-4 py-8 text-center text-slate-400">
+                <td colSpan={6} className="px-4 py-8 text-center text-slate-400">
                   게시판이 없습니다. 위에서 추가해 보세요.
                 </td>
               </tr>
@@ -113,6 +123,23 @@ export default function BoardsPage() {
                     >
                       {b.is_active ? '활성' : '비활성'}
                     </span>
+                  </td>
+                  <td className="px-4 py-3">
+                    <button
+                      onClick={() => onToggleComments(b)}
+                      role="switch"
+                      aria-checked={b.comments_enabled}
+                      className={`relative inline-flex h-5 w-9 items-center rounded-full transition ${
+                        b.comments_enabled ? 'bg-indigo-600' : 'bg-slate-300'
+                      }`}
+                      title={b.comments_enabled ? '댓글 허용됨 (클릭해 끄기)' : '댓글 비활성 (클릭해 켜기)'}
+                    >
+                      <span
+                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition ${
+                          b.comments_enabled ? 'translate-x-4' : 'translate-x-1'
+                        }`}
+                      />
+                    </button>
                   </td>
                   <td className="px-4 py-3 text-right">
                     <button
