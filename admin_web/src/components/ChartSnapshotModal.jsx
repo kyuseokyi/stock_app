@@ -163,13 +163,16 @@ function channelSeries(chart, channels, previewChannel) {
   return out
 }
 
-function buildOption(chart, shapes = [], preview = null, channelPreview = null) {
+function buildOption(chart, shapes = [], preview = null, channelPreview = null, showVP = true) {
   const dates = chart.candles.map((c) => c.date.slice(5)) // MM-DD
   const candles = chart.candles.map((c) => [c.open, c.close, c.low, c.high])
   const bb = chart.bollinger
   const { markLine, markArea, markPoint } = buildMarks(chart, shapes, preview)
   const channels = shapes.filter((s) => s.type === 'channel')
   const chSeries = channelSeries(chart, channels, channelPreview)
+  const vpSeries = showVP ? [volumeProfileSeries(chart.volumeProfile)] : []
+  const legendData = ['캔들', 'MA5', 'MA20', 'MA50', 'MA120', 'BB상단', 'BB하단']
+  if (showVP) legendData.push('매물대')
   return {
     animation: false,
     grid: { left: 15, right: 60, top: 45, bottom: 30 },
@@ -180,7 +183,7 @@ function buildOption(chart, shapes = [], preview = null, channelPreview = null) 
     },
     tooltip: { trigger: 'axis', axisPointer: { type: 'cross' } },
     legend: {
-      data: ['캔들', 'MA5', 'MA20', 'MA50', 'MA120', 'BB상단', 'BB하단', '매물대'],
+      data: legendData,
       top: 22,
       right: 10,
       type: 'scroll',
@@ -197,7 +200,7 @@ function buildOption(chart, shapes = [], preview = null, channelPreview = null) 
       splitLine: { lineStyle: { color: '#f1f5f9' } },
     },
     series: [
-      volumeProfileSeries(chart.volumeProfile),
+      ...vpSeries,
       {
         name: '캔들',
         type: 'candlestick',
@@ -250,6 +253,7 @@ export default function ChartSnapshotModal({ open, onClose, onInsert }) {
   const [selected, setSelected] = useState(null)
   const [range, setRange] = useState(defaultRange)
   const [bbStdDev, setBbStdDev] = useState(2.0)
+  const [showVP, setShowVP] = useState(true) // 매물대 표시 토글
   const [chart, setChart] = useState(null)
   const [searching, setSearching] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -342,8 +346,8 @@ export default function ChartSnapshotModal({ open, onClose, onInsert }) {
   }
 
   const option = useMemo(
-    () => (chart ? buildOption(chart, shapes, preview, channelPreview) : null),
-    [chart, shapes, preview, channelPreview],
+    () => (chart ? buildOption(chart, shapes, preview, channelPreview, showVP) : null),
+    [chart, shapes, preview, channelPreview, showVP],
   )
 
   // 차트 인스턴스 준비 시 zrender 드로잉 핸들러 바인딩(마운트마다 1회)
@@ -544,6 +548,16 @@ export default function ChartSnapshotModal({ open, onClose, onInsert }) {
               className="w-16 rounded-lg border border-slate-300 px-2 py-1 tabular-nums"
             />
           </div>
+
+          <label className="flex cursor-pointer items-center gap-1.5 text-slate-600">
+            <input
+              type="checkbox"
+              checked={showVP}
+              onChange={(e) => setShowVP(e.target.checked)}
+              className="accent-slate-500"
+            />
+            매물대
+          </label>
 
           {chart && (
             <span
