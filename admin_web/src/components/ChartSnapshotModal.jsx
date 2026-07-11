@@ -1,6 +1,75 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import ReactECharts from 'echarts-for-react'
 import { getChartData, searchStocks } from '../api/stockClient'
+import { useChartDrawings } from '../hooks/useChartDrawings'
+
+const clampIdx = (i, len) => Math.max(0, Math.min(len - 1, Math.round(i)))
+
+// 드로잉 도형(데이터좌표) → ECharts markLine/markArea/markPoint 로 변환.
+// 데이터 좌표 native 라 리로드/리사이즈에도 정합, getDataURL 캡처에 포함된다.
+function buildMarks(chart, shapes, preview) {
+  const dates = chart.candles.map((c) => c.date.slice(5))
+  const digits = chart.currency === 'KRW' ? 0 : 2
+  const fmt = (v) =>
+    Number(v).toLocaleString(undefined, { maximumFractionDigits: digits })
+
+  const hlines = shapes.filter((s) => s.type === 'hline')
+  const rects = shapes.filter((s) => s.type === 'rect')
+  const texts = shapes.filter((s) => s.type === 'text')
+  const allRects = preview ? [...rects, preview] : rects
+
+  const markLine = hlines.length
+    ? {
+        symbol: 'none',
+        silent: true,
+        data: hlines.map((h) => ({
+          yAxis: h.price,
+          label: { formatter: fmt(h.price), position: 'end', color: '#e11d48' },
+        })),
+        lineStyle: { color: '#e11d48', width: 1.2 },
+      }
+    : undefined
+
+  const markArea = allRects.length
+    ? {
+        silent: true,
+        itemStyle: {
+          color: 'rgba(59,130,246,0.12)',
+          borderColor: '#3b82f6',
+          borderWidth: 1,
+        },
+        data: allRects.map((r) => [
+          { xAxis: dates[clampIdx(r.xi1, dates.length)], yAxis: Math.max(r.y1, r.y2) },
+          { xAxis: dates[clampIdx(r.xi2, dates.length)], yAxis: Math.min(r.y1, r.y2) },
+        ]),
+      }
+    : undefined
+
+  const markPoint = texts.length
+    ? {
+        symbol: 'circle',
+        symbolSize: 5,
+        itemStyle: { color: '#0f172a' },
+        data: texts.map((t) => ({
+          coord: [dates[clampIdx(t.xi, dates.length)], t.price],
+          value: t.text,
+          label: {
+            formatter: t.text,
+            position: 'top',
+            color: '#0f172a',
+            backgroundColor: 'rgba(255,255,255,0.85)',
+            borderColor: '#94a3b8',
+            borderWidth: 1,
+            borderRadius: 3,
+            padding: [2, 4],
+            fontSize: 12,
+          },
+        })),
+      }
+    : undefined
+
+  return { markLine, markArea, markPoint }
+}
 
 // 기본 조회 기간: 최근 3개월
 function defaultRange() {
@@ -54,10 +123,11 @@ function volumeProfileSeries(vp) {
   }
 }
 
-function buildOption(chart) {
+function buildOption(chart, shapes = [], preview = null) {
   const dates = chart.candles.map((c) => c.date.slice(5)) // MM-DD
   const candles = chart.candles.map((c) => [c.open, c.close, c.low, c.high])
   const bb = chart.bollinger
+  const { markLine, markArea, markPoint } = buildMarks(chart, shapes, preview)
   return {
     animation: false,
     grid: { left: 55, right: 20, top: 45, bottom: 30 },
@@ -92,6 +162,9 @@ function buildOption(chart) {
           borderColor: '#ef4444',
           borderColor0: '#3b82f6',
         },
+        markLine,
+        markArea,
+        markPoint,
       },
       { name: 'MA5', type: 'line', data: chart.ma5, smooth: true, showSymbol: false, lineStyle: { width: 1, color: '#f59e0b' } },
       { name: 'MA20', type: 'line', data: chart.ma20, smooth: true, showSymbol: false, lineStyle: { width: 1, color: '#8b5cf6' } },
@@ -134,6 +207,14 @@ export default function ChartSnapshotModal({ open, onClose, onInsert }) {
   const [searching, setSearching] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+
+  // 드로잉
+  const { tool, toggleTool, setTool, shapes, addShape, removeShape, clearAll } =
+    useChartDrawings()
+  const [preview, setPreview] = useState(null) // 사각형 드래그 미리보기
+  const [textInput, setTextInput] = useState(null) // { px, py, xi, price }
+  const toolRef = useRef(tool)
+  toolRef.current = tool
 
   // 검색어 debounce → searchStocks
   useEffect(() => {
@@ -187,15 +268,84 @@ export default function ChartSnapshotModal({ open, onClose, onInsert }) {
     if (selected) loadChart(selected, range, val)
   }
 
-  const option = useMemo(() => (chart ? buildOption(chart) : null), [chart])
+  const option = useMemo(
+    () => (chart ? buildOption(chart, shapes, preview) : null),
+    [chart, shapes, preview],
+  )
+
+  // 차트 위 드로잉: zrender 이벤트로 클릭/드래그 → 데이터 좌표 도형 추가
+  useEffect(() => {
+    const inst = chartRef.current?.getEchartsInstance?.()
+    if (!inst || !chart) return
+    const zr = inst.getZr()
+
+    const toData = (e) => {
+      const p = inst.convertFromPixel({ gridIndex: 0 }, [e.offsetX, e.offsetY])
+      if (!p || Number.isNaN(p[0]) || Number.isNaN(p[1])) return null
+      return p // [xIndex, price]
+    }
+    let dragStart = null
+
+    const onClick = (e) => {
+      const t = toolRef.current
+      if (!t || t === 'rect') return
+      const p = toData(e)
+      if (!p) return
+      if (t === 'hline') addShape({ type: 'hline', price: p[1] })
+      else if (t === 'text')
+        setTextInput({ px: e.offsetX, py: e.offsetY, xi: p[0], price: p[1] })
+    }
+    const onDown = (e) => {
+      if (toolRef.current !== 'rect') return
+      const p = toData(e)
+      if (!p) return
+      dragStart = { xi: p[0], price: p[1] }
+      setPreview(null)
+    }
+    const onMove = (e) => {
+      if (toolRef.current !== 'rect' || !dragStart) return
+      const p = toData(e)
+      if (!p) return
+      setPreview({ type: 'rect', xi1: dragStart.xi, y1: dragStart.price, xi2: p[0], y2: p[1] })
+    }
+    const onUp = (e) => {
+      if (toolRef.current !== 'rect' || !dragStart) return
+      const p = toData(e)
+      if (p) {
+        addShape({ type: 'rect', xi1: dragStart.xi, y1: dragStart.price, xi2: p[0], y2: p[1] })
+      }
+      dragStart = null
+      setPreview(null)
+    }
+
+    zr.on('click', onClick)
+    zr.on('mousedown', onDown)
+    zr.on('mousemove', onMove)
+    zr.on('mouseup', onUp)
+    return () => {
+      zr.off('click', onClick)
+      zr.off('mousedown', onDown)
+      zr.off('mousemove', onMove)
+      zr.off('mouseup', onUp)
+    }
+  }, [chart, addShape])
 
   if (!open) return null
+
+  const commitText = (val) => {
+    if (textInput && val.trim()) {
+      addShape({ type: 'text', xi: textInput.xi, price: textInput.price, text: val.trim() })
+    }
+    setTextInput(null)
+  }
 
   const handleInsert = () => {
     const inst = chartRef.current?.getEchartsInstance()
     if (!inst) return
     const dataURL = inst.getDataURL({ type: 'png', pixelRatio: 2, backgroundColor: '#ffffff' })
     onInsert(dataURL)
+    clearAll()
+    setTool(null)
     onClose()
   }
 
@@ -297,8 +447,73 @@ export default function ChartSnapshotModal({ open, onClose, onInsert }) {
           <p className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>
         )}
 
+        {/* 드로잉 툴바 */}
+        {chart && (
+          <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
+            <span className="text-slate-500">그리기</span>
+            {[
+              { key: 'hline', label: '수평선 ─' },
+              { key: 'rect', label: '사각형 ▭' },
+              { key: 'text', label: '텍스트 T' },
+            ].map((b) => (
+              <button
+                key={b.key}
+                onClick={() => toggleTool(b.key)}
+                className={`rounded-lg border px-2.5 py-1 ${
+                  tool === b.key
+                    ? 'border-indigo-500 bg-indigo-50 text-indigo-600'
+                    : 'border-slate-300 text-slate-600 hover:bg-slate-50'
+                }`}
+              >
+                {b.label}
+              </button>
+            ))}
+            {shapes.length > 0 && (
+              <button
+                onClick={clearAll}
+                className="rounded-lg border border-slate-300 px-2.5 py-1 text-slate-500 hover:bg-slate-50"
+              >
+                전체지우기
+              </button>
+            )}
+            {tool && (
+              <span className="text-xs text-slate-400">
+                {tool === 'hline' && '차트를 클릭해 수평선을 추가'}
+                {tool === 'rect' && '드래그해 사각형 영역을 지정'}
+                {tool === 'text' && '클릭한 위치에 텍스트를 입력'}
+              </span>
+            )}
+          </div>
+        )}
+
+        {/* 그린 항목 칩 (개별 삭제) */}
+        {shapes.length > 0 && (
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {shapes.map((s, i) => (
+              <span
+                key={s.id}
+                className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600"
+              >
+                {s.type === 'hline' && `수평선 ${i + 1}`}
+                {s.type === 'rect' && `사각형 ${i + 1}`}
+                {s.type === 'text' && `텍스트: ${s.text}`}
+                <button
+                  onClick={() => removeShape(s.id)}
+                  className="text-slate-400 hover:text-red-500"
+                  aria-label="삭제"
+                >
+                  ✕
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
+
         {/* 차트 */}
-        <div className="mt-3 min-h-[320px] flex-1 rounded-lg border border-slate-200">
+        <div
+          className="relative mt-3 min-h-[320px] flex-1 rounded-lg border border-slate-200"
+          style={{ cursor: tool ? 'crosshair' : 'default' }}
+        >
           {loading ? (
             <p className="py-32 text-center text-sm text-slate-400">차트 불러오는 중…</p>
           ) : option ? (
@@ -307,6 +522,26 @@ export default function ChartSnapshotModal({ open, onClose, onInsert }) {
             <p className="py-32 text-center text-sm text-slate-400">
               종목을 검색해 선택하면 차트가 표시됩니다.
             </p>
+          )}
+
+          {/* 텍스트 입력 오버레이 (임시 — 확정 시 차트에 markPoint로 배치) */}
+          {textInput && (
+            <input
+              autoFocus
+              defaultValue=""
+              placeholder="텍스트 입력 후 Enter"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') commitText(e.target.value)
+                else if (e.key === 'Escape') setTextInput(null)
+              }}
+              onBlur={(e) => commitText(e.target.value)}
+              style={{
+                position: 'absolute',
+                left: Math.min(textInput.px, 360),
+                top: textInput.py,
+              }}
+              className="z-10 w-40 rounded border border-indigo-400 bg-white px-2 py-1 text-xs shadow"
+            />
           )}
         </div>
 
