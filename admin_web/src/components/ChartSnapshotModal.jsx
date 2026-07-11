@@ -123,15 +123,16 @@ function volumeProfileSeries(vp) {
   }
 }
 
-// 이중 추세선(평행 채널): 기준선 P1-P2, P3로 평행 폭 지정 → 기준/평행/중심 3선.
-// 각 선을 캔들 인덱스 구간 [iL,iR]에만 값이 있는 line 시리즈로 만든다(구간 밖 null).
+// 이중 추세선(평행 채널): 기준선 P1-P2 + 폭(widthPct, 기준가 대비 %)로 평행선 지정.
+// 폭 부호로 위/아래 방향 결정, 중심선은 두 선의 중간. 구간 [iL,iR]에만 값(밖은 null).
 function computeChannelLines(ch, dates) {
   const n = dates.length
-  const { x1, y1, x2, y2, x3, y3 } = ch
+  const { x1, y1, x2, y2, widthPct = 2 } = ch
   if (Math.abs(x2 - x1) < 0.5) return null // 수직/퇴화 방지
   const m = (y2 - y1) / (x2 - x1)
   const base = (i) => y1 + m * (i - x1)
-  const dy = y3 - base(x3)
+  const ref = (y1 + y2) / 2 // 기준가(폭 % 산정용)
+  const dy = ref * (widthPct / 100)
   const iL = clampIdx(Math.min(x1, x2), n)
   const iR = clampIdx(Math.max(x1, x2), n)
 
@@ -256,15 +257,19 @@ export default function ChartSnapshotModal({ open, onClose, onInsert }) {
   const [error, setError] = useState('')
 
   // 드로잉
-  const { tool, toggleTool, setTool, shapes, addShape, removeShape, clearAll } =
+  const { tool, toggleTool, setTool, shapes, addShape, removeShape, updateShape, clearAll } =
     useChartDrawings()
   const [preview, setPreview] = useState(null) // 사각형 드래그 미리보기
-  const [channelPreview, setChannelPreview] = useState(null) // 채널 3클릭 미리보기
+  const [channelPreview, setChannelPreview] = useState(null) // 채널 미리보기
+  const [channelWidth, setChannelWidth] = useState(2.0) // 채널 폭(%)
   const [textInput, setTextInput] = useState(null) // { px, py, xi, price }
   const toolRef = useRef(tool)
   toolRef.current = tool
+  const channelWidthRef = useRef(channelWidth)
+  channelWidthRef.current = channelWidth
   const dragStartRef = useRef(null) // 사각형 드래그 시작점
-  const chPtsRef = useRef([]) // 채널 3클릭 진행 점들
+  const chPtsRef = useRef([]) // 채널 기준선 진행 점들
+  const lastChannelIdRef = useRef(null) // 마지막 생성 채널(폭 슬라이더 대상)
 
   // 검색어 debounce → searchStocks
   useEffect(() => {
@@ -318,6 +323,13 @@ export default function ChartSnapshotModal({ open, onClose, onInsert }) {
     if (selected) loadChart(selected, range, val)
   }
 
+  // 채널 폭(%) 조절 → 마지막 생성 채널을 실시간 갱신(다음 채널의 기본값도 됨)
+  const handleChannelWidth = (val) => {
+    setChannelWidth(val)
+    const id = lastChannelIdRef.current
+    if (id && shapes.some((s) => s.id === id)) updateShape(id, { widthPct: val })
+  }
+
   const option = useMemo(
     () => (chart ? buildOption(chart, shapes, preview, channelPreview) : null),
     [chart, shapes, preview, channelPreview],
@@ -352,13 +364,15 @@ export default function ChartSnapshotModal({ open, onClose, onInsert }) {
       else if (t === 'channel') {
         const pts = [...chPtsRef.current, { xi: p.xi, price: p.price }]
         chPtsRef.current = pts
-        if (pts.length === 3) {
-          addShape({
+        if (pts.length === 2) {
+          // 기준선 2점 완성 → 현재 폭(%)으로 채널 생성. 폭은 슬라이더로 조절.
+          const created = addShape({
             type: 'channel',
             x1: pts[0].xi, y1: pts[0].price,
             x2: pts[1].xi, y2: pts[1].price,
-            x3: pts[2].xi, y3: pts[2].price,
+            widthPct: channelWidthRef.current,
           })
+          lastChannelIdRef.current = created.id
           chPtsRef.current = []
           setChannelPreview(null)
         }
@@ -380,14 +394,13 @@ export default function ChartSnapshotModal({ open, onClose, onInsert }) {
       const drag = dragStartRef.current
       if (t === 'rect' && drag) {
         setPreview({ type: 'rect', xi1: drag.xi, y1: drag.price, xi2: p.xi, y2: p.price })
-      } else if (t === 'channel' && chPtsRef.current.length) {
-        const pts = chPtsRef.current
-        const a = pts[0]
-        const b = pts.length >= 2 ? pts[1] : { xi: p.xi, price: p.price }
+      } else if (t === 'channel' && chPtsRef.current.length === 1) {
+        // 1점 찍은 상태: 커서를 기준선 끝점으로 채널 미리보기(현재 폭 적용)
+        const a = chPtsRef.current[0]
         setChannelPreview({
           x1: a.xi, y1: a.price,
-          x2: b.xi, y2: b.price,
-          x3: p.xi, y3: p.price,
+          x2: p.xi, y2: p.price,
+          widthPct: channelWidthRef.current,
         })
       }
     })
@@ -422,6 +435,8 @@ export default function ChartSnapshotModal({ open, onClose, onInsert }) {
     setTool(null)
     setPreview(null)
     setChannelPreview(null)
+    chPtsRef.current = []
+    lastChannelIdRef.current = null
     onClose()
   }
 
@@ -565,10 +580,27 @@ export default function ChartSnapshotModal({ open, onClose, onInsert }) {
                 전체지우기
               </button>
             )}
+            {tool === 'channel' && (
+              <span className="flex items-center gap-2">
+                <label className="text-slate-500">폭</label>
+                <input
+                  type="range"
+                  min="-10"
+                  max="10"
+                  step="0.5"
+                  value={channelWidth}
+                  onChange={(e) => handleChannelWidth(Number(e.target.value))}
+                  className="accent-indigo-500"
+                />
+                <span className="w-10 tabular-nums text-slate-600">
+                  {channelWidth.toFixed(1)}%
+                </span>
+              </span>
+            )}
             {tool && (
               <span className="text-xs text-slate-400">
                 {tool === 'hline' && '차트를 클릭해 수평선을 추가'}
-                {tool === 'channel' && '3번 클릭: 기준선 2점 → 평행 폭 1점 (중심선 자동)'}
+                {tool === 'channel' && '기준선 2점 클릭 → 폭 슬라이더로 조절'}
                 {tool === 'rect' && '드래그해 사각형 영역을 지정'}
                 {tool === 'text' && '클릭한 위치에 텍스트를 입력'}
               </span>

@@ -18,12 +18,19 @@ export function useChartDrawings() {
   const [tool, setTool] = useState(null) // 'hline' | 'rect' | 'text' | null
   const [shapes, setShapes] = useState([])
 
-  const addShape = useCallback(
-    (s) => setShapes((prev) => [...prev, { id: nextId(), ...s }]),
-    [],
-  )
+  // 생성한 도형(id 포함)을 반환 → 호출측에서 마지막 도형 추적 가능
+  const addShape = useCallback((s) => {
+    const shape = { id: nextId(), ...s }
+    setShapes((prev) => [...prev, shape])
+    return shape
+  }, [])
   const removeShape = useCallback(
     (id) => setShapes((prev) => prev.filter((s) => s.id !== id)),
+    [],
+  )
+  const updateShape = useCallback(
+    (id, patch) =>
+      setShapes((prev) => prev.map((s) => (s.id === id ? { ...s, ...patch } : s))),
     [],
   )
   const clearAll = useCallback(() => setShapes([]), [])
@@ -34,5 +41,14 @@ export function useChartDrawings() {
     [],
   )
 
-  return { tool, setTool, toggleTool, shapes, addShape, removeShape, clearAll }
+  return {
+    tool,
+    setTool,
+    toggleTool,
+    shapes,
+    addShape,
+    removeShape,
+    updateShape,
+    clearAll,
+  }
 }
