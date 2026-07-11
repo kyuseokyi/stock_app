@@ -110,13 +110,13 @@ function volumeProfileSeries(vp) {
       const yHigh = api.coord([0, bin.priceHigh])[1]
       const yLow = api.coord([0, bin.priceLow])[1]
       const cs = params.coordSys
-      const rightEdge = cs.x + cs.width
       const w = (bin.volume / maxVol) * (cs.width * 0.28)
       const top = Math.min(yHigh, yLow)
       const h = Math.max(1, Math.abs(yLow - yHigh) - 1)
+      // 좌측 끝(cs.x)에서 오른쪽으로 뻗는 가로막대
       return {
         type: 'rect',
-        shape: { x: rightEdge - w, y: top, width: w, height: h },
+        shape: { x: cs.x, y: top, width: w, height: h },
         style: { fill: 'rgba(100,116,139,0.28)' },
       }
     },
@@ -172,7 +172,7 @@ function buildOption(chart, shapes = [], preview = null, channelPreview = null) 
   const chSeries = channelSeries(chart, channels, channelPreview)
   return {
     animation: false,
-    grid: { left: 55, right: 20, top: 45, bottom: 30 },
+    grid: { left: 15, right: 60, top: 45, bottom: 30 },
     title: {
       text: `${chart.name} (${chart.symbol})`,
       left: 'center',
@@ -191,7 +191,11 @@ function buildOption(chart, shapes = [], preview = null, channelPreview = null) 
       boundaryGap: true,
       axisLine: { lineStyle: { color: '#94a3b8' } },
     },
-    yAxis: { scale: true, splitLine: { lineStyle: { color: '#f1f5f9' } } },
+    yAxis: {
+      scale: true,
+      position: 'right',
+      splitLine: { lineStyle: { color: '#f1f5f9' } },
+    },
     series: [
       volumeProfileSeries(chart.volumeProfile),
       {
@@ -217,21 +221,21 @@ function buildOption(chart, shapes = [], preview = null, channelPreview = null) 
         type: 'line',
         data: bb?.upper ?? [],
         showSymbol: false,
-        lineStyle: { width: 1, type: 'dashed', color: '#0ea5e9' },
+        lineStyle: { width: 1, type: 'solid', color: '#0ea5e9' },
       },
       {
         name: 'BB중심',
         type: 'line',
         data: bb?.mid ?? [],
         showSymbol: false,
-        lineStyle: { width: 1, type: 'dotted', color: '#0ea5e9', opacity: 0.6 },
+        lineStyle: { width: 1, type: 'solid', color: '#0ea5e9', opacity: 0.6 },
       },
       {
         name: 'BB하단',
         type: 'line',
         data: bb?.lower ?? [],
         showSymbol: false,
-        lineStyle: { width: 1, type: 'dashed', color: '#0ea5e9' },
+        lineStyle: { width: 1, type: 'solid', color: '#0ea5e9' },
         areaStyle: undefined,
       },
       ...chSeries,
@@ -442,6 +446,13 @@ export default function ChartSnapshotModal({ open, onClose, onInsert }) {
               setQuery(e.target.value)
               setSelected(null)
             }}
+            onKeyDown={(e) => {
+              // 부모 폼 submit(→모달 닫힘) 방지. Enter 시 첫 검색결과 선택
+              if (e.key === 'Enter') {
+                e.preventDefault()
+                if (!selected && results.length > 0) handleSelect(results[0])
+              }
+            }}
             placeholder="국내외 종목·지수 검색 (예: 삼성, AAPL, KOSPI)"
             className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none"
           />
@@ -495,15 +506,20 @@ export default function ChartSnapshotModal({ open, onClose, onInsert }) {
           <div className="flex items-center gap-2">
             <label className="text-slate-500">볼린저 σ</label>
             <input
-              type="range"
-              min="1"
-              max="3"
+              type="number"
+              min="0.5"
+              max="4"
               step="0.1"
               value={bbStdDev}
-              onChange={(e) => handleBbChange(Number(e.target.value))}
-              className="accent-sky-500"
+              onChange={(e) => {
+                const v = Number(e.target.value)
+                if (!Number.isNaN(v) && v > 0) handleBbChange(v)
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') e.preventDefault()
+              }}
+              className="w-16 rounded-lg border border-slate-300 px-2 py-1 tabular-nums"
             />
-            <span className="w-8 tabular-nums text-slate-600">{bbStdDev.toFixed(1)}</span>
           </div>
 
           {chart && (
@@ -595,7 +611,13 @@ export default function ChartSnapshotModal({ open, onClose, onInsert }) {
           {loading ? (
             <p className="py-32 text-center text-sm text-slate-400">차트 불러오는 중…</p>
           ) : option ? (
-            <ReactECharts ref={chartRef} option={option} style={{ height: 320, width: '100%' }} />
+            <ReactECharts
+              ref={chartRef}
+              option={option}
+              notMerge
+              lazyUpdate={false}
+              style={{ height: 320, width: '100%' }}
+            />
           ) : (
             <p className="py-32 text-center text-sm text-slate-400">
               종목을 검색해 선택하면 차트가 표시됩니다.
