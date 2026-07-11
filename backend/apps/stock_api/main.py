@@ -14,6 +14,9 @@ import os
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from strawberry.fastapi import GraphQLRouter
+
+from apps.stock_api.graphql.schema import schema
 
 app = FastAPI(title="Stock App - Stock API Service", version="0.1.0")
 
@@ -34,7 +37,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# TODO: app.include_router(stocks.router)  # /api/v1/stocks (스크리너/차트)
+# GraphQL: searchStocks / getChartData (어드민 차트 삽입 · 클라이언트 차트 조회)
+graphql_app = GraphQLRouter(schema)
+app.include_router(graphql_app, prefix="/graphql")
 
 
 @app.get("/health", tags=["health"])
