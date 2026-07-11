@@ -271,6 +271,29 @@ export default function ChartSnapshotModal({ open, onClose, onInsert }) {
   const chPtsRef = useRef([]) // 채널 기준선 진행 점들
   const lastChannelIdRef = useRef(null) // 마지막 생성 채널(폭 슬라이더 대상)
 
+  // 그리는 중 ESC → 진행 중 드로잉 취소(모달은 유지)
+  useEffect(() => {
+    if (!open) return
+    const onKey = (e) => {
+      if (e.key !== 'Escape') return
+      const inProgress =
+        chPtsRef.current.length ||
+        dragStartRef.current ||
+        channelPreview ||
+        preview ||
+        textInput
+      if (!inProgress) return
+      e.stopPropagation()
+      chPtsRef.current = []
+      dragStartRef.current = null
+      setChannelPreview(null)
+      setPreview(null)
+      setTextInput(null)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [open, channelPreview, preview, textInput])
+
   // 검색어 debounce → searchStocks
   useEffect(() => {
     if (!query.trim()) {
