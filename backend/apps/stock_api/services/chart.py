@@ -116,5 +116,99 @@ def moving_average(candles: list[Candle], window: int) -> list[float | None]:
     return out
 
 
+@dataclass(frozen=True)
+class BollingerBand:
+    period: int
+    std_dev: float  # 표준편차 배수 (bbStdDev)
+    mid: list[float | None]
+    upper: list[float | None]
+    lower: list[float | None]
+
+
+@dataclass(frozen=True)
+class VolumeProfileBin:
+    price_low: float
+    price_high: float
+    volume: int
+
+
+def bollinger_bands(
+    candles: list[Candle], period: int = 20, std_dev: float = 2.0
+) -> BollingerBand:
+    """볼린저 밴드. 중심선=SMA(period), 상/하단=중심 ± std_dev*σ.
+
+    std_dev(bbStdDev)를 인자로 받아 밴드 폭을 동적으로 계산한다.
+    """
+    closes = [c.close for c in candles]
+    mid: list[float | None] = []
+    upper: list[float | None] = []
+    lower: list[float | None] = []
+    for i in range(len(closes)):
+        if i < period - 1:
+            mid.append(None)
+            upper.append(None)
+            lower.append(None)
+            continue
+        window = closes[i - period + 1 : i + 1]
+        m = sum(window) / period
+        var = sum((x - m) ** 2 for x in window) / period
+        sigma = math.sqrt(var)
+        mid.append(round(m, 2))
+        upper.append(round(m + std_dev * sigma, 2))
+        lower.append(round(m - std_dev * sigma, 2))
+    return BollingerBand(
+        period=period, std_dev=std_dev, mid=mid, upper=upper, lower=lower
+    )
+
+
+def ma_order(candles: list[Candle]) -> str:
+    """최신 시점의 이동평균선 배열 상태.
+
+    정배열(PERFECT): MA5 > MA20 > MA50 > MA120
+    역배열(REVERSE): MA5 < MA20 < MA50 < MA120
+    그 외: MIXED (판정 불가/혼조 포함)
+    """
+    def last(window: int) -> float | None:
+        vals = moving_average(candles, window)
+        return vals[-1] if vals else None
+
+    m5, m20, m50, m120 = last(5), last(20), last(50), last(120)
+    if None in (m5, m20, m50, m120):
+        return "MIXED"
+    if m5 > m20 > m50 > m120:
+        return "PERFECT"
+    if m5 < m20 < m50 < m120:
+        return "REVERSE"
+    return "MIXED"
+
+
+def volume_profile(candles: list[Candle], bins: int = 20) -> list[VolumeProfileBin]:
+    """가격대별 누적 거래량(매물대). 각 캔들 거래량을 종가가 속한 가격 구간에 합산."""
+    if not candles:
+        return []
+    lows = [c.low for c in candles]
+    highs = [c.high for c in candles]
+    p_min, p_max = min(lows), max(highs)
+    if p_max <= p_min:
+        return [VolumeProfileBin(p_min, p_max, sum(c.volume for c in candles))]
+
+    width = (p_max - p_min) / bins
+    buckets = [0] * bins
+    for c in candles:
+        idx = int((c.close - p_min) / width)
+        idx = max(0, min(bins - 1, idx))
+        buckets[idx] += c.volume
+
+    digits = 2 if any(c.close < 1000 for c in candles) else 0
+    return [
+        VolumeProfileBin(
+            price_low=round(p_min + i * width, digits),
+            price_high=round(p_min + (i + 1) * width, digits),
+            volume=buckets[i],
+        )
+        for i in range(bins)
+    ]
+
+
 def resolve_stock(symbol: str) -> SeedStock | None:
     return get_by_symbol(symbol)

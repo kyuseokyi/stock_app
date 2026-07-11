@@ -4,7 +4,13 @@ from __future__ import annotations
 
 import strawberry
 
-from apps.stock_api.graphql.types import Candle, ChartData, Stock
+from apps.stock_api.graphql.types import (
+    BollingerBand,
+    Candle,
+    ChartData,
+    Stock,
+    VolumeProfileBin,
+)
 from apps.stock_api.seed_catalog import search as catalog_search
 from apps.stock_api.services import chart as chart_service
 
@@ -24,17 +30,23 @@ class Query:
             for s in catalog_search(query)
         ]
 
-    @strawberry.field(description="종목/지수의 기간별 OHLCV 및 이동평균 조회")
+    @strawberry.field(
+        description="종목/지수의 기간별 OHLCV·이동평균·정배열/역배열·볼린저밴드·매물대 조회"
+    )
     def get_chart_data(
-        self, symbol: str, start_date: str, end_date: str
+        self,
+        symbol: str,
+        start_date: str,
+        end_date: str,
+        bb_std_dev: float = 2.0,
     ) -> ChartData | None:
         stock = chart_service.resolve_stock(symbol)
         if stock is None:
             return None
 
         candles = chart_service.generate_candles(symbol, start_date, end_date)
-        ma5 = chart_service.moving_average(candles, 5)
-        ma20 = chart_service.moving_average(candles, 20)
+        bb = chart_service.bollinger_bands(candles, period=20, std_dev=bb_std_dev)
+        vp = chart_service.volume_profile(candles)
 
         return ChartData(
             symbol=stock.symbol,
@@ -52,8 +64,26 @@ class Query:
                 )
                 for c in candles
             ],
-            ma5=ma5,
-            ma20=ma20,
+            ma5=chart_service.moving_average(candles, 5),
+            ma20=chart_service.moving_average(candles, 20),
+            ma50=chart_service.moving_average(candles, 50),
+            ma120=chart_service.moving_average(candles, 120),
+            ma_order=chart_service.ma_order(candles),
+            bollinger=BollingerBand(
+                period=bb.period,
+                std_dev=bb.std_dev,
+                mid=bb.mid,
+                upper=bb.upper,
+                lower=bb.lower,
+            ),
+            volume_profile=[
+                VolumeProfileBin(
+                    price_low=b.price_low,
+                    price_high=b.price_high,
+                    volume=b.volume,
+                )
+                for b in vp
+            ],
         )
 
 
