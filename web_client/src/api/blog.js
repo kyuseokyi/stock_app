@@ -22,3 +22,9 @@ export const listComments = async (blogId) => {
   const { data } = await client.get(`/blogs/${blogId}/comments`)
   return data
 }
+
+// 댓글 작성 (로그인 필요 — client 인터셉터가 Bearer 부착)
+export const createComment = async (blogId, content) => {
+  const { data } = await client.post(`/blogs/${blogId}/comments`, { content })
+  return data
+}
