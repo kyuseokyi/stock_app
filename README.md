@@ -145,6 +145,24 @@ docker compose -f docker-compose.dev.yml stop   # DB 인프라 정지(데이터 
 | `VITE_AUTH_BASE_URL` | admin_web | `http://localhost:8001/api/v1` | 인증 API |
 | `VITE_STOCK_API_URL` | admin_web | `http://localhost:8002/graphql` | 주식 API(GraphQL) — 차트 삽입 종목검색/차트 |
 | `VITE_AUTH_BASE_URL` | web_client | `http://localhost:8001/api/v1` | 인증 API — 임시 로그인(닉네임) |
+| `KIS_MODE` | collector | `vps` | KIS 접속 모드 — `vps`(모의투자) \| `prod`(실서버) |
+| `KIS_APP_KEY` / `KIS_APP_SECRET` | collector | (빈값) | KIS OpenAPI 앱키/시크릿 (비우면 Mock 수집 폴백) |
+| `KIS_ACCOUNT_NO` | collector | (빈값) | 계좌번호(시세조회만이면 생략 가능) |
+
+> 백엔드는 `shared` 로드 시 `APP_ENV`(기본 `development`)에 따라 `backend/.env.{APP_ENV}` → `backend/.env` 를 자동 로드합니다. 템플릿은 `backend/.env.example`.
+
+### 🔑 한국투자증권(KIS) 설정 (Phase 1 데이터 파이프라인)
+```bash
+cd backend
+cp .env.example .env.development     # 템플릿 복사 (.env.* 는 git 무시)
+# .env.development 를 열어 아래를 채웁니다:
+#   KIS_MODE=vps          # 먼저 모의투자(sandbox)로 안전하게 테스트
+#   KIS_APP_KEY=...        # https://apiportal.koreainvestment.com 에서 발급
+#   KIS_APP_SECRET=...
+#   KIS_ACCOUNT_NO=...     # 계좌번호(예: 12345678-01) — 시세조회만이면 생략 가능
+```
+- **앱키가 없으면** 수집기는 Mock 데이터로 폴백하므로 키 없이도 구조 개발이 가능합니다.
+- `KIS_MODE=vps`(모의투자) → BASE `openapivts...:29443`, `prod` → `openapi...:9443` 로 자동 전환됩니다.
 
 ## 🔔 알림 아키텍처
 - **웹(SSE)**: 블로그 서비스의 `GET /api/v1/notifications/stream` 에 EventSource 로 연결 → 새 글 작성 시 Redis pub/sub 로 즉시 토스트 알림.
