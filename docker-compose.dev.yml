@@ -18,7 +18,7 @@ services:
     restart: unless-stopped
 
   clickhouse:
-    image: clickhouse/clickhouse-server:latest
+    image: clickhouse/clickhouse-server:24.8
     container_name: stock_clickhouse
     environment:
       CLICKHOUSE_USER: default
