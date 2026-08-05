@@ -1,6 +1,6 @@
 # Stock App 로드맵 & 진행 현황
 
-> 최종 업데이트: 2026-07-21
+> 최종 업데이트: 2026-08-05
 
 한국투자증권 API 기반 주식 데이터 파이프라인 + 블로그/커뮤니티 + 관리자/유저 웹/모바일 풀스택 모노레포의 진행 현황과 향후 단계.
 
@@ -46,12 +46,19 @@
 
 ### Phase 1 — 데이터 파이프라인 (실데이터 기반)
 > stock_api의 온더플라이(가짜)를 실데이터로 교체하는 기반. 스크리너·실차트의 전제.
-- [ ] KIS OpenAPI Custom Client (`requests` 기반, OAuth 토큰/Hashkey/rate-limit 처리)
-- [ ] OHLCV 수집 → 지표 연산(MA·정/역배열·볼린저·매물대·거래량) → ClickHouse 적재
-- [ ] 재무데이터(PER/PBR/ROE) 연동
-- [ ] Celery beat 스케줄(매일 장 마감 후) 실적재 검증
-- [ ] stock_api `getChartData`/`searchStocks`를 ClickHouse 조회로 전환
-- ⚠️ **KIS 앱키/자격증명 필요** (없으면 더미 수집기 스켈레톤부터)
+
+**(a) 수직 슬라이스 — 005930 국내 일봉 [완료 ✅ 2026-07-21]**
+- [x] KIS OpenAPI Custom Client (`requests` 동기 + OAuth 토큰 Redis 공유 캐시, 5xx만 재시도)
+- [x] 국내 일봉 수집(수정주가) → MA5/20/50/120 → ClickHouse 멱등 적재(`ReplacingMergeTree`)
+- [x] Celery 태스크 `collector.collect_daily_ohlcv`(겹침창 today-30d~+2d) — 멱등 검증
+- [x] stock_api `getChartData` 하이브리드(수집종목=CH, 나머지=온더플라이)
+
+**(b) 확장 — 다음 슬라이스**
+- [ ] 국내 전종목 루프 + `AsyncLimiter` 레이트리밋 + 실패격리
+- [ ] Celery beat 스케줄(매일 장 마감 후) 자동 수집
+- [ ] 과거 백필(bulk import, 날짜 청킹으로 장기 히스토리)
+- [ ] 해외 주식/지수, 재무데이터(PER/PBR/ROE) 연동
+- [ ] 정배열/역배열·매물대의 CH 컬럼 영속화(스크리너 성능용)
 
 ### Phase 2 — 스크리너
 - [ ] `stock_api` 스크리너 리졸버/엔드포인트(필터 조합)
