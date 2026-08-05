@@ -13,6 +13,7 @@ from apps.stock_api.graphql.types import (
 )
 from apps.stock_api.seed_catalog import search as catalog_search
 from apps.stock_api.services import chart as chart_service
+from apps.stock_api.services import clickhouse_source as ch_source
 
 
 @strawberry.type
@@ -44,7 +45,10 @@ class Query:
         if stock is None:
             return None
 
-        candles = chart_service.generate_candles(symbol, start_date, end_date)
+        # 하이브리드: 수집된 종목이면 ClickHouse 실데이터, 없으면 온더플라이 시드
+        candles = ch_source.get_candles(symbol, start_date, end_date)
+        if not candles:
+            candles = chart_service.generate_candles(symbol, start_date, end_date)
         bb = chart_service.bollinger_bands(candles, period=20, std_dev=bb_std_dev)
         vp = chart_service.volume_profile(candles)
 
