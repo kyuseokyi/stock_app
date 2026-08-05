@@ -23,7 +23,10 @@ celery_app = Celery(
     "stock_app",
     broker=REDIS_URL,
     backend=REDIS_URL,
-    include=["apps.collector.tasks.notifications"],
+    include=[
+        "apps.collector.tasks.notifications",
+        "apps.collector.tasks.ohlcv",
+    ],
 )
 
 celery_app.conf.update(
@@ -35,10 +38,12 @@ celery_app.conf.update(
     accept_content=["json"],
 )
 
-# celery-beat 스케줄: 매일 오후 4시(장 종료 후) 일봉 수집 Task 트리거 예정.
+# celery-beat 스케줄(다음 슬라이스에서 전종목 확장 예정).
+# Phase 1(a)는 수동 트리거로 검증하므로, beat 는 임시로 1종목만 걸어둔다.
 celery_app.conf.beat_schedule = {
-    "collect-daily-prices": {
-        "task": "apps.collector.tasks.pipeline.collect_daily_prices",
+    "collect-daily-005930": {
+        "task": "collector.collect_daily_ohlcv",
         "schedule": crontab(hour=16, minute=0),
+        "args": ["005930"],
     },
 }
