@@ -56,13 +56,80 @@ npm run dev        # http://localhost:5173
 ```
 
 ### 4. 일반 유저 웹 (web_client)
-일반 사용자(B2C)용 반응형 웹. 블로그/커뮤니티 조회 + SSE 실시간 알림(현재 댓글은 읽기 전용).
+일반 사용자(B2C)용 반응형 웹. 블로그/커뮤니티 조회 + SSE 실시간 알림 + **임시 로그인(닉네임)으로 댓글 작성**.
+> 임시 로그인은 auth 서비스의 `POST /api/v1/auth/guest`(닉네임→FREE 유저 발급)를 사용합니다. 카카오/구글 OAuth는 추후 동일 토큰 경로로 교체 예정. 댓글 작성 테스트에는 auth(8001)도 함께 띄워야 합니다.
 ```bash
 cd web_client
 npm install
 npm run dev        # http://localhost:3000
 ```
 > blog 서비스(8000)만 있으면 조회가 동작합니다. (`VITE_API_BASE_URL` 로 API 주소 오버라이드)
+
+## 🔄 작업 재개(Resume) 가이드 & 환경 점검
+
+작업을 중단했다가 다시 시작할 때, **DB 인프라(Docker)** 는 재부팅 전까지 계속 떠 있지만 **앱 서비스(FastAPI/Celery/Vite)** 는 종료되므로 다시 띄워야 합니다.
+
+> 📌 **가상환경 참고**: 백엔드는 `uv` 가 `backend/.venv` 를 자동 관리합니다. `uv run ...` 만 쓰면 되고 **별도 conda 활성화는 필요 없습니다.** (전역 규칙상 conda를 쓰고 싶다면 `stock_app` env를 먼저 생성해 사용하세요.)
+
+### 0. 사전 준비물 (최초 1회)
+- **Docker Desktop** (DB 인프라), **uv** (백엔드 파이썬), **Node.js 18+** (프론트)
+
+### 1. 현재 상태 점검 (무엇이 켜져 있나)
+```bash
+# DB 인프라(도커) 상태 — postgres/redis/clickhouse 가 healthy 인지
+docker compose -f docker-compose.dev.yml ps
+
+# 앱 서비스 포트 점유 확인 (● 떠 있으면 실행 중)
+for p in 8001 8000 8002 5173 3000; do lsof -ti:$p >/dev/null 2>&1 && echo "$p ●실행중" || echo "$p ○정지"; done
+# 8001 auth · 8000 blog · 8002 stock_api · 5173 admin_web · 3000 web_client
+
+# Celery 워커
+pgrep -fl "celery.*worker" || echo "celery ○정지"
+```
+
+### 2. 최소 기동 순서 (매번)
+```bash
+# (1) DB 인프라가 내려가 있으면 먼저 올린다 (재부팅 후엔 항상 필요)
+docker compose -f docker-compose.dev.yml up -d
+
+# (2) 백엔드 서비스 — 필요한 것만. 각 명령은 별도 터미널/백그라운드로 실행
+cd backend
+uv run uvicorn apps.auth.main:app      --reload --port 8001   # 로그인/JWT
+uv run uvicorn apps.blog.main:app      --reload --port 8000   # 게시판/글/댓글/SSE
+uv run uvicorn apps.stock_api.main:app --reload --port 8002   # 주식 GraphQL(차트/종목)
+uv run celery -A apps.collector.celery_app worker --loglevel=info   # 알림 워커(선택)
+
+# (3) 프론트 — 필요한 것만
+cd ../admin_web  && npm run dev   # 관리자 5173  (auth 8001 + blog 8000 + stock_api 8002 필요)
+cd ../web_client && npm run dev   # 유저웹 3000  (blog 8000 + 댓글작성 시 auth 8001)
+```
+
+### 3. 기능별 "무엇을 띄워야 하나"
+| 하고 싶은 것 | 필요한 서비스 |
+|---|---|
+| 관리자 로그인 + 게시판/글/댓글 관리 | Docker(postgres) + auth(8001) + blog(8000) + admin_web(5173) |
+| 어드민 차트 삽입(종목검색/드로잉) | 위 + stock_api(8002) |
+| 유저 웹 블로그 조회 | Docker(postgres) + blog(8000) + web_client(3000) |
+| 유저 웹 임시 로그인 + 댓글 작성 | 위 + auth(8001) |
+| 새 글 실시간 알림(SSE)·푸시(Mock) | 위 + Redis(도커) + celery worker |
+
+### 4. 마이그레이션/시드 (스키마·계정 변경 시에만)
+```bash
+cd backend
+uv run alembic upgrade head            # 모델 변경 후 스키마 반영
+uv run python -m apps.auth.seed_admin  # 관리자 계정 없을 때 (admin@stock.app / admin1234)
+```
+
+### 5. 종료
+```bash
+# 앱 서비스만 정리 (포트 kill)
+for p in 8001 8000 8002 5173 3000; do lsof -ti:$p | xargs kill -9 2>/dev/null; done
+pkill -f "celery.*worker"
+
+docker compose -f docker-compose.dev.yml stop   # DB 인프라 정지(데이터 유지)
+# docker compose -f docker-compose.dev.yml down  # 컨테이너 제거(볼륨은 유지 → 데이터 보존)
+```
+> 데이터(볼륨 `pg_data`/`clickhouse_data`/`redis_data`)는 `down` 해도 유지됩니다. 완전 초기화는 `down -v`.
 
 ## ⚙️ 주요 환경변수
 
@@ -77,6 +144,7 @@ npm run dev        # http://localhost:3000
 | `VITE_API_BASE_URL` | admin_web | `http://localhost:8000/api/v1` | 블로그 API |
 | `VITE_AUTH_BASE_URL` | admin_web | `http://localhost:8001/api/v1` | 인증 API |
 | `VITE_STOCK_API_URL` | admin_web | `http://localhost:8002/graphql` | 주식 API(GraphQL) — 차트 삽입 종목검색/차트 |
+| `VITE_AUTH_BASE_URL` | web_client | `http://localhost:8001/api/v1` | 인증 API — 임시 로그인(닉네임) |
 
 ## 🔔 알림 아키텍처
 - **웹(SSE)**: 블로그 서비스의 `GET /api/v1/notifications/stream` 에 EventSource 로 연결 → 새 글 작성 시 Redis pub/sub 로 즉시 토스트 알림.
