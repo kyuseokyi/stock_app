@@ -30,23 +30,24 @@ CLICKHOUSE_DB = os.getenv("CLICKHOUSE_DB", "stock_data")
 DAILY_PRICES_DDL = f"""
 CREATE TABLE IF NOT EXISTS {CLICKHOUSE_DB}.daily_prices
 (
-    ticker      String,
-    date        Date,
-    open        Float64,
-    high        Float64,
-    low         Float64,
-    close       Float64,
-    volume      UInt64,
-    ma5         Nullable(Float64),
-    ma20        Nullable(Float64),
-    ma50        Nullable(Float64),
-    ma120       Nullable(Float64),
-    bb_upper    Nullable(Float64),
-    bb_lower    Nullable(Float64),
-    rsi_14      Nullable(Float64),
-    macd        Nullable(Float64)
+    ticker       String,
+    date         Date,
+    open         Float64,
+    high         Float64,
+    low          Float64,
+    close        Float64,
+    volume       UInt64,
+    ma5          Nullable(Float64),
+    ma20         Nullable(Float64),
+    ma50         Nullable(Float64),
+    ma120        Nullable(Float64),
+    bb_upper     Nullable(Float64),
+    bb_lower     Nullable(Float64),
+    rsi_14       Nullable(Float64),
+    macd         Nullable(Float64),
+    ingested_at  DateTime DEFAULT now()
 )
-ENGINE = MergeTree()
+ENGINE = ReplacingMergeTree(ingested_at)
 PARTITION BY toYYYYMM(date)
 ORDER BY (ticker, date)
 TTL date + INTERVAL 10 YEAR
