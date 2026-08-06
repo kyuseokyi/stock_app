@@ -457,7 +457,7 @@ export default function ChartSnapshotModal({ open, onClose, onInsert }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-white p-5 shadow-xl">
+      <div className="flex max-h-[90vh] w-full max-w-[1344px] flex-col overflow-hidden rounded-2xl bg-white p-5 shadow-xl">
         <div className="mb-3 flex items-center justify-between">
           <h3 className="text-lg font-bold text-slate-900">차트 삽입 — 종목 검색</h3>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600" aria-label="닫기">
@@ -642,7 +642,7 @@ export default function ChartSnapshotModal({ open, onClose, onInsert }) {
 
         {/* 차트 */}
         <div
-          className="relative mt-3 min-h-[320px] flex-1 rounded-lg border border-slate-200"
+          className="relative mt-3 h-[62vh] min-h-[340px] rounded-lg border border-slate-200"
           style={{ cursor: tool ? 'crosshair' : 'default' }}
         >
           {loading ? (
@@ -654,7 +654,7 @@ export default function ChartSnapshotModal({ open, onClose, onInsert }) {
               notMerge
               lazyUpdate={false}
               onChartReady={handleChartReady}
-              style={{ height: 320, width: '100%' }}
+              style={{ height: '100%', width: '100%' }}
             />
           ) : (
             <p className="py-32 text-center text-sm text-slate-400">
