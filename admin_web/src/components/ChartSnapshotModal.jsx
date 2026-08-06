@@ -166,39 +166,74 @@ function channelSeries(chart, channels, previewChannel) {
 function buildOption(chart, shapes = [], preview = null, channelPreview = null, showVP = true) {
   const dates = chart.candles.map((c) => c.date.slice(5)) // MM-DD
   const candles = chart.candles.map((c) => [c.open, c.close, c.low, c.high])
+  // 거래량: 상승(종가≥시가) 빨강 / 하락 파랑 (한국 관례)
+  const volumes = chart.candles.map((c) => ({
+    value: c.volume,
+    itemStyle: { color: c.close >= c.open ? '#ef4444' : '#3b82f6' },
+  }))
   const bb = chart.bollinger
   const { markLine, markArea, markPoint } = buildMarks(chart, shapes, preview)
   const channels = shapes.filter((s) => s.type === 'channel')
   const chSeries = channelSeries(chart, channels, channelPreview)
   const vpSeries = showVP ? [volumeProfileSeries(chart.volumeProfile)] : []
-  const legendData = ['캔들', 'MA5', 'MA20', 'MA50', 'MA120', 'BB상단', 'BB하단']
+  const legendData = ['캔들', 'MA5', 'MA20', 'MA50', 'MA120', 'BB상단', 'BB하단', '거래량']
   if (showVP) legendData.push('매물대')
   return {
     animation: false,
-    grid: { left: 15, right: 60, top: 45, bottom: 30 },
+    // 상단=가격, 하단=거래량 2단 그리드
+    grid: [
+      { left: 15, right: 60, top: 45, height: '60%' },
+      { left: 15, right: 60, top: '72%', height: '18%' },
+    ],
     title: {
       text: `${chart.name} (${chart.symbol})`,
       left: 'center',
       textStyle: { fontSize: 14 },
     },
     tooltip: { trigger: 'axis', axisPointer: { type: 'cross' } },
+    axisPointer: { link: [{ xAxisIndex: 'all' }] }, // 두 그리드 크로스헤어 연동
     legend: {
       data: legendData,
       top: 22,
       right: 10,
       type: 'scroll',
     },
-    xAxis: {
-      type: 'category',
-      data: dates,
-      boundaryGap: true,
-      axisLine: { lineStyle: { color: '#94a3b8' } },
-    },
-    yAxis: {
-      scale: true,
-      position: 'right',
-      splitLine: { lineStyle: { color: '#f1f5f9' } },
-    },
+    xAxis: [
+      {
+        type: 'category',
+        data: dates,
+        boundaryGap: true,
+        gridIndex: 0,
+        axisLine: { lineStyle: { color: '#94a3b8' } },
+        axisLabel: { show: false }, // 가격축 라벨은 숨기고 거래량축에만 표기
+      },
+      {
+        type: 'category',
+        data: dates,
+        boundaryGap: true,
+        gridIndex: 1,
+        axisLine: { lineStyle: { color: '#94a3b8' } },
+      },
+    ],
+    yAxis: [
+      {
+        scale: true,
+        position: 'right',
+        gridIndex: 0,
+        splitLine: { lineStyle: { color: '#f1f5f9' } },
+      },
+      {
+        scale: true,
+        position: 'right',
+        gridIndex: 1,
+        splitNumber: 2,
+        axisLabel: {
+          formatter: (v) =>
+            v >= 1e8 ? `${(v / 1e8).toFixed(0)}억` : v >= 1e4 ? `${(v / 1e4).toFixed(0)}만` : v,
+        },
+        splitLine: { show: false },
+      },
+    ],
     series: [
       ...vpSeries,
       {
@@ -240,6 +275,15 @@ function buildOption(chart, shapes = [], preview = null, channelPreview = null, 
         showSymbol: false,
         lineStyle: { width: 1, type: 'solid', color: '#0ea5e9' },
         areaStyle: undefined,
+      },
+      {
+        name: '거래량',
+        type: 'bar',
+        xAxisIndex: 1,
+        yAxisIndex: 1,
+        data: volumes,
+        barWidth: '60%',
+        itemStyle: { color: '#94a3b8' }, // 범례 스와치용 중립색(막대는 개별 빨강/파랑 우선)
       },
       ...chSeries,
     ],
