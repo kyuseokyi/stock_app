@@ -26,6 +26,7 @@ celery_app = Celery(
     include=[
         "apps.collector.tasks.notifications",
         "apps.collector.tasks.ohlcv",
+        "apps.collector.tasks.backfill",
     ],
 )
 
