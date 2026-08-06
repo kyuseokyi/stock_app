@@ -54,10 +54,12 @@
 - [x] stock_api `getChartData` 하이브리드(수집종목=CH, 나머지=온더플라이)
 
 **(b) 확장 — 다음 슬라이스**
-- [ ] 국내 전종목 루프 + `AsyncLimiter` 레이트리밋 + 실패격리
-- [ ] Celery beat 스케줄(매일 장 마감 후) 자동 수집
+- [x] 국내 전종목 루프 + 레이트리밋 + 실패격리 `collector.collect_all_daily` — 마스터 소스 무관 설계(`stock_master`), 종목별 try/except 격리, fallback 20종목 검증(18적재·상폐종목 무시)
+- [x] 전종목 마스터 로더 — KRX `.mst` 다운로드/파싱(`kis/master.py`) + fallback. 매 수집마다 재로드해 신규상장/상폐 자동반영. `STOCK_MASTER_SOURCE=mst|fallback|auto`
+- [x] Celery beat 스케줄 — 매일 20:30(NXT 애프터마켓 종료 후) `collect_all_daily` 자동 수집
 - [x] 과거 백필(청킹 수집) `collector.backfill_domestic_daily` — 전체 시계열 MA 일괄계산(MA120 정합), 005930 14개월 검증(291행·MA120 172행)
-- [ ] 전종목 백필 확장(레이트리밋 적용) + beat 정기 백필
+- [x] 전종목 백필 확장 `collector.backfill_all_daily`(레이트리밋 적용)
+- [ ] `.mst` 실환경 값검증(현 세션은 다운로드 호스트 차단) + 성능(동기순차→필요시 async 병렬)
 - [ ] 해외 주식/지수, 재무데이터(PER/PBR/ROE) 연동
 - [ ] 정배열/역배열·매물대의 CH 컬럼 영속화(스크리너 성능용)
 

@@ -1,6 +1,7 @@
 # Phase 1 (a) 수직 슬라이스 — KIS 국내 일봉 수집 파이프라인
 
 - 작성일: 2026-07-21
+- **개정 2026-08-06**: 시장코드 `J`(KRX) → **`UN`(KRX+넥스트레이드 통합)** 로 변경. `J` 단독은 넥스트레이드(NXT, 2025-03 출범) 물량이 빠져 MTS 차트와 값이 달랐음(005930 08-05: J C246000/V22.5M vs UN C242000/V43.3M=MTS 일치). "KIS 수집 세부" 절 참조. → 후속 (b) 슬라이스: `docs/superpowers/specs/2026-08-06-phase1b-universe-collection-design.md`
 - 관련: `docs/ROADMAP.md`(Phase 1), `docs/screener_plan.md`, `docs/ams-reference/02-data-collection.md`
 - ams 원본 참조: `app/kis_worker.py`, `app/tasks/collector/daily_ohlcv_fetcher.py`, `app/libs/external_api/kis_client.py`
 
@@ -43,7 +44,9 @@ backend/apps/collector/
 
 ## KIS 수집 세부
 - 엔드포인트: `uapi/domestic-stock/v1/quotations/inquire-daily-itemchartprice` (응답 `output2` 배열)
-- 파라미터: `FID_INPUT_DATE_1/2`(기간), `FID_PERIOD_DIV_CODE='D'`, **`FID_ORG_ADJ_PRC='0'`(수정주가)**
+- 파라미터: `FID_INPUT_DATE_1/2`(기간), `FID_PERIOD_DIV_CODE='D'`, **`FID_ORG_ADJ_PRC='0'`(수정주가)**, **`FID_COND_MRKT_DIV_CODE='UN'`(KRX+NXT 통합 — MTS와 값 일치)**
+  - 시장코드: `J`=KRX 단독, `NX`=넥스트레이드 단독, `UN`=통합(거래량=합산). MTS는 UN 표시 → UN 사용 필수.
+  - (참고) `FID_ORG_ADJ_PRC`는 액면분할/병합만 반영, 배당은 미반영 → 수정=원주가 동일. 배당 수정주가는 별개 이슈.
 - 필드매핑: `stck_bsop_date→date, stck_oprc→open, stck_hgpr→high, stck_lwpr→low, stck_clpr→close, acml_vol→volume`
 - 토큰: `POST /oauth2/tokenP`(client_credentials) → Redis 키 `kis:{mode}:{appkey}` 공유 캐시(TTL ~12h, 발급제한 대응)
 - 재시도: 5xx·타임아웃·연결오류만, 지수 백오프. 4xx 즉시 실패.

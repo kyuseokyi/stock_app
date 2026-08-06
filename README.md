@@ -42,7 +42,16 @@ uv run uvicorn apps.stock_api.main:app --reload --port 8002   # 주식 API(Graph
 
 # 데이터 수집/알림 워커 (Celery)
 uv run celery -A apps.collector.celery_app worker --loglevel=info
-uv run celery -A apps.collector.celery_app beat   --loglevel=info   # 스케줄러
+uv run celery -A apps.collector.celery_app beat   --loglevel=info   # 스케줄러(매일 20:30 전종목 수집)
+
+# 국내 주식 데이터 수집 — 수동 트리거 (워커 실행 중일 때)
+# 전종목 일봉(겹침창) 수집:      collector.collect_all_daily
+# 전종목 장기 백필(청킹):        collector.backfill_all_daily  (months=14)
+# 단일 종목:                     collector.collect_daily_ohlcv / collector.backfill_domestic_daily
+# 예) 워커 없이 즉시 실행:
+uv run python -c "from apps.collector.tasks.universe import collect_all_daily; print(collect_all_daily(source='mst'))"
+# 종목 마스터 소스: STOCK_MASTER_SOURCE=mst(전종목·.mst) | fallback(대형주 20) | auto(기본: mst→실패시 fallback)
+# KIS 초당 호출 제한: KIS_RATE_PER_SEC(기본 8)
 ```
 > ⚠️ 관리자 웹 로그인은 **auth(8001)**, 게시판/글/댓글은 **blog(8000)** 을 사용합니다. 어드민을 테스트하려면 **두 서비스를 모두** 띄워야 합니다.
 
@@ -147,6 +156,8 @@ docker compose -f docker-compose.dev.yml stop   # DB 인프라 정지(데이터 
 | `VITE_AUTH_BASE_URL` | web_client | `http://localhost:8001/api/v1` | 인증 API — 임시 로그인(닉네임) |
 | `KIS_MODE` | collector | `vps` | KIS 접속 모드 — `vps`(모의투자) \| `prod`(실서버) |
 | `KIS_APP_KEY` / `KIS_APP_SECRET` | collector | (빈값) | KIS OpenAPI 앱키/시크릿 (비우면 Mock 수집 폴백) |
+| `STOCK_MASTER_SOURCE` | collector | `auto` | 전종목 마스터 소스 — `mst`(.mst 전종목) \| `fallback`(대형주 20) \| `auto`(mst→실패시 fallback) |
+| `KIS_RATE_PER_SEC` | collector | `8` | 전종목 수집 시 KIS 초당 호출 상한(실전 ~20 한도 내 보수적) |
 | `KIS_ACCOUNT_NO` | collector | (빈값) | 계좌번호(시세조회만이면 생략 가능) |
 
 > 백엔드는 `shared` 로드 시 `APP_ENV`(기본 `development`)에 따라 `backend/.env.{APP_ENV}` → `backend/.env` 를 자동 로드합니다. 템플릿은 `backend/.env.example`.

@@ -27,6 +27,7 @@ celery_app = Celery(
         "apps.collector.tasks.notifications",
         "apps.collector.tasks.ohlcv",
         "apps.collector.tasks.backfill",
+        "apps.collector.tasks.universe",
     ],
 )
 
@@ -39,12 +40,13 @@ celery_app.conf.update(
     accept_content=["json"],
 )
 
-# celery-beat 스케줄(다음 슬라이스에서 전종목 확장 예정).
-# Phase 1(a)는 수동 트리거로 검증하므로, beat 는 임시로 1종목만 걸어둔다.
+# celery-beat 스케줄.
+# 넥스트레이드(NXT) 애프터마켓이 20:00 까지라 통합(UN) 일봉은 그 이후 확정된다.
+# → 전종목 일봉 수집을 매일 20:30(Asia/Seoul)에 실행.
 celery_app.conf.beat_schedule = {
-    "collect-daily-005930": {
-        "task": "collector.collect_daily_ohlcv",
-        "schedule": crontab(hour=16, minute=0),
-        "args": ["005930"],
+    "collect-all-daily": {
+        "task": "collector.collect_all_daily",
+        "schedule": crontab(hour=20, minute=30),
+        # 마스터 소스는 STOCK_MASTER_SOURCE(기본 auto: .mst→실패시 fallback)
     },
 }

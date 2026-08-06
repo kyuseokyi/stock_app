@@ -5,6 +5,15 @@
 ## 📌 Project Overview
 본 프로젝트는 **한국투자증권 API** 기반의 주식 시계열 데이터 파이프라인, 모바일 큐레이션 앱, 그리고 관리자 웹페이지를 포함하는 풀스택 주식 애플리케이션 모노레포입니다.
 
+## 📈 KIS 데이터 수집 규칙 (필수 준수)
+1. **국내 시세는 반드시 시장코드 `UN`(통합)으로 조회** — `FID_COND_MRKT_DIV_CODE='UN'`.
+   - `J`=KRX 단독, `NX`=넥스트레이드(NXT) 단독, `UN`=KRX+NXT 통합(거래량=합산).
+   - 넥스트레이드(2025-03 출범) 이후 **한투 MTS 차트는 UN 통합 시세**를 표시하므로, `J`로 수집하면 OHLC·거래량이 MTS와 달라진다(검증: 005930 2026-08-05 J C246000/V22.5M vs UN C242000/V43.3M=MTS 일치).
+   - 신규 시세 엔드포인트(현재가/스크리너/차트 등) 추가 시에도 UN 기본. 기존 J 수집분은 UN 재수집.
+2. **수정주가**: `FID_ORG_ADJ_PRC='0'`. 단 KIS 수정주가는 액면분할/병합만 반영, **배당 미반영**(수정=원주가 동일). 배당 수정주가는 별개 이슈.
+3. **전종목 마스터**: KIS 시세 API는 전종목 목록을 주지 않는다. KRX `.mst`(코드 마스터) 다운로드/파싱으로 확보하며, KIS가 매일 갱신하므로 **매 수집마다 재로드**해야 신규상장/상장폐지가 반영된다. `apps/collector/stock_master.py`(`STOCK_MASTER_SOURCE=mst|fallback|auto`).
+4. **멱등 적재**: ClickHouse `daily_prices`는 `ReplacingMergeTree(ingested_at)`. 조회는 항상 `FINAL`. 겹침 재수집해도 FINAL 기준 날짜당 1행.
+
 ## 📂 Directory Structure & Tech Stack
 *   `backend/`: Python FastAPI (API Server), Strawberry (GraphQL), Celery. PostgreSQL & ClickHouse 사용. (`uv`)
 *   `mobile/`: React Native (Expo). 주식 차트(`react-native-echarts`) 및 GraphQL(`graphql-request`).
