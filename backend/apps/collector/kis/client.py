@@ -22,7 +22,9 @@ from shared.kis_config import KISConfig, get_kis_config
 #   NX = 넥스트레이드(ATS, 대체거래소) 단독
 #   UN = 통합(KRX+NXT) — MTS 차트와 동일한 합산 시세(거래량=KRX+NXT)
 # 넥스트레이드 출범(2025-03) 이후 MTS는 통합(UN) 시세를 표시하므로 UN 을 기본으로 한다.
+# ⚠️ 단, NXT 미상장 종목은 UN 조회 시 빈 응답 → fetcher가 J(KRX)로 폴백한다.
 DOMESTIC_MARKET_CODE = "UN"
+KRX_MARKET_CODE = "J"  # UN 빈응답(비-NXT 종목) 폴백용
 TR_DAILY_ITEMCHART = "FHKST03010100"
 
 _MAX_RETRIES = 5
@@ -78,15 +80,23 @@ class KISClient:
 
     # --- 국내 일봉 ---
     def get_daily_ohlcv(
-        self, ticker: str, start_yyyymmdd: str, end_yyyymmdd: str
+        self,
+        ticker: str,
+        start_yyyymmdd: str,
+        end_yyyymmdd: str,
+        market_code: str = DOMESTIC_MARKET_CODE,
     ) -> list[dict]:
-        """국내 일봉 원시 행(output2) 리스트 반환. 1회 호출 최대 ~100행."""
+        """국내 일봉 원시 행(output2) 리스트 반환. 1회 호출 최대 ~100행.
+
+        market_code: UN(통합·기본) | J(KRX) | NX(넥스트레이드). NXT 미상장 종목은
+        UN 이 빈 응답이므로 상위(fetcher)에서 J 폴백을 처리한다.
+        """
         url = (
             f"{self.cfg.base_url}"
             "/uapi/domestic-stock/v1/quotations/inquire-daily-itemchartprice"
         )
         params = {
-            "FID_COND_MRKT_DIV_CODE": DOMESTIC_MARKET_CODE,
+            "FID_COND_MRKT_DIV_CODE": market_code,
             "FID_INPUT_ISCD": ticker,
             "FID_INPUT_DATE_1": start_yyyymmdd,
             "FID_INPUT_DATE_2": end_yyyymmdd,

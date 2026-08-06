@@ -8,7 +8,11 @@ from __future__ import annotations
 
 from datetime import date, timedelta
 
-from apps.collector.kis.client import KISClient
+from apps.collector.kis.client import (
+    DOMESTIC_MARKET_CODE,
+    KRX_MARKET_CODE,
+    KISClient,
+)
 
 # KIS 일봉은 1회 호출 최대 ~100행(거래일). 100 캘린더일 ≈ 68~72 거래일이라 안전.
 _CHUNK_SPAN_DAYS = 100
@@ -41,9 +45,13 @@ def fetch_domestic_daily(
     """국내 일봉을 수집해 날짜 오름차순 OHLCV 리스트로 반환.
 
     KIS는 최신→과거 순으로 주므로 오름차순으로 뒤집는다. 빈 필드 행은 건너뛴다.
+    시장코드: UN(통합) 우선 → 빈 응답(NXT 미상장 종목)이면 J(KRX)로 폴백.
     """
     client = client or KISClient()
-    raw = client.get_daily_ohlcv(ticker, start_yyyymmdd, end_yyyymmdd)
+    raw = client.get_daily_ohlcv(ticker, start_yyyymmdd, end_yyyymmdd, DOMESTIC_MARKET_CODE)
+    if not raw:
+        # NXT 미상장 종목은 UN 이 빈 응답 → KRX(J) 로 재조회
+        raw = client.get_daily_ohlcv(ticker, start_yyyymmdd, end_yyyymmdd, KRX_MARKET_CODE)
     out: list[dict] = []
     for row in raw:
         if not row.get("stck_bsop_date") or not row.get("stck_clpr"):
