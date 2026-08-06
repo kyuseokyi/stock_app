@@ -21,7 +21,8 @@ backend/apps/collector/
 ### ① 종목 마스터 = 소스 무관(pluggable), 매 수집마다 재로드
 - `STOCK_MASTER_SOURCE`: `mst`(KRX .mst 전종목) | `fallback`(대형주 20) | `auto`(기본: mst→실패시 fallback).
 - KIS 시세 API는 "전종목 목록"을 주지 않는다. 신규상장/상장폐지는 **KIS가 매일 갱신하는 .mst를 재다운로드**해야 반영됨 → 수집 태스크가 매 실행 시 `load_domestic_tickers()` 재호출.
-- **환경 제약**: `.mst` 다운로드 호스트(`new.real.download.dw.koreainvestment.com`)가 일부 샌드박스에서 차단됨. `auto`가 fallback으로 자동 전환. 실배포/로컬에선 정상. **최초 도입 시 .mst 파싱 값 검증 권장**(고정폭·CP949).
+- **다운로드 호스트**: `https://new.real.download.dws.co.kr/common/master/{kospi,kosdaq}_code.mst.zip` (dws.co.kr). ⚠️ 초기에 `dw.koreainvestment.com`으로 잘못 넣어 NXDOMAIN → dws.co.kr로 정정. 파싱: 고정폭·CP949, 라인 앞부분 `[0:9]`=단축코드/`[21:]`=한글명, 뒤 228바이트=수치필드.
+  - 검증(2026-08-06 로컬 worker): KOSPI+KOSDAQ **4,383 instrument** 로드·수집 성공(주식+ETF/ETN/펀드/스팩 포함). 펀드/투자회사 등은 일봉 빈 응답 → 실패격리로 0행 스킵.
 
 ### ② 레이트리밋 = 동기 최소간격
 - 수집 루프는 단일 Celery 워커 스레드에서 순차 실행 → `RateLimiter(per_sec)`로 호출 간 최소간격 보장.
@@ -48,7 +49,7 @@ backend/apps/collector/
 
 ## 검증(완료 기준)
 1. `collect_all_daily(source='fallback')` → 다종목 적재, 종목별 MA 계산, 멱등. ✅ (fallback 20 → 18적재, 상폐 2종목 무시, 실패 0)
-2. 실환경에서 `source='mst'` → ~2,800종목 수집(값 검증 필요). ⏳ 이 세션 미검증(다운로드 차단)
+2. 실환경 `.mst` 로드 → **4,383 instrument** 수집. ✅ (로컬 worker, 정정 URL) — worker+beat 가동, 매일 20:30 자동수집.
 3. 종목별 실패가 전체를 막지 않음(격리). ✅
 
 ## 비범위 (다음)

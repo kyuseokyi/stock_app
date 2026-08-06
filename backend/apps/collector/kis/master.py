@@ -3,9 +3,9 @@
 KIS 다운로드 서버에서 kospi/kosdaq 코드 마스터(zip)를 받아 (종목코드, 종목명, 시장)
 튜플로 파싱한다. KIS 공식 open-trading-api 샘플 포맷을 따른다(고정폭·CP949).
 
-⚠️ 이 다운로드 호스트는 일부 샌드박스 환경에서 차단될 수 있다. 그 경우
-   stock_master.load_domestic_tickers() 가 fallback 정적 리스트로 자동 전환한다.
-   실배포/로컬 환경에서 정상 동작하며, 최초 도입 시 값 검증 권장.
+다운로드 호스트: new.real.download.dws.co.kr (KIS 종목 마스터 CDN).
+다운로드/파싱 실패 시 stock_master.load_domestic_tickers() 가 fallback 정적 리스트로
+자동 전환한다. KOSPI ~2,560 / KOSDAQ ~1,700 instrument(주식+ETF/ETN/펀드/스팩 포함).
 
 참조: KIS open-trading-api / stocks_info (kis_kospi_code_mst.py, kis_kosdaq_code_mst.py)
 """
@@ -18,8 +18,8 @@ from dataclasses import dataclass
 
 import requests
 
-_KOSPI_URL = "https://new.real.download.dw.koreainvestment.com/common/master/kospi_code.mst.zip"
-_KOSDAQ_URL = "https://new.real.download.dw.koreainvestment.com/common/master/kosdaq_code.mst.zip"
+_KOSPI_URL = "https://new.real.download.dws.co.kr/common/master/kospi_code.mst.zip"
+_KOSDAQ_URL = "https://new.real.download.dws.co.kr/common/master/kosdaq_code.mst.zip"
 _TIMEOUT = 30
 
 
