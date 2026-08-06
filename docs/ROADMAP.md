@@ -49,7 +49,7 @@
 
 **(a) 수직 슬라이스 — 005930 국내 일봉 [완료 ✅ 2026-07-21]**
 - [x] KIS OpenAPI Custom Client (`requests` 동기 + OAuth 토큰 Redis 공유 캐시, 5xx만 재시도)
-- [x] 국내 일봉 수집(수정주가) → MA5/20/50/120 → ClickHouse 멱등 적재(`ReplacingMergeTree`)
+- [x] 국내 일봉 수집(수정주가, **시장코드 UN=KRX+넥스트레이드 통합** → MTS 차트와 값 일치) → MA5/20/50/120 → ClickHouse 멱등 적재(`ReplacingMergeTree`)
 - [x] Celery 태스크 `collector.collect_daily_ohlcv`(겹침창 today-30d~+2d) — 멱등 검증
 - [x] stock_api `getChartData` 하이브리드(수집종목=CH, 나머지=온더플라이)
 

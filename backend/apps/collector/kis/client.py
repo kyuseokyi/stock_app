@@ -1,7 +1,7 @@
 """한국투자증권(KIS) 국내 시세 수집용 저수준 클라이언트 (동기, requests 기반).
 
 - OAuth 토큰: Redis 공유 캐시(발급 제한 대응) → 없으면 발급 후 저장
-- 국내 일봉: inquire-daily-itemchartprice (tr_id=FHKST03010100, 수정주가)
+- 국내 일봉: inquire-daily-itemchartprice (tr_id=FHKST03010100, 수정주가, 시장=UN 통합)
 - 재시도: 5xx·타임아웃·연결오류만 지수 백오프, 4xx 즉시 실패
 
 참조(ams): app/libs/external_api/kis_client.py, schemas/kis/domestic_stock/inquire_daily_itemchartprice.py
@@ -17,8 +17,12 @@ import requests
 
 from shared.kis_config import KISConfig, get_kis_config
 
-# 국내 주식 시장 분류 코드(J: 주식/ETF/ETN)
-DOMESTIC_MARKET_CODE = "J"
+# 국내 주식 시장 분류 코드
+#   J  = KRX(한국거래소) 단독
+#   NX = 넥스트레이드(ATS, 대체거래소) 단독
+#   UN = 통합(KRX+NXT) — MTS 차트와 동일한 합산 시세(거래량=KRX+NXT)
+# 넥스트레이드 출범(2025-03) 이후 MTS는 통합(UN) 시세를 표시하므로 UN 을 기본으로 한다.
+DOMESTIC_MARKET_CODE = "UN"
 TR_DAILY_ITEMCHART = "FHKST03010100"
 
 _MAX_RETRIES = 5
