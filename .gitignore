@@ -33,3 +33,7 @@ redis_data/
 
 # Antigravity Agents
 .agents/
+
+# ClickHouse 백업 산출물 / celery 로그
+backend/backups/
+backend/logs/
