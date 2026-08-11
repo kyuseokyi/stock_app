@@ -58,8 +58,11 @@
 - [x] 전종목 마스터 로더 — KRX `.mst` 다운로드/파싱(`kis/master.py`) + fallback. 매 수집마다 재로드해 신규상장/상폐 자동반영. `STOCK_MASTER_SOURCE=mst|fallback|auto`
 - [x] Celery beat 스케줄 — 매일 20:30(NXT 애프터마켓 종료 후) `collect_all_daily` 자동 수집
 - [x] 과거 백필(청킹 수집) `collector.backfill_domestic_daily` — 전체 시계열 MA 일괄계산(MA120 정합), 005930 14개월 검증(291행·MA120 172행)
-- [x] 전종목 백필 확장 `collector.backfill_all_daily`(레이트리밋 적용)
-- [ ] `.mst` 실환경 값검증(현 세션은 다운로드 호스트 차단) + 성능(동기순차→필요시 async 병렬)
+- [x] 전종목 백필 확장 `collector.backfill_all_daily`(레이트리밋 적용) — 로컬 실행 검증(3,926종목·107.6만행·MA120 61.8만행)
+- [x] `.mst` 실환경 검증 — URL 정정(dws.co.kr) + **UN 빈응답 시 J 폴백**(NXT 미상장 종목 누락 해결, 608→3,926종목)
+- [x] worker+beat 가동(매일 20:30 자동수집) + ClickHouse 백업/복원 스크립트(`docs/deployment/`)
+- [x] 차트 지표 lookback 버퍼 — 짧은 구간 뷰에서도 MA120 표시(`getChartData`)
+- [ ] 성능: 동기 순차 → async 병렬(aiolimiter) 승격(전종목 수집 ~1시간 단축)
 - [ ] 해외 주식/지수, 재무데이터(PER/PBR/ROE) 연동
 - [ ] 정배열/역배열·매물대의 CH 컬럼 영속화(스크리너 성능용)
 
