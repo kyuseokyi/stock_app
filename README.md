@@ -32,7 +32,8 @@ docker-compose -f docker-compose.dev.yml up -d
 ```bash
 cd backend
 uv sync                                   # 의존성 동기화
-uv run alembic upgrade head               # DB 스키마 마이그레이션
+uv run alembic upgrade head               # PostgreSQL 스키마 마이그레이션
+uv run python -m shared.clickhouse_schema # ClickHouse 스키마 생성(daily_prices/fundamentals, 멱등)
 uv run python -m apps.auth.seed_admin     # 관리자 시드 (최초 1회)
 
 # 각 서비스는 개별 포트로 실행 (필요한 것만 띄우면 됩니다)
@@ -125,8 +126,9 @@ cd ../web_client && npm run dev   # 유저웹 3000  (blog 8000 + 댓글작성 �
 ### 4. 마이그레이션/시드 (스키마·계정 변경 시에만)
 ```bash
 cd backend
-uv run alembic upgrade head            # 모델 변경 후 스키마 반영
-uv run python -m apps.auth.seed_admin  # 관리자 계정 없을 때 (admin@stock.app / admin1234)
+uv run alembic upgrade head             # PostgreSQL 모델 변경 후 스키마 반영
+uv run python -m shared.clickhouse_schema  # ClickHouse 테이블 (없으면 생성, 멱등)
+uv run python -m apps.auth.seed_admin   # 관리자 계정 없을 때 (admin@stock.app / admin1234)
 ```
 
 ### 5. 종료
@@ -175,13 +177,24 @@ cp .env.example .env.development     # 템플릿 복사 (.env.* 는 git 무시)
 - **앱키가 없으면** 수집기는 Mock 데이터로 폴백하므로 키 없이도 구조 개발이 가능합니다.
 - `KIS_MODE=vps`(모의투자) → BASE `openapivts...:29443`, `prod` → `openapi...:9443` 로 자동 전환됩니다.
 
+### 📊 최초 주식 데이터 적재 (KIS 설정 후, 최초 1회)
+ClickHouse는 처음엔 비어 있어 `stock_api`가 온더플라이(가짜) 차트를 보여줍니다. 실데이터로 채우려면:
+```bash
+cd backend
+# 전종목 14개월 백필 — 워커 없이 즉시 실행(약 1시간). 비-NXT 종목은 UN→J 폴백.
+uv run python -c "from apps.collector.tasks.universe import backfill_all_daily; print(backfill_all_daily(months=14))"
+```
+- 이후 매일 20:30 `beat`이 `collect_all_daily`로 자동 갱신합니다.
+- **이미 백업본이 있으면** 재수집(~1시간) 대신 복원이 빠릅니다 → `docs/deployment/clickhouse-backup.md`.
+- 빠른 확인만 원하면 대형주 몇 종목만: `... backfill_domestic_daily('005930', months=14)`.
+
 ## 🔔 알림 아키텍처
 - **웹(SSE)**: 블로그 서비스의 `GET /api/v1/notifications/stream` 에 EventSource 로 연결 → 새 글 작성 시 Redis pub/sub 로 즉시 토스트 알림.
 - **모바일(FCM)**: 새 글 작성 시 Celery 워커로 위임(`collector.send_new_post_notification`) → 대상 유저에게 푸시. 현재 발송기는 Mock(로그), `PUSH_BACKEND=fcm` + 자격증명으로 교체 예정.
 
 ## 🛠 데이터 스토어
 - **PostgreSQL**: 사용자·게시판·게시글·댓글 등 관계형 데이터
-- **ClickHouse**: 주식 시계열/보조지표 (파티셔닝, `ReplacingMergeTree` 예정)
+- **ClickHouse**: 주식 시계열/보조지표 — `daily_prices`(`ReplacingMergeTree(ingested_at)`, 멱등 적재·조회 FINAL), `fundamentals`
 - **Redis**: Celery 브로커 + SSE pub/sub + 캐시
 
 ## 📚 문서
