@@ -142,6 +142,22 @@ docker compose -f docker-compose.dev.yml stop   # DB 인프라 정지(데이터 
 ```
 > 데이터(볼륨 `pg_data`/`clickhouse_data`/`redis_data`)는 `down` 해도 유지됩니다. 완전 초기화는 `down -v`.
 
+## 🗄️ 로컬 DB 접속 정보
+
+`docker-compose.dev.yml` 기준값입니다. 앱은 아래를 기본값으로 자동 사용하며, DataGrip/DBeaver 등 GUI 툴로 직접 붙을 때도 동일하게 입력합니다.
+
+| DB | Host | Port | User | Password | Database |
+|---|---|---|---|---|---|
+| **PostgreSQL** | localhost | `5432` | `stock_user` | `stock_password` | `stock_db` |
+| **ClickHouse** | localhost | `8123`(HTTP) / `9000`(Native) | `default` | `password` | `stock_data` |
+| **Redis** | localhost | `6379` | — | (없음) | `0` |
+
+> **GUI 툴(DataGrip/DBeaver) 접속 팁**
+> - **PostgreSQL**: 기본 PostgreSQL 드라이버로 위 값 그대로. URL: `jdbc:postgresql://localhost:5432/stock_db`
+> - **ClickHouse**: **HTTP 8123** + ClickHouse 드라이버 **0.6.3 이상** 권장(구버전은 서버 24.8과 호환 문제 발생). URL: `jdbc:clickhouse://localhost:8123/stock_data`
+> - 조회 시 최신 1행 보장은 `... FINAL` 사용: `SELECT * FROM stock_data.daily_prices FINAL WHERE ticker='005930' ORDER BY date`
+> - ⚠️ 위 값은 **로컬 개발용**입니다. 운영 배포 시 비밀번호를 반드시 변경하세요.
+
 ## ⚙️ 주요 환경변수
 
 | 변수 | 대상 | 기본값 | 설명 |
@@ -149,6 +165,9 @@ docker compose -f docker-compose.dev.yml stop   # DB 인프라 정지(데이터 
 | `DATABASE_URL` | backend | `postgresql+asyncpg://stock_user:stock_password@localhost:5432/stock_db` | 비동기 DB(API) |
 | `SYNC_DATABASE_URL` | collector | `postgresql+psycopg2://...` | 동기 DB(Celery) |
 | `REDIS_URL` | backend | `redis://localhost:6379/0` | Celery 브로커 & SSE pub/sub |
+| `CLICKHOUSE_HOST` / `CLICKHOUSE_PORT` | backend | `localhost` / `8123` | ClickHouse 호스트·HTTP 포트 |
+| `CLICKHOUSE_USER` / `CLICKHOUSE_PASSWORD` | backend | `default` / `password` | ClickHouse 인증 |
+| `CLICKHOUSE_DB` | backend | `stock_data` | 주가 시계열 DB |
 | `JWT_SECRET_KEY` | auth·blog | `dev-insecure-secret-change-me` | JWT 서명 키 (**서비스 간 동일값 필수**, 운영 필수 설정) |
 | `PUSH_BACKEND` | collector | `mock` | `mock` \| `fcm` (FCM은 자격증명 준비 후) |
 | `CORS_ORIGINS` | backend | (localhost 기본 허용) | 콤마 구분 추가 오리진 |
