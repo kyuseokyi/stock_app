@@ -158,6 +158,27 @@ docker compose -f docker-compose.dev.yml stop   # DB 인프라 정지(데이터 
 > - 조회 시 최신 1행 보장은 `... FINAL` 사용: `SELECT * FROM stock_data.daily_prices FINAL WHERE ticker='005930' ORDER BY date`
 > - ⚠️ 위 값은 **로컬 개발용**입니다. 운영 배포 시 비밀번호를 반드시 변경하세요.
 
+### 스키마 요약
+
+**PostgreSQL (`stock_db`) — 관계형** · 스키마는 Alembic 관리(`backend/alembic/`)
+
+| 테이블 | 용도 | 주요 컬럼 |
+|---|---|---|
+| `users` | 사용자(관리자·게스트·소셜) | email, nickname, provider, provider_id, role, is_active, password_hash, fcm_token |
+| `boards` | 게시판 | name, order_index, is_active, min_role_required, comments_enabled |
+| `blog_posts` | 게시글 | board_id, author_id, title, content, thumbnail_url, view_count |
+| `blog_comments` | 댓글 | post_id, author_id, content |
+| `push_templates` | 푸시 알림 템플릿 | title, body, last_sent_at |
+| `stock_meta` | 종목 메타(마스터) | ticker, name, market, is_active |
+| `alembic_version` | 마이그레이션 버전(Alembic 자동) | version_num |
+
+**ClickHouse (`stock_data`) — 시계열** · 스키마는 `shared/clickhouse_schema.py`
+
+| 테이블 | 엔진 | 용도 |
+|---|---|---|
+| `daily_prices` | `ReplacingMergeTree(ingested_at)` | 일봉 OHLCV + MA5/20/50/120 (조회 `FINAL`) |
+| `fundamentals` | `MergeTree` | 재무지표(PER/PBR/ROE 등) — Phase 1-b 연동 예정 |
+
 ## ⚙️ 주요 환경변수
 
 | 변수 | 대상 | 기본값 | 설명 |
