@@ -13,6 +13,8 @@ from dataclasses import dataclass
 from datetime import date, timedelta
 
 from apps.stock_api.seed_catalog import SeedStock, get_by_symbol
+from shared import stock_meta_repo
+from shared.database import SyncSessionLocal
 
 
 @dataclass(frozen=True)
@@ -211,4 +213,18 @@ def volume_profile(candles: list[Candle], bins: int = 20) -> list[VolumeProfileB
 
 
 def resolve_stock(symbol: str) -> SeedStock | None:
+    """종목 해석: stock_meta(국내) 우선 → 없으면 seed_catalog(미국/지수).
+
+    국내는 country=KR/currency=KRW 상수로 SeedStock 형태로 감싸 downstream 호환.
+    """
+    with SyncSessionLocal() as db:
+        m = stock_meta_repo.get_active(db, symbol)
+    if m is not None:
+        return SeedStock(
+            symbol=m.ticker,
+            name=m.name,
+            market=m.market.value,
+            country="KR",
+            currency="KRW",
+        )
     return get_by_symbol(symbol)

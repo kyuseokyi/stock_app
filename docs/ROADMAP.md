@@ -62,6 +62,7 @@
 - [x] `.mst` 실환경 검증 — URL 정정(dws.co.kr) + **UN 빈응답 시 J 폴백**(NXT 미상장 종목 누락 해결, 608→3,926종목)
 - [x] worker+beat 가동(매일 20:30 자동수집) + ClickHouse 백업/복원 스크립트(`docs/deployment/`)
 - [x] 차트 지표 lookback 버퍼 — 짧은 구간 뷰에서도 MA120 표시(`getChartData`)
+- [x] **종목 마스터 `stock_meta` 일원화** — `.mst`→stock_meta 동기화(상폐 is_active=false), collector 수집대상·stock_api 검색/차트해석이 단일 마스터 사용. 미국/지수는 seed 하이브리드 유지(`shared/stock_meta_repo.py`)
 - [ ] 성능: 동기 순차 → async 병렬(aiolimiter) 승격(전종목 수집 ~1시간 단축)
 - [ ] 해외 주식/지수, 재무데이터(PER/PBR/ROE) 연동
 - [ ] 정배열/역배열·매물대의 CH 컬럼 영속화(스크리너 성능용)

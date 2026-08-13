@@ -16,6 +16,8 @@ from apps.stock_api.graphql.types import (
 from apps.stock_api.seed_catalog import search as catalog_search
 from apps.stock_api.services import chart as chart_service
 from apps.stock_api.services import clickhouse_source as ch_source
+from shared import stock_meta_repo
+from shared.database import SyncSessionLocal
 
 # MA120 등 장기 지표를 표시 시작일부터 그리려면 그 이전 거래일이 필요하다.
 # 200 캘린더일 ≈ 140 거래일 > 120 → 표시 구간 첫날부터 MA120 산출 가능.
@@ -43,16 +45,32 @@ def _display_start_index(candles: list, start_date: str) -> int:
 class Query:
     @strawberry.field(description="국내·해외 주식 및 주요 지수 통합 검색")
     def search_stocks(self, query: str) -> list[Stock]:
-        return [
-            Stock(
-                symbol=s.symbol,
-                name=s.name,
-                market=s.market,
-                country=s.country,
-                currency=s.currency,
-            )
-            for s in catalog_search(query)
-        ]
+        # 국내는 stock_meta(단일 마스터), 미국/지수는 seed_catalog 하이브리드
+        results: list[Stock] = []
+        with SyncSessionLocal() as db:
+            for m in stock_meta_repo.search_active(db, query):
+                results.append(
+                    Stock(
+                        symbol=m.ticker,
+                        name=m.name,
+                        market=m.market.value,
+                        country="KR",
+                        currency="KRW",
+                    )
+                )
+        seen = {r.symbol for r in results}
+        for s in catalog_search(query):
+            if s.country != "KR" and s.symbol not in seen:  # 미국/지수만 seed에서
+                results.append(
+                    Stock(
+                        symbol=s.symbol,
+                        name=s.name,
+                        market=s.market,
+                        country=s.country,
+                        currency=s.currency,
+                    )
+                )
+        return results
 
     @strawberry.field(
         description="종목/지수의 기간별 OHLCV·이동평균·정배열/역배열·볼린저밴드·매물대 조회"
