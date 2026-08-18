@@ -76,9 +76,9 @@
 - [ ] 종목 상세/차트 화면 (어드민 차트+드로잉 컴포넌트 재사용)
 - [ ] 소셜 로그인(카카오/구글) 실연동 → 임시 로그인 대체
 
-### Phase 4 — 모바일 앱 (Expo) *(미착수)*
-- [ ] 앱 셋업(EAS dev/prod 분리, bundleId 분리)
-- [ ] 블로그/스크리너/차트 화면 + 차트 드로잉
+### Phase 4 — 모바일 앱 (Expo) *(초기화 완료)*
+- [x] 앱 셋업 — Expo SDK 57/RN 0.86, expo-router 하단 5탭(홈/스크리너/블로그/관심종목/내정보), **Unistyles v3** 테마 스타일링(상승=빨강/하락=파랑, adaptiveThemes), zustand. `app.config.js`로 dev/prod 앱이름·bundleId 동적 분리(`StockApp Dev`/`com.stockapp.dev` ↔ `StockApp`/`com.stockapp`), `eas.json` dev/preview/prod 프로필, `EXPO_PUBLIC_*` env 분리. 검증: tsc·expo-doctor 21/21·expo config
+- [ ] 블로그/스크리너/차트 화면 + 차트 드로잉 (현재 각 탭은 플레이스홀더)
 - [ ] 실제 FCM 푸시(현재 Mock 대체)
 
 ### 상시 백로그

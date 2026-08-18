@@ -75,6 +75,29 @@ npm run dev        # http://localhost:3000
 ```
 > blog 서비스(8000)만 있으면 조회가 동작합니다. (`VITE_API_BASE_URL` 로 API 주소 오버라이드)
 
+### 5. 모바일 앱 (Expo / React Native)
+Expo SDK 57 · React Native 0.86 · expo-router(하단 5탭: 홈/스크리너/블로그/관심종목/내정보) · **Unistyles v3**(테마 스타일링) · zustand.
+> ⚠️ **Unistyles는 네이티브 코드라 Expo Go에서 실행되지 않습니다.** 반드시 **개발 빌드(dev build)** 로 실행하세요. 스타일 없이 UI 구조만 빠르게 볼 때는 웹(`npm run web`)이 가장 가볍습니다.
+```bash
+cd mobile
+npm install
+
+# (A) 웹으로 빠르게 확인 (Expo Go 불필요)
+npm run web
+
+# (B) 네이티브 개발 빌드 — 최초 1회 prebuild 후 실행 (Xcode/Android SDK 필요)
+npx expo prebuild --clean          # ios/android 네이티브 프로젝트 생성(커밋 안 함 — CNG)
+npm run ios                        # 또는 npm run android
+
+# (C) EAS 클라우드/로컬 빌드 — dev/prod 프로필 분리
+# eas build --profile development --platform android            # 클라우드(무료티어 차감)
+# eas build --profile development --platform android --local    # 로컬(무제한)
+```
+- **환경 분리**: `APP_ENV`(빌드 시 주입, `eas.json`에서 프로필별 지정)에 따라 앱 이름·번들ID가 동적 분리 → 개발/상용 앱 동시 설치 가능.
+  - dev → `StockApp Dev` / `com.stockapp.dev`, prod → `StockApp` / `com.stockapp` (`app.config.js`)
+- **API 주소**: `.env.development` / `.env.production` 의 `EXPO_PUBLIC_*` 변수(`src/lib/env.ts` 단일 접근점). 실기기 테스트 시 `localhost` → 개발 PC의 LAN IP로 교체.
+- **검증(설정 레벨)**: `npx tsc --noEmit` · `npx expo-doctor` · `APP_ENV=production npx expo config --type public --json`
+
 ## 🔄 작업 재개(Resume) 가이드 & 환경 점검
 
 작업을 중단했다가 다시 시작할 때, **DB 인프라(Docker)** 는 재부팅 전까지 계속 떠 있지만 **앱 서비스(FastAPI/Celery/Vite)** 는 종료되므로 다시 띄워야 합니다.
