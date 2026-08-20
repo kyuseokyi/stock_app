@@ -34,15 +34,36 @@
   },
   "devDependencies": {
     "@types/react": "~19.2.2",
+    "cross-env": "^10.1.0",
     "typescript": "~6.0.3"
   },
   "scripts": {
     "start": "expo start",
-    "reset-project": "node ./scripts/reset-project.js",
-    "android": "expo start --android",
-    "ios": "expo start --ios",
+    "start:dev": "cross-env APP_ENV=development expo start",
+    "start:prod": "cross-env APP_ENV=production expo start",
     "web": "expo start --web",
-    "lint": "expo lint"
+    "prebuild:dev": "cross-env APP_ENV=development expo prebuild --clean",
+    "prebuild:prod": "cross-env APP_ENV=production expo prebuild --clean",
+    "prebuild:dev:ios": "cross-env APP_ENV=development expo prebuild --platform ios --clean",
+    "prebuild:dev:android": "cross-env APP_ENV=development expo prebuild --platform android --clean",
+    "prebuild:prod:ios": "cross-env APP_ENV=production expo prebuild --platform ios --clean",
+    "prebuild:prod:android": "cross-env APP_ENV=production expo prebuild --platform android --clean",
+    "ios": "expo run:ios",
+    "ios:dev": "cross-env APP_ENV=development expo run:ios",
+    "ios:dev:device": "cross-env APP_ENV=development expo run:ios --device",
+    "ios:prod": "npm run prebuild:prod:ios && cross-env APP_ENV=production expo run:ios --configuration Release --device",
+    "android": "expo run:android",
+    "android:dev": "cross-env APP_ENV=development expo run:android",
+    "android:dev:device": "cross-env APP_ENV=development expo run:android --device",
+    "android:prod": "npm run prebuild:prod:android && cross-env APP_ENV=production expo run:android --variant release --device",
+    "build:ios:dev": "eas build --platform ios --profile development --local",
+    "build:ios:sim": "eas build --platform ios --profile development-sim --local",
+    "build:ios:prod": "eas build --platform ios --profile production --local",
+    "build:android:dev": "eas build --platform android --profile development --local",
+    "build:android:prod": "eas build --platform android --profile production --local",
+    "lint": "expo lint",
+    "typecheck": "tsc --noEmit",
+    "reset-project": "node ./scripts/reset-project.js"
   },
   "private": true
 }

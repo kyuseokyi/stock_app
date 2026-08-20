@@ -85,14 +85,18 @@ npm install
 # (A) 웹으로 빠르게 확인 (Expo Go 불필요)
 npm run web
 
-# (B) 네이티브 개발 빌드 — 최초 1회 prebuild 후 실행 (Xcode/Android SDK 필요)
-npx expo prebuild --clean          # ios/android 네이티브 프로젝트 생성(커밋 안 함 — CNG)
-npm run ios                        # 또는 npm run android
+# (B) 네이티브 개발 빌드 — expo run:* 이 prebuild+빌드+실행을 한 번에 (Xcode/Android SDK 필요)
+npm run ios                # = expo run:ios (개발용). 실기기: npm run ios:dev:device
+npm run android            # = expo run:android.       실기기: npm run android:dev:device
+# 상용 릴리스 실행:        npm run ios:prod / npm run android:prod
+# 네이티브 폴더만 재생성:  npm run prebuild:dev  (또는 prebuild:prod)
 
-# (C) EAS 클라우드/로컬 빌드 — dev/prod 프로필 분리
-# eas build --profile development --platform android            # 클라우드(무료티어 차감)
-# eas build --profile development --platform android --local    # 로컬(무제한)
+# (C) EAS 로컬 빌드 — dev/prod 프로필 분리 (모두 --local, 무제한)
+npm run build:android:dev  # eas build --platform android --profile development --local
+npm run build:ios:sim      # iOS 시뮬레이터용 (development-sim 프로필)
+npm run build:android:prod # 상용(app-bundle) / build:ios:prod
 ```
+> 모든 스크립트는 `cross-env APP_ENV=development|production` 으로 환경을 주입한다(Windows/macOS 공통). `:dev`/`:prod` 접미사로 환경을, `:device`로 실기기를 선택. EAS 프로필은 `eas.json`의 development/development-sim/preview/production.
 - **환경 분리**: `APP_ENV`(빌드 시 주입, `eas.json`에서 프로필별 지정)에 따라 앱 이름·번들ID가 동적 분리 → 개발/상용 앱 동시 설치 가능.
   - dev → `StockApp Dev` / `com.stockapp.dev`, prod → `StockApp` / `com.stockapp` (`app.config.js`)
 - **API 주소**: `.env.development` / `.env.production` 의 `EXPO_PUBLIC_*` 변수(`src/lib/env.ts` 단일 접근점). 실기기 테스트 시 `localhost` → 개발 PC의 LAN IP로 교체.
