@@ -24,6 +24,11 @@ _default_origins = [
     "http://127.0.0.1:5173",
     "http://localhost:3000",
     "http://127.0.0.1:3000",
+    # Expo(모바일) 웹 dev 서버 — 기본 8081, 충돌 시 8082
+    "http://localhost:8081",
+    "http://127.0.0.1:8081",
+    "http://localhost:8082",
+    "http://127.0.0.1:8082",
 ]
 _extra = os.getenv("CORS_ORIGINS", "")
 ALLOWED_ORIGINS = _default_origins + [o.strip() for o in _extra.split(",") if o.strip()]
