@@ -82,7 +82,11 @@ Expo SDK 57 · React Native 0.86 · expo-router(하단 5탭: 홈/스크리너/�
 cd mobile
 npm install
 
-# (A) 웹으로 빠르게 확인 (Expo Go 불필요)
+# 환경파일 생성 (실제 .env.* 는 gitignore, .env.example 만 커밋됨)
+cp .env.example .env.development
+cp .env.example .env.production   # 이후 URL을 상용 도메인으로 교체
+
+# (A) 웹으로 빠르게 확인 (Expo Go 불필요) — 기본 8081이 점유 중이면 --port 8082
 npm run web
 
 # (B) 네이티브 개발 빌드 — expo run:* 이 prebuild+빌드+실행을 한 번에 (Xcode/Android SDK 필요)
@@ -99,7 +103,7 @@ npm run build:android:prod # 상용(app-bundle) / build:ios:prod
 > 모든 스크립트는 `cross-env APP_ENV=development|production` 으로 환경을 주입한다(Windows/macOS 공통). `:dev`/`:prod` 접미사로 환경을, `:device`로 실기기를 선택. EAS 프로필은 `eas.json`의 development/development-sim/preview/production.
 - **환경 분리**: `APP_ENV`(빌드 시 주입, `eas.json`에서 프로필별 지정)에 따라 앱 이름·번들ID가 동적 분리 → 개발/상용 앱 동시 설치 가능.
   - dev → `StockApp Dev` / `com.stockapp.dev`, prod → `StockApp` / `com.stockapp` (`app.config.js`)
-- **API 주소**: `.env.development` / `.env.production` 의 `EXPO_PUBLIC_*` 변수(`src/lib/env.ts` 단일 접근점). 실기기 테스트 시 `localhost` → 개발 PC의 LAN IP로 교체.
+- **API 주소(MSA 서비스별)**: `EXPO_PUBLIC_STOCK_GRAPHQL_URL`(stock_api :8002/graphql) · `EXPO_PUBLIC_BLOG_API_URL`(blog :8000) · `EXPO_PUBLIC_AUTH_API_URL`(auth :8001). `src/lib/env.ts` 단일 접근점, 통신은 `src/lib/api`(GraphQL+REST). 운영은 Nginx가 한 호스트로 통합. 실기기 테스트 시 `localhost` → 개발 PC의 LAN IP로 교체.
 - **검증(설정 레벨)**: `npx tsc --noEmit` · `npx expo-doctor` · `APP_ENV=production npx expo config --type public --json`
 
 ## 🔄 작업 재개(Resume) 가이드 & 환경 점검
