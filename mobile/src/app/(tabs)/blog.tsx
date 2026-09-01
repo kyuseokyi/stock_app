@@ -1,4 +1,5 @@
 import { ActivityIndicator, FlatList, Pressable, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StyleSheet } from 'react-native-unistyles';
 
 import type { BlogPost } from '@/features/blog/types';
@@ -36,11 +37,12 @@ function BlogCard({ post }: { post: BlogPost }) {
 }
 
 export default function BlogScreen() {
+  const insets = useSafeAreaInsets();
   const { data, loading, error, reload } = useBlogList();
 
   if (loading) {
     return (
-      <View style={styles.center}>
+      <View style={[styles.center, { paddingTop: insets.top }]}>
         <ActivityIndicator />
         <Text style={styles.hint}>불러오는 중…</Text>
       </View>
@@ -49,7 +51,7 @@ export default function BlogScreen() {
 
   if (error) {
     return (
-      <View style={styles.center}>
+      <View style={[styles.center, { paddingTop: insets.top }]}>
         <Text style={styles.errorTitle}>블로그를 불러오지 못했습니다</Text>
         <Text style={styles.hint}>{error}</Text>
         <Pressable style={styles.retry} onPress={reload}>
@@ -61,7 +63,7 @@ export default function BlogScreen() {
 
   if (data.length === 0) {
     return (
-      <View style={styles.center}>
+      <View style={[styles.center, { paddingTop: insets.top }]}>
         <Text style={styles.hint}>아직 글이 없습니다</Text>
       </View>
     );
@@ -70,7 +72,7 @@ export default function BlogScreen() {
   return (
     <FlatList
       style={styles.list}
-      contentContainerStyle={styles.listContent}
+      contentContainerStyle={[styles.listContent, { paddingTop: insets.top + 16 }]}
       data={data}
       keyExtractor={(item) => String(item.id)}
       renderItem={({ item }) => <BlogCard post={item} />}
