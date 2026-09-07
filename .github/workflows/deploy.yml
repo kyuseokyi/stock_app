@@ -1,0 +1,28 @@
+name: Deploy Production to Home Server
+
+on:
+  push:
+    branches: [ "main" ]
+
+jobs:
+  deploy:
+    name: Deploy APIs & Workers
+    runs-on: self-hosted
+
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+
+    - name: Ensure Production Env File Exists
+      run: |
+        if [ ! -f backend/.env.production ]; then
+          echo "Warning: backend/.env.production file not found! Copying from .env.example as a fallback."
+          cp backend/.env.example backend/.env.production
+        fi
+
+    - name: Build and Deploy via Docker Compose
+      run: |
+        echo "🚀 Starting Deployment Process..."
+        # 배포용 docker-compose.prod.yml을 사용하여 컨테이너 빌드 및 재시작 (다운타임 최소화)
+        docker compose -f docker-compose.prod.yml up -d --build
+        echo "✅ Deployment Successful!"

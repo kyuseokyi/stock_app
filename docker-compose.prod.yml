@@ -1,0 +1,140 @@
+version: '3.8'
+
+services:
+  # -------------------------
+  # 1. Databases (Infrastructure)
+  # -------------------------
+  postgres:
+    image: postgres:15-alpine
+    container_name: stock_postgres_prod
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-stock_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-stock_password}
+      POSTGRES_DB: ${POSTGRES_DB:-stock_db}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg_data_prod:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-stock_user} -d ${POSTGRES_DB:-stock_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.8
+    container_name: stock_clickhouse_prod
+    environment:
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-default}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-password}
+      CLICKHOUSE_DB: ${CLICKHOUSE_DB:-stock_data}
+    ports:
+      - "8123:8123" # HTTP port (for external connections)
+      - "9000:9000" # Native client port
+    volumes:
+      - clickhouse_data_prod:/var/lib/clickhouse
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8123/ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: stock_redis_prod
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data_prod:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # -------------------------
+  # 2. Application Services (Backend APIs)
+  # -------------------------
+  auth_api:
+    build: ./backend
+    container_name: stock_auth_api
+    command: uvicorn apps.auth.main:app --host 0.0.0.0 --port 8001
+    ports:
+      - "8001:8001"
+    env_file:
+      - ./backend/.env.production
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  stock_api:
+    build: ./backend
+    container_name: stock_stock_api
+    command: uvicorn apps.stock_api.main:app --host 0.0.0.0 --port 8002
+    ports:
+      - "8002:8002"
+    env_file:
+      - ./backend/.env.production
+    depends_on:
+      postgres:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  blog_api:
+    build: ./backend
+    container_name: stock_blog_api
+    command: uvicorn apps.blog.main:app --host 0.0.0.0 --port 8003
+    ports:
+      - "8003:8003"
+    env_file:
+      - ./backend/.env.production
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # -------------------------
+  # 3. Backend Worker (Celery)
+  # -------------------------
+  celery_worker:
+    build: ./backend
+    container_name: stock_celery_worker
+    command: celery -A apps.collector.celery_app worker --loglevel=info
+    env_file:
+      - ./backend/.env.production
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  celery_beat:
+    build: ./backend
+    container_name: stock_celery_beat
+    command: celery -A apps.collector.celery_app beat --loglevel=info
+    env_file:
+      - ./backend/.env.production
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  pg_data_prod:
+  clickhouse_data_prod:
+  redis_data_prod:
