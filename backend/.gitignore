@@ -8,3 +8,6 @@ wheels/
 
 # Virtual environments
 .venv
+
+# Celery Beat 런타임 스케줄 상태(환경별 산출물 — 버전관리 대상 아님)
+celerybeat-schedule*
