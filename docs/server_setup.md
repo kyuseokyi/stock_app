@@ -179,4 +179,5 @@ curl -s https://api.haezean.com/graphql -H 'content-type: application/json' \
 | DB 인증 실패 | `DATABASE_URL` 비번 ≠ `compose.env` 비번(§3 경고). 볼륨은 최초 비번으로 고정되므로 바꾸려면 볼륨 삭제 필요 |
 | 배포 중 `.env.production` Permission denied | 시크릿 소유자가 `root`. 러너 사용자로 `sudo chown -R <러너>:<러너> /opt/stock_app/env`(§3) |
 | 전 요청 500 (테이블 없음) | §7 스키마 부트스트랩 미실행 |
+| alembic 돌렸는데 `relation "users" does not exist` | alembic이 `@localhost`(빈 곳)에 붙음. `env.py`는 `SYNC_DATABASE_URL`(=@postgres)을 자동 사용하도록 수정됨 — 구 이미지면 `-e ALEMBIC_DATABASE_URL='postgresql+psycopg2://stock_user:stock_password@postgres:5432/stock_db'` 로 재실행 후 seed_admin |
 | 데이터가 Mock으로 나옴 | `KIS_APP_KEY` 비었거나 `KIS_MODE≠prod`(§3-1) |

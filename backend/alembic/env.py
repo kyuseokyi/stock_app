@@ -13,11 +13,14 @@ from shared.models import Base
 # access to the values within the .ini file in use.
 config = context.config
 
-# 마이그레이션은 동기 드라이버(psycopg2)를 사용한다. 로컬 기본값은
-# docker-compose.dev.yml 의 Postgres 를 가리키며, 환경변수로 오버라이드 가능.
-DATABASE_URL = os.getenv(
-    "ALEMBIC_DATABASE_URL",
-    "postgresql+psycopg2://stock_user:stock_password@localhost:5432/stock_db",
+# 마이그레이션은 동기 드라이버(psycopg2)를 사용한다.
+# 우선순위: ALEMBIC_DATABASE_URL > SYNC_DATABASE_URL(앱과 동일 DB) > 로컬 기본값.
+# → 운영 컨테이너는 .env.production 의 SYNC_DATABASE_URL(@postgres)을 자동 사용하므로
+#   별도 ALEMBIC_DATABASE_URL 없이도 올바른 DB에 마이그레이션한다.
+DATABASE_URL = (
+    os.getenv("ALEMBIC_DATABASE_URL")
+    or os.getenv("SYNC_DATABASE_URL")
+    or "postgresql+psycopg2://stock_user:stock_password@localhost:5432/stock_db"
 )
 config.set_main_option("sqlalchemy.url", DATABASE_URL)
 
