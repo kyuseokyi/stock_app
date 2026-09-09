@@ -49,7 +49,11 @@ sudo ./svc.sh start
 **왜**: 러너는 매 배포마다 `actions/checkout`이 `git clean -ffdx`를 돌려 **gitignore된 파일까지 삭제**한다. 체크아웃 안에 `.env.production`을 만들어도 **다음 배포에서 사라진다**. 그래서 시크릿은 체크아웃 밖 고정 경로에 두고, 워크플로가 매번 복사해 온다(§4에 반영됨).
 
 ```bash
+# ⚠️ 소유자 = 러너 실행 사용자여야 한다. 워크플로의 cp 는 그 사용자로(sudo 없이) 실행되므로
+#    root:root 로 두면 배포 시 "Permission denied"로 파일을 못 읽는다.
+RUNNER_USER=summersnow            # 러너 서비스 실행 사용자로 교체(systemd 'Run as user' 값)
 sudo mkdir -p /opt/stock_app/env
+sudo chown -R "$RUNNER_USER:$RUNNER_USER" /opt/stock_app/env
 sudo chmod 700 /opt/stock_app/env
 ```
 
@@ -173,5 +177,6 @@ curl -s https://api.haezean.com/graphql -H 'content-type: application/json' \
 | 배포 성공했는데 접속 불가 | `docker compose logs stock_api`로 FastAPI 부팅 에러 확인 |
 | DB 연결 에러 | `.env.production`의 DB 호스트가 `localhost` → **컨테이너 이름**(`postgres`/`redis`/`clickhouse`)이어야(§3-1) |
 | DB 인증 실패 | `DATABASE_URL` 비번 ≠ `compose.env` 비번(§3 경고). 볼륨은 최초 비번으로 고정되므로 바꾸려면 볼륨 삭제 필요 |
+| 배포 중 `.env.production` Permission denied | 시크릿 소유자가 `root`. 러너 사용자로 `sudo chown -R <러너>:<러너> /opt/stock_app/env`(§3) |
 | 전 요청 500 (테이블 없음) | §7 스키마 부트스트랩 미실행 |
 | 데이터가 Mock으로 나옴 | `KIS_APP_KEY` 비었거나 `KIS_MODE≠prod`(§3-1) |
