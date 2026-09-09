@@ -272,3 +272,7 @@ uv run python -c "from apps.collector.tasks.universe import backfill_all_daily; 
 - 아키텍처: `docs/architecture_plan.md`
 - AMS 참고 분석: `docs/ams-reference/`
 - 기능별 프롬프트: `docs/prompts/`
+- **배포(미니PC + Cloudflare Tunnel + GitHub Actions)**:
+  - 서버 최초 설정 런북: `docs/server_setup.md`
+  - 배포 아키텍처/트러블슈팅: `docs/deployment_guide.md`
+  - SSH 무포워딩 접속(Termius): `docs/cloudflare_termius_guide.md`

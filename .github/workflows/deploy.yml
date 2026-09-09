@@ -13,11 +13,20 @@ jobs:
     - name: Checkout Code
       uses: actions/checkout@v4
 
-    - name: Ensure Production Env File Exists
+    - name: Load Production Env from Host (fail if missing)
       run: |
-        if [ ! -f backend/.env.production ]; then
-          echo "Warning: backend/.env.production file not found! Copying from .env.example as a fallback."
-          cp backend/.env.example backend/.env.production
+        # 러너는 매 배포마다 git clean(-ffdx)으로 ignored 파일까지 지운다.
+        # 따라서 .env.production 은 체크아웃 밖(호스트 고정 경로)에 두고 매번 복사해 온다.
+        # .env.example 폴백은 KIS키 없음/약한 비번으로 "성공처럼 보이는 깨진 배포"를 만들므로 금지 → 없으면 실패.
+        HOST_ENV=/opt/stock_app/env
+        if [ ! -f "$HOST_ENV/.env.production" ]; then
+          echo "::error::$HOST_ENV/.env.production not found on host. See docs/server_setup.md (§3)."
+          exit 1
+        fi
+        cp "$HOST_ENV/.env.production" backend/.env.production
+        # compose 변수 치환용 루트 .env (강한 DB 비번을 쓸 때만 존재). 없으면 compose 기본값 사용.
+        if [ -f "$HOST_ENV/compose.env" ]; then
+          cp "$HOST_ENV/compose.env" .env
         fi
 
     - name: Build and Deploy via Docker Compose
