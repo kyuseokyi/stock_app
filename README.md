@@ -249,6 +249,24 @@ docker compose -f docker-compose.dev.yml stop   # DB 인프라 정지(데이터 
 >
 > **CORS**: 프론트는 auth·blog·stock 3개 API를 모두 호출하므로 세 서비스가 동일 CORS 정책(`shared/cors.py`)을 공유한다. develop 도메인은 코드에 포함돼 서버 env 를 깜빡해도 CORS 가 동작한다.
 
+### 로컬 개발 → 개발서버(미니PC) DB 사용 (SSH 터널)
+
+로컬에서 개발서버(미니PC)의 **PostgreSQL·ClickHouse** 를 그대로 쓴다(수집된 실데이터로 개발). DB 포트는 LAN 전용이라 Cloudflare 로 노출하지 않고, 기존 cloudflared SSH 경로(`ssh.haezean.com`→`127.0.0.1:2222`) 위로 **SSH 포트포워딩**만 얹는다. **Redis 는 로컬 유지**(Celery 브로커 충돌 방지).
+
+```bash
+# 1) 별도 터미널에서 터널 유지 (cloudflared LaunchAgent 가 2222 를 열고 있어야 함)
+./scripts/dev-db-tunnel.sh          # localhost:15432→PG(5432), localhost:18123→CH(8123)
+
+# 2) backend/.env.development 는 이미 15432/18123 을 가리킴 → 로컬 백엔드 그대로 기동
+#    (완전 로컬로 되돌리려면 5432/8123 으로 바꾸고 docker-compose.dev.yml 기동)
+
+# 3) 연결 확인
+psql "postgresql://stock_user:stock_password@localhost:15432/stock_db" -c '\dt'
+curl -s "http://localhost:18123/?query=SELECT%20count()%20FROM%20stock_data.daily_prices%20FINAL"
+```
+
+> ⚠️ **주의**: 로컬에서 alembic 마이그레이션/seed 를 돌리면 **개발서버 스키마·데이터가 바뀐다**(공유 DB). 개발서버 DB 비밀번호가 `.env.development` 값과 달라졌다면(compose.env 로 커스텀 설정 시) URL 의 비번을 맞춰야 한다. 터널이 내려가면 로컬 백엔드는 DB 연결 실패로 뜨니, 이땐 스크립트를 다시 실행하거나 완전 로컬로 전환한다.
+
 > 백엔드는 `shared` 로드 시 `APP_ENV`(기본 `development`)에 따라 `backend/.env.{APP_ENV}` → `backend/.env` 를 자동 로드합니다. 템플릿은 `backend/.env.example`.
 
 ### 🔑 한국투자증권(KIS) 설정 (Phase 1 데이터 파이프라인)
