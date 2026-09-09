@@ -35,3 +35,11 @@ jobs:
         # 배포용 docker-compose.prod.yml을 사용하여 컨테이너 빌드 및 재시작 (다운타임 최소화)
         docker compose -f docker-compose.prod.yml up -d --build
         echo "✅ Deployment Successful!"
+
+    - name: Cleanup old images (배포로 교체된 dangling 이미지 자동 삭제)
+      if: always()
+      run: |
+        # up --build 로 교체돼 태그를 잃은 이전 이미지(<none>)만 제거.
+        # 실행 중 스택이 쓰는 이미지와 볼륨(pg/clickhouse/redis 데이터)은 보존된다.
+        docker image prune -f
+        echo "🧹 dangling 이미지 정리 완료"

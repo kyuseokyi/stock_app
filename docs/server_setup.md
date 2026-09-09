@@ -124,13 +124,16 @@ sudo apt-get update && sudo apt-get install -y cloudflared
 ```
 [Cloudflare Zero Trust → Networks → Tunnels]에서 터널 생성 후, **Published application routes**에 3개 API 서브도메인을 추가(자세한 대시보드 절차는 `cloudflare_termius_guide.md` §3.1 참조):
 
-| Hostname | Service |
-|---|---|
-| `auth.haezean.com` | `http://localhost:8001` |
-| `api.haezean.com` | `http://localhost:8002` |
-| `blog.haezean.com` | `http://localhost:8003` |
+| Hostname | Type | Service |
+|---|---|---|
+| `auth.haezean.com` | HTTP | `localhost:8001` (auth API) |
+| `api.haezean.com` | HTTP | `localhost:8002` (stock API) |
+| `blog.haezean.com` | HTTP | `localhost:8003` (blog API) |
+| `app.haezean.com` | HTTP | `localhost:3000` (web_client) |
+| `admin.haezean.com` | HTTP | `localhost:3001` (admin_web) |
 
-> ⚠️ **DB 포트(5432·8123·9000·6379)에는 터널 호스트네임을 절대 붙이지 않는다.** 외부 노출 금지, LAN 전용. Cloudflare가 붙는 건 위 3개 API 서브도메인뿐.
+> Type은 **HTTP**(로컬 uvicorn/serve는 평문). 외부 HTTPS는 Cloudflare 엣지가 종단한다 — 로컬 인증서 불필요.
+> ⚠️ **DB 포트(5432·8123·9000·6379)에는 터널 호스트네임을 절대 붙이지 않는다.** 외부 노출 금지, LAN 전용. Cloudflare가 붙는 건 위 API·프론트 서브도메인뿐.
 
 ---
 
@@ -170,7 +173,35 @@ curl -s https://api.haezean.com/graphql -H 'content-type: application/json' \
 
 ---
 
-## 9. 트러블슈팅
+## 9. 디스크 관리 (이미지·빌드캐시)
+데이터(ClickHouse 시계열)는 압축돼 작지만, **매 배포의 `--build`로 오래된 이미지·빌드캐시가 누적**되는 게 유일한 디스크 관리 포인트다.
+
+**① 오래된 이미지 자동 삭제** — `deploy.yml`에 반영됨: 배포 끝에 `docker image prune -f`로 교체된 dangling 이미지 제거(실행 중 스택 이미지·볼륨은 보존). 별도 조치 불필요.
+
+**② 빌드 캐시 10GB 상한** — Docker 데몬 GC로 설정(항상 자동 적용). `/etc/docker/daemon.json`:
+```json
+{
+  "builder": { "gc": { "enabled": true, "defaultKeepStorage": "10GB" } }
+}
+```
+```bash
+sudo nano /etc/docker/daemon.json      # 다른 설정이 있으면 병합
+sudo systemctl restart docker          # ⚠️ 모든 컨테이너 재시작 → 수집 중이면 끝난 뒤 적용
+```
+→ BuildKit이 캐시를 **10GB 이하로 유지**(초과분 자동 GC). 캐시를 남겨 빌드 속도는 유지하면서 상한만 건다.
+
+**현황 확인 / 수동 정리**:
+```bash
+docker system df                       # 이미지/컨테이너/볼륨/빌드캐시 용량
+df -h /                                # 디스크 여유
+docker image prune -af                 # (필요시) 미사용 이미지 삭제
+docker builder prune -f                # (필요시) 빌드 캐시 전체 삭제
+```
+> ⚠️ **`docker system prune --volumes` 절대 금지** — `pg_data_prod`·`clickhouse_data_prod`·`redis_data_prod` 볼륨(=DB 실데이터)이 삭제된다. `image`/`builder` prune만 볼륨을 건드리지 않는다.
+
+---
+
+## 10. 트러블슈팅
 | 증상 | 원인/조치 |
 |---|---|
 | 러너가 작업을 안 잡음(대기) | 러너 오프라인이거나 docker 그룹 미가입(§1·§2) |
