@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # -------------------------
   # 1. Databases (Infrastructure)
@@ -132,6 +130,32 @@ services:
     depends_on:
       redis:
         condition: service_healthy
+    restart: unless-stopped
+
+  # -------------------------
+  # 4. Frontends (정적 SPA — node serve. VITE_* 는 빌드타임 주입이라 args로 굽는다)
+  # -------------------------
+  web_client:
+    build:
+      context: ./web_client
+      args:
+        VITE_API_BASE_URL: https://blog.haezean.com/api/v1
+        VITE_AUTH_BASE_URL: https://auth.haezean.com/api/v1
+    container_name: stock_web_client
+    ports:
+      - "3000:3000"
+    restart: unless-stopped
+
+  admin_web:
+    build:
+      context: ./admin_web
+      args:
+        VITE_API_BASE_URL: https://blog.haezean.com/api/v1
+        VITE_AUTH_BASE_URL: https://auth.haezean.com/api/v1
+        VITE_STOCK_API_URL: https://api.haezean.com/graphql
+    container_name: stock_admin_web
+    ports:
+      - "3001:3000"
     restart: unless-stopped
 
 volumes:

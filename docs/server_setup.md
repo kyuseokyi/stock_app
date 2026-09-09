@@ -124,13 +124,16 @@ sudo apt-get update && sudo apt-get install -y cloudflared
 ```
 [Cloudflare Zero Trust → Networks → Tunnels]에서 터널 생성 후, **Published application routes**에 3개 API 서브도메인을 추가(자세한 대시보드 절차는 `cloudflare_termius_guide.md` §3.1 참조):
 
-| Hostname | Service |
-|---|---|
-| `auth.haezean.com` | `http://localhost:8001` |
-| `api.haezean.com` | `http://localhost:8002` |
-| `blog.haezean.com` | `http://localhost:8003` |
+| Hostname | Type | Service |
+|---|---|---|
+| `auth.haezean.com` | HTTP | `localhost:8001` (auth API) |
+| `api.haezean.com` | HTTP | `localhost:8002` (stock API) |
+| `blog.haezean.com` | HTTP | `localhost:8003` (blog API) |
+| `app.haezean.com` | HTTP | `localhost:3000` (web_client) |
+| `admin.haezean.com` | HTTP | `localhost:3001` (admin_web) |
 
-> ⚠️ **DB 포트(5432·8123·9000·6379)에는 터널 호스트네임을 절대 붙이지 않는다.** 외부 노출 금지, LAN 전용. Cloudflare가 붙는 건 위 3개 API 서브도메인뿐.
+> Type은 **HTTP**(로컬 uvicorn/serve는 평문). 외부 HTTPS는 Cloudflare 엣지가 종단한다 — 로컬 인증서 불필요.
+> ⚠️ **DB 포트(5432·8123·9000·6379)에는 터널 호스트네임을 절대 붙이지 않는다.** 외부 노출 금지, LAN 전용. Cloudflare가 붙는 건 위 API·프론트 서브도메인뿐.
 
 ---
 
