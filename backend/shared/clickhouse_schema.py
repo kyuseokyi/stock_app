@@ -70,14 +70,30 @@ ORDER BY (ticker, date)
 """
 
 
+# 프로세스별 재사용 클라이언트 캐시.
+# 매 호출 새 클라이언트를 만들면 clickhouse_connect 가 여는 HTTP 소켓이 닫히지 않고
+# 쌓여 FD 누수(EMFILE)로 이어진다 → 전종목 수집이 ~1000종목 부근에서
+# OSError(24, 'Too many open files')로 무더기 실패(누수된 FD는 회수 안 돼 복구 불가).
+# 한 프로세스는 클라이언트 하나만 재사용한다. celery prefork/포크 후에도 자식이
+# 자기 클라이언트를 갖도록 PID 로 캐시를 무효화한다. (clickhouse_connect 클라이언트는
+# 풀 기반이라 재사용·동시 조회에 안전하며, 어디서도 .close() 하지 않음)
+_client = None
+_client_pid: int | None = None
+
+
 def get_client():
-    """관리(스키마) 작업용 ClickHouse 클라이언트."""
-    return clickhouse_connect.get_client(
-        host=CLICKHOUSE_HOST,
-        port=CLICKHOUSE_PORT,
-        username=CLICKHOUSE_USER,
-        password=CLICKHOUSE_PASSWORD,
-    )
+    """관리/적재/조회 공용 ClickHouse 클라이언트(프로세스별 1개 재사용)."""
+    global _client, _client_pid
+    pid = os.getpid()
+    if _client is None or _client_pid != pid:
+        _client = clickhouse_connect.get_client(
+            host=CLICKHOUSE_HOST,
+            port=CLICKHOUSE_PORT,
+            username=CLICKHOUSE_USER,
+            password=CLICKHOUSE_PASSWORD,
+        )
+        _client_pid = pid  # 연결 성공 후에만 캐시 확정(실패 시 다음 호출에서 재시도)
+    return _client
 
 
 def init_clickhouse() -> None:
