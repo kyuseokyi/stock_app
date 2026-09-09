@@ -1,11 +1,8 @@
 import axios from 'axios'
+import { API_BASE_URL as BLOG_BASE_URL, AUTH_BASE_URL } from '../config'
 
-// 마이크로서비스별 base URL. 각 서비스는 독립 포트로 실행되며,
-// 운영에서는 Nginx 리버스 프록시가 /api/v1/* 를 각 서비스로 라우팅한다.
-const BLOG_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1'
-const AUTH_BASE_URL =
-  import.meta.env.VITE_AUTH_BASE_URL || 'http://localhost:8001/api/v1'
+// 마이크로서비스별 base URL(빌드 타임 주입, 폴백/fail-fast 는 ../config 참조).
+// 운영에서는 Cloudflare 터널이 각 서브도메인(blog/auth.haezean.com)으로 라우팅한다.
 
 // 공통 인터셉터를 붙인 axios 인스턴스 팩토리
 function makeClient(baseURL) {

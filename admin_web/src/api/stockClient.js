@@ -1,9 +1,7 @@
 import { GraphQLClient, gql } from 'graphql-request'
+import { STOCK_API_URL } from '../config'
 
-// stock_api GraphQL 엔드포인트 (기본 로컬 8002)
-const STOCK_API_URL =
-  import.meta.env.VITE_STOCK_API_URL || 'http://localhost:8002/graphql'
-
+// stock_api GraphQL 엔드포인트(빌드 타임 주입, 폴백/fail-fast 는 ../config 참조)
 const client = new GraphQLClient(STOCK_API_URL)
 
 const SEARCH_STOCKS = gql`

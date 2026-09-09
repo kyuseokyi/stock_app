@@ -1,8 +1,7 @@
 import axios from 'axios'
+import { AUTH_BASE_URL as authURL } from '../config'
 
-// 인증 서비스 base URL (auth 8001)
-const authURL =
-  import.meta.env.VITE_AUTH_BASE_URL || 'http://localhost:8001/api/v1'
+// 인증 서비스 base URL (auth 8001) — 빌드 타임 주입, 폴백/fail-fast 는 ../config
 
 const authClient = axios.create({
   baseURL: authURL,

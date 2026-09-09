@@ -10,28 +10,19 @@
 
 from __future__ import annotations
 
-import os
-
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from strawberry.fastapi import GraphQLRouter
 
 from apps.stock_api.graphql.schema import schema
+from shared.cors import build_allowed_origins
 
 app = FastAPI(title="Stock App - Stock API Service", version="0.1.0")
 
-_default_origins = [
-    "http://localhost:5173",
-    "http://127.0.0.1:5173",
-    "http://localhost:3000",
-    "http://127.0.0.1:3000",
-]
-_extra = os.getenv("CORS_ORIGINS", "")
-ALLOWED_ORIGINS = _default_origins + [o.strip() for o in _extra.split(",") if o.strip()]
-
+# --- CORS --- (local/develop/product 공통 정책은 shared.cors 참조)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=ALLOWED_ORIGINS,
+    allow_origins=build_allowed_origins(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
