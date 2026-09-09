@@ -1,8 +1,8 @@
 import axios from 'axios'
 import { TOKEN_KEY } from '../store/auth'
+import { API_BASE_URL as baseURL } from '../config'
 
-// 블로그 서비스 base URL (조회 + 인증형 댓글 작성)
-const baseURL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1'
+// 블로그 서비스 base URL (조회 + 인증형 댓글 작성) — 빌드 타임 주입, 폴백/fail-fast 는 ../config
 
 const client = axios.create({
   baseURL,

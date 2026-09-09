@@ -1,8 +1,7 @@
 import { useEffect, useState } from 'react'
+import { API_BASE_URL } from '../config'
 
-const STREAM_URL =
-  (import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1') +
-  '/notifications/stream'
+const STREAM_URL = API_BASE_URL + '/notifications/stream'
 
 // SSE(EventSource) 실시간 알림 → 우측 하단 토스트
 export default function NotificationToaster() {

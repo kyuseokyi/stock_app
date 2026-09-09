@@ -8,34 +8,19 @@
 
 from __future__ import annotations
 
-import os
-
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+
+from shared.cors import build_allowed_origins
 
 from .routers import blogs, boards, comments, notifications
 
 app = FastAPI(title="Stock App - Blog Service", version="0.1.0")
 
-# --- CORS (어드민 웹 로컬 개발 허용) ---
-# 기본으로 Vite(5173)/CRA(3000) 로컬 오리진을 허용하고, 환경변수로 확장 가능.
-_default_origins = [
-    "http://localhost:5173",
-    "http://127.0.0.1:5173",
-    "http://localhost:3000",
-    "http://127.0.0.1:3000",
-    # Expo(모바일) 웹 dev 서버 — 기본 8081, 충돌 시 8082
-    "http://localhost:8081",
-    "http://127.0.0.1:8081",
-    "http://localhost:8082",
-    "http://127.0.0.1:8082",
-]
-_extra = os.getenv("CORS_ORIGINS", "")
-ALLOWED_ORIGINS = _default_origins + [o.strip() for o in _extra.split(",") if o.strip()]
-
+# --- CORS --- (local/develop/product 공통 정책은 shared.cors 참조)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=ALLOWED_ORIGINS,
+    allow_origins=build_allowed_origins(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

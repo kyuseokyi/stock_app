@@ -222,7 +222,7 @@ docker compose -f docker-compose.dev.yml stop   # DB 인프라 정지(데이터 
 | `CLICKHOUSE_DB` | backend | `stock_data` | 주가 시계열 DB |
 | `JWT_SECRET_KEY` | auth·blog | `dev-insecure-secret-change-me` | JWT 서명 키 (**서비스 간 동일값 필수**, 운영 필수 설정) |
 | `PUSH_BACKEND` | collector | `mock` | `mock` \| `fcm` (FCM은 자격증명 준비 후) |
-| `CORS_ORIGINS` | backend | (localhost 기본 허용) | 콤마 구분 추가 오리진 |
+| `CORS_ORIGINS` | backend | (localhost + haezean 기본 허용) | 콤마 구분 **추가** 오리진(product 등). develop 배포 도메인(admin/app.haezean.com)은 `shared/cors.py`에 코드로 포함돼 env 없이도 허용 |
 | `VITE_API_BASE_URL` | admin_web | `http://localhost:8000/api/v1` | 블로그 API |
 | `VITE_AUTH_BASE_URL` | admin_web | `http://localhost:8001/api/v1` | 인증 API |
 | `VITE_STOCK_API_URL` | admin_web | `http://localhost:8002/graphql` | 주식 API(GraphQL) — 차트 삽입 종목검색/차트 |
@@ -231,7 +231,23 @@ docker compose -f docker-compose.dev.yml stop   # DB 인프라 정지(데이터 
 | `KIS_APP_KEY` / `KIS_APP_SECRET` | collector | (빈값) | KIS OpenAPI 앱키/시크릿 (비우면 Mock 수집 폴백) |
 | `STOCK_MASTER_SOURCE` | collector | `auto` | 전종목 마스터 소스 — `mst`(.mst 전종목) \| `fallback`(대형주 20) \| `auto`(mst→실패시 fallback) |
 | `KIS_RATE_PER_SEC` | collector | `8` | 전종목 수집 시 KIS 초당 호출 상한(실전 ~20 한도 내 보수적) |
+| `KIS_COOLDOWN_THRESHOLD` | collector | `5` | 연속 연결실패 몇 회에서 적응형 쿨다운 시작 |
+| `KIS_COOLDOWN_BASE_SEC` / `KIS_COOLDOWN_MAX_SEC` | collector | `60` / `600` | 쿨다운 시작·상한(초). 연속실패 지속 시 2배씩 에스컬레이트 |
 | `KIS_ACCOUNT_NO` | collector | (빈값) | 계좌번호(시세조회만이면 생략 가능) |
+
+## 🌍 환경 3단계 (local / develop / product)
+
+프론트(admin_web·web_client)의 API 주소는 **빌드 타임에 `VITE_*` 로 번들에 구워진다.** 각 티어별 주입 지점:
+
+| 티어 | 프론트 API URL 주입 | 백엔드 API 위치 | CORS |
+|---|---|---|---|
+| **local** | `npm run dev`(vite serve) — 값 없으면 `src/config.js` 의 localhost 폴백 | 로컬 uvicorn(8000/8001/8002) | `shared/cors.py` 의 localhost 기본 허용 |
+| **develop** | `docker-compose.prod.yml` 의 **build args**(haezean 터널 URL) | 미니PC(Cloudflare 터널) | admin/app.haezean.com 이 `shared/cors.py` 에 코드로 포함 |
+| **product** | 실서버 도메인 확정 시 build args 로 주입 | (미정) | 도메인 확정 시 `CORS_ORIGINS` env 로 추가 |
+
+> **🔒 fail-fast (green-but-broken 차단)**: 배포 빌드(`vite build`)에서 `VITE_*` 가 비면 **localhost 로 폴백하지 않고 빌드가 실패**한다(`vite.config.js` + `src/config.js`). 과거 admin.haezean.com 이 localhost 를 부르던 류의 'green-but-broken' 배포를 원천 차단. dev serve(`npm run dev`)에서만 localhost 폴백을 허용한다.
+>
+> **CORS**: 프론트는 auth·blog·stock 3개 API를 모두 호출하므로 세 서비스가 동일 CORS 정책(`shared/cors.py`)을 공유한다. develop 도메인은 코드에 포함돼 서버 env 를 깜빡해도 CORS 가 동작한다.
 
 > 백엔드는 `shared` 로드 시 `APP_ENV`(기본 `development`)에 따라 `backend/.env.{APP_ENV}` → `backend/.env` 를 자동 로드합니다. 템플릿은 `backend/.env.example`.
 

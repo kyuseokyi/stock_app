@@ -213,6 +213,7 @@ docker builder prune -f                # (필요시) 빌드 캐시 전체 삭제
 | alembic 돌렸는데 `relation "users" does not exist` | alembic이 `@localhost`(빈 곳)에 붙음. `env.py`는 `SYNC_DATABASE_URL`(=@postgres)을 자동 사용하도록 수정됨 — 구 이미지면 `-e ALEMBIC_DATABASE_URL='postgresql+psycopg2://stock_user:stock_password@postgres:5432/stock_db'` 로 재실행 후 seed_admin |
 | 데이터가 Mock으로 나옴 | `KIS_APP_KEY` 비었거나 `KIS_MODE≠prod`(§3-1) |
 | 전종목 수집이 특정 개수(예: ~928)부터 줄줄이 `Max retries exceeded` | 연결계열 실패. §11 참조(코드 완화 적용됨 — Session 재사용 + 적응형 쿨다운 + 연결계열 2차 재시도). 근본원인은 로그의 errno로 확정 |
+| admin/app.haezean.com 에서 "백엔드 서버에 연결할 수 없습니다"(로그인/조회 실패) | **CORS**. 프론트 빌드는 정상(터널 URL 구워짐)인데 백엔드가 그 origin 을 거부한 것. develop 도메인(admin/app.haezean.com)은 `shared/cors.py`에 코드로 포함됨 → **최신 코드로 재배포하면 해결**. 재배포 전 즉시 완화: `.env.production`에 `CORS_ORIGINS=https://admin.haezean.com,https://app.haezean.com` 추가 후 `docker compose -f docker-compose.prod.yml up -d --force-recreate auth_api blog_api stock_api`(재빌드 X). 검증: `curl -s -D - -o /dev/null -X OPTIONS https://auth.haezean.com/api/v1/auth/login -H 'Origin: https://admin.haezean.com' -H 'Access-Control-Request-Method: POST' \| grep -i allow-origin` 가 origin 을 반환해야 함 |
 
 ## 11. 수집 신뢰성 (연결계열 실패 완화·진단)
 KIS 시세 상한은 **20 TPS**. 우리는 8/s(=40%)로 도는데도 대량 순회(~928종목) 후 연결오류가 관찰됐다 → **TPS 초과가 원인이 아니다.** 코드에 3중 완화를 적용했다(`apps/collector/kis/client.py`, `apps/collector/tasks/universe.py`):
