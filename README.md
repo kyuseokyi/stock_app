@@ -1,6 +1,6 @@
 # Stock App Project
 
-한국투자증권 API 기반 주식 데이터 파이프라인 + 블로그/커뮤니티 + 관리자 웹/모바일을 포함하는 풀스택 모노레포입니다. 백엔드는 **용도별 독립 마이크로서비스(`backend/apps/`)** 로 구성되며, 로컬은 각 서비스를 개별 포트로 실행하고 운영은 Nginx 리버스 프록시로 통합합니다.
+한국투자증권 API 기반 주식 데이터 파이프라인 + 블로그/커뮤니티 + 관리자 웹/모바일을 포함하는 풀스택 모노레포입니다. 백엔드는 **용도별 독립 마이크로서비스(`backend/apps/`)** 로 구성되며, 로컬은 각 서비스를 개별 포트로 실행하고 운영은 Cloudflare Tunnel(Zero Trust)이 서브도메인별로 라우팅합니다(auth/api/blog/app/admin.haezean.com → 각 로컬 포트).
 
 ## 📂 구조
 
@@ -103,7 +103,7 @@ npm run build:android:prod # 상용(app-bundle) / build:ios:prod
 > 모든 스크립트는 `cross-env APP_ENV=development|production` 으로 환경을 주입한다(Windows/macOS 공통). `:dev`/`:prod` 접미사로 환경을, `:device`로 실기기를 선택. EAS 프로필은 `eas.json`의 development/development-sim/preview/production.
 - **환경 분리**: `APP_ENV`(빌드 시 주입, `eas.json`에서 프로필별 지정)에 따라 앱 이름·번들ID가 동적 분리 → 개발/상용 앱 동시 설치 가능.
   - dev → `StockApp Dev` / `com.stockapp.dev`, prod → `StockApp` / `com.stockapp` (`app.config.js`)
-- **API 주소(MSA 서비스별)**: `EXPO_PUBLIC_STOCK_GRAPHQL_URL`(stock_api :8002/graphql) · `EXPO_PUBLIC_BLOG_API_URL`(blog :8000) · `EXPO_PUBLIC_AUTH_API_URL`(auth :8001). `src/lib/env.ts` 단일 접근점, 통신은 `src/lib/api`(GraphQL+REST). 운영은 Nginx가 한 호스트로 통합. 실기기 테스트 시 `localhost` → 개발 PC의 LAN IP로 교체.
+- **API 주소(MSA 서비스별)**: `EXPO_PUBLIC_STOCK_GRAPHQL_URL`(stock_api :8002/graphql) · `EXPO_PUBLIC_BLOG_API_URL`(blog :8000) · `EXPO_PUBLIC_AUTH_API_URL`(auth :8001). `src/lib/env.ts` 단일 접근점, 통신은 `src/lib/api`(GraphQL+REST). 운영은 Cloudflare Tunnel이 서브도메인별로 라우팅. 실기기 테스트 시 `localhost` → 개발 PC의 LAN IP로 교체.
 - **검증(설정 레벨)**: `npx tsc --noEmit` · `npx expo-doctor` · `APP_ENV=production npx expo config --type public --json`
 
 ## 🔄 작업 재개(Resume) 가이드 & 환경 점검

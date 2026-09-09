@@ -32,7 +32,7 @@ conda activate stock_app
 cd backend
 uv sync                     # 의존성 설치 및 동기화
 
-# 각 마이크로서비스는 독립 포트로 실행 (운영은 Nginx 리버스 프록시로 통합)
+# 각 마이크로서비스는 독립 포트로 실행 (운영은 Cloudflare Tunnel이 서브도메인별로 라우팅)
 uv run uvicorn apps.auth.main:app      --reload --port 8001  # 인증 서버
 uv run uvicorn apps.blog.main:app      --reload --port 8000  # 블로그(게시판/댓글) 서버
 uv run uvicorn apps.stock_api.main:app --reload --port 8002  # 주식 API 서버(스켈레톤)

@@ -105,18 +105,18 @@ stock_app/
     상용 서버(VPS) 구매 후 접속부터 서비스 배포까지의 상세 절차입니다.
     1. **서버 접속 및 보안 설정 (UFW 방화벽)**
        * `ssh root@<서버IP>` 로 접속 후 패키지 업데이트: `sudo apt update && sudo apt upgrade -y`
-       * 방화벽 설정(포트 개방): `sudo ufw allow OpenSSH`, `sudo ufw allow 80`, `sudo ufw allow 443`, `sudo ufw enable` (HTTPS 및 관리자 웹용 포트만 최소한으로 엽니다.)
+       * 방화벽 설정: `sudo ufw allow OpenSSH && sudo ufw enable`. **Cloudflare Tunnel은 아웃바운드 연결이라 80/443 인바운드 개방이 불필요**하다(포트포워딩·인바운드 포트 개방 없음).
     2. **Docker 및 Docker Compose 설치**
        * 공식 스크립트로 설치: `curl -fsSL https://get.docker.com -o get-docker.sh && sudo sh get-docker.sh`
        * `sudo apt install docker-compose-plugin -y`
     3. **소스코드 다운로드 및 환경변수 셋팅**
        * `git clone <프로젝트_레포지토리_주소>`
        * `cd stock_app` 이동 후 `.env.example`을 복사하여 `.env.production` 파일을 생성합니다. (KIS API Key, DB 비밀번호 등 실제 상용 키 입력)
-    4. **Cloudflare 연동 및 Nginx Proxy (SSL 세팅)**
+    4. **Cloudflare Tunnel 연동 (인그레스 — 포트포워딩·Nginx 불필요)**
        * 구입하신 도메인의 네임서버를 **Cloudflare**로 이전하여 무료 플랜에 등록합니다.
-       * Cloudflare DNS 메뉴에서 서버의 공인 IP로 A 레코드를 연결하고 '프록시 상태(주황색 구름)'를 켭니다.
-       * Cloudflare의 SSL/TLS 설정 메뉴에서 **"가변(Flexible)"** 또는 **"전체(Full)"** 모드로 설정하여 클라이언트-서버 간 무료 HTTPS 통신을 활성화합니다. (Certbot 등 별도의 SSL 갱신 스크립트가 필요 없습니다.)
-       * 우분투 서버에 `sudo apt install nginx` 후, Nginx가 외부의 80포트 요청을 받아 내부의 `8000`포트(FastAPI)와 `5173`(Admin)으로 넘겨주도록(Reverse Proxy) 설정합니다.
+       * 서버에 `cloudflared` 데몬을 설치하고 Zero Trust에서 터널을 생성해 연결합니다. 터널은 **아웃바운드** 연결이라 이중 NAT·포트포워딩 없이 동작하고, HTTPS는 Cloudflare 엣지가 종단하므로 Nginx/Certbot이 필요 없습니다.
+       * Zero Trust의 **Published application routes**에서 서브도메인을 내부 Docker 포트로 라우팅합니다: `auth.haezean.com`→8001, `api`→8002, `blog`→8003, `app`→3000, `admin`→3001. ⚠️ DB 포트(5432/8123/9000/6379)는 절대 터널에 노출하지 않는다(LAN 전용).
+       * 상세 절차는 `docs/server_setup.md`(배포 런북) · `docs/cloudflare_termius_guide.md`(SSH 터널) 참조.
     5. **최종 컨테이너 실행**
        * `docker compose -f docker-compose.prod.yml up -d --build` 명령어로 전체 시스템(FastAPI, Celery, Postgres, ClickHouse, Redis)을 일괄 백그라운드 실행합니다.
 
