@@ -212,3 +212,39 @@ docker builder prune -f                # (필요시) 빌드 캐시 전체 삭제
 | 전 요청 500 (테이블 없음) | §7 스키마 부트스트랩 미실행 |
 | alembic 돌렸는데 `relation "users" does not exist` | alembic이 `@localhost`(빈 곳)에 붙음. `env.py`는 `SYNC_DATABASE_URL`(=@postgres)을 자동 사용하도록 수정됨 — 구 이미지면 `-e ALEMBIC_DATABASE_URL='postgresql+psycopg2://stock_user:stock_password@postgres:5432/stock_db'` 로 재실행 후 seed_admin |
 | 데이터가 Mock으로 나옴 | `KIS_APP_KEY` 비었거나 `KIS_MODE≠prod`(§3-1) |
+| 전종목 수집이 특정 개수(예: ~928)부터 줄줄이 `Max retries exceeded` | 연결계열 실패. §11 참조(코드 완화 적용됨 — Session 재사용 + 적응형 쿨다운 + 연결계열 2차 재시도). 근본원인은 로그의 errno로 확정 |
+
+## 11. 수집 신뢰성 (연결계열 실패 완화·진단)
+KIS 시세 상한은 **20 TPS**. 우리는 8/s(=40%)로 도는데도 대량 순회(~928종목) 후 연결오류가 관찰됐다 → **TPS 초과가 원인이 아니다.** 코드에 3중 완화를 적용했다(`apps/collector/kis/client.py`, `apps/collector/tasks/universe.py`):
+
+1. **커넥션 재사용**: `KISClient`가 인스턴스 `requests.Session`(keep-alive, 풀=4)으로 요청 → 매 요청 새 TCP+TLS 핸드셰이크 폭주를 제거.
+2. **적응형 쿨다운**: 연결계열(`KISConnectionError`) 연속 실패가 임계치(기본 5) 이상이면 `60→120→…→600초`로 쉬었다 재개(성공 시 리셋). 4xx·rt_cd 논리오류는 대상 아님(즉시 격리).
+3. **연결계열 2차 재시도**: 1차에서 연결계열로 실패한 종목만 쿨다운 후 한 번 더 시도(논리오류는 재시도 안 함).
+
+튜닝 env(선택, `.env.production`): `KIS_RATE_PER_SEC`(기본 8), `KIS_COOLDOWN_THRESHOLD`(5), `KIS_COOLDOWN_BASE_SEC`(60), `KIS_COOLDOWN_MAX_SEC`(600).
+
+**⚠️ 검증 순서(중요)**: 전종목 재시도 전 **20종목 프로브**부터.
+```bash
+# 20종목만 먼저 — 성공하면 차단 해제 상태, 실패하면 아직 원격 차단(코드로 못 고침 → 대기)
+docker exec stock_celery_worker \
+  celery -A apps.collector.celery_app call collector.collect_all_daily --kwargs '{"limit": 20}'
+docker exec stock_celery_worker celery -A apps.collector.celery_app inspect active   # 진행 확인
+docker logs -f stock_celery_worker                                                   # errno 확인
+```
+
+**근본원인 확정(다음 실패 시, 실행 *중*에)**: 코드가 실패를 `repr`로 남기므로 로그의 `[Errno …]`가 그대로 보인다. 의미:
+| 로그의 errno | 원인 | 처방 |
+|---|---|---|
+| `[Errno 99]`/`[Errno 98] Cannot assign requested address` | 로컬 포트 고갈 | Session이 해결(적용됨). `sysctl net.ipv4.ip_local_port_range` 확인 |
+| `Connection reset by peer`/TLS 핸드셰이크 실패 | 원격 엣지가 핸드셰이크 레이트 차단 | Session이 핸드셰이크 수를 급감시켜 해결 |
+| `Read timed out`/`[Errno 110]` (connect) | 원격 지연/IP 차단 | 쿨다운이 완화. 코드로 근본 해결 불가 → 대기 |
+| `dmesg`에 `nf_conntrack: table full` | conntrack 테이블 포화 | 코드 아님 → sysctl 조정 |
+
+실행 *중* 미니PC에서 로컬 자원 소진 여부를 초 단위로 판별:
+```bash
+ss -tan state time-wait | wc -l                              # TIME_WAIT 소켓 수(수만이면 포트압박)
+cat /proc/sys/net/netfilter/nf_conntrack_count               # 현재 conntrack 엔트리
+cat /proc/sys/net/netfilter/nf_conntrack_max                 # 상한(count가 근접하면 포화)
+dmesg | tail -30                                             # conntrack table full 경고 확인
+```
+> 재발 위치가 단서: **같은 개수(~900~1000)에서 또 막히면** 미확인 자원 상한, **랜덤/즉시면** 원격 차단. 전종목 1회가 깨끗이 끝나기 전엔 "해결"로 보고하지 않는다.
