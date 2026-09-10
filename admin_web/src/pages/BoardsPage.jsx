@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { createBoard, deleteBoard, listBoards, updateBoard } from '../api/boards'
+import { showToast } from '../lib/toast'
 
 export default function BoardsPage() {
   const [boards, setBoards] = useState([])
@@ -25,13 +26,18 @@ export default function BoardsPage() {
 
   const onCreate = async (e) => {
     e.preventDefault()
-    if (!name.trim()) return
+    if (!name.trim()) {
+      showToast('게시판 이름을 입력하세요.', { icon: '⚠️' })
+      return
+    }
     try {
       await createBoard({ name: name.trim(), order_index: boards.length + 1 })
+      showToast(`'${name.trim()}' 게시판을 추가했습니다.`, { icon: '✅' })
       setName('')
       load()
     } catch {
       setError('게시판 생성에 실패했습니다.')
+      showToast('게시판 생성에 실패했습니다.', { icon: '⚠️' })
     }
   }
 

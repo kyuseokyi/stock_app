@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { listBoards } from '../api/boards'
 import { createBlog, getBlog, updateBlog } from '../api/blogs'
 import RichTextEditor from '../components/RichTextEditor'
+import { showToast } from '../lib/toast'
 
 export default function BlogEditorPage() {
   const { id } = useParams()
@@ -14,6 +15,7 @@ export default function BlogEditorPage() {
   const [loading, setLoading] = useState(isEdit)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const submittingRef = useRef(false) // 중복 제출 방지(렌더 타이밍·Enter 제출 무관)
 
   useEffect(() => {
     listBoards().then(setBoards).catch(() => {})
@@ -33,9 +35,16 @@ export default function BlogEditorPage() {
 
   const onSubmit = async (e) => {
     e.preventDefault()
+    if (submittingRef.current) return // 이미 저장 중이면 무시(중복 등록 방지)
     setError('')
-    if (!form.board_id) return setError('게시판을 선택하세요.')
-    if (!form.title.trim()) return setError('제목을 입력하세요.')
+    // 필수 입력 검증 — 미입력 시 토스트로 안내(인라인 문구는 놓치기 쉬움)
+    if (!form.board_id) return showToast('게시판을 선택하세요.', { icon: '⚠️' })
+    if (!form.title.trim()) return showToast('제목을 입력하세요.', { icon: '⚠️' })
+    // 내용: 텍스트가 없어도 차트/이미지 등 미디어가 있으면 허용
+    const hasText = form.content.replace(/<[^>]*>/g, '').trim().length > 0
+    const hasMedia = /<(img|iframe|video)\b/i.test(form.content)
+    if (!hasText && !hasMedia) return showToast('내용을 입력하세요.', { icon: '⚠️' })
+    submittingRef.current = true
     setSaving(true)
     try {
       const payload = {
@@ -48,9 +57,12 @@ export default function BlogEditorPage() {
       } else {
         await createBlog(payload)
       }
+      showToast(isEdit ? '게시글을 수정했습니다.' : '게시글을 등록했습니다.', { icon: '✅' })
       navigate('/blogs')
     } catch {
       setError('저장에 실패했습니다.')
+      showToast('저장에 실패했습니다.', { icon: '⚠️' })
+      submittingRef.current = false // 실패 시 재시도 허용(성공 시엔 이동하므로 리셋 불필요)
     } finally {
       setSaving(false)
     }

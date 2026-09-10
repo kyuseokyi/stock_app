@@ -23,7 +23,7 @@ export default function NotificationToaster() {
         payload.type === 'new_post'
           ? `새 글이 등록되었습니다: ${payload.title}`
           : '새 알림이 도착했습니다.'
-      setToasts((prev) => [...prev, { id, text }])
+      setToasts((prev) => [...prev, { id, text, icon: '🔔' }])
       // 5초 후 자동 제거
       setTimeout(() => {
         setToasts((prev) => prev.filter((t) => t.id !== id))
@@ -37,6 +37,21 @@ export default function NotificationToaster() {
     }
   }, [])
 
+  // 클라이언트 수동 토스트(showToast → window 'app:toast' 이벤트) 수신
+  useEffect(() => {
+    const onToast = (e) => {
+      const { text, icon = '🔔' } = e.detail || {}
+      if (!text) return
+      const id = `${Date.now()}-${Math.random()}`
+      setToasts((prev) => [...prev, { id, text, icon }])
+      setTimeout(() => {
+        setToasts((prev) => prev.filter((t) => t.id !== id))
+      }, 5000)
+    }
+    window.addEventListener('app:toast', onToast)
+    return () => window.removeEventListener('app:toast', onToast)
+  }, [])
+
   const dismiss = (id) => setToasts((prev) => prev.filter((t) => t.id !== id))
 
   return (
@@ -46,7 +61,7 @@ export default function NotificationToaster() {
           key={t.id}
           className="pointer-events-auto flex items-start gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-lg"
         >
-          <span className="mt-0.5 text-lg">🔔</span>
+          <span className="mt-0.5 text-lg">{t.icon || '🔔'}</span>
           <p className="flex-1 text-sm text-slate-700">{t.text}</p>
           <button
             onClick={() => dismiss(t.id)}
