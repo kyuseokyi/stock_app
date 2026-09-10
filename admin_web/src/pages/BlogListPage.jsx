@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { listBoards } from '../api/boards'
 import { deleteBlog, listBlogs } from '../api/blogs'
+import { showToast } from '../lib/toast'
 
 const PAGE_SIZE = 10
 
@@ -45,8 +46,21 @@ export default function BlogListPage() {
 
   const onDelete = async (id) => {
     if (!confirm('이 게시글을 삭제할까요?')) return
-    await deleteBlog(id)
-    load()
+    const prev = data
+    // 낙관적 제거: 목록을 통째로 다시 그리지 않고 해당 행만 즉시 제거(깜빡임 방지)
+    setData((d) => ({
+      ...d,
+      items: d.items.filter((i) => i.id !== id),
+      total: Math.max(0, d.total - 1),
+    }))
+    try {
+      await deleteBlog(id)
+      showToast('게시글을 삭제했습니다.', { icon: '✅' })
+      load() // 총계·페이지 동기화(목록은 유지된 채 백그라운드 갱신)
+    } catch {
+      setData(prev) // 실패 시 롤백
+      showToast('삭제에 실패했습니다.', { icon: '⚠️' })
+    }
   }
 
   return (
@@ -96,7 +110,7 @@ export default function BlogListPage() {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {loading ? (
+            {loading && data.items.length === 0 ? (
               <tr>
                 <td colSpan={5} className="px-4 py-8 text-center text-slate-400">
                   불러오는 중…
@@ -146,7 +160,9 @@ export default function BlogListPage() {
       </div>
 
       <div className="mt-4 flex items-center justify-between text-sm text-slate-500">
-        <span>총 {data.total}건</span>
+        <span>
+          총 {data.total}건{loading && data.items.length > 0 ? ' · 갱신 중…' : ''}
+        </span>
         <div className="flex items-center gap-2">
           <button
             disabled={page <= 1}
