@@ -1,0 +1,53 @@
+name: Deploy Web (Client & Admin)
+
+# 트리거: main 에 web_client/admin_web 또는 compose 변경이 push 되면 자동, 또는 UI 에서 수동 실행.
+# 대상: web_client(3000) + admin_web(3001) 만 재빌드·재기동. 백엔드/Celery 워커는 건드리지 않음
+#       (프론트 배포가 수집 워커를 중단시키지 않도록 분리한 것이 이 파이프라인의 핵심).
+on:
+  push:
+    branches: [ "main" ]
+    paths:
+      - "web_client/**"
+      - "admin_web/**"
+      - "docker-compose.prod.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-web
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy Frontends
+    runs-on: self-hosted
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+
+    - name: Load Production Env from Host (fail if missing)
+      run: |
+        # 프론트는 build args(compose)로 haezean URL 을 굽지만, compose 파일이 백엔드
+        # env_file(backend/.env.production)을 참조하므로 프론트만 배포해도 compose 파싱을 위해
+        # 이 파일이 존재해야 한다(러너 git clean 으로 매번 삭제됨). 없으면 배포 자체가 깨진 것이니 실패.
+        HOST_ENV=/opt/stock_app/env
+        if [ ! -f "$HOST_ENV/.env.production" ]; then
+          echo "::error::$HOST_ENV/.env.production not found on host. See docs/server_setup.md (§3)."
+          exit 1
+        fi
+        cp "$HOST_ENV/.env.production" backend/.env.production
+        if [ -f "$HOST_ENV/compose.env" ]; then
+          cp "$HOST_ENV/compose.env" .env
+        fi
+
+    - name: Build and Deploy frontends
+      run: |
+        echo "🚀 Deploying web (client + admin)…"
+        # 지정한 프론트 2개만 재빌드·재생성(VITE_* build args = haezean URL). 백엔드/워커 무영향.
+        docker compose -f docker-compose.prod.yml up -d --build web_client admin_web
+        echo "✅ Web deploy done"
+
+    - name: Cleanup dangling images
+      if: always()
+      run: |
+        docker image prune -f
+        echo "🧹 dangling 이미지 정리 완료"

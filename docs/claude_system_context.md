@@ -37,8 +37,8 @@ When writing Dockerfiles or Compose files, respect the following service boundar
 3.  **Inter-Service Communication:** Backend services should communicate via the database (Redis/Postgres) or internal Docker DNS (e.g., `http://auth_api:8001`) if direct HTTP calls are necessary, not via the public Cloudflare URLs.
 4.  **Monorepo Structure:** Keep backend code inside `/backend`, React Native inside `/mobile`, and React Vite apps inside `/admin_web` and `/web_client`.
 
-## 4. Current CI/CD Workflow (`.github/workflows/deploy.yml`)
-*   **Trigger:** Push to `main`.
-*   **Action:** Runs on `self-hosted` runner.
-*   **Execution:** `docker compose -f docker-compose.prod.yml up -d --build`
+## 4. Current CI/CD Workflow (split by target — same mini PC)
+*   **Two workflows:** `deploy-server.yml` (paths: `backend/**`, `docker-compose.prod.yml`) and `deploy-web.yml` (paths: `web_client/**`, `admin_web/**`, `docker-compose.prod.yml`).
+*   **Trigger:** Push to `main` matching the paths above (path-filtered auto), or manual `workflow_dispatch` from the Actions UI.
+*   **Action:** Runs on `self-hosted` runner; each deploys only its own services via `docker compose ... up -d --build <services>` so the other stack (esp. the collection worker) is untouched.
 *   *Note:* Ensure any changes to the build process are reflected in `docker-compose.prod.yml`.

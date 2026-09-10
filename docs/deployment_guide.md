@@ -9,7 +9,7 @@
 본 프로젝트는 외부 클라우드(AWS 등)가 아닌 로컬 홈 서버(미니PC)에 배포되며, 이중 NAT 환경의 네트워크 한계를 극복하기 위해 **Pull 기반 배포 방식**을 채택했습니다.
 
 1. **개발자:** 로컬 PC에서 코드를 수정 후 GitHub `main` 브랜치에 Push (`git push`)
-2. **GitHub Actions:** `.github/workflows/deploy.yml` 트리거 발생
+2. **GitHub Actions:** 변경 경로에 따라 `deploy-server.yml`(backend/**) 또는 `deploy-web.yml`(web_client·admin_web/**) 트리거 발생(수동 실행도 가능)
 3. **Self-hosted Runner:** 홈 서버에 백그라운드로 띄워진 에이전트가 신호를 받아 최신 코드를 `checkout`
 4. **Docker Compose 빌드:** 홈 서버 안에서 `docker-compose.prod.yml`을 기반으로 전체 컨테이너(API, Celery, DB 등)를 새로 빌드(`--build`)하고 백그라운드로 무중단 재시작(`-d`)
 

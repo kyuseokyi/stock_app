@@ -1,0 +1,54 @@
+name: Deploy Server (Backend & Workers)
+
+# 트리거: main 에 backend 또는 compose 변경이 push 되면 자동, 또는 UI 에서 수동 실행.
+# 대상: API 3종 + Celery worker/beat 만 재빌드·재기동. 프론트(web_client/admin_web)는 건드리지 않음.
+on:
+  push:
+    branches: [ "main" ]
+    paths:
+      - "backend/**"
+      - "docker-compose.prod.yml"
+  workflow_dispatch:
+
+# 같은 대상 배포가 겹치지 않도록 직렬화(진행 중 배포는 중단하지 않음)
+concurrency:
+  group: deploy-server
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy APIs & Celery
+    runs-on: self-hosted
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+
+    - name: Load Production Env from Host (fail if missing)
+      run: |
+        # 러너는 매 배포마다 git clean(-ffdx)으로 ignored 파일까지 지운다.
+        # .env.production 은 체크아웃 밖(호스트 고정 경로)에 두고 매번 복사해 온다.
+        # .env.example 폴백은 "성공처럼 보이는 깨진 배포"를 만들므로 금지 → 없으면 실패.
+        HOST_ENV=/opt/stock_app/env
+        if [ ! -f "$HOST_ENV/.env.production" ]; then
+          echo "::error::$HOST_ENV/.env.production not found on host. See docs/server_setup.md (§3)."
+          exit 1
+        fi
+        cp "$HOST_ENV/.env.production" backend/.env.production
+        if [ -f "$HOST_ENV/compose.env" ]; then
+          cp "$HOST_ENV/compose.env" .env
+        fi
+
+    - name: Build and Deploy backend services
+      run: |
+        echo "🚀 Deploying backend (APIs + Celery)…"
+        # 지정 서비스만 재빌드·재생성. DB(postgres/clickhouse/redis)는 depends_on 으로
+        # 필요 시 기동되며 이미 healthy 면 no-op(볼륨·데이터 보존). 프론트는 미포함 → 무영향.
+        docker compose -f docker-compose.prod.yml up -d --build \
+          auth_api stock_api blog_api celery_worker celery_beat
+        echo "✅ Backend deploy done"
+
+    - name: Cleanup dangling images
+      if: always()
+      run: |
+        docker image prune -f
+        echo "🧹 dangling 이미지 정리 완료"

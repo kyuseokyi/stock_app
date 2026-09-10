@@ -110,7 +110,7 @@ CLICKHOUSE_PASSWORD=<CH비번>    # §3-1과 동일
 ---
 
 ## 4. 워크플로의 시크릿 주입 (이미 반영됨 — 참고)
-`.github/workflows/deploy.yml`이 매 배포에서 `/opt/stock_app/env/.env.production`을 `backend/.env.production`으로 **복사(없으면 실패)**, `compose.env`가 있으면 루트 `.env`로 복사한다. → 시크릿은 git에 안 올라가고, 매 배포마다 호스트에서 주입된다.
+배포 워크플로(`deploy-server.yml`·`deploy-web.yml`)가 매 배포에서 `/opt/stock_app/env/.env.production`을 `backend/.env.production`으로 **복사(없으면 실패)**, `compose.env`가 있으면 루트 `.env`로 복사한다. → 시크릿은 git에 안 올라가고, 매 배포마다 호스트에서 주입된다.
 
 ---
 
@@ -137,18 +137,25 @@ sudo apt-get update && sudo apt-get install -y cloudflared
 
 ---
 
-## 6. 최초 배포 트리거
-`dev → main` 병합 후 push하면 러너가 `docker compose -f docker-compose.prod.yml up -d --build`를 실행한다.
-```bash
-# (로컬에서) 실제 배포 트리거
-git checkout main && git merge dev && git push origin main
-```
-→ GitHub Actions 탭에서 `Deploy Production to Home Server` 실행을 확인.
+## 6. 배포 트리거 (서버/웹 분기)
+배포는 **경로 기반 자동 + 수동** 두 워크플로로 분리돼 있다(같은 미니PC 대상). 프론트 배포가 수집 워커를 중단시키지 않는 게 분리의 핵심.
+
+| 워크플로 | 자동 트리거 경로 | 배포 대상 |
+|---|---|---|
+| `.github/workflows/deploy-server.yml` (Deploy Server) | `backend/**`, `docker-compose.prod.yml` | auth/stock/blog API + celery worker/beat (DB는 depends_on) |
+| `.github/workflows/deploy-web.yml` (Deploy Web) | `web_client/**`, `admin_web/**`, `docker-compose.prod.yml` | web_client(3000) + admin_web(3001) |
+
+- **자동**: `dev → main` 병합 후 push하면, 변경된 경로에 해당하는 워크플로만 실행된다(둘 다 바뀌면 둘 다). `docker-compose.prod.yml` 변경은 양쪽 모두 트리거.
+  ```bash
+  git checkout main && git merge dev && git push origin main
+  ```
+- **수동**: GitHub Actions 탭 → `Deploy Server` 또는 `Deploy Web` → **Run workflow**(workflow_dispatch). 수집 시간(매일 20:30)을 피해 원하는 때 배포할 때 사용.
+- 각 워크플로는 지정 서비스만 `up -d --build` 하므로 나머지 컨테이너·볼륨은 그대로 유지된다. `concurrency` 로 같은 대상 배포는 직렬화된다.
 
 ---
 
 ## 7. 스키마 부트스트랩 (최초 1회 — 생략하면 전 요청 500!)
-`docker-compose.prod.yml`/`deploy.yml`에는 **마이그레이션이 없다**. 첫 배포 후 볼륨이 비어 있으므로, 서버에서 **한 번** 스키마를 만든다(이미지에 deps가 system 설치돼 있어 `uv run` 불필요):
+`docker-compose.prod.yml`/배포 워크플로에는 **마이그레이션이 없다**. 첫 배포 후 볼륨이 비어 있으므로, 서버에서 **한 번** 스키마를 만든다(이미지에 deps가 system 설치돼 있어 `uv run` 불필요):
 ```bash
 # 배포와 동일한 compose 프로젝트에서 실행해야 이미지/네트워크가 일치한다.
 # 러너 기본 체크아웃 경로:
@@ -176,7 +183,7 @@ curl -s https://api.haezean.com/graphql -H 'content-type: application/json' \
 ## 9. 디스크 관리 (이미지·빌드캐시)
 데이터(ClickHouse 시계열)는 압축돼 작지만, **매 배포의 `--build`로 오래된 이미지·빌드캐시가 누적**되는 게 유일한 디스크 관리 포인트다.
 
-**① 오래된 이미지 자동 삭제** — `deploy.yml`에 반영됨: 배포 끝에 `docker image prune -f`로 교체된 dangling 이미지 제거(실행 중 스택 이미지·볼륨은 보존). 별도 조치 불필요.
+**① 오래된 이미지 자동 삭제** — 배포 워크플로(server/web)에 반영됨: 배포 끝에 `docker image prune -f`로 교체된 dangling 이미지 제거(실행 중 스택 이미지·볼륨은 보존). 별도 조치 불필요.
 
 **② 빌드 캐시 10GB 상한** — Docker 데몬 GC로 설정(항상 자동 적용). `/etc/docker/daemon.json`:
 ```json
