@@ -1,7 +1,7 @@
 # 미니PC 서버 최초 설정 런북 (Ubuntu 24.04)
 
 > **범위**: 홈 서버(미니PC)에서 **딱 한 번** 수행하는 부트스트랩. 이후 배포는 `main` push → GitHub Actions가 자동 처리.
-> **관련 문서**: [`deployment_guide.md`](./deployment_guide.md)(전체 아키텍처·트러블슈팅) · [`cloudflare_termius_guide.md`](./cloudflare_termius_guide.md)(SSH 터널·Termius) · [`claude_system_context.md`](./claude_system_context.md)(제약).
+> **관련 문서**: [`run_and_deploy.md`](./run_and_deploy.md)(일상 실행·배포 빠른 참조) · [`deployment_guide.md`](./deployment_guide.md)(전체 아키텍처·트러블슈팅) · [`cloudflare_termius_guide.md`](./cloudflare_termius_guide.md)(SSH 터널·Termius) · [`claude_system_context.md`](./claude_system_context.md)(제약).
 > **인그레스 원칙**: 외부 노출은 **Cloudflare Tunnel 전용**. Nginx/Traefik/Let's Encrypt/포트포워딩 금지.
 
 전제: Ubuntu 24.04 + sudo · 도메인 `haezean.com` 이 Cloudflare에 연결됨 · GitHub 저장소 `kyuseokyi/stock_app` 접근 권한.

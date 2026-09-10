@@ -21,6 +21,8 @@ docker-compose.dev.yml
 
 ## 🚀 로컬 개발 환경 셋업 (Windows & macOS 공통)
 
+> 💡 일상 실행·서버 배포 **빠른 참조**는 [`docs/run_and_deploy.md`](docs/run_and_deploy.md) 에 정리돼 있습니다(아래는 상세 설명).
+
 DB 인프라는 **Docker Named Volumes** 기반으로 OS 간 권한/성능 이슈 없이 동작합니다.
 
 ### 1. 인프라 구동 (PostgreSQL / ClickHouse / Redis)
