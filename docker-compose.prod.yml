@@ -114,6 +114,13 @@ services:
     command: celery -A apps.collector.celery_app worker --loglevel=info
     env_file:
       - ./backend/.env.production
+    # FD 방어선: 정상 baseline 은 ~117이며 코드(get_client 싱글턴)가 누수를 막는다.
+    # 컨테이너 기본 soft 한도(1024)는 과거 EMFILE 벽이었으므로 소폭 상향해 여유를 두되,
+    # 값을 과하게 키우지 않아 향후 FD 누수 회귀가 host 를 잠식하기 전에 드러나게 한다.
+    ulimits:
+      nofile:
+        soft: 8192
+        hard: 8192
     depends_on:
       redis:
         condition: service_healthy
