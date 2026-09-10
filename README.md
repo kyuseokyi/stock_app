@@ -175,6 +175,14 @@ docker compose -f docker-compose.dev.yml stop   # DB 인프라 정지(데이터 
 ```
 > 데이터(볼륨 `pg_data`/`clickhouse_data`/`redis_data`)는 `down` 해도 유지됩니다. 완전 초기화는 `down -v`.
 
+## 🧪 테스트
+백엔드 회귀 테스트는 `pytest`(`backend/tests/`). 네트워크·DB 없이(순수 로직 + 목) 돌아가며, 수집 견고성(적응형 쿨다운·연결계열 2차 재시도), ClickHouse 클라이언트 싱글턴(FD 누수 방지), CORS 허용 오리진, KIS 재시도 분류를 커버한다.
+```bash
+cd backend
+uv run pytest                                    # 전체
+uv run pytest tests/test_universe_cooldown.py    # 특정 파일
+```
+
 ## 🗄️ 로컬 DB 접속 정보
 
 `docker-compose.dev.yml` 기준값입니다. 앱은 아래를 기본값으로 자동 사용하며, DataGrip/DBeaver 등 GUI 툴로 직접 붙을 때도 동일하게 입력합니다.
@@ -304,7 +312,21 @@ uv run python -c "from apps.collector.tasks.universe import backfill_all_daily; 
 - **ClickHouse**: 주식 시계열/보조지표 — `daily_prices`(`ReplacingMergeTree(ingested_at)`, 멱등 적재·조회 FINAL), `fundamentals`
 - **Redis**: Celery 브로커 + SSE pub/sub + 캐시
 
+## 🚀 배포 (미니PC — 서버/웹 분리)
+
+배포는 GitHub Actions self-hosted 러너(미니PC)에서 동작하며, **대상별 두 워크플로**로 분리돼 있다(프론트 배포가 수집 워커/API를 건드리지 않도록). 상세·명령은 [`docs/run_and_deploy.md`](docs/run_and_deploy.md), 서버 최초 부트스트랩은 [`docs/server_setup.md`](docs/server_setup.md).
+
+| 워크플로 | 자동 트리거(경로) | 배포 대상 |
+|---|---|---|
+| `deploy-server.yml` | `backend/**`, `docker-compose.prod.yml` | auth/stock/blog API + celery worker/beat |
+| `deploy-web.yml` | `web_client/**`, `admin_web/**`, `docker-compose.prod.yml` | web_client(3000) + admin_web(3001) |
+
+- **자동**: `dev → main` 병합 후 push → **변경 경로에 해당하는 워크플로만** 실행(각자 지정 서비스만 `up -d --build`, 나머지 컨테이너·볼륨 보존).
+- **수동**: GitHub **Actions** 탭 → `Deploy Server`/`Deploy Web` → **Run workflow**(Branch `main`), 또는 `gh workflow run deploy-server.yml --ref main`. 수집 시간(매일 20:30)을 피해 배포할 때 사용.
+- ⚠️ 최초 배포 후 **스키마 부트스트랩 1회** 필수(`server_setup.md §7`). **DB 포트(5432/8123/9000/6379)는 LAN 전용** — Cloudflare 터널에 노출 금지.
+
 ## 📚 문서
+- **일상 실행·배포 빠른 참조: `docs/run_and_deploy.md`**
 - 아키텍처: `docs/architecture_plan.md`
 - AMS 참고 분석: `docs/ams-reference/`
 - 기능별 프롬프트: `docs/prompts/`
