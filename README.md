@@ -187,6 +187,8 @@ uv run pytest tests/test_universe_cooldown.py    # 특정 파일
 
 `docker-compose.dev.yml` 기준값입니다. 앱은 아래를 기본값으로 자동 사용하며, DataGrip/DBeaver 등 GUI 툴로 직접 붙을 때도 동일하게 입력합니다.
 
+> 💡 **개발서버(미니PC) DB에 GUI로 붙기**(Cloudflare 터널 경유 SSH) + DataGrip 상세 절차는 [`docs/db_access.md`](docs/db_access.md) 참조.
+
 | DB | Host | Port | User | Password | Database |
 |---|---|---|---|---|---|
 | **PostgreSQL** | localhost | `5432` | `stock_user` | `stock_password` | `stock_db` |
@@ -327,6 +329,7 @@ uv run python -c "from apps.collector.tasks.universe import backfill_all_daily; 
 
 ## 📚 문서
 - **일상 실행·배포 빠른 참조: `docs/run_and_deploy.md`**
+- **DB 접속(DataGrip/DBeaver, 개발서버 터널 포함): `docs/db_access.md`**
 - 아키텍처: `docs/architecture_plan.md`
 - AMS 참고 분석: `docs/ams-reference/`
 - 기능별 프롬프트: `docs/prompts/`
