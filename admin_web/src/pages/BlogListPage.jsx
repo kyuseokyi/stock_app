@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { listBoards } from '../api/boards'
-import { deleteBlog, listBlogs } from '../api/blogs'
+import { deleteBlog, listBlogs, updateBlog } from '../api/blogs'
 import { showToast } from '../lib/toast'
 
 const PAGE_SIZE = 10
@@ -63,6 +63,29 @@ export default function BlogListPage() {
     }
   }
 
+  const onToggleFeatured = async (post) => {
+    const next = !post.featured_at
+    const prev = data
+    // 낙관적 반영: 해당 행만 즉시 갱신(깜빡임 방지)
+    setData((d) => ({
+      ...d,
+      items: d.items.map((i) =>
+        i.id === post.id
+          ? { ...i, featured_at: next ? new Date().toISOString() : null }
+          : i,
+      ),
+    }))
+    try {
+      await updateBlog(post.id, { featured: next })
+      showToast(next ? '홈 추천으로 설정했습니다.' : '홈 추천을 해제했습니다.', {
+        icon: next ? '⭐' : '🔕',
+      })
+    } catch {
+      setData(prev) // 실패 시 롤백
+      showToast('추천 설정에 실패했습니다.', { icon: '⚠️' })
+    }
+  }
+
   return (
     <div>
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
@@ -104,6 +127,7 @@ export default function BlogListPage() {
             <tr>
               <th className="px-4 py-3 font-medium">ID</th>
               <th className="px-4 py-3 font-medium">제목</th>
+              <th className="px-4 py-3 text-center font-medium">추천</th>
               <th className="px-4 py-3 font-medium">게시판</th>
               <th className="px-4 py-3 font-medium">작성일</th>
               <th className="px-4 py-3 text-right font-medium">작업</th>
@@ -112,13 +136,13 @@ export default function BlogListPage() {
           <tbody className="divide-y divide-slate-100">
             {loading && data.items.length === 0 ? (
               <tr>
-                <td colSpan={5} className="px-4 py-8 text-center text-slate-400">
+                <td colSpan={6} className="px-4 py-8 text-center text-slate-400">
                   불러오는 중…
                 </td>
               </tr>
             ) : data.items.length === 0 ? (
               <tr>
-                <td colSpan={5} className="px-4 py-8 text-center text-slate-400">
+                <td colSpan={6} className="px-4 py-8 text-center text-slate-400">
                   게시글이 없습니다.
                 </td>
               </tr>
@@ -132,6 +156,15 @@ export default function BlogListPage() {
                       className="hover:text-indigo-600 hover:underline"
                     >
                       {p.title}
+                    </button>
+                  </td>
+                  <td className="px-4 py-3 text-center">
+                    <button
+                      onClick={() => onToggleFeatured(p)}
+                      title={p.featured_at ? '홈 추천 해제' : '홈 추천 설정'}
+                      className="text-lg leading-none"
+                    >
+                      {p.featured_at ? '⭐' : '☆'}
                     </button>
                   </td>
                   <td className="px-4 py-3">{boardName(p.board_id)}</td>
