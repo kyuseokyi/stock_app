@@ -154,6 +154,10 @@ class BlogPost(Base, TimestampMixin):
     content: Mapped[str] = mapped_column(Text, nullable=False)  # HTML 본문
     thumbnail_url: Mapped[str | None] = mapped_column(String(512))
     view_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    # 홈 추천(큐레이션): 켠 시각. NULL=추천 아님. 홈은 featured_at DESC 로 노출.
+    featured_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
+    )
 
     board: Mapped["Board"] = relationship(back_populates="posts")
     author: Mapped["User"] = relationship(back_populates="posts")
