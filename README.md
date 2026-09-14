@@ -210,7 +210,7 @@ uv run pytest tests/test_universe_cooldown.py    # 특정 파일
 |---|---|---|
 | `users` | 사용자(관리자·게스트·소셜) | email, nickname, provider, provider_id, role, is_active, password_hash, fcm_token |
 | `boards` | 게시판 | name, order_index, is_active, min_role_required, comments_enabled |
-| `blog_posts` | 게시글 | board_id, author_id, title, content, thumbnail_url, view_count |
+| `blog_posts` | 게시글 | board_id, author_id, title, content, thumbnail_url, view_count, featured_at(홈 추천 켠 시각) |
 | `blog_comments` | 댓글 | post_id, author_id, content |
 | `push_templates` | 푸시 알림 템플릿 | title, body, last_sent_at |
 | `stock_meta` | 종목 메타(마스터) | ticker, name, market, is_active |

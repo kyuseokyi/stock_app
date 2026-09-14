@@ -31,14 +31,14 @@ featured_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nu
 
 ### 마이그레이션 (Alembic)
 
-- **additive & backward-compatible**: `nullable=True`(기본 `NULL`)로만 추가.
-  현재 배포된 blog API는 이 컬럼을 몰라도 계속 동작 → **배포 순서 무관**.
+- **additive & backward-compatible**: `nullable=True`(기본 `NULL`)로만 추가 → *구버전* blog API(이 컬럼을 모르는 코드)는 계속 동작한다.
+- ⚠️ **그러나 이번 배포의 신버전 코드는 ORM 모델에 `featured_at` 을 선언**하므로, 대상 DB에 컬럼이 없으면 blog 조회 전반이 500 이 난다. 즉 **마이그레이션이 신버전 코드보다 먼저(또는 함께) 대상 DB에 적용돼야 한다** — "배포 순서 무관" 아님.
+- ⚠️ **자동 마이그레이션 없음**: `deploy-server.yml`·`docker-compose.prod.yml`·`Dockerfile` 어디에도 `alembic upgrade` 스텝이 없다(컨테이너는 `uvicorn …` 만 실행). 따라서 배포 담당자가 **수동으로 `alembic upgrade head` 를 대상 DB에 실행**해야 한다(초기 부트스트랩 이후의 모든 마이그레이션에 해당하는 기존 운영 갭).
 - ⚠️ **실행 대상 DB 주의(Regression Prevention, CLAUDE.md §6)**:
   `alembic upgrade head`를 **개발서버 DB에 터널로 붙은 상태**로 돌리면
   공유 develop 스키마가 바뀐다(`docs/db_access.md`, `run_and_deploy.md` §3 참고).
   - 로컬 검증은 로컬 DB(`docker-compose.dev.yml`)에서.
-  - develop 반영은 **서버 배포 파이프라인이 컨테이너에서 1회 실행**하도록 한다
-    (수동 실행 시 조용한 시간, 수집 20:30 회피).
+  - develop/prod 반영은 서버 배포 시 **수동 `alembic upgrade head` 1회**(조용한 시간, 수집 20:30 회피).
 
 ## 3. 백엔드 (blog 서비스, 새 엔드포인트 없음)
 

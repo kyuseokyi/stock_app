@@ -283,13 +283,15 @@ async def test_featured_none_returns_all(session):
 
 async def test_featured_filter_and_order(session):
     _, posts = await _seed(session)
-    # posts[0] 먼저 추천, posts[2] 나중에 추천 → featured_at DESC 로 posts[2] 가 위
-    await crud.update_blog(session, posts[0], schemas.BlogUpdate(featured=True))
+    # feature 순서를 id 순서와 반대로: posts[2] 를 먼저, posts[0] 를 나중에 추천.
+    # featured_at DESC 면 [posts[0], posts[2]] (나중에 켠 게 위),
+    # id DESC tie-break 만이라면 [posts[2], posts[0]] 가 나온다 → 정렬 주체를 구분한다.
     await crud.update_blog(session, posts[2], schemas.BlogUpdate(featured=True))
+    await crud.update_blog(session, posts[0], schemas.BlogUpdate(featured=True))
 
     total, items = await crud.list_blogs(session, featured=True)
     assert total == 2
-    assert [p.id for p in items] == [posts[2].id, posts[0].id]
+    assert [p.id for p in items] == [posts[0].id, posts[2].id]
 
 
 async def test_unfeature_removes_from_list(session):
@@ -308,6 +310,16 @@ async def test_update_other_field_keeps_featured(session):
     await crud.update_blog(session, posts[0], schemas.BlogUpdate(title="수정됨"))
     total, _ = await crud.list_blogs(session, featured=True)
     assert total == 1
+
+
+async def test_refeature_preserves_original_time(session):
+    """이미 추천된 글에 featured=True 재전송해도 featured_at 이 바뀌지 않는다."""
+    _, posts = await _seed(session)
+    await crud.update_blog(session, posts[0], schemas.BlogUpdate(featured=True))
+    first = posts[0].featured_at
+    assert first is not None
+    await crud.update_blog(session, posts[0], schemas.BlogUpdate(featured=True))
+    assert posts[0].featured_at == first
 ```
 
 - [ ] **Step 3: 테스트 실행 → 실패 확인**
@@ -366,9 +378,13 @@ async def update_blog(
 ) -> BlogPost:
     values = data.model_dump(exclude_unset=True)
     # featured(불리언) 은 컬럼이 아니라 featured_at(타임스탬프)으로 번역한다.
+    # 이미 추천 중인 글에 featured=True 를 다시 보내도 최초로 켠 시각을 보존한다(홈 순서 유지).
     if "featured" in values:
-        featured = values.pop("featured")
-        post.featured_at = datetime.now(timezone.utc) if featured else None
+        if values.pop("featured"):
+            if post.featured_at is None:
+                post.featured_at = datetime.now(timezone.utc)
+        else:
+            post.featured_at = None
     for key, value in values.items():
         setattr(post, key, value)
     await db.commit()
@@ -381,7 +397,7 @@ async def update_blog(
 ```bash
 cd backend && uv run pytest tests/test_blog_featured.py -v
 ```
-Expected: 4 passed. 이어서 기존 테스트 회귀 확인:
+Expected: 5 passed. 이어서 기존 테스트 회귀 확인:
 ```bash
 uv run pytest -q
 ```
@@ -906,7 +922,7 @@ EOF
 
 - [ ] **Step 2: 배포 노트 확인(마이그레이션 실행 시점)**
 
-`docs/run_and_deploy.md` §B-4 "배포 시 주의" 에 이미 "최초 배포 후 스키마 부트스트랩 1회" 항목이 있다. featured_at 마이그레이션은 이 경로(서버 배포 시 컨테이너에서 `alembic upgrade head`)로 develop 에 반영된다 — 추가 문서 변경이 필요하면 한 줄 보강, 아니면 생략.
+⚠️ **정정(실제 확인)**: `deploy-server.yml`·`docker-compose.prod.yml`·`Dockerfile` 어디에도 `alembic upgrade` 스텝이 **없다**(컨테이너는 `uvicorn …` 만 실행). 따라서 featured_at 마이그레이션은 자동 반영되지 않으며, 신버전 코드는 ORM에 `featured_at` 을 선언하므로 컬럼이 없으면 blog 조회가 500 난다. **배포 담당자가 대상 DB에 수동 `alembic upgrade head` 를 신버전 코드보다 먼저(또는 함께) 실행**해야 한다.
 
 - [ ] **Step 3: 전체 테스트 최종 확인**
 
@@ -933,11 +949,12 @@ EOF
 
 ## 배포 (사용자 확인 후)
 
+- **⚠️ 먼저: 대상 DB에 `alembic upgrade head` 수동 실행**(파이프라인 자동 스텝 없음). 신버전 코드가 뜨기 전에 `featured_at` 컬럼이 존재해야 blog 조회가 500 나지 않는다.
 - `dev` → `main` 병합 push 시:
-  - `backend/**` 변경 → **Deploy Server** 워크플로가 blog API 재빌드 + 컨테이너에서 마이그레이션 반영.
+  - `backend/**` 변경 → **Deploy Server** 워크플로가 blog API 재빌드(단, 마이그레이션은 위에서 수동 선행).
   - `admin_web/**` 변경 → **Deploy Web**.
   - mobile 은 EAS 별도(자동 배포 대상 아님).
-- 수집 시간(20:30) 회피. 마이그레이션은 additive 라 무중단.
+- 수집 시간(20:30) 회피. 마이그레이션 자체는 additive(nullable) 라 컬럼 추가는 무중단.
 
 ---
 
