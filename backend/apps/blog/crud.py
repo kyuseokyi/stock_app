@@ -5,6 +5,8 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -59,22 +61,28 @@ async def list_blogs(
     db: AsyncSession,
     *,
     board_id: int | None = None,
+    featured: bool | None = None,
     page: int = 1,
     size: int = 20,
 ) -> tuple[int, list[BlogPost]]:
-    """(total, items) 페이지네이션 결과."""
+    """(total, items) 페이지네이션 결과.
+
+    featured=True 면 추천(featured_at IS NOT NULL)만 최근에 켠 순으로 반환.
+    """
     base = select(BlogPost)
     count_stmt = select(func.count()).select_from(BlogPost)
     if board_id is not None:
         base = base.where(BlogPost.board_id == board_id)
         count_stmt = count_stmt.where(BlogPost.board_id == board_id)
+    if featured is True:
+        base = base.where(BlogPost.featured_at.is_not(None))
+        count_stmt = count_stmt.where(BlogPost.featured_at.is_not(None))
+        order = (BlogPost.featured_at.desc(), BlogPost.id.desc())
+    else:
+        order = (BlogPost.created_at.desc(), BlogPost.id.desc())
 
     total = (await db.execute(count_stmt)).scalar_one()
-    stmt = (
-        base.order_by(BlogPost.created_at.desc(), BlogPost.id.desc())
-        .offset((page - 1) * size)
-        .limit(size)
-    )
+    stmt = base.order_by(*order).offset((page - 1) * size).limit(size)
     items = list((await db.execute(stmt)).scalars().all())
     return total, items
 
@@ -94,7 +102,16 @@ async def create_blog(db: AsyncSession, data: schemas.BlogCreate) -> BlogPost:
 async def update_blog(
     db: AsyncSession, post: BlogPost, data: schemas.BlogUpdate
 ) -> BlogPost:
-    for key, value in data.model_dump(exclude_unset=True).items():
+    values = data.model_dump(exclude_unset=True)
+    # featured(불리언) 은 컬럼이 아니라 featured_at(타임스탬프)으로 번역한다.
+    # 이미 추천 중인 글에 featured=True 를 다시 보내도 최초로 켠 시각을 보존한다(홈 순서 유지).
+    if "featured" in values:
+        if values.pop("featured"):
+            if post.featured_at is None:
+                post.featured_at = datetime.now(timezone.utc)
+        else:
+            post.featured_at = None
+    for key, value in values.items():
         setattr(post, key, value)
     await db.commit()
     await db.refresh(post)
