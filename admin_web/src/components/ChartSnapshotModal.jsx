@@ -166,19 +166,19 @@ function channelSeries(chart, channels, previewChannel) {
   all.forEach((ch, idx) => {
     const lines = computeChannelLines(ch, dates)
     if (!lines) return
-    const seg = (suffix, data, type, color) => ({
+    const seg = (suffix, data, type, color, width) => ({
       name: `_ch${idx}_${suffix}`, // legend.data 에 없으므로 범례엔 숨김
       type: 'line',
       data,
       showSymbol: false,
       silent: true,
       connectNulls: false,
-      lineStyle: { color, width: 1.3, type },
+      lineStyle: { color, width, type },
     })
-    // 역할별 색 구분(문서 custom_candle_chart_idea.md): 상단=로즈, 중심=노랑 점선, 하단=그린
-    out.push(seg('upper', lines.upperLine, 'solid', '#f43f5e')) // 상단 저항선
-    out.push(seg('lower', lines.lowerLine, 'solid', '#10b981')) // 하단 지지선
-    out.push(seg('mid', lines.midLine, 'dashed', '#eab308')) // 중심선(미디언)
+    // 역할별 색·굵기 구분(문서 custom_candle_chart_idea.md): 상·하단은 굵게(2), 중심선은 얇게(1).
+    out.push(seg('upper', lines.upperLine, 'solid', '#f43f5e', 2)) // 상단 저항선
+    out.push(seg('lower', lines.lowerLine, 'solid', '#10b981', 2)) // 하단 지지선
+    out.push(seg('mid', lines.midLine, 'dashed', '#eab308', 1)) // 중심선(미디언)
   })
   return out
 }
