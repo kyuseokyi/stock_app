@@ -5,6 +5,18 @@ import { useChartDrawings } from '../hooks/useChartDrawings'
 
 const clampIdx = (i, len) => Math.max(0, Math.min(len - 1, Math.round(i)))
 
+// 3중추세선 캔들 스냅: 클릭 지점을 가장 가까운 캔들에 붙이고(정수 인덱스),
+// 가격은 그 캔들의 고점/저점(꼬리) 중 클릭 가격에 더 가까운 쪽으로 스냅한다.
+// → 위를 클릭하면 고점(상단 저항선), 아래를 클릭하면 저점(하단 지지선)에 자연히 잡힌다.
+function snapToCandle(candles, xi, price) {
+  if (!candles || candles.length === 0) return { xi, price }
+  const idx = clampIdx(xi, candles.length)
+  const c = candles[idx]
+  if (!c) return { xi, price }
+  const snappedPrice = Math.abs(price - c.high) <= Math.abs(price - c.low) ? c.high : c.low
+  return { xi: idx, price: snappedPrice }
+}
+
 // 드로잉 도형(데이터좌표) → ECharts markLine/markArea/markPoint 로 변환.
 // 데이터 좌표 native 라 리로드/리사이즈에도 정합, getDataURL 캡처에 포함된다.
 function buildMarks(chart, shapes, preview) {
@@ -123,8 +135,11 @@ function volumeProfileSeries(vp) {
   }
 }
 
-// 이중 추세선(평행 채널): 첫 선 P1-P2(한쪽 가장자리, 각도 결정) + P3(반대편 위치)로 간격 지정.
-// 대칭 평행선 = base+dy, 중심선 = base+dy/2. 구간 [iL,iR]에만 값(밖은 null).
+// 3중추세선(평행 채널): 첫 선 P1-P2(한쪽 가장자리, 각도 결정) + P3(반대편 위치)로 간격 지정.
+// 문서(docs/custom_candle_chart_idea.md) 용어: 상단 저항선(upperLine)/중심선(midLine)/하단 지지선(lowerLine).
+// 두 가장자리는 그린 순서(base=0, 반대편=dy)와 무관하게 가격 높이로 상단/하단을 정한다:
+//   upper = 높은 가격 쪽(offset max(0,dy)), lower = 낮은 쪽(min(0,dy)), mid = 두 선의 중점(dy/2).
+// 구간 [iL,iR]에만 값(밖은 null).
 function computeChannelLines(ch, dates) {
   const n = dates.length
   const { x1, y1, x2, y2, x3, y3 } = ch
@@ -137,7 +152,11 @@ function computeChannelLines(ch, dates) {
 
   const mk = (offset) =>
     dates.map((_, i) => (i >= iL && i <= iR ? Math.round((base(i) + offset) * 100) / 100 : null))
-  return { baseLine: mk(0), parallel: mk(dy), center: mk(dy / 2) }
+  return {
+    upperLine: mk(Math.max(0, dy)), // 상단 저항선
+    midLine: mk(dy / 2), // 중심선(미디언, 자동)
+    lowerLine: mk(Math.min(0, dy)), // 하단 지지선
+  }
 }
 
 function channelSeries(chart, channels, previewChannel) {
@@ -156,9 +175,9 @@ function channelSeries(chart, channels, previewChannel) {
       connectNulls: false,
       lineStyle: { color: '#2563eb', width: 1.3, type },
     })
-    out.push(seg('base', lines.baseLine, 'solid'))
-    out.push(seg('par', lines.parallel, 'solid'))
-    out.push(seg('mid', lines.center, 'dashed'))
+    out.push(seg('upper', lines.upperLine, 'solid'))
+    out.push(seg('lower', lines.lowerLine, 'solid'))
+    out.push(seg('mid', lines.midLine, 'dashed'))
   })
   return out
 }
@@ -313,6 +332,8 @@ export default function ChartSnapshotModal({ open, onClose, onInsert }) {
   toolRef.current = tool
   const dragStartRef = useRef(null) // 사각형 드래그 시작점
   const chPtsRef = useRef([]) // 채널 진행 점들(첫 선 2점)
+  const candlesRef = useRef([]) // 최신 캔들(스냅용) — handleChartReady 는 마운트 1회 바인딩이라 stale 클로저 방지
+  candlesRef.current = chart?.candles ?? []
 
   // 그리는 중 ESC → 진행 중 드로잉 취소(모달은 유지)
   useEffect(() => {
@@ -422,7 +443,9 @@ export default function ChartSnapshotModal({ open, onClose, onInsert }) {
         setTextInput({ px: p.px, py: p.py, xi: p.xi, price: p.price })
       else if (t === 'channel') {
         // 1·2번 클릭: 첫 선(가장자리), 3번 클릭: 대칭 평행선 위치(간격)
-        const pts = [...chPtsRef.current, { xi: p.xi, price: p.price }]
+        // 각 점을 가장 가까운 캔들의 고점/저점에 스냅 → 캔들↔캔들 연결.
+        const snapped = snapToCandle(candlesRef.current, p.xi, p.price)
+        const pts = [...chPtsRef.current, snapped]
         chPtsRef.current = pts
         if (pts.length === 3) {
           addShape({
@@ -454,13 +477,15 @@ export default function ChartSnapshotModal({ open, onClose, onInsert }) {
         setPreview({ type: 'rect', xi1: drag.xi, y1: drag.price, xi2: p.xi, y2: p.price })
       } else if (t === 'channel' && chPtsRef.current.length) {
         // 1점: 커서를 끝점으로 첫 선 미리보기 / 2점: 커서를 P3로 채널(간격) 미리보기
+        // 커서도 캔들에 스냅해, 확정 시와 동일한 위치로 미리보기를 보여준다.
         const pts = chPtsRef.current
+        const cur = snapToCandle(candlesRef.current, p.xi, p.price)
         const a = pts[0]
-        const b = pts.length >= 2 ? pts[1] : { xi: p.xi, price: p.price }
+        const b = pts.length >= 2 ? pts[1] : cur
         setChannelPreview({
           x1: a.xi, y1: a.price,
           x2: b.xi, y2: b.price,
-          x3: p.xi, y3: p.price,
+          x3: cur.xi, y3: cur.price,
         })
       }
     })
@@ -625,7 +650,7 @@ export default function ChartSnapshotModal({ open, onClose, onInsert }) {
             <span className="text-slate-500">그리기</span>
             {[
               { key: 'hline', label: '수평선 ─' },
-              { key: 'channel', label: '이중추세선 ⧉' },
+              { key: 'channel', label: '3중추세선 ⧉' },
               { key: 'rect', label: '사각형 ▭' },
               { key: 'text', label: '텍스트 T' },
             ].map((b) => (
@@ -652,7 +677,8 @@ export default function ChartSnapshotModal({ open, onClose, onInsert }) {
             {tool && (
               <span className="text-xs text-slate-400">
                 {tool === 'hline' && '차트를 클릭해 수평선을 추가'}
-                {tool === 'channel' && '3번 클릭: 첫 선 2점 → 대칭선 위치 1점 (중심선 자동)'}
+                {tool === 'channel' &&
+                  '3번 클릭(캔들 고/저에 스냅): 첫 선 2점 → 반대편 선 1점 · 상단 저항선/하단 지지선 + 중심선 자동'}
                 {tool === 'rect' && '드래그해 사각형 영역을 지정'}
                 {tool === 'text' && '클릭한 위치에 텍스트를 입력'}
               </span>
@@ -669,7 +695,7 @@ export default function ChartSnapshotModal({ open, onClose, onInsert }) {
                 className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600"
               >
                 {s.type === 'hline' && `수평선 ${i + 1}`}
-                {s.type === 'channel' && `추세선 ${i + 1}`}
+                {s.type === 'channel' && `3중추세선 ${i + 1}`}
                 {s.type === 'rect' && `사각형 ${i + 1}`}
                 {s.type === 'text' && `텍스트: ${s.text}`}
                 <button
