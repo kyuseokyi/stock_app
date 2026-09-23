@@ -11,6 +11,7 @@ type RawBlog = {
   thumbnail_url: string | null;
   author_id: number | null;
   view_count: number;
+  featured_at: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -31,6 +32,7 @@ function toBlogPost(r: RawBlog): BlogPost {
     thumbnailUrl: r.thumbnail_url,
     authorId: r.author_id,
     viewCount: r.view_count,
+    featuredAt: r.featured_at,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
   };
@@ -39,11 +41,13 @@ function toBlogPost(r: RawBlog): BlogPost {
 /** 글 목록 조회. GET /api/v1/blogs (blog 서비스, 포트 8000) */
 export async function fetchBlogList(params?: {
   boardId?: number;
+  featured?: boolean;
   page?: number;
   size?: number;
 }): Promise<BlogListResponse> {
   const raw = await blogApi.get<RawBlogList>('/api/v1/blogs', {
     board_id: params?.boardId,
+    featured: params?.featured,
     page: params?.page,
     size: params?.size ?? 20,
   });

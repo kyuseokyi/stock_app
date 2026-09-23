@@ -7,6 +7,7 @@ export type BlogPost = {
   thumbnailUrl: string | null;
   authorId: number | null;
   viewCount: number;
+  featuredAt: string | null; // ISO, null이면 추천 아님
   createdAt: string; // ISO
   updatedAt: string;
 };

@@ -106,6 +106,7 @@ npm run build:android:prod # 상용(app-bundle) / build:ios:prod
 - **환경 분리**: `APP_ENV`(빌드 시 주입, `eas.json`에서 프로필별 지정)에 따라 앱 이름·번들ID가 동적 분리 → 개발/상용 앱 동시 설치 가능.
   - dev → `StockApp Dev` / `com.stockapp.dev`, prod → `StockApp` / `com.stockapp` (`app.config.js`)
 - **API 주소(MSA 서비스별)**: `EXPO_PUBLIC_STOCK_GRAPHQL_URL`(stock_api :8002/graphql) · `EXPO_PUBLIC_BLOG_API_URL`(blog :8000) · `EXPO_PUBLIC_AUTH_API_URL`(auth :8001). `src/lib/env.ts` 단일 접근점, 통신은 `src/lib/api`(GraphQL+REST). 운영은 Cloudflare Tunnel이 서브도메인별로 라우팅. 실기기 테스트 시 `localhost` → 개발 PC의 LAN IP로 교체.
+- **홈 추천 글(큐레이션)**: 관리자 게시글 목록에서 ⭐ 토글로 "홈 추천"을 켜면(`blog_posts.featured_at`), 모바일 홈 탭에 최근에 켠 순으로 노출된다. API: `GET /api/v1/blogs?featured=true`.
 - **검증(설정 레벨)**: `npx tsc --noEmit` · `npx expo-doctor` · `APP_ENV=production npx expo config --type public --json`
 
 ## 🔄 작업 재개(Resume) 가이드 & 환경 점검
@@ -209,7 +210,7 @@ uv run pytest tests/test_universe_cooldown.py    # 특정 파일
 |---|---|---|
 | `users` | 사용자(관리자·게스트·소셜) | email, nickname, provider, provider_id, role, is_active, password_hash, fcm_token |
 | `boards` | 게시판 | name, order_index, is_active, min_role_required, comments_enabled |
-| `blog_posts` | 게시글 | board_id, author_id, title, content, thumbnail_url, view_count |
+| `blog_posts` | 게시글 | board_id, author_id, title, content, thumbnail_url, view_count, featured_at(홈 추천 켠 시각) |
 | `blog_comments` | 댓글 | post_id, author_id, content |
 | `push_templates` | 푸시 알림 템플릿 | title, body, last_sent_at |
 | `stock_meta` | 종목 메타(마스터) | ticker, name, market, is_active |

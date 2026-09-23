@@ -61,6 +61,7 @@ class BlogUpdate(BaseModel):
     title: str | None = Field(None, max_length=255)
     content: str | None = None
     thumbnail_url: str | None = Field(None, max_length=512)
+    featured: bool | None = Field(None, description="홈 추천 on/off")
 
 
 class BlogOut(BlogBase):
@@ -69,6 +70,7 @@ class BlogOut(BlogBase):
     id: int
     author_id: int | None
     view_count: int
+    featured_at: datetime | None = None
     created_at: datetime
     updated_at: datetime
 
