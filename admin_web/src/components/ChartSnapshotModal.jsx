@@ -183,7 +183,7 @@ function channelSeries(chart, channels, previewChannel) {
   return out
 }
 
-function buildOption(chart, shapes = [], preview = null, channelPreview = null, showVP = true) {
+function buildOption(chart, shapes = [], preview = null, channelPreview = null, showVP = true, showTooltip = false) {
   const dates = chart.candles.map((c) => c.date.slice(5)) // MM-DD
   const candles = chart.candles.map((c) => [c.open, c.close, c.low, c.high])
   // 거래량: 상승(종가≥시가) 빨강 / 하락 파랑 (한국 관례)
@@ -210,7 +210,10 @@ function buildOption(chart, shapes = [], preview = null, channelPreview = null, 
       left: 'center',
       textStyle: { fontSize: 14 },
     },
-    tooltip: { trigger: 'axis', axisPointer: { type: 'cross' } },
+    // 캔들 인포창(마우스오버 툴팁) — 기본 off. 켤 때만 axis 트리거 + 십자선.
+    tooltip: showTooltip
+      ? { trigger: 'axis', axisPointer: { type: 'cross' } }
+      : { show: false },
     axisPointer: { link: [{ xAxisIndex: 'all' }] }, // 두 그리드 크로스헤어 연동
     legend: {
       data: legendData,
@@ -318,6 +321,7 @@ export default function ChartSnapshotModal({ open, onClose, onInsert }) {
   const [range, setRange] = useState(defaultRange)
   const [bbStdDev, setBbStdDev] = useState(2.0)
   const [showVP, setShowVP] = useState(true) // 매물대 표시 토글
+  const [showTooltip, setShowTooltip] = useState(false) // 캔들 인포창(마우스오버 툴팁) — 기본 off
   const [chart, setChart] = useState(null)
   const [searching, setSearching] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -412,8 +416,8 @@ export default function ChartSnapshotModal({ open, onClose, onInsert }) {
   }
 
   const option = useMemo(
-    () => (chart ? buildOption(chart, shapes, preview, channelPreview, showVP) : null),
-    [chart, shapes, preview, channelPreview, showVP],
+    () => (chart ? buildOption(chart, shapes, preview, channelPreview, showVP, showTooltip) : null),
+    [chart, shapes, preview, channelPreview, showVP, showTooltip],
   )
 
   // 차트 인스턴스 준비 시 zrender 드로잉 핸들러 바인딩(마운트마다 1회)
@@ -627,6 +631,16 @@ export default function ChartSnapshotModal({ open, onClose, onInsert }) {
               className="accent-slate-500"
             />
             매물대
+          </label>
+
+          <label className="flex cursor-pointer items-center gap-1.5 text-slate-600">
+            <input
+              type="checkbox"
+              checked={showTooltip}
+              onChange={(e) => setShowTooltip(e.target.checked)}
+              className="accent-slate-500"
+            />
+            캔들 정보
           </label>
 
           {chart && (
