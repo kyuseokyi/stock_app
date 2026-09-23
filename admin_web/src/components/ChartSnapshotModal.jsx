@@ -183,7 +183,7 @@ function channelSeries(chart, channels, previewChannel) {
   return out
 }
 
-function buildOption(chart, shapes = [], preview = null, channelPreview = null, showVP = true, showTooltip = false) {
+function buildOption(chart, shapes = [], preview = null, channelPreview = null, showVP = true, showTooltip = false, editable = false) {
   const dates = chart.candles.map((c) => c.date.slice(5)) // MM-DD
   const candles = chart.candles.map((c) => [c.open, c.close, c.low, c.high])
   // 거래량: 상승(종가≥시가) 빨강 / 하락 파랑 (한국 관례)
@@ -195,6 +195,25 @@ function buildOption(chart, shapes = [], preview = null, channelPreview = null, 
   const { markLine, markArea, markPoint } = buildMarks(chart, shapes, preview)
   const channels = shapes.filter((s) => s.type === 'channel')
   const chSeries = channelSeries(chart, channels, channelPreview)
+  // 편집 모드(도구 미선택): 3중추세선 제어점 P1·P2·P3 에 드래그 핸들(흰 원) 표시.
+  const handleSeries =
+    editable && channels.length
+      ? [
+          {
+            name: '_handles',
+            type: 'scatter',
+            data: channels.flatMap((ch) => [
+              [dates[clampIdx(ch.x1, dates.length)], ch.y1],
+              [dates[clampIdx(ch.x2, dates.length)], ch.y2],
+              [dates[clampIdx(ch.x3, dates.length)], ch.y3],
+            ]),
+            symbolSize: 12,
+            itemStyle: { color: '#ffffff', borderColor: '#4b5563', borderWidth: 2 },
+            z: 20,
+            silent: true, // 히트테스트는 zr 이벤트에서 수동으로 처리
+          },
+        ]
+      : []
   const vpSeries = showVP ? [volumeProfileSeries(chart.volumeProfile)] : []
   const legendData = ['캔들', 'MA5', 'MA20', 'MA50', 'MA120', 'BB상단', 'BB하단', '거래량']
   if (showVP) legendData.push('매물대')
@@ -309,6 +328,7 @@ function buildOption(chart, shapes = [], preview = null, channelPreview = null, 
         itemStyle: { color: '#94a3b8' }, // 범례 스와치용 중립색(막대는 개별 빨강/파랑 우선)
       },
       ...chSeries,
+      ...handleSeries,
     ],
   }
 }
@@ -328,7 +348,7 @@ export default function ChartSnapshotModal({ open, onClose, onInsert }) {
   const [error, setError] = useState('')
 
   // 드로잉
-  const { tool, toggleTool, setTool, shapes, addShape, removeShape, clearAll } =
+  const { tool, toggleTool, setTool, shapes, addShape, removeShape, updateShape, clearAll } =
     useChartDrawings()
   const [preview, setPreview] = useState(null) // 사각형 드래그 미리보기
   const [channelPreview, setChannelPreview] = useState(null) // 채널 미리보기
@@ -339,6 +359,9 @@ export default function ChartSnapshotModal({ open, onClose, onInsert }) {
   const chPtsRef = useRef([]) // 채널 진행 점들(첫 선 2점)
   const candlesRef = useRef([]) // 최신 캔들(스냅용) — handleChartReady 는 마운트 1회 바인딩이라 stale 클로저 방지
   candlesRef.current = chart?.candles ?? []
+  const shapesRef = useRef([]) // 최신 도형(편집 히트테스트용, stale 클로저 방지)
+  shapesRef.current = shapes
+  const editDragRef = useRef(null) // 편집 드래그 중인 제어점 { id, key:'p1'|'p2'|'p3' }
 
   // 그리는 중 ESC → 진행 중 드로잉 취소(모달은 유지)
   useEffect(() => {
@@ -416,8 +439,8 @@ export default function ChartSnapshotModal({ open, onClose, onInsert }) {
   }
 
   const option = useMemo(
-    () => (chart ? buildOption(chart, shapes, preview, channelPreview, showVP, showTooltip) : null),
-    [chart, shapes, preview, channelPreview, showVP, showTooltip],
+    () => (chart ? buildOption(chart, shapes, preview, channelPreview, showVP, showTooltip, tool === null) : null),
+    [chart, shapes, preview, channelPreview, showVP, showTooltip, tool],
   )
 
   // 차트 인스턴스 준비 시 zrender 드로잉 핸들러 바인딩(마운트마다 1회)
@@ -432,6 +455,31 @@ export default function ChartSnapshotModal({ open, onClose, onInsert }) {
       const p = inst.convertFromPixel({ gridIndex: 0 }, [px, py])
       if (!p || Number.isNaN(p[0]) || Number.isNaN(p[1])) return null
       return { xi: p[0], price: p[1], px, py }
+    }
+
+    // 편집 모드 히트테스트: 클릭 지점이 어느 3중추세선의 어느 제어점 핸들 위인지.
+    const HANDLE_HIT_PX = 12
+    const hitTestHandle = (e) => {
+      const px = e.offsetX ?? e.zrX
+      const py = e.offsetY ?? e.zrY
+      if (px == null || py == null) return null
+      const cs = candlesRef.current
+      for (const ch of shapesRef.current.filter((s) => s.type === 'channel')) {
+        const pts = [
+          { key: 'p1', xi: ch.x1, price: ch.y1 },
+          { key: 'p2', xi: ch.x2, price: ch.y2 },
+          { key: 'p3', xi: ch.x3, price: ch.y3 },
+        ]
+        for (const pt of pts) {
+          const cat = cs[clampIdx(pt.xi, cs.length)]?.date.slice(5)
+          if (cat == null) continue
+          const q = inst.convertToPixel({ gridIndex: 0 }, [cat, pt.price])
+          if (q && Math.hypot(q[0] - px, q[1] - py) <= HANDLE_HIT_PX) {
+            return { id: ch.id, key: pt.key }
+          }
+        }
+      }
+      return null
     }
 
     zr.on('click', (e) => {
@@ -466,6 +514,12 @@ export default function ChartSnapshotModal({ open, onClose, onInsert }) {
     })
 
     zr.on('mousedown', (e) => {
+      // 편집 모드(도구 미선택): 제어점 핸들을 잡으면 드래그 시작.
+      if (toolRef.current === null) {
+        const hit = hitTestHandle(e)
+        if (hit) editDragRef.current = hit
+        return
+      }
       if (toolRef.current !== 'rect') return
       const p = toData(e)
       if (!p) return
@@ -477,6 +531,17 @@ export default function ChartSnapshotModal({ open, onClose, onInsert }) {
       const t = toolRef.current
       const p = toData(e)
       if (!p) return
+      // 편집 드래그: 잡은 제어점을 커서 위치로 이동(x=정수 캔들 열, price=자유). 중심선 자동 갱신.
+      if (t === null && editDragRef.current) {
+        const xi = clampIdx(p.xi, candlesRef.current.length)
+        const { id, key } = editDragRef.current
+        const patch =
+          key === 'p1' ? { x1: xi, y1: p.price }
+          : key === 'p2' ? { x2: xi, y2: p.price }
+          : { x3: xi, y3: p.price }
+        updateShape(id, patch)
+        return
+      }
       const drag = dragStartRef.current
       if (t === 'rect' && drag) {
         setPreview({ type: 'rect', xi1: drag.xi, y1: drag.price, xi2: p.xi, y2: p.price })
@@ -496,6 +561,11 @@ export default function ChartSnapshotModal({ open, onClose, onInsert }) {
     })
 
     zr.on('mouseup', (e) => {
+      // 편집 드래그 종료
+      if (editDragRef.current) {
+        editDragRef.current = null
+        return
+      }
       const drag = dragStartRef.current
       if (toolRef.current !== 'rect' || !drag) return
       const p = toData(e)
@@ -696,6 +766,11 @@ export default function ChartSnapshotModal({ open, onClose, onInsert }) {
                   '3번 클릭(캔들 고/저에 스냅): 첫 선 2점 → 반대편 선 1점 · 상단 저항선/하단 지지선 + 중심선 자동'}
                 {tool === 'rect' && '드래그해 사각형 영역을 지정'}
                 {tool === 'text' && '클릭한 위치에 텍스트를 입력'}
+              </span>
+            )}
+            {!tool && shapes.some((s) => s.type === 'channel') && (
+              <span className="text-xs text-slate-400">
+                편집: 흰 핸들(●)을 끌어 3중추세선 조절 · 그리려면 도구 선택
               </span>
             )}
           </div>
