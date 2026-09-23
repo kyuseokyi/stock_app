@@ -123,27 +123,38 @@ function volumeProfileSeries(vp) {
   }
 }
 
-// 3중추세선(평행 채널): 첫 선 P1-P2(한쪽 가장자리, 각도 결정) + P3(반대편 위치)로 간격 지정.
-// 문서(docs/custom_candle_chart_idea.md) 용어: 상단 저항선(upperLine)/중심선(midLine)/하단 지지선(lowerLine).
-// 두 가장자리는 그린 순서(base=0, 반대편=dy)와 무관하게 가격 높이로 상단/하단을 정한다:
-//   upper = 높은 가격 쪽(offset max(0,dy)), lower = 낮은 쪽(min(0,dy)), mid = 두 선의 중점(dy/2).
-// 구간 [iL,iR]에만 값(밖은 null).
+// 3중추세선 데이터 모델(4모서리 평행 채널):
+//   상단선 두 끝점 (xL,yUL)-(xR,yUR) + 폭 w(상·하단 세로 간격). 하단선 = 상단선 - w(항상 평행).
+//   문서(docs/custom_candle_chart_idea.md) 용어: 상단 저항선/중심선(미디언)/하단 지지선.
+// 3클릭(P1,P2=첫 선, P3=반대편)을 이 모델로 변환. 그리기·프리뷰 공용.
+function makeChannel(x1, y1, x2, y2, x3, y3) {
+  const [xa, ya, xb, yb] = x1 <= x2 ? [x1, y1, x2, y2] : [x2, y2, x1, y1]
+  if (Math.abs(xb - xa) < 0.5) return { xL: xa, yUL: ya, xR: xa, yUR: ya, w: 0 } // 퇴화 → compute가 null
+  const slope = (yb - ya) / (xb - xa)
+  const dy = y3 - (ya + slope * (x3 - xa)) // 첫 선 대비 P3 세로 간격
+  const up = Math.max(0, dy)
+  return { xL: xa, yUL: ya + up, xR: xb, yUR: yb + up, w: Math.abs(dy) }
+}
+
+// 4모서리 모델 → 상단/중심/하단 시계열. 구간 [iL,iR]에만 값(밖은 null).
+// w 부호와 무관하게 높은 가격을 상단으로 배치(드래그로 상·하단이 교차해도 역할 유지).
 function computeChannelLines(ch, dates) {
   const n = dates.length
-  const { x1, y1, x2, y2, x3, y3 } = ch
-  if (Math.abs(x2 - x1) < 0.5) return null // 수직/퇴화 방지
-  const m = (y2 - y1) / (x2 - x1)
-  const base = (i) => y1 + m * (i - x1)
-  const dy = y3 - base(x3) // 첫 선 대비 P3의 세로 간격
-  const iL = clampIdx(Math.min(x1, x2), n)
-  const iR = clampIdx(Math.max(x1, x2), n)
+  const { xL, yUL, xR, yUR, w } = ch
+  if (xL == null || Math.abs(xR - xL) < 0.5) return null // 수직/퇴화 방지
+  const slope = (yUR - yUL) / (xR - xL)
+  const upperAt = (i) => yUL + slope * (i - xL)
+  const iL = clampIdx(Math.min(xL, xR), n)
+  const iR = clampIdx(Math.max(xL, xR), n)
 
   const mk = (offset) =>
-    dates.map((_, i) => (i >= iL && i <= iR ? Math.round((base(i) + offset) * 100) / 100 : null))
+    dates.map((_, i) => (i >= iL && i <= iR ? Math.round((upperAt(i) + offset) * 100) / 100 : null))
+  const upperOff = w >= 0 ? 0 : -w
+  const lowerOff = w >= 0 ? -w : 0
   return {
-    upperLine: mk(Math.max(0, dy)), // 상단 저항선
-    midLine: mk(dy / 2), // 중심선(미디언, 자동)
-    lowerLine: mk(Math.min(0, dy)), // 하단 지지선
+    upperLine: mk(upperOff), // 상단 저항선
+    midLine: mk(-w / 2), // 중심선(미디언, 자동)
+    lowerLine: mk(lowerOff), // 하단 지지선
   }
 }
 
@@ -194,9 +205,10 @@ function buildOption(chart, shapes = [], preview = null, channelPreview = null, 
             yAxisIndex: 0,
             symbol: 'circle',
             data: channels.flatMap((ch) => [
-              [dates[clampIdx(ch.x1, dates.length)], ch.y1],
-              [dates[clampIdx(ch.x2, dates.length)], ch.y2],
-              [dates[clampIdx(ch.x3, dates.length)], ch.y3],
+              [dates[clampIdx(ch.xL, dates.length)], ch.yUL], // 상단 좌
+              [dates[clampIdx(ch.xR, dates.length)], ch.yUR], // 상단 우
+              [dates[clampIdx(ch.xL, dates.length)], ch.yUL - ch.w], // 하단 좌
+              [dates[clampIdx(ch.xR, dates.length)], ch.yUR - ch.w], // 하단 우
             ]),
             symbolSize: 13,
             itemStyle: { color: '#ffffff', borderColor: '#111827', borderWidth: 2 },
@@ -458,9 +470,10 @@ export default function ChartSnapshotModal({ open, onClose, onInsert }) {
       const cs = candlesRef.current
       for (const ch of shapesRef.current.filter((s) => s.type === 'channel')) {
         const pts = [
-          { key: 'p1', xi: ch.x1, price: ch.y1 },
-          { key: 'p2', xi: ch.x2, price: ch.y2 },
-          { key: 'p3', xi: ch.x3, price: ch.y3 },
+          { key: 'UL', xi: ch.xL, price: ch.yUL },
+          { key: 'UR', xi: ch.xR, price: ch.yUR },
+          { key: 'LL', xi: ch.xL, price: ch.yUL - ch.w },
+          { key: 'LR', xi: ch.xR, price: ch.yUR - ch.w },
         ]
         for (const pt of pts) {
           const cat = cs[clampIdx(pt.xi, cs.length)]?.date.slice(5)
@@ -498,9 +511,11 @@ export default function ChartSnapshotModal({ open, onClose, onInsert }) {
         if (pts.length === 3) {
           addShape({
             type: 'channel',
-            x1: pts[0].xi, y1: pts[0].price,
-            x2: pts[1].xi, y2: pts[1].price,
-            x3: pts[2].xi, y3: pts[2].price,
+            ...makeChannel(
+              pts[0].xi, pts[0].price,
+              pts[1].xi, pts[1].price,
+              pts[2].xi, pts[2].price,
+            ),
           })
           chPtsRef.current = []
           setChannelPreview(null)
@@ -527,15 +542,20 @@ export default function ChartSnapshotModal({ open, onClose, onInsert }) {
       const t = toolRef.current
       const p = toData(e)
       if (!p) return
-      // 편집 드래그: 잡은 제어점을 커서 위치로 자유 이동(열 스냅 없음, 차트 범위로만 제한). 중심선 자동 갱신.
+      // 편집 드래그: 잡은 모서리를 커서로 자유 이동(열 스냅 없음, 차트 범위로만 제한).
+      // 폭 w 는 유지 → 어느 모서리를 끌든 두 선이 함께(평행) 기울고 중심선은 자동 재계산.
       if (editDragRef.current) {
         const n = candlesRef.current.length
         const xi = Math.max(0, Math.min(n - 1, p.xi))
         const { id, key } = editDragRef.current
+        const sh = shapesRef.current.find((s) => s.id === id)
+        if (!sh) return
+        const w = sh.w ?? 0
         const patch =
-          key === 'p1' ? { x1: xi, y1: p.price }
-          : key === 'p2' ? { x2: xi, y2: p.price }
-          : { x3: xi, y3: p.price }
+          key === 'UL' ? { xL: xi, yUL: p.price }
+          : key === 'UR' ? { xR: xi, yUR: p.price }
+          : key === 'LL' ? { xL: xi, yUL: p.price + w } // 하단 좌 = price → 상단 좌 = price + w
+          : { xR: xi, yUR: p.price + w } // 하단 우
         updateShape(id, patch)
         return
       }
@@ -548,11 +568,7 @@ export default function ChartSnapshotModal({ open, onClose, onInsert }) {
         const cur = { xi: p.xi, price: p.price }
         const a = pts[0]
         const b = pts.length >= 2 ? pts[1] : cur
-        setChannelPreview({
-          x1: a.xi, y1: a.price,
-          x2: b.xi, y2: b.price,
-          x3: cur.xi, y3: cur.price,
-        })
+        setChannelPreview(makeChannel(a.xi, a.price, b.xi, b.price, cur.xi, cur.price))
       }
     })
 
