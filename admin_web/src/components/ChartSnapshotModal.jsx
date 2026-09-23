@@ -5,18 +5,6 @@ import { useChartDrawings } from '../hooks/useChartDrawings'
 
 const clampIdx = (i, len) => Math.max(0, Math.min(len - 1, Math.round(i)))
 
-// 3중추세선 캔들 스냅: 클릭 지점을 가장 가까운 캔들에 붙이고(정수 인덱스),
-// 가격은 그 캔들의 고점/저점(꼬리) 중 클릭 가격에 더 가까운 쪽으로 스냅한다.
-// → 위를 클릭하면 고점(상단 저항선), 아래를 클릭하면 저점(하단 지지선)에 자연히 잡힌다.
-function snapToCandle(candles, xi, price) {
-  if (!candles || candles.length === 0) return { xi, price }
-  const idx = clampIdx(xi, candles.length)
-  const c = candles[idx]
-  if (!c) return { xi, price }
-  const snappedPrice = Math.abs(price - c.high) <= Math.abs(price - c.low) ? c.high : c.low
-  return { xi: idx, price: snappedPrice }
-}
-
 // 드로잉 도형(데이터좌표) → ECharts markLine/markArea/markPoint 로 변환.
 // 데이터 좌표 native 라 리로드/리사이즈에도 정합, getDataURL 캡처에 포함된다.
 function buildMarks(chart, shapes, preview) {
@@ -504,10 +492,8 @@ export default function ChartSnapshotModal({ open, onClose, onInsert }) {
       else if (t === 'text')
         setTextInput({ px: p.px, py: p.py, xi: p.xi, price: p.price })
       else if (t === 'channel') {
-        // 1·2번 클릭: 첫 선(가장자리), 3번 클릭: 대칭 평행선 위치(간격)
-        // 각 점을 가장 가까운 캔들의 고점/저점에 스냅 → 캔들↔캔들 연결.
-        const snapped = snapToCandle(candlesRef.current, p.xi, p.price)
-        const pts = [...chPtsRef.current, snapped]
+        // 1·2번 클릭: 첫 선(가장자리), 3번 클릭: 대칭 평행선 위치(간격). 스냅 없이 클릭 위치 그대로.
+        const pts = [...chPtsRef.current, { xi: p.xi, price: p.price }]
         chPtsRef.current = pts
         if (pts.length === 3) {
           addShape({
@@ -541,9 +527,10 @@ export default function ChartSnapshotModal({ open, onClose, onInsert }) {
       const t = toolRef.current
       const p = toData(e)
       if (!p) return
-      // 편집 드래그: 잡은 제어점을 커서 위치로 이동(x=정수 캔들 열, price=자유). 중심선 자동 갱신.
+      // 편집 드래그: 잡은 제어점을 커서 위치로 자유 이동(열 스냅 없음, 차트 범위로만 제한). 중심선 자동 갱신.
       if (editDragRef.current) {
-        const xi = clampIdx(p.xi, candlesRef.current.length)
+        const n = candlesRef.current.length
+        const xi = Math.max(0, Math.min(n - 1, p.xi))
         const { id, key } = editDragRef.current
         const patch =
           key === 'p1' ? { x1: xi, y1: p.price }
@@ -556,10 +543,9 @@ export default function ChartSnapshotModal({ open, onClose, onInsert }) {
       if (t === 'rect' && drag) {
         setPreview({ type: 'rect', xi1: drag.xi, y1: drag.price, xi2: p.xi, y2: p.price })
       } else if (t === 'channel' && chPtsRef.current.length) {
-        // 1점: 커서를 끝점으로 첫 선 미리보기 / 2점: 커서를 P3로 채널(간격) 미리보기
-        // 커서도 캔들에 스냅해, 확정 시와 동일한 위치로 미리보기를 보여준다.
+        // 1점: 커서를 끝점으로 첫 선 미리보기 / 2점: 커서를 P3로 채널(간격) 미리보기 (스냅 없음)
         const pts = chPtsRef.current
-        const cur = snapToCandle(candlesRef.current, p.xi, p.price)
+        const cur = { xi: p.xi, price: p.price }
         const a = pts[0]
         const b = pts.length >= 2 ? pts[1] : cur
         setChannelPreview({
@@ -773,7 +759,7 @@ export default function ChartSnapshotModal({ open, onClose, onInsert }) {
               <span className="text-xs text-slate-400">
                 {tool === 'hline' && '차트를 클릭해 수평선을 추가'}
                 {tool === 'channel' &&
-                  '3번 클릭(캔들 고/저에 스냅): 첫 선 2점 → 반대편 선 1점 · 상단 저항선/하단 지지선 + 중심선 자동'}
+                  '3번 클릭: 첫 선 2점 → 반대편 선 1점 · 상단 저항선/하단 지지선 + 중심선 자동 (핸들로 조절)'}
                 {tool === 'rect' && '드래그해 사각형 영역을 지정'}
                 {tool === 'text' && '클릭한 위치에 텍스트를 입력'}
               </span>
