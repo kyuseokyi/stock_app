@@ -202,13 +202,16 @@ function buildOption(chart, shapes = [], preview = null, channelPreview = null, 
           {
             name: '_handles',
             type: 'scatter',
+            xAxisIndex: 0,
+            yAxisIndex: 0,
+            symbol: 'circle',
             data: channels.flatMap((ch) => [
               [dates[clampIdx(ch.x1, dates.length)], ch.y1],
               [dates[clampIdx(ch.x2, dates.length)], ch.y2],
               [dates[clampIdx(ch.x3, dates.length)], ch.y3],
             ]),
-            symbolSize: 12,
-            itemStyle: { color: '#ffffff', borderColor: '#4b5563', borderWidth: 2 },
+            symbolSize: 13,
+            itemStyle: { color: '#ffffff', borderColor: '#111827', borderWidth: 2 },
             z: 20,
             silent: true, // 히트테스트는 zr 이벤트에서 수동으로 처리
           },
@@ -362,6 +365,7 @@ export default function ChartSnapshotModal({ open, onClose, onInsert }) {
   const shapesRef = useRef([]) // 최신 도형(편집 히트테스트용, stale 클로저 방지)
   shapesRef.current = shapes
   const editDragRef = useRef(null) // 편집 드래그 중인 제어점 { id, key:'p1'|'p2'|'p3' }
+  const suppressClickRef = useRef(false) // 핸들 드래그 직후의 click(그리기 추가) 억제
 
   // 그리는 중 ESC → 진행 중 드로잉 취소(모달은 유지)
   useEffect(() => {
@@ -439,8 +443,8 @@ export default function ChartSnapshotModal({ open, onClose, onInsert }) {
   }
 
   const option = useMemo(
-    () => (chart ? buildOption(chart, shapes, preview, channelPreview, showVP, showTooltip, tool === null) : null),
-    [chart, shapes, preview, channelPreview, showVP, showTooltip, tool],
+    () => (chart ? buildOption(chart, shapes, preview, channelPreview, showVP, showTooltip, true) : null),
+    [chart, shapes, preview, channelPreview, showVP, showTooltip],
   )
 
   // 차트 인스턴스 준비 시 zrender 드로잉 핸들러 바인딩(마운트마다 1회)
@@ -483,6 +487,11 @@ export default function ChartSnapshotModal({ open, onClose, onInsert }) {
     }
 
     zr.on('click', (e) => {
+      // 핸들을 잡아 드래그한 직후의 click 은 그리기 추가로 이어지지 않게 무시
+      if (suppressClickRef.current) {
+        suppressClickRef.current = false
+        return
+      }
       const t = toolRef.current
       if (t !== 'channel' && chPtsRef.current.length) {
         chPtsRef.current = []
@@ -514,10 +523,11 @@ export default function ChartSnapshotModal({ open, onClose, onInsert }) {
     })
 
     zr.on('mousedown', (e) => {
-      // 편집 모드(도구 미선택): 제어점 핸들을 잡으면 드래그 시작.
-      if (toolRef.current === null) {
-        const hit = hitTestHandle(e)
-        if (hit) editDragRef.current = hit
+      // 제어점 핸들을 잡으면(도구 상태 무관) 드래그 시작 + 뒤따르는 click 억제.
+      const hit = hitTestHandle(e)
+      if (hit) {
+        editDragRef.current = hit
+        suppressClickRef.current = true
         return
       }
       if (toolRef.current !== 'rect') return
@@ -532,7 +542,7 @@ export default function ChartSnapshotModal({ open, onClose, onInsert }) {
       const p = toData(e)
       if (!p) return
       // 편집 드래그: 잡은 제어점을 커서 위치로 이동(x=정수 캔들 열, price=자유). 중심선 자동 갱신.
-      if (t === null && editDragRef.current) {
+      if (editDragRef.current) {
         const xi = clampIdx(p.xi, candlesRef.current.length)
         const { id, key } = editDragRef.current
         const patch =
@@ -768,9 +778,9 @@ export default function ChartSnapshotModal({ open, onClose, onInsert }) {
                 {tool === 'text' && '클릭한 위치에 텍스트를 입력'}
               </span>
             )}
-            {!tool && shapes.some((s) => s.type === 'channel') && (
+            {shapes.some((s) => s.type === 'channel') && (
               <span className="text-xs text-slate-400">
-                편집: 흰 핸들(●)을 끌어 3중추세선 조절 · 그리려면 도구 선택
+                편집: 흰 핸들(●)을 끌어 3중추세선 조절
               </span>
             )}
           </div>
