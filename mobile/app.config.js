@@ -42,6 +42,7 @@ export default {
         },
       ],
       'react-native-edge-to-edge',
+      'expo-secure-store',
     ],
     experiments: {
       typedRoutes: true,
