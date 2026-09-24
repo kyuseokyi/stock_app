@@ -123,38 +123,48 @@ function volumeProfileSeries(vp) {
   }
 }
 
-// 3중추세선 데이터 모델(4모서리 평행 채널):
-//   상단선 두 끝점 (xL,yUL)-(xR,yUR) + 폭 w(상·하단 세로 간격). 하단선 = 상단선 - w(항상 평행).
-//   문서(docs/custom_candle_chart_idea.md) 용어: 상단 저항선/중심선(미디언)/하단 지지선.
-// 3클릭(P1,P2=첫 선, P3=반대편)을 이 모델로 변환. 그리기·프리뷰 공용.
+// 3중추세선 데이터 모델(독립 2선):
+//   상단선 (ux1,uy1)-(ux2,uy2), 하단선 (lx1,ly1)-(lx2,ly2). 두 선은 서로 독립(각자 끝점 이동).
+//   중심선은 각 x에서 두 선의 중점으로 자동 계산. 문서(custom_candle_chart_idea.md)의 "독립 2선 채널".
+// 3클릭(P1,P2=첫 선, P3=반대편)을 이 모델로 변환(초기엔 평행). 그리기·프리뷰 공용.
 function makeChannel(x1, y1, x2, y2, x3, y3) {
   const [xa, ya, xb, yb] = x1 <= x2 ? [x1, y1, x2, y2] : [x2, y2, x1, y1]
-  if (Math.abs(xb - xa) < 0.5) return { xL: xa, yUL: ya, xR: xa, yUR: ya, w: 0 } // 퇴화 → compute가 null
+  if (Math.abs(xb - xa) < 0.5) {
+    return { ux1: xa, uy1: ya, ux2: xa, uy2: ya, lx1: xa, ly1: ya, lx2: xa, ly2: ya } // 퇴화 → compute가 null
+  }
   const slope = (yb - ya) / (xb - xa)
   const dy = y3 - (ya + slope * (x3 - xa)) // 첫 선 대비 P3 세로 간격
-  const up = Math.max(0, dy)
-  return { xL: xa, yUL: ya + up, xR: xb, yUR: yb + up, w: Math.abs(dy) }
+  const upOff = Math.max(0, dy) // 상단(높은 가격) 오프셋
+  const loOff = Math.min(0, dy) // 하단(낮은 가격) 오프셋
+  return {
+    ux1: xa, uy1: ya + upOff, ux2: xb, uy2: yb + upOff,
+    lx1: xa, ly1: ya + loOff, lx2: xb, ly2: yb + loOff,
+  }
 }
 
-// 4모서리 모델 → 상단/중심/하단 시계열. 구간 [iL,iR]에만 값(밖은 null).
-// w 부호와 무관하게 높은 가격을 상단으로 배치(드래그로 상·하단이 교차해도 역할 유지).
+// 독립 2선 모델 → 상단/중심/하단 시계열. 각 선은 자기 [iL,iR] 구간에만, 중심선은 두 선 겹치는 구간에만.
 function computeChannelLines(ch, dates) {
   const n = dates.length
-  const { xL, yUL, xR, yUR, w } = ch
-  if (xL == null || Math.abs(xR - xL) < 0.5) return null // 수직/퇴화 방지
-  const slope = (yUR - yUL) / (xR - xL)
-  const upperAt = (i) => yUL + slope * (i - xL)
-  const iL = clampIdx(Math.min(xL, xR), n)
-  const iR = clampIdx(Math.max(xL, xR), n)
-
-  const mk = (offset) =>
-    dates.map((_, i) => (i >= iL && i <= iR ? Math.round((upperAt(i) + offset) * 100) / 100 : null))
-  const upperOff = w >= 0 ? 0 : -w
-  const lowerOff = w >= 0 ? -w : 0
+  const { ux1, uy1, ux2, uy2, lx1, ly1, lx2, ly2 } = ch
+  const uOK = ux1 != null && Math.abs(ux2 - ux1) >= 0.5
+  const lOK = lx1 != null && Math.abs(lx2 - lx1) >= 0.5
+  if (!uOK && !lOK) return null
+  const at = (ax, ay, bx, by) => (i) => ay + ((by - ay) / (bx - ax)) * (i - ax)
+  const uAt = uOK ? at(ux1, uy1, ux2, uy2) : null
+  const lAt = lOK ? at(lx1, ly1, lx2, ly2) : null
+  const uiL = clampIdx(Math.min(ux1, ux2), n), uiR = clampIdx(Math.max(ux1, ux2), n)
+  const liL = clampIdx(Math.min(lx1, lx2), n), liR = clampIdx(Math.max(lx1, lx2), n)
+  const round = (v) => Math.round(v * 100) / 100
+  const mk = (fn, iL, iR) =>
+    dates.map((_, i) => (fn && i >= iL && i <= iR ? round(fn(i)) : null))
+  const miL = Math.max(uiL, liL), miR = Math.min(uiR, liR)
+  const midLine = dates.map((_, i) =>
+    uAt && lAt && i >= miL && i <= miR ? round((uAt(i) + lAt(i)) / 2) : null,
+  )
   return {
-    upperLine: mk(upperOff), // 상단 저항선
-    midLine: mk(-w / 2), // 중심선(미디언, 자동)
-    lowerLine: mk(lowerOff), // 하단 지지선
+    upperLine: mk(uAt, uiL, uiR), // 상단 저항선
+    midLine, // 중심선(각 x 중점, 자동)
+    lowerLine: mk(lAt, liL, liR), // 하단 지지선
   }
 }
 
@@ -205,10 +215,10 @@ function buildOption(chart, shapes = [], preview = null, channelPreview = null, 
             yAxisIndex: 0,
             symbol: 'circle',
             data: channels.flatMap((ch) => [
-              [dates[clampIdx(ch.xL, dates.length)], ch.yUL], // 상단 좌
-              [dates[clampIdx(ch.xR, dates.length)], ch.yUR], // 상단 우
-              [dates[clampIdx(ch.xL, dates.length)], ch.yUL - ch.w], // 하단 좌
-              [dates[clampIdx(ch.xR, dates.length)], ch.yUR - ch.w], // 하단 우
+              [dates[clampIdx(ch.ux1, dates.length)], ch.uy1], // 상단 좌
+              [dates[clampIdx(ch.ux2, dates.length)], ch.uy2], // 상단 우
+              [dates[clampIdx(ch.lx1, dates.length)], ch.ly1], // 하단 좌
+              [dates[clampIdx(ch.lx2, dates.length)], ch.ly2], // 하단 우
             ]),
             symbolSize: 13,
             itemStyle: { color: '#ffffff', borderColor: '#111827', borderWidth: 2 },
@@ -470,10 +480,10 @@ export default function ChartSnapshotModal({ open, onClose, onInsert }) {
       const cs = candlesRef.current
       for (const ch of shapesRef.current.filter((s) => s.type === 'channel')) {
         const pts = [
-          { key: 'UL', xi: ch.xL, price: ch.yUL },
-          { key: 'UR', xi: ch.xR, price: ch.yUR },
-          { key: 'LL', xi: ch.xL, price: ch.yUL - ch.w },
-          { key: 'LR', xi: ch.xR, price: ch.yUR - ch.w },
+          { key: 'UL', xi: ch.ux1, price: ch.uy1 },
+          { key: 'UR', xi: ch.ux2, price: ch.uy2 },
+          { key: 'LL', xi: ch.lx1, price: ch.ly1 },
+          { key: 'LR', xi: ch.lx2, price: ch.ly2 },
         ]
         for (const pt of pts) {
           const cat = cs[clampIdx(pt.xi, cs.length)]?.date.slice(5)
@@ -524,11 +534,21 @@ export default function ChartSnapshotModal({ open, onClose, onInsert }) {
     })
 
     zr.on('mousedown', (e) => {
-      // 제어점 핸들을 잡으면(도구 상태 무관) 드래그 시작 + 뒤따르는 click 억제.
+      // 핸들을 잡으면(도구 상태 무관) 그 '선 전체'를 평행이동하는 드래그 시작 + 뒤따르는 click 억제.
+      // 시작 시점의 커서·해당 선 끝점을 기록해, 이동 델타를 두 끝점에 동일 적용(각도 유지).
       const hit = hitTestHandle(e)
       if (hit) {
-        editDragRef.current = hit
-        suppressClickRef.current = true
+        const p = toData(e)
+        const sh = shapesRef.current.find((s) => s.id === hit.id)
+        if (p && sh) {
+          const line = hit.key === 'UL' || hit.key === 'UR' ? 'upper' : 'lower'
+          const s =
+            line === 'upper'
+              ? { x1: sh.ux1, y1: sh.uy1, x2: sh.ux2, y2: sh.uy2 }
+              : { x1: sh.lx1, y1: sh.ly1, x2: sh.lx2, y2: sh.ly2 }
+          editDragRef.current = { id: hit.id, line, cxi: p.xi, cprice: p.price, ...s }
+          suppressClickRef.current = true
+        }
         return
       }
       if (toolRef.current !== 'rect') return
@@ -542,21 +562,22 @@ export default function ChartSnapshotModal({ open, onClose, onInsert }) {
       const t = toolRef.current
       const p = toData(e)
       if (!p) return
-      // 편집 드래그: 잡은 모서리를 커서로 자유 이동(열 스냅 없음, 차트 범위로만 제한).
-      // 폭 w 는 유지 → 어느 모서리를 끌든 두 선이 함께(평행) 기울고 중심선은 자동 재계산.
+      // 편집 드래그: 잡은 '선 전체'를 각도(기울기) 유지한 채 평행이동(반대편 선은 그대로). 중심선 자동 재계산.
       if (editDragRef.current) {
         const n = candlesRef.current.length
-        const xi = Math.max(0, Math.min(n - 1, p.xi))
-        const { id, key } = editDragRef.current
-        const sh = shapesRef.current.find((s) => s.id === id)
-        if (!sh) return
-        const w = sh.w ?? 0
+        const d = editDragRef.current
+        // x 델타는 두 끝점이 [0,n-1]을 벗어나지 않도록 균일 클램프 → 슬로프 불변.
+        const rawDxi = p.xi - d.cxi
+        const lo = -Math.min(d.x1, d.x2)
+        const hi = n - 1 - Math.max(d.x1, d.x2)
+        const dxi = Math.max(lo, Math.min(hi, rawDxi))
+        const dprice = p.price - d.cprice
+        const nx1 = d.x1 + dxi, nx2 = d.x2 + dxi
         const patch =
-          key === 'UL' ? { xL: xi, yUL: p.price }
-          : key === 'UR' ? { xR: xi, yUR: p.price }
-          : key === 'LL' ? { xL: xi, yUL: p.price + w } // 하단 좌 = price → 상단 좌 = price + w
-          : { xR: xi, yUR: p.price + w } // 하단 우
-        updateShape(id, patch)
+          d.line === 'upper'
+            ? { ux1: nx1, uy1: d.y1 + dprice, ux2: nx2, uy2: d.y2 + dprice }
+            : { lx1: nx1, ly1: d.y1 + dprice, lx2: nx2, ly2: d.y2 + dprice }
+        updateShape(d.id, patch)
         return
       }
       const drag = dragStartRef.current
