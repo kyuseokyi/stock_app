@@ -58,3 +58,9 @@ export async function fetchBlogList(params?: {
     items: raw.items.map(toBlogPost),
   };
 }
+
+/** 글 상세 조회. GET /api/v1/blogs/{id} (blog 서비스, 포트 8000) */
+export async function fetchBlog(id: number): Promise<BlogPost> {
+  const raw = await blogApi.get<RawBlog>(`/api/v1/blogs/${id}`);
+  return toBlogPost(raw);
+}

@@ -7,6 +7,7 @@ export default function RootLayout() {
       <StatusBar style="auto" />
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="(tabs)" />
+        <Stack.Screen name="blog/[id]" options={{ headerShown: true, title: '글 상세' }} />
       </Stack>
     </>
   );
