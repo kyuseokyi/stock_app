@@ -12,7 +12,7 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - pg_data_prod:/var/lib/postgresql/data
+      - ${POSTGRES_DATA_DIR:-pg_data_prod}:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-stock_user} -d ${POSTGRES_DB:-stock_db}"]
       interval: 10s
@@ -31,7 +31,7 @@ services:
       - "8123:8123" # HTTP port (for external connections)
       - "9000:9000" # Native client port
     volumes:
-      - clickhouse_data_prod:/var/lib/clickhouse
+      - ${CLICKHOUSE_DATA_DIR:-clickhouse_data_prod}:/var/lib/clickhouse
     ulimits:
       nofile:
         soft: 262144
@@ -49,7 +49,7 @@ services:
     ports:
       - "6379:6379"
     volumes:
-      - redis_data_prod:/data
+      - ${REDIS_DATA_DIR:-redis_data_prod}:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
