@@ -5,18 +5,6 @@ import { useChartDrawings } from '../hooks/useChartDrawings'
 
 const clampIdx = (i, len) => Math.max(0, Math.min(len - 1, Math.round(i)))
 
-// 3중추세선 캔들 스냅: 클릭 지점을 가장 가까운 캔들에 붙이고(정수 인덱스),
-// 가격은 그 캔들의 고점/저점(꼬리) 중 클릭 가격에 더 가까운 쪽으로 스냅한다.
-// → 위를 클릭하면 고점(상단 저항선), 아래를 클릭하면 저점(하단 지지선)에 자연히 잡힌다.
-function snapToCandle(candles, xi, price) {
-  if (!candles || candles.length === 0) return { xi, price }
-  const idx = clampIdx(xi, candles.length)
-  const c = candles[idx]
-  if (!c) return { xi, price }
-  const snappedPrice = Math.abs(price - c.high) <= Math.abs(price - c.low) ? c.high : c.low
-  return { xi: idx, price: snappedPrice }
-}
-
 // 드로잉 도형(데이터좌표) → ECharts markLine/markArea/markPoint 로 변환.
 // 데이터 좌표 native 라 리로드/리사이즈에도 정합, getDataURL 캡처에 포함된다.
 function buildMarks(chart, shapes, preview) {
@@ -135,27 +123,48 @@ function volumeProfileSeries(vp) {
   }
 }
 
-// 3중추세선(평행 채널): 첫 선 P1-P2(한쪽 가장자리, 각도 결정) + P3(반대편 위치)로 간격 지정.
-// 문서(docs/custom_candle_chart_idea.md) 용어: 상단 저항선(upperLine)/중심선(midLine)/하단 지지선(lowerLine).
-// 두 가장자리는 그린 순서(base=0, 반대편=dy)와 무관하게 가격 높이로 상단/하단을 정한다:
-//   upper = 높은 가격 쪽(offset max(0,dy)), lower = 낮은 쪽(min(0,dy)), mid = 두 선의 중점(dy/2).
-// 구간 [iL,iR]에만 값(밖은 null).
+// 3중추세선 데이터 모델(독립 2선):
+//   상단선 (ux1,uy1)-(ux2,uy2), 하단선 (lx1,ly1)-(lx2,ly2). 두 선은 서로 독립(각자 끝점 이동).
+//   중심선은 각 x에서 두 선의 중점으로 자동 계산. 문서(custom_candle_chart_idea.md)의 "독립 2선 채널".
+// 3클릭(P1,P2=첫 선, P3=반대편)을 이 모델로 변환(초기엔 평행). 그리기·프리뷰 공용.
+function makeChannel(x1, y1, x2, y2, x3, y3) {
+  const [xa, ya, xb, yb] = x1 <= x2 ? [x1, y1, x2, y2] : [x2, y2, x1, y1]
+  if (Math.abs(xb - xa) < 0.5) {
+    return { ux1: xa, uy1: ya, ux2: xa, uy2: ya, lx1: xa, ly1: ya, lx2: xa, ly2: ya } // 퇴화 → compute가 null
+  }
+  const slope = (yb - ya) / (xb - xa)
+  const dy = y3 - (ya + slope * (x3 - xa)) // 첫 선 대비 P3 세로 간격
+  const upOff = Math.max(0, dy) // 상단(높은 가격) 오프셋
+  const loOff = Math.min(0, dy) // 하단(낮은 가격) 오프셋
+  return {
+    ux1: xa, uy1: ya + upOff, ux2: xb, uy2: yb + upOff,
+    lx1: xa, ly1: ya + loOff, lx2: xb, ly2: yb + loOff,
+  }
+}
+
+// 독립 2선 모델 → 상단/중심/하단 시계열. 각 선은 자기 [iL,iR] 구간에만, 중심선은 두 선 겹치는 구간에만.
 function computeChannelLines(ch, dates) {
   const n = dates.length
-  const { x1, y1, x2, y2, x3, y3 } = ch
-  if (Math.abs(x2 - x1) < 0.5) return null // 수직/퇴화 방지
-  const m = (y2 - y1) / (x2 - x1)
-  const base = (i) => y1 + m * (i - x1)
-  const dy = y3 - base(x3) // 첫 선 대비 P3의 세로 간격
-  const iL = clampIdx(Math.min(x1, x2), n)
-  const iR = clampIdx(Math.max(x1, x2), n)
-
-  const mk = (offset) =>
-    dates.map((_, i) => (i >= iL && i <= iR ? Math.round((base(i) + offset) * 100) / 100 : null))
+  const { ux1, uy1, ux2, uy2, lx1, ly1, lx2, ly2 } = ch
+  const uOK = ux1 != null && Math.abs(ux2 - ux1) >= 0.5
+  const lOK = lx1 != null && Math.abs(lx2 - lx1) >= 0.5
+  if (!uOK && !lOK) return null
+  const at = (ax, ay, bx, by) => (i) => ay + ((by - ay) / (bx - ax)) * (i - ax)
+  const uAt = uOK ? at(ux1, uy1, ux2, uy2) : null
+  const lAt = lOK ? at(lx1, ly1, lx2, ly2) : null
+  const uiL = clampIdx(Math.min(ux1, ux2), n), uiR = clampIdx(Math.max(ux1, ux2), n)
+  const liL = clampIdx(Math.min(lx1, lx2), n), liR = clampIdx(Math.max(lx1, lx2), n)
+  const round = (v) => Math.round(v * 100) / 100
+  const mk = (fn, iL, iR) =>
+    dates.map((_, i) => (fn && i >= iL && i <= iR ? round(fn(i)) : null))
+  const miL = Math.max(uiL, liL), miR = Math.min(uiR, liR)
+  const midLine = dates.map((_, i) =>
+    uAt && lAt && i >= miL && i <= miR ? round((uAt(i) + lAt(i)) / 2) : null,
+  )
   return {
-    upperLine: mk(Math.max(0, dy)), // 상단 저항선
-    midLine: mk(dy / 2), // 중심선(미디언, 자동)
-    lowerLine: mk(Math.min(0, dy)), // 하단 지지선
+    upperLine: mk(uAt, uiL, uiR), // 상단 저항선
+    midLine, // 중심선(각 x 중점, 자동)
+    lowerLine: mk(lAt, liL, liR), // 하단 지지선
   }
 }
 
@@ -183,7 +192,7 @@ function channelSeries(chart, channels, previewChannel) {
   return out
 }
 
-function buildOption(chart, shapes = [], preview = null, channelPreview = null, showVP = true) {
+function buildOption(chart, shapes = [], preview = null, channelPreview = null, showVP = true, showTooltip = false, editable = false) {
   const dates = chart.candles.map((c) => c.date.slice(5)) // MM-DD
   const candles = chart.candles.map((c) => [c.open, c.close, c.low, c.high])
   // 거래량: 상승(종가≥시가) 빨강 / 하락 파랑 (한국 관례)
@@ -195,6 +204,29 @@ function buildOption(chart, shapes = [], preview = null, channelPreview = null, 
   const { markLine, markArea, markPoint } = buildMarks(chart, shapes, preview)
   const channels = shapes.filter((s) => s.type === 'channel')
   const chSeries = channelSeries(chart, channels, channelPreview)
+  // 편집 모드(도구 미선택): 3중추세선 제어점 P1·P2·P3 에 드래그 핸들(흰 원) 표시.
+  const handleSeries =
+    editable && channels.length
+      ? [
+          {
+            name: '_handles',
+            type: 'scatter',
+            xAxisIndex: 0,
+            yAxisIndex: 0,
+            symbol: 'circle',
+            data: channels.flatMap((ch) => [
+              [dates[clampIdx(ch.ux1, dates.length)], ch.uy1], // 상단 좌
+              [dates[clampIdx(ch.ux2, dates.length)], ch.uy2], // 상단 우
+              [dates[clampIdx(ch.lx1, dates.length)], ch.ly1], // 하단 좌
+              [dates[clampIdx(ch.lx2, dates.length)], ch.ly2], // 하단 우
+            ]),
+            symbolSize: 13,
+            itemStyle: { color: '#ffffff', borderColor: '#111827', borderWidth: 2 },
+            z: 20,
+            silent: true, // 히트테스트는 zr 이벤트에서 수동으로 처리
+          },
+        ]
+      : []
   const vpSeries = showVP ? [volumeProfileSeries(chart.volumeProfile)] : []
   const legendData = ['캔들', 'MA5', 'MA20', 'MA50', 'MA120', 'BB상단', 'BB하단', '거래량']
   if (showVP) legendData.push('매물대')
@@ -210,7 +242,10 @@ function buildOption(chart, shapes = [], preview = null, channelPreview = null, 
       left: 'center',
       textStyle: { fontSize: 14 },
     },
-    tooltip: { trigger: 'axis', axisPointer: { type: 'cross' } },
+    // 캔들 인포창(마우스오버 툴팁) — 기본 off. 켤 때만 axis 트리거 + 십자선.
+    tooltip: showTooltip
+      ? { trigger: 'axis', axisPointer: { type: 'cross' } }
+      : { show: false },
     axisPointer: { link: [{ xAxisIndex: 'all' }] }, // 두 그리드 크로스헤어 연동
     legend: {
       data: legendData,
@@ -306,6 +341,7 @@ function buildOption(chart, shapes = [], preview = null, channelPreview = null, 
         itemStyle: { color: '#94a3b8' }, // 범례 스와치용 중립색(막대는 개별 빨강/파랑 우선)
       },
       ...chSeries,
+      ...handleSeries,
     ],
   }
 }
@@ -318,13 +354,14 @@ export default function ChartSnapshotModal({ open, onClose, onInsert }) {
   const [range, setRange] = useState(defaultRange)
   const [bbStdDev, setBbStdDev] = useState(2.0)
   const [showVP, setShowVP] = useState(true) // 매물대 표시 토글
+  const [showTooltip, setShowTooltip] = useState(false) // 캔들 인포창(마우스오버 툴팁) — 기본 off
   const [chart, setChart] = useState(null)
   const [searching, setSearching] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
   // 드로잉
-  const { tool, toggleTool, setTool, shapes, addShape, removeShape, clearAll } =
+  const { tool, toggleTool, setTool, shapes, addShape, removeShape, updateShape, clearAll } =
     useChartDrawings()
   const [preview, setPreview] = useState(null) // 사각형 드래그 미리보기
   const [channelPreview, setChannelPreview] = useState(null) // 채널 미리보기
@@ -335,6 +372,10 @@ export default function ChartSnapshotModal({ open, onClose, onInsert }) {
   const chPtsRef = useRef([]) // 채널 진행 점들(첫 선 2점)
   const candlesRef = useRef([]) // 최신 캔들(스냅용) — handleChartReady 는 마운트 1회 바인딩이라 stale 클로저 방지
   candlesRef.current = chart?.candles ?? []
+  const shapesRef = useRef([]) // 최신 도형(편집 히트테스트용, stale 클로저 방지)
+  shapesRef.current = shapes
+  const editDragRef = useRef(null) // 편집 드래그 중인 제어점 { id, key:'p1'|'p2'|'p3' }
+  const suppressClickRef = useRef(false) // 핸들 드래그 직후의 click(그리기 추가) 억제
 
   // 그리는 중 ESC → 진행 중 드로잉 취소(모달은 유지)
   useEffect(() => {
@@ -412,8 +453,8 @@ export default function ChartSnapshotModal({ open, onClose, onInsert }) {
   }
 
   const option = useMemo(
-    () => (chart ? buildOption(chart, shapes, preview, channelPreview, showVP) : null),
-    [chart, shapes, preview, channelPreview, showVP],
+    () => (chart ? buildOption(chart, shapes, preview, channelPreview, showVP, showTooltip, true) : null),
+    [chart, shapes, preview, channelPreview, showVP, showTooltip],
   )
 
   // 차트 인스턴스 준비 시 zrender 드로잉 핸들러 바인딩(마운트마다 1회)
@@ -430,7 +471,38 @@ export default function ChartSnapshotModal({ open, onClose, onInsert }) {
       return { xi: p[0], price: p[1], px, py }
     }
 
+    // 편집 모드 히트테스트: 클릭 지점이 어느 3중추세선의 어느 제어점 핸들 위인지.
+    const HANDLE_HIT_PX = 12
+    const hitTestHandle = (e) => {
+      const px = e.offsetX ?? e.zrX
+      const py = e.offsetY ?? e.zrY
+      if (px == null || py == null) return null
+      const cs = candlesRef.current
+      for (const ch of shapesRef.current.filter((s) => s.type === 'channel')) {
+        const pts = [
+          { key: 'UL', xi: ch.ux1, price: ch.uy1 },
+          { key: 'UR', xi: ch.ux2, price: ch.uy2 },
+          { key: 'LL', xi: ch.lx1, price: ch.ly1 },
+          { key: 'LR', xi: ch.lx2, price: ch.ly2 },
+        ]
+        for (const pt of pts) {
+          const cat = cs[clampIdx(pt.xi, cs.length)]?.date.slice(5)
+          if (cat == null) continue
+          const q = inst.convertToPixel({ gridIndex: 0 }, [cat, pt.price])
+          if (q && Math.hypot(q[0] - px, q[1] - py) <= HANDLE_HIT_PX) {
+            return { id: ch.id, key: pt.key }
+          }
+        }
+      }
+      return null
+    }
+
     zr.on('click', (e) => {
+      // 핸들을 잡아 드래그한 직후의 click 은 그리기 추가로 이어지지 않게 무시
+      if (suppressClickRef.current) {
+        suppressClickRef.current = false
+        return
+      }
       const t = toolRef.current
       if (t !== 'channel' && chPtsRef.current.length) {
         chPtsRef.current = []
@@ -443,17 +515,17 @@ export default function ChartSnapshotModal({ open, onClose, onInsert }) {
       else if (t === 'text')
         setTextInput({ px: p.px, py: p.py, xi: p.xi, price: p.price })
       else if (t === 'channel') {
-        // 1·2번 클릭: 첫 선(가장자리), 3번 클릭: 대칭 평행선 위치(간격)
-        // 각 점을 가장 가까운 캔들의 고점/저점에 스냅 → 캔들↔캔들 연결.
-        const snapped = snapToCandle(candlesRef.current, p.xi, p.price)
-        const pts = [...chPtsRef.current, snapped]
+        // 1·2번 클릭: 첫 선(가장자리), 3번 클릭: 대칭 평행선 위치(간격). 스냅 없이 클릭 위치 그대로.
+        const pts = [...chPtsRef.current, { xi: p.xi, price: p.price }]
         chPtsRef.current = pts
         if (pts.length === 3) {
           addShape({
             type: 'channel',
-            x1: pts[0].xi, y1: pts[0].price,
-            x2: pts[1].xi, y2: pts[1].price,
-            x3: pts[2].xi, y3: pts[2].price,
+            ...makeChannel(
+              pts[0].xi, pts[0].price,
+              pts[1].xi, pts[1].price,
+              pts[2].xi, pts[2].price,
+            ),
           })
           chPtsRef.current = []
           setChannelPreview(null)
@@ -462,6 +534,23 @@ export default function ChartSnapshotModal({ open, onClose, onInsert }) {
     })
 
     zr.on('mousedown', (e) => {
+      // 핸들을 잡으면(도구 상태 무관) 그 '선 전체'를 평행이동하는 드래그 시작 + 뒤따르는 click 억제.
+      // 시작 시점의 커서·해당 선 끝점을 기록해, 이동 델타를 두 끝점에 동일 적용(각도 유지).
+      const hit = hitTestHandle(e)
+      if (hit) {
+        const p = toData(e)
+        const sh = shapesRef.current.find((s) => s.id === hit.id)
+        if (p && sh) {
+          const line = hit.key === 'UL' || hit.key === 'UR' ? 'upper' : 'lower'
+          const s =
+            line === 'upper'
+              ? { x1: sh.ux1, y1: sh.uy1, x2: sh.ux2, y2: sh.uy2 }
+              : { x1: sh.lx1, y1: sh.ly1, x2: sh.lx2, y2: sh.ly2 }
+          editDragRef.current = { id: hit.id, line, cxi: p.xi, cprice: p.price, ...s }
+          suppressClickRef.current = true
+        }
+        return
+      }
       if (toolRef.current !== 'rect') return
       const p = toData(e)
       if (!p) return
@@ -473,25 +562,43 @@ export default function ChartSnapshotModal({ open, onClose, onInsert }) {
       const t = toolRef.current
       const p = toData(e)
       if (!p) return
+      // 편집 드래그: 잡은 '선 전체'를 각도(기울기) 유지한 채 평행이동(반대편 선은 그대로). 중심선 자동 재계산.
+      if (editDragRef.current) {
+        const n = candlesRef.current.length
+        const d = editDragRef.current
+        // x 델타는 두 끝점이 [0,n-1]을 벗어나지 않도록 균일 클램프 → 슬로프 불변.
+        const rawDxi = p.xi - d.cxi
+        const lo = -Math.min(d.x1, d.x2)
+        const hi = n - 1 - Math.max(d.x1, d.x2)
+        const dxi = Math.max(lo, Math.min(hi, rawDxi))
+        const dprice = p.price - d.cprice
+        const nx1 = d.x1 + dxi, nx2 = d.x2 + dxi
+        const patch =
+          d.line === 'upper'
+            ? { ux1: nx1, uy1: d.y1 + dprice, ux2: nx2, uy2: d.y2 + dprice }
+            : { lx1: nx1, ly1: d.y1 + dprice, lx2: nx2, ly2: d.y2 + dprice }
+        updateShape(d.id, patch)
+        return
+      }
       const drag = dragStartRef.current
       if (t === 'rect' && drag) {
         setPreview({ type: 'rect', xi1: drag.xi, y1: drag.price, xi2: p.xi, y2: p.price })
       } else if (t === 'channel' && chPtsRef.current.length) {
-        // 1점: 커서를 끝점으로 첫 선 미리보기 / 2점: 커서를 P3로 채널(간격) 미리보기
-        // 커서도 캔들에 스냅해, 확정 시와 동일한 위치로 미리보기를 보여준다.
+        // 1점: 커서를 끝점으로 첫 선 미리보기 / 2점: 커서를 P3로 채널(간격) 미리보기 (스냅 없음)
         const pts = chPtsRef.current
-        const cur = snapToCandle(candlesRef.current, p.xi, p.price)
+        const cur = { xi: p.xi, price: p.price }
         const a = pts[0]
         const b = pts.length >= 2 ? pts[1] : cur
-        setChannelPreview({
-          x1: a.xi, y1: a.price,
-          x2: b.xi, y2: b.price,
-          x3: cur.xi, y3: cur.price,
-        })
+        setChannelPreview(makeChannel(a.xi, a.price, b.xi, b.price, cur.xi, cur.price))
       }
     })
 
     zr.on('mouseup', (e) => {
+      // 편집 드래그 종료
+      if (editDragRef.current) {
+        editDragRef.current = null
+        return
+      }
       const drag = dragStartRef.current
       if (toolRef.current !== 'rect' || !drag) return
       const p = toData(e)
@@ -629,6 +736,16 @@ export default function ChartSnapshotModal({ open, onClose, onInsert }) {
             매물대
           </label>
 
+          <label className="flex cursor-pointer items-center gap-1.5 text-slate-600">
+            <input
+              type="checkbox"
+              checked={showTooltip}
+              onChange={(e) => setShowTooltip(e.target.checked)}
+              className="accent-slate-500"
+            />
+            캔들 정보
+          </label>
+
           {chart && (
             <span
               className={`rounded-full px-2 py-0.5 text-xs font-medium ${
@@ -679,9 +796,14 @@ export default function ChartSnapshotModal({ open, onClose, onInsert }) {
               <span className="text-xs text-slate-400">
                 {tool === 'hline' && '차트를 클릭해 수평선을 추가'}
                 {tool === 'channel' &&
-                  '3번 클릭(캔들 고/저에 스냅): 첫 선 2점 → 반대편 선 1점 · 상단 저항선/하단 지지선 + 중심선 자동'}
+                  '3번 클릭: 첫 선 2점 → 반대편 선 1점 · 상단 저항선/하단 지지선 + 중심선 자동 (핸들로 조절)'}
                 {tool === 'rect' && '드래그해 사각형 영역을 지정'}
                 {tool === 'text' && '클릭한 위치에 텍스트를 입력'}
+              </span>
+            )}
+            {shapes.some((s) => s.type === 'channel') && (
+              <span className="text-xs text-slate-400">
+                편집: 흰 핸들(●)을 끌어 3중추세선 조절
               </span>
             )}
           </div>

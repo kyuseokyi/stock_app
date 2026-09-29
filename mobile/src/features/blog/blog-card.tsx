@@ -1,4 +1,5 @@
-import { Text, View } from 'react-native';
+import { useRouter } from 'expo-router';
+import { Pressable, Text, View } from 'react-native';
 import { StyleSheet } from 'react-native-unistyles';
 
 import type { BlogPost } from './types';
@@ -19,8 +20,12 @@ export function fmtDate(iso: string): string {
 }
 
 export function BlogCard({ post }: { post: BlogPost }) {
+  const router = useRouter();
+
   return (
-    <View style={styles.card}>
+    <Pressable
+      style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
+      onPress={() => router.push(`/blog/${post.id}`)}>
       <Text style={styles.cardTitle} numberOfLines={1}>
         {post.title}
       </Text>
@@ -30,7 +35,7 @@ export function BlogCard({ post }: { post: BlogPost }) {
       <Text style={styles.cardMeta}>
         조회 {post.viewCount} · {fmtDate(post.createdAt)}
       </Text>
-    </View>
+    </Pressable>
   );
 }
 
@@ -42,6 +47,9 @@ const styles = StyleSheet.create((theme) => ({
     borderColor: theme.colors.border,
     padding: theme.gap(2),
     gap: theme.gap(0.5),
+  },
+  cardPressed: {
+    opacity: 0.7,
   },
   cardTitle: {
     fontSize: 16,

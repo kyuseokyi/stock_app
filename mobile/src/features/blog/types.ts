@@ -18,3 +18,14 @@ export type BlogListResponse = {
   size: number;
   items: BlogPost[];
 };
+
+/** 댓글 도메인 타입(camelCase). 서버 snake_case는 comments-api.ts에서 변환한다. */
+export type Comment = {
+  id: number;
+  postId: number;
+  authorId: number | null;
+  authorName: string | null;
+  content: string;
+  createdAt: string; // ISO
+  updatedAt: string;
+};
