@@ -20,7 +20,7 @@
 | **백엔드 스택** | FastAPI 3종 + Celery 2종 |  완료 | Auth(:8001), Stock(:8002), Blog(:8003), Worker, Beat 정상 구동 |
 | **프론트엔드** | 유저 웹 + 어드민 패널 |  완료 | Web Client(:3000), Admin Web(:3001) Vite 빌드 및 서빙 완료 |
 | **CLI 툴** | 터널 도구 설치 |  완료 | `cloudflared` v2026.9.3 설치 및 PATH 등록 완료 |
-| **CI/CD** | GitHub Actions Runner 등록 | ⏳ 대기 | 저장소 Settings에서 발급된 토큰 등록 대기 |
+| **CI/CD** | GitHub Actions Runner 등록 |  완료 | `macmini-server` 백그라운드 서비스(LaunchAgent) 등록 및 GitHub 연결 완료 |
 | **외부 접속** | Cloudflare Zero Trust 터널 | ⏳ 대기 | Cloudflare 대시보드 터널 생성 및 토큰 등록 대기 |
 
 ---
