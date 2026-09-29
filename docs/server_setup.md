@@ -97,15 +97,23 @@ sudo chmod 600 /opt/stock_app/env/.env.production
 ```
 > ⚠️ **DB 비번은 두 곳에서 일치해야 한다**: 위 `DATABASE_URL`/`CLICKHOUSE_PASSWORD` **와** §3-2의 `compose.env`. 한쪽만 강한 비번으로 두면 컨테이너 DB(기본값으로 초기화됨)에 앱이 **인증 실패**한다.
 
-### 3-2. `/opt/stock_app/env/compose.env` (강한 DB 비번 쓸 때만, 선택)
-`docker-compose.prod.yml`의 `${POSTGRES_PASSWORD:-...}`는 **compose 변수 치환**이라 `backend/.env.production`이 아니라 **compose 프로젝트 루트의 `.env`**에서 읽는다. 강한 비번을 쓰려면:
+### 3-2. `/opt/stock_app/env/compose.env` (스토리지 분리 및 DB 설정)
+`docker-compose.prod.yml`의 환경변수 치환(`${CLICKHOUSE_DATA_DIR}`, `${POSTGRES_PASSWORD}` 등)은 `backend/.env.production`이 아니라 **compose 프로젝트 루트의 `.env`**에서 읽습니다.
+
+추가 SSD(`/Volumes/StockData`)로 대용량 시계열 DB 스토리지를 분리하거나 강한 비번을 쓸 때 사용합니다:
 ```ini
+# --- [스토리지 분리 (추가 SSD 지정)] ---
+CLICKHOUSE_DATA_DIR=/Volumes/StockData/clickhouse
+POSTGRES_DATA_DIR=/Volumes/StockData/postgres
+REDIS_DATA_DIR=/Volumes/StockData/redis
+
+# --- [DB 인증정보 (선택)] ---
 POSTGRES_USER=stock_user
 POSTGRES_PASSWORD=<DB비번>      # §3-1 URL과 동일
 POSTGRES_DB=stock_db
 CLICKHOUSE_PASSWORD=<CH비번>    # §3-1과 동일
 ```
-> 기본값(`stock_password`/`password`)을 그대로 쓸 거면 이 파일은 생략 가능(단 보안 약함).
+> 설정하지 않으면 기본 내장 Docker 볼륨(`clickhouse_data_prod` 등)과 기본 비밀번호를 사용합니다.
 
 ---
 
