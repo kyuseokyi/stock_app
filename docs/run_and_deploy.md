@@ -23,6 +23,9 @@ Docker Desktop · **uv**(백엔드 파이썬) · Node 18+(프론트). 백엔드�
 | **(b) 개발서버(미니PC) DB 사용** | `./scripts/dev-db-tunnel.sh` (별도 터미널 유지) | `localhost:15432→PG`, `18123→CH` 포워딩. **Redis는 로컬 유지**. `.env.development`는 이미 15432/18123을 가리킴 |
 
 > (b) 상세·주의(공유 DB 스키마 변경, cloudflared 2222 선행)는 README "로컬 개발 → 개발서버 DB(SSH 터널)" 참조.
+> 💡 **Windows 빠른 실행 스크립트 (`scripts/`)**:
+> - DB 인프라 시작/종료: `scripts\start-infra.cmd` / `scripts\stop-infra.cmd`
+> - 전체 서비스(백엔드 3개 + 웹 2개) 원클릭 기동: `scripts\start-services.cmd`
 
 ### 2. 백엔드 (uv — 필요한 것만 별도 터미널/백그라운드)
 ```bash
