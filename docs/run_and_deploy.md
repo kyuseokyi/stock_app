@@ -4,6 +4,7 @@
 
 > **더 깊은 문서**
 > - 로컬 상세(포트·기능별 조합·DB 접속정보): [`../README.md`](../README.md)
+> - Windows 환경 개발 셋업 가이드: [`windows_setup.md`](./windows_setup.md)
 > - 서버 **최초 1회** 부트스트랩(러너 등록·시크릿·Cloudflare·스키마): [`server_setup.md`](./server_setup.md)
 > - SSH 터널(cloudflared·Termius): [`cloudflare_termius_guide.md`](./cloudflare_termius_guide.md)
 > - DB 접속(DataGrip/DBeaver, 개발서버 터널 포함): [`db_access.md`](./db_access.md)
@@ -23,6 +24,9 @@ Docker Desktop · **uv**(백엔드 파이썬) · Node 18+(프론트). 백엔드�
 | **(b) 개발서버(미니PC) DB 사용** | `./scripts/dev-db-tunnel.sh` (별도 터미널 유지) | `localhost:15432→PG`, `18123→CH` 포워딩. **Redis는 로컬 유지**. `.env.development`는 이미 15432/18123을 가리킴 |
 
 > (b) 상세·주의(공유 DB 스키마 변경, cloudflared 2222 선행)는 README "로컬 개발 → 개발서버 DB(SSH 터널)" 참조.
+> 💡 **Windows 빠른 실행 스크립트 (`scripts/`)**:
+> - DB 인프라 시작/종료: `scripts\start-infra.cmd` / `scripts\stop-infra.cmd`
+> - 전체 서비스(백엔드 3개 + 웹 2개) 원클릭 기동: `scripts\start-services.cmd`
 
 ### 2. 백엔드 (uv — 필요한 것만 별도 터미널/백그라운드)
 ```bash
