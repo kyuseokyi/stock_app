@@ -22,7 +22,13 @@ docker-compose.dev.yml
 ## 🚀 로컬 개발 환경 셋업 (Windows & macOS 공통)
 
 > 💡 일상 실행·서버 배포 **빠른 참조**는 [`docs/run_and_deploy.md`](docs/run_and_deploy.md) 에 정리돼 있습니다(아래는 상세 설명).
-> 🪟 **Windows 사용자**: 상세 개발 환경 셋업(WSL2 Docker 연동, 배치 스크립트 등)은 [`docs/windows_setup.md`](docs/windows_setup.md) 를 참조하세요.
+> 🪟 **Windows 사용자**: 상세 개발 환경 셋업, 버전 관리자(`vfox`/`conda`/`nvm`), WSL2 Docker 연동은 [`docs/windows_setup.md`](docs/windows_setup.md) 를 참조하세요.
+
+### 0. 런타임 버전 관리 (Java / Python / Node)
+다중 프로젝트 및 모바일 빌드 호환성을 위해 각 언어별 버전 매니저가 제공됩니다:
+- **☕ Java (모바일 React Native 빌드)**: `vfox use -g java@17.0.2+8` (버전 전환 시 `JAVA_HOME` 자동 갱신)
+- **🐍 Python (백엔드)**: `conda activate stock_app` (또는 `uv run ...` 직접 사용)
+- **🟢 Node.js (웹/모바일)**: `nvm install 20` / `nvm use 20` (`fnm` 초고속 엔진 기반)
 
 DB 인프라는 **Docker Named Volumes** 기반으로 OS 간 권한/성능 이슈 없이 동작합니다.
 

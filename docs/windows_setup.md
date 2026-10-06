@@ -43,33 +43,64 @@ Windows 환경에서는 **Windows 네이티브(PowerShell/CMD)** 와 **WSL2 (Ubu
 | **Docker Shim** | `%LOCALAPPDATA%\Programs\Git\cmd\docker.cmd` | WSL2 Docker 호출 래퍼 |
 | **Docker Compose** | `%LOCALAPPDATA%\Programs\Git\cmd\docker-compose.cmd` | WSL2 Docker Compose 호출 래퍼 |
 
-### 2-1. 버전 매니저 사용법 (Version Managers)
+### 2-1. 버전 매니저 설정 상세 및 사용법 (Version Management)
 
-#### ☕ Java 버전 변경 (`vfox`)
-모바일 React Native 빌드 시 Java 버전을 유연하게 교체할 수 있습니다:
-```cmd
-vfox search java                     # 설치 가능한 Java 버전 목록 조회
-vfox install java@17.0.2+8           # Java 17 LTS 설치 (현재 기본 설치됨)
-vfox install java@11.0.16+8          # 필요 시 Java 11 설치
-vfox use -g java@17.0.2+8            # 글로벌 기본 Java 17로 전환 (JAVA_HOME 자동 변경)
-java -version                        # 버전 확인
+모바일(React Native), 백엔드(FastAPI), 프론트엔드(React) 개발 시 라이브러리 간 호환성을 보장하기 위해 Java, Python, Node.js 버전 매니저가 각각 구성되어 있습니다.
+
+```
+[버전 매니저 체계]
+  ├─ Java   : vfox (VersionFox) ──> JAVA_HOME 자동 스위칭 (%USERPROFILE%\.vfox\sdks\java)
+  ├─ Python : Conda (Miniconda3) ──> 가상환경 격리 (%USERPROFILE%\miniconda3)
+  │           └─ (보조) uv       ──> backend/.venv 고속 패키지 동기화
+  └─ Node   : fnm (nvm 래퍼)     ──> Node.js 버전 전환 (%LOCALAPPDATA%\fnm_multishells)
 ```
 
-#### 🐍 Python 가상환경/버전 관리 (`conda`)
-```cmd
-conda create -n stock_app python=3.12   # 프로젝트용 Python 3.12 가상환경 생성
-conda activate stock_app                # 가상환경 활성화
-conda env list                          # 가상환경 목록 확인
-```
+#### ☕ Java 버전 관리 (`vfox`)
+Android 빌드 및 Gradle 도구는 환경변수 **`JAVA_HOME`** 을 기반으로 동작합니다. `vfox`는 버전을 전환할 때 레지스트리의 `JAVA_HOME`과 심볼릭 링크(`%USERPROFILE%\.vfox\sdks\java`)를 자동으로 갱신하므로, **Android Studio나 빌드 스크립트를 재설정할 필요가 없습니다.**
 
-#### 🟢 Node.js 버전 변경 (`nvm` / `fnm`)
-```cmd
-nvm install 20                       # Node.js 20 버전 설치
-nvm install 22                       # Node.js 22 버전 설치
-nvm use 20                           # Node.js 20으로 전환
-nvm list                             # 설치된 Node 목록 확인
-node -v                              # 현재 버전 확인
-```
+- **자주 쓰는 명령어**:
+  ```cmd
+  vfox search java                      # 설치 가능한 Java 버전 목록 조회
+  vfox install java@17.0.2+8            # Java 17 LTS 설치 (React Native / Expo SDK 57 표준)
+  vfox install java@11.0.16+8           # Java 11 LTS 설치 (구형 안드로이드 빌드용)
+  vfox install java@21.0.2+13           # Java 21 LTS 설치 (최신 도구용)
+  vfox use -g java@17.0.2+8             # 전역(Global) 기본 버전을 17로 지정 (JAVA_HOME 자동 변경)
+  vfox use -p java@17.0.2+8             # 현재 디렉터리(.tool-versions) 전용 버전 설정
+  vfox list java                        # 로컬에 설치된 Java 버전 목록 확인
+  java -version                         # 활성화된 Java 버전 확인
+  ```
+- **JAVA_HOME 확인**:
+  ```cmd
+  echo %JAVA_HOME%                      # C:\Users\<사용자>\.vfox\sdks\java 출력 확인
+  ```
+
+#### 🐍 Python 가상환경 및 버전 관리 (`conda`)
+`CLAUDE.md` 규칙에 정의된 백엔드 가상환경(`stock_app`)을 생성하고 관리할 수 있습니다.
+
+- **자주 쓰는 명령어**:
+  ```cmd
+  conda create -n stock_app python=3.12 -y   # 프로젝트 권장 Python 3.12 가상환경 생성
+  conda activate stock_app                 # stock_app 가상환경 활성화
+  conda deactivate                         # 가상환경 비활성화
+  conda env list                           # 설치된 가상환경 목록 확인
+  conda env remove -n <이름>                # 가상환경 삭제
+  ```
+- **Conda와 uv 연동**:
+  - `conda activate stock_app` 활성화 후 `backend/` 폴더에서 `uv sync`를 실행하면, Conda 가상환경과 완벽히 동기화되어 독립적인 패키지 관리가 가능합니다.
+
+#### 🟢 Node.js 버전 관리 (`nvm` / `fnm`)
+`nvm` 명령어가 고속 Rust 기반 엔진인 `fnm`으로 연결되어 있으며, `.nvmrc` 및 `.node-version` 파일을 지원합니다.
+
+- **자주 쓰는 명령어**:
+  ```cmd
+  nvm install 20                        # Node.js 20 LTS 버전 설치
+  nvm install 22                        # Node.js 22 LTS 버전 설치
+  nvm install 24                        # Node.js 24 LTS 버전 설치 (현재 기본)
+  nvm use 20                            # 현재 세션에서 Node 20으로 전환
+  nvm default 22                        # 전역 기본 버전을 Node 22로 지정
+  nvm list                              # 설치된 Node.js 버전 목록 확인
+  node -v                               # 현재 Node 버전 확인
+  ```
 
 ---
 
