@@ -35,10 +35,41 @@ Windows 환경에서는 **Windows 네이티브(PowerShell/CMD)** 와 **WSL2 (Ubu
 | 도구 | 설치 경로 / 방식 | 비고 |
 |---|---|---|
 | **Git** | `%LOCALAPPDATA%\Programs\Git\cmd` | MinGit 64-bit |
-| **uv** | `%LOCALAPPDATA%\Microsoft\WinGet\Packages\astral-sh.uv_*` | Python 3.12 자동 관리 |
-| **Node.js** | `%LOCALAPPDATA%\Microsoft\WinGet\Packages\OpenJS.NodeJS.LTS_*` | Node v24 LTS + npm 11 |
+| **Java 매니저 (vfox)** | `%LOCALAPPDATA%\Programs\Git\cmd\vfox.exe` | Java 다중 버전 관리 (`JAVA_HOME` 자동 관리) |
+| **Java (JDK 17 LTS)** | `%USERPROFILE%\.vfox\sdks\java` | OpenJDK 17 (React Native 표준) |
+| **Python 매니저 (Conda)** | `%USERPROFILE%\miniconda3\Scripts\conda.exe` | Miniconda 26.7.1 가상환경 관리 |
+| **Python 빌더 (uv)** | `%LOCALAPPDATA%\Microsoft\WinGet\Packages\astral-sh.uv_*` | 백엔드 가상환경/패키지 고속 동기화 |
+| **Node 매니저 (fnm / nvm)** | `%LOCALAPPDATA%\Programs\Git\cmd\fnm.exe`, `nvm.cmd` | Node.js 다중 버전 관리 (nvm 명령어 호환) |
 | **Docker Shim** | `%LOCALAPPDATA%\Programs\Git\cmd\docker.cmd` | WSL2 Docker 호출 래퍼 |
 | **Docker Compose** | `%LOCALAPPDATA%\Programs\Git\cmd\docker-compose.cmd` | WSL2 Docker Compose 호출 래퍼 |
+
+### 2-1. 버전 매니저 사용법 (Version Managers)
+
+#### ☕ Java 버전 변경 (`vfox`)
+모바일 React Native 빌드 시 Java 버전을 유연하게 교체할 수 있습니다:
+```cmd
+vfox search java                     # 설치 가능한 Java 버전 목록 조회
+vfox install java@17.0.2+8           # Java 17 LTS 설치 (현재 기본 설치됨)
+vfox install java@11.0.16+8          # 필요 시 Java 11 설치
+vfox use -g java@17.0.2+8            # 글로벌 기본 Java 17로 전환 (JAVA_HOME 자동 변경)
+java -version                        # 버전 확인
+```
+
+#### 🐍 Python 가상환경/버전 관리 (`conda`)
+```cmd
+conda create -n stock_app python=3.12   # 프로젝트용 Python 3.12 가상환경 생성
+conda activate stock_app                # 가상환경 활성화
+conda env list                          # 가상환경 목록 확인
+```
+
+#### 🟢 Node.js 버전 변경 (`nvm` / `fnm`)
+```cmd
+nvm install 20                       # Node.js 20 버전 설치
+nvm install 22                       # Node.js 22 버전 설치
+nvm use 20                           # Node.js 20으로 전환
+nvm list                             # 설치된 Node 목록 확인
+node -v                              # 현재 버전 확인
+```
 
 ---
 
