@@ -81,6 +81,15 @@
 - [ ] 블로그/스크리너/차트 화면 + 차트 드로잉 (현재 각 탭은 플레이스홀더)
 - [ ] 실제 FCM 푸시(현재 Mock 대체)
 
+### Phase 5 — 실시간 트레이딩 게임 (Trading Game) & 에듀테인먼트
+- [ ] **마스터 기획 완료** (`docs/trading_game_plan.md`)
+- [ ] 1달 1종목 고정 시즌제 & 가상 1,000만 원 지급
+- [ ] 한투 실시간 WebSocket 수집 데몬 (`H0STCNT0`) + Redis Pub/Sub 중계
+- [ ] 원클릭 즉시 체결 (BUY/SELL, 롱/숏, 1x~5x 레버리지, TP/SL 자동 청산)
+- [ ] Redis ZSET 기반 실시간 랭킹 (Top 100) & 말일 명예의 전당 아카이빙
+- [ ] 관리자 데일리 스마트 코치 (모닝 시황/지지·저항선 + 이브닝 마감 복기) via `admin_web`
+- [ ] 24시간 교육 모듈: 인게임 실시간 넛지, 듀오링고형 퀘스트, 야간 10초 차트 퀴즈
+
 ### 상시 백로그
 - [ ] 이중추세선 조작 방식 재정의(대기 중)
 - [ ] 테스트(pytest / Vitest / Playwright)
@@ -89,8 +98,10 @@
 ---
 
 ## 참고 문서
+- **트레이딩 게임 마스터 기획: `docs/trading_game_plan.md`**
 - 아키텍처: `docs/architecture_plan.md`
 - 스크리너 기획: `docs/screener_plan.md`
 - 기능별 프롬프트: `docs/prompts/`
 - AMS 참고 분석: `docs/ams-reference/`
 - 설계 스펙: `docs/superpowers/specs/`
+
