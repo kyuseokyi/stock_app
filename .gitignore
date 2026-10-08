@@ -37,3 +37,6 @@ redis_data/
 # ClickHouse 백업 산출물 / celery 로그
 backend/backups/
 backend/logs/
+
+# superpowers brainstorming (visual companion) 임시 산출물
+.superpowers/
