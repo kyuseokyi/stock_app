@@ -333,34 +333,37 @@ flowchart TD
 
 ## 7. 단계별 개발 로드맵 (Milestones)
 
+각 단계별 Claude Code 실행용 상세 프롬프트 지시서는 [`docs/prompts/trading_game/`](file:///Users/kyuseok/Documents/private/projects/ivyro/work_space/stock_app/docs/prompts/trading_game/00_master_guide.md)에 준비되어 있습니다.
+
 ```
-[Phase 1: 기획 확정 및 DB 스키마 마이그레이션]
+[Phase 1: 기획 확정 및 DB 스키마 마이그레이션] -> docs/prompts/trading_game/01_phase1_db_schema.md
   ├── 게임 테이블 모델링 (SQLAlchemy) & 마이그레이션 (Alembic)
   └── 기초 데이터 시딩 (시즌 1기 생성, 차트 퀴즈 20문항)
 
-[Phase 2: 한투 실시간 WebSocket 시세 수집기 구축]
+[Phase 2: 한투 실시간 WebSocket 시세 수집기 구축] -> docs/prompts/trading_game/02_phase2_kis_ws_collector.md
   ├── KIS 실시간 WebSocket Client (H0STCNT0 TR 연동)
   ├── 수집 데몬 프로세스 & 자동 재연결 로직 구현
   └── Redis Pub/Sub 채널 발행 검증
 
-[Phase 3: 가상 체결 엔진 및 클라이언트 중계 WS Gateway]
+[Phase 3: 가상 체결 엔진 및 클라이언트 중계 WS Gateway] -> docs/prompts/trading_game/03_phase3_order_engine_gateway.md
   ├── FastAPI WebSocket Gateway (클라이언트 시세 중계)
   ├── 원클릭 가상 주문/체결 (BUY/SELL) 및 자동 TP/SL 감시 엔진
   └── 실시간 PnL 계산 및 마진콜(강제청산) 처리
 
-[Phase 4: 실시간 랭킹 & 시즌 정산 시스템]
+[Phase 4: 실시간 랭킹 & 시즌 정산 시스템] -> docs/prompts/trading_game/04_phase4_ranking_season_settlement.md
   ├── Redis ZSET 기반 실시간 랭킹 (Top 100) 정산 API
   └── 시즌 마감 스케줄러 (Celery Beat) & 명예의 전당 적재
 
-[Phase 5: 교육 & 스마트 코치 모듈 + 관리자 웹(admin_web)]
+[Phase 5: 교육 & 스마트 코치 모듈 + 관리자 웹(admin_web)] -> docs/prompts/trading_game/05_phase5_coach_quest_admin.md
   ├── [admin_web] 관리자 스마트 코치 작성/발행 페이지 개발
   ├── 인-게임 실시간 상황별 코칭(Nudge) 룰 엔진
   ├── 단계별 퀘스트 로직 및 보상 처리
   └── 야간 10초 차트 퀴즈 API
 
-[Phase 6: 프론트엔드 UI 화면 구현 (web_client / mobile)]
+[Phase 6: 프론트엔드 UI 화면 구현 (web_client / mobile)] -> docs/prompts/trading_game/06_phase6_frontend_ui.md
   ├── 실시간 캔들 차트 & 원클릭 매수/매도 트레이딩 패널
   ├── 차트 위 관리자 지지선/저항선 오버레이 & 코칭 배너
   ├── 실시간 랭킹 & 명예의 전당 뷰
   └── 야간 퀴즈 모달 & 퀘스트 뷰
 ```
+
