@@ -7,7 +7,7 @@ type Props = {
   title: string;
   subtitle?: string;
   left?: ReactNode; // 아이콘/이모지
-  right?: ReactNode; // 값(없으면 chevron만)
+  right?: ReactNode; // 값 슬롯
   onPress?: () => void;
   disabled?: boolean; // "준비 중" 등 비활성
 };
@@ -22,10 +22,11 @@ function renderSlot(node: ReactNode, textStyle: StyleProp<TextStyle>): ReactNode
 /** 제목+보조문구 좌측, 값+chevron 우측. 높이 ≥56, 구분선 대신 여백. */
 export function ListRow({ title, subtitle, left, right, onPress, disabled = false }: Props) {
   const { theme } = useUnistyles();
-  const Wrapper = onPress && !disabled ? Pressable : View;
+  const pressable = Boolean(onPress) && !disabled;
+  const Wrapper = pressable ? Pressable : View;
   return (
     <Wrapper
-      onPress={onPress && !disabled ? onPress : undefined}
+      onPress={pressable ? onPress : undefined}
       style={[styles.row, disabled && styles.rowDisabled]}>
       {left != null ? <View style={styles.left}>{renderSlot(left, styles.leftText)}</View> : null}
       <View style={styles.center}>
@@ -34,7 +35,9 @@ export function ListRow({ title, subtitle, left, right, onPress, disabled = fals
       </View>
       <View style={styles.right}>
         {renderSlot(right, styles.rightText)}
-        <Ionicons name="chevron-forward" size={18} color={theme.colors.textSecondary} />
+        {pressable ? (
+          <Ionicons name="chevron-forward" size={18} color={theme.colors.textSecondary} />
+        ) : null}
       </View>
     </Wrapper>
   );
