@@ -4,33 +4,36 @@
  */
 import { StyleSheet } from 'react-native-unistyles';
 
-// 모든 테마가 공유하는 값(간격 헬퍼 등). gap(1)=8, gap(2)=16 ...
+// 모든 테마 공유값. gap(1)=8, gap(2)=16 ...
 const shared = {
   gap: (v: number) => v * 8,
+  radius: { chip: 999, button: 14, input: 12, card: 20 },
 };
 
 const lightTheme = {
   colors: {
     background: '#ffffff',
-    surface: '#f5f6f8',
-    border: '#e2e5ea',
-    text: '#0b0d12',
-    textSecondary: '#60646c',
-    primary: '#208aef',
-    up: '#e23f3f', // 상승 = 빨강 (국내 관례)
-    down: '#2f6bff', // 하락 = 파랑
+    surface: '#f2f4f6',
+    border: '#e5e8eb',
+    text: '#191f28',
+    textSecondary: '#8b95a1',
+    primary: '#3182f6', // 토스 블루
+    primarySoft: '#e8f1fe', // 연한 포인트 배경
+    up: '#f04452', // 상승/수익 = 빨강 (국내 관례)
+    down: '#3182f6', // 하락/손실 = 파랑
   },
   ...shared,
 };
 
 const darkTheme = {
   colors: {
-    background: '#0b0d12',
-    surface: '#16191f',
-    border: '#252a32',
-    text: '#f5f7fa',
+    background: '#17171c',
+    surface: '#202127',
+    border: '#2b2d33',
+    text: '#f4f6f8',
     textSecondary: '#9aa0aa',
-    primary: '#3c9bff',
+    primary: '#4a94f8',
+    primarySoft: '#1e2a3d',
     up: '#ff5b5b',
     down: '#5b8cff',
   },
