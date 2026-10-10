@@ -85,7 +85,7 @@ npm run dev        # http://localhost:3000
 > blog 서비스(8000)만 있으면 조회가 동작합니다. (`VITE_API_BASE_URL` 로 API 주소 오버라이드)
 
 ### 5. 모바일 앱 (Expo / React Native)
-Expo SDK 57 · React Native 0.86 · expo-router(하단 5탭: 홈/스크리너/블로그/관심종목/내정보) · **Unistyles v3**(테마 스타일링) · zustand.
+Expo SDK 57 · React Native 0.86 · expo-router(하단 4탭: 홈/블로그/게임/내정보 — 스크리너·관심종목 탭은 제거됨) · **Unistyles v3**(테마 스타일링) · zustand.
 > ⚠️ **Unistyles는 네이티브 코드라 Expo Go에서 실행되지 않습니다.** 반드시 **개발 빌드(dev build)** 로 실행하세요. 스타일 없이 UI 구조만 빠르게 볼 때는 웹(`npm run web`)이 가장 가볍습니다.
 ```bash
 cd mobile
@@ -116,6 +116,8 @@ npm run build:android:prod # 상용(app-bundle) / build:ios:prod
 - **홈 추천 글(큐레이션)**: 관리자 게시글 목록에서 ⭐ 토글로 "홈 추천"을 켜면(`blog_posts.featured_at`), 모바일 홈 탭에 최근에 켠 순으로 노출된다. API: `GET /api/v1/blogs?featured=true`.
 - **블로그(웹 클라이언트 동일 기능)**: 블로그 탭은 게시판(보드) 선택 + 페이지네이션(`GET /boards`, `GET /blogs?board_id=&page=`), 카드 탭 시 **글 상세**(`app/blog/[id].tsx`)로 이동해 본문 HTML을 **WebView**로 렌더(차트 base64 이미지 포함). 상세에서 **댓글 읽기/쓰기**(`GET/POST /blogs/{id}/comments`, 게시판 `comments_enabled` 게이팅).
 - **게스트 로그인**: 내정보 탭에서 닉네임만으로 로그인(`POST /auth/guest`), 토큰은 `expo-secure-store`에 저장, `src/lib/api`가 Bearer 자동 부착 + 401 시 정리(`src/features/auth`, `src/lib/api/auth-token.ts`). (실시간 새글 알림은 웹 SSE와 달리 모바일은 FCM 경로라 후속 과제)
+- **공통 UI**: 공유 컴포넌트는 `mobile/src/ui/`에 있으며 토스 디자인 언어(`docs/mobile_design_language.md`)를 따른다.
+- **테스트/검증**: 순수 로직 단위 테스트는 `cd mobile && npm test`(jest). 화면은 `npx tsc --noEmit`(+ 실기기 확인)로 검증한다. 이 프로젝트에는 eslint가 설정되어 있지 않아 모바일 lint 단계는 없다.
 - **검증(설정 레벨)**: `npx tsc --noEmit` · `npx expo-doctor` · `APP_ENV=production npx expo config --type public --json`
 
 ## 🔄 작업 재개(Resume) 가이드 & 환경 점검
