@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import type { ReactNode } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { Pressable, Text, View, type StyleProp, type TextStyle } from 'react-native';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
 type Props = {
@@ -12,6 +12,13 @@ type Props = {
   disabled?: boolean; // "준비 중" 등 비활성
 };
 
+function renderSlot(node: ReactNode, textStyle: StyleProp<TextStyle>): ReactNode {
+  if (typeof node === 'string' || typeof node === 'number') {
+    return <Text style={textStyle}>{node}</Text>;
+  }
+  return node;
+}
+
 /** 제목+보조문구 좌측, 값+chevron 우측. 높이 ≥56, 구분선 대신 여백. */
 export function ListRow({ title, subtitle, left, right, onPress, disabled = false }: Props) {
   const { theme } = useUnistyles();
@@ -20,13 +27,13 @@ export function ListRow({ title, subtitle, left, right, onPress, disabled = fals
     <Wrapper
       onPress={onPress && !disabled ? onPress : undefined}
       style={[styles.row, disabled && styles.rowDisabled]}>
-      {left ? <View style={styles.left}>{left}</View> : null}
+      {left != null ? <View style={styles.left}>{renderSlot(left, styles.leftText)}</View> : null}
       <View style={styles.center}>
         <Text style={styles.title}>{title}</Text>
         {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
       </View>
       <View style={styles.right}>
-        {right}
+        {renderSlot(right, styles.rightText)}
         <Ionicons name="chevron-forward" size={18} color={theme.colors.textSecondary} />
       </View>
     </Wrapper>
@@ -43,8 +50,10 @@ const styles = StyleSheet.create((theme) => ({
   },
   rowDisabled: { opacity: 0.4 },
   left: { width: 28, alignItems: 'center' },
+  leftText: { fontSize: 18 },
   center: { flex: 1, gap: 2 },
   title: { fontSize: 16, fontWeight: '600', color: theme.colors.text },
   subtitle: { fontSize: 13, color: theme.colors.textSecondary },
+  rightText: { fontSize: 15, color: theme.colors.textSecondary },
   right: { flexDirection: 'row', alignItems: 'center', gap: theme.gap(0.5) },
 }));
