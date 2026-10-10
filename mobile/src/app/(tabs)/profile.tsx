@@ -1,13 +1,14 @@
 import { useState } from 'react';
 import { ScrollView, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { StyleSheet } from 'react-native-unistyles';
+import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
 import { useAuthStore } from '@/features/auth/store';
-import { AmountText, Button, Card, ListRow } from '@/ui';
+import { Button, Card, ListRow } from '@/ui';
 
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
+  const { theme } = useUnistyles();
   const user = useAuthStore((s) => s.user);
   const login = useAuthStore((s) => s.login);
   const logout = useAuthStore((s) => s.logout);
@@ -42,13 +43,12 @@ export default function ProfileScreen() {
         <Text style={styles.screenTitle}>내정보</Text>
         <Card>
           <Text style={styles.nickname}>{user.nickname}</Text>
-          <Text style={styles.role}>FREE 등급</Text>
+          <Text style={styles.role}>{user.role} 등급</Text>
         </Card>
 
         <Card style={styles.rankCard}>
           <Text style={styles.rankLabel}>🏆 이번 시즌 내 순위</Text>
           <Text style={styles.rankHint}>시즌이 시작되면 순위가 표시돼요</Text>
-          <AmountText value={0} kind="pct" size={22} />
         </Card>
 
         <View style={styles.group}>
@@ -72,7 +72,7 @@ export default function ProfileScreen() {
       <TextInput
         style={styles.input}
         placeholder="닉네임"
-        placeholderTextColor="#8b95a1"
+        placeholderTextColor={theme.colors.textSecondary}
         value={nickname}
         onChangeText={setNickname}
         editable={!submitting}
