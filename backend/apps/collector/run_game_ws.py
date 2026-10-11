@@ -63,6 +63,20 @@ def _payload_from_parsed(tick: dict) -> dict:
     }
 
 
+async def _consume(use_mock, cfg, ticker, base_price, redis_url, publisher) -> None:
+    if use_mock:
+        async for tick in mock_ticks(ticker, base_price):
+            await publisher.publish(tick)
+    else:
+        client = KISWebSocketClient(cfg, ticker, redis_url)
+        async for raw in client.stream():
+            parsed = parse_message(raw)
+            if not parsed:
+                continue
+            for t in parsed:
+                await publisher.publish(_payload_from_parsed(t))
+
+
 async def run() -> None:
     ticker = await _active_season_ticker()
     if not ticker:
@@ -82,23 +96,22 @@ async def run() -> None:
     base_price = float(os.getenv("MOCK_BASE_PRICE", "71500"))
 
     log.info("수집 시작: ticker=%s mock=%s", ticker, use_mock)
+    consumer = asyncio.create_task(
+        _consume(use_mock, cfg, ticker, base_price, redis_url, publisher)
+    )
+    stopper = asyncio.create_task(stop.wait())
     try:
-        if use_mock:
-            async for tick in mock_ticks(ticker, base_price, stop):
-                await publisher.publish(tick)
-                if stop.is_set():
-                    break
-        else:
-            client = KISWebSocketClient(cfg, ticker, redis_url)
-            async for raw in client.stream():
-                if stop.is_set():
-                    break
-                parsed = parse_message(raw)
-                if not parsed:
-                    continue
-                for t in parsed:
-                    await publisher.publish(_payload_from_parsed(t))
+        await asyncio.wait({consumer, stopper}, return_when=asyncio.FIRST_COMPLETED)
     finally:
+        consumer.cancel()
+        stopper.cancel()
+        for t in (consumer, stopper):
+            try:
+                await t
+            except asyncio.CancelledError:
+                pass
+            except Exception:  # noqa: BLE001
+                log.exception("수집 태스크 예외")
         await publisher.close()
         log.info("수집 데몬 종료")
 

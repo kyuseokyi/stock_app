@@ -86,7 +86,6 @@ class KISWebSocketClient:
                 async with websockets.connect(self.cfg.ws_url, ping_interval=None) as ws:
                     await ws.send(_subscribe_frame(approval_key, self.ticker))
                     log.info("KIS WS 구독: %s", self.ticker)
-                    backoff = 1.0  # 성공 시 백오프 리셋
                     async for raw in ws:
                         if isinstance(raw, bytes):
                             raw = raw.decode("utf-8", "ignore")
@@ -104,8 +103,10 @@ class KISWebSocketClient:
                                 log.warning("KIS WS 구독 실패, approval_key 재발급: %s", raw[:200])
                                 await invalidate_approval_key(self.cfg, self.redis_url)
                                 raise RuntimeError("KIS subscribe failed; reissuing approval key")
-                            # rt_cd == "0" (구독 성공 ack) 등 → skip
+                            if rt_cd == "0":
+                                backoff = 1.0  # 구독 성공 확인 → 백오프 리셋
                             continue
+                        backoff = 1.0  # 첫 데이터 프레임(ack 미확인 대비)
                         yield raw
             except Exception as e:  # noqa: BLE001 — 재연결 목적의 광범위 포획
                 log.warning("KIS WS 끊김/오류: %s (재연결 %.0fs)", e, backoff)
