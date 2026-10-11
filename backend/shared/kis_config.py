@@ -17,6 +17,12 @@ _BASE_URLS = {
     "vps": "https://openapivts.koreainvestment.com:29443",  # 모의투자(sandbox)
 }
 
+# 모드별 실시간 WebSocket URL
+_WS_URLS = {
+    "prod": "ws://ops.koreainvestment.com:21000",   # 실서버
+    "vps": "ws://ops.koreainvestment.com:31000",    # 모의투자
+}
+
 
 @dataclass(frozen=True)
 class KISConfig:
@@ -28,6 +34,10 @@ class KISConfig:
     @property
     def base_url(self) -> str:
         return _BASE_URLS.get(self.mode, _BASE_URLS["vps"])
+
+    @property
+    def ws_url(self) -> str:
+        return _WS_URLS.get(self.mode, _WS_URLS["vps"])
 
     @property
     def is_sandbox(self) -> bool:
