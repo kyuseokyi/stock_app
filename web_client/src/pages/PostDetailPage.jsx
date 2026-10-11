@@ -135,7 +135,7 @@ export default function PostDetailPage() {
         ) : (
           <button
             onClick={() => setLoginOpen(true)}
-            className="mt-5 w-full rounded-field bg-surface px-4 py-3 text-center text-sm text-brand hover:bg-line"
+            className="mt-5 w-full rounded-field bg-white px-4 py-3 text-center text-sm text-brand hover:brightness-95"
           >
             로그인하고 댓글 작성하기
           </button>

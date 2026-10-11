@@ -19,7 +19,7 @@ export default function Button({
   return (
     <button
       disabled={disabled || loading}
-      className={`${base} ${variants[variant] ?? variants.primary}${full ? 'w-full' : ''} ${className}`}
+      className={`${base} ${variants[variant] ?? variants.primary} ${full ? 'w-full' : ''} ${className}`}
       {...props}
     >
       {loading && loadingText ? loadingText : children}
