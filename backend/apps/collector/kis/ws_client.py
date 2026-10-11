@@ -47,6 +47,16 @@ async def issue_approval_key(cfg: KISConfig, redis_url: str) -> str:
         await r.aclose()
 
 
+async def invalidate_approval_key(cfg: KISConfig, redis_url: str) -> None:
+    """캐시된 approval_key 삭제(무효 키 재사용 방지)."""
+    rkey = f"kis:approval:{cfg.mode}:{cfg.app_key[:10]}"
+    r = aioredis.from_url(redis_url, decode_responses=True)
+    try:
+        await r.delete(rkey)
+    finally:
+        await r.aclose()
+
+
 def _subscribe_frame(approval_key: str, ticker: str) -> str:
     return json.dumps(
         {
@@ -80,9 +90,21 @@ class KISWebSocketClient:
                     async for raw in ws:
                         if isinstance(raw, bytes):
                             raw = raw.decode("utf-8", "ignore")
-                        # PINGPONG 제어 프레임은 그대로 되돌려 pong
-                        if raw.startswith("{") and "PINGPONG" in raw:
-                            await ws.send(raw)
+                        if raw.startswith("{"):
+                            # 제어/응답 프레임(JSON): 소비자에게 넘기지 않는다.
+                            if "PINGPONG" in raw:
+                                await ws.send(raw)  # pong
+                                continue
+                            try:
+                                rt_cd = json.loads(raw).get("body", {}).get("rt_cd")
+                            except (ValueError, AttributeError):
+                                rt_cd = None
+                            if rt_cd is not None and rt_cd != "0":
+                                # 구독 실패(예: approval_key 무효) → 캐시 무효화 후 재연결(신규 키)
+                                log.warning("KIS WS 구독 실패, approval_key 재발급: %s", raw[:200])
+                                await invalidate_approval_key(self.cfg, self.redis_url)
+                                raise RuntimeError("KIS subscribe failed; reissuing approval key")
+                            # rt_cd == "0" (구독 성공 ack) 등 → skip
                             continue
                         yield raw
             except Exception as e:  # noqa: BLE001 — 재연결 목적의 광범위 포획
