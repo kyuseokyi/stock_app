@@ -36,13 +36,13 @@ export default function NotificationToaster() {
       {toasts.map((t) => (
         <div
           key={t.id}
-          className="pointer-events-auto flex items-start gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-lg"
+          className="pointer-events-auto flex items-start gap-3 rounded-card border border-line bg-white px-4 py-3 shadow-lg"
         >
           <span className="mt-0.5 text-lg">🔔</span>
-          <p className="flex-1 text-sm text-slate-700">{t.text}</p>
+          <p className="flex-1 text-sm text-ink">{t.text}</p>
           <button
             onClick={() => setToasts((prev) => prev.filter((x) => x.id !== t.id))}
-            className="shrink-0 text-slate-400 hover:text-slate-600"
+            className="shrink-0 text-ink-muted hover:text-ink"
             aria-label="닫기"
           >
             ✕

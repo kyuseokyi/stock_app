@@ -12,11 +12,11 @@ export default function HomePage() {
   return (
     <div className="py-16 text-center">
       {error ? (
-        <p className="text-sm text-red-500">{error}</p>
+        <p className="text-sm text-up">{error}</p>
       ) : !loaded ? (
-        <p className="text-slate-400">불러오는 중…</p>
+        <p className="text-ink-muted">불러오는 중…</p>
       ) : (
-        <p className="text-slate-400">표시할 게시판이 없습니다.</p>
+        <p className="text-ink-muted">표시할 게시판이 없습니다.</p>
       )}
     </div>
   )

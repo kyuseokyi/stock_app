@@ -37,16 +37,16 @@ export default function LoginModal({ open, onClose, onSuccess }) {
       onClick={onClose}
     >
       <div
-        className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-xl"
+        className="w-full max-w-sm rounded-card bg-white p-5 shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-1 flex items-center justify-between">
-          <h3 className="text-lg font-bold text-slate-900">로그인</h3>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600" aria-label="닫기">
+          <h3 className="text-lg font-bold text-ink">로그인</h3>
+          <button onClick={onClose} className="text-ink-muted hover:text-ink" aria-label="닫기">
             ✕
           </button>
         </div>
-        <p className="mb-4 text-xs text-slate-400">
+        <p className="mb-4 text-xs text-ink-muted">
           닉네임을 입력하면 바로 시작합니다. (소셜 로그인은 준비 중)
         </p>
         <form onSubmit={submit}>
@@ -56,13 +56,13 @@ export default function LoginModal({ open, onClose, onSuccess }) {
             onChange={(e) => setNickname(e.target.value)}
             maxLength={20}
             placeholder="닉네임 (예: 주린이)"
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none"
+            className="w-full rounded-field border border-line px-3 py-2 text-sm focus:border-brand focus:outline-none"
           />
-          {error && <p className="mt-2 text-sm text-red-500">{error}</p>}
+          {error && <p className="mt-2 text-sm text-up">{error}</p>}
           <button
             type="submit"
             disabled={loading}
-            className="mt-4 w-full rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+            className="mt-4 w-full rounded-btn bg-brand px-4 py-2.5 text-sm font-semibold text-white hover:brightness-95 disabled:opacity-50"
           >
             {loading ? '로그인 중…' : '닉네임으로 시작'}
           </button>
