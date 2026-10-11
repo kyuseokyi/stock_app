@@ -66,7 +66,7 @@ export default function PostDetailPage() {
         ← 목록으로
       </Link>
 
-      <Card className="mt-3 sm:p-6">
+      <Card as="article" className="mt-3 sm:p-6">
         {board && (
           <span className="mb-2 inline-block rounded-full bg-brand-soft px-2 py-0.5 text-xs text-brand">
             {board.name}
@@ -82,7 +82,7 @@ export default function PostDetailPage() {
         />
       </Card>
 
-      <Card className="mt-6 sm:p-6">
+      <Card as="section" className="mt-6 sm:p-6">
         <h2 className="mb-4 text-lg font-bold text-ink">
           댓글 <span className="text-brand">{comments.length}</span>
         </h2>
