@@ -60,11 +60,16 @@
 - `game_seasons`: `UniqueConstraint(season_number)` — 기수 중복 방지.
 - `hall_of_fame`: `UniqueConstraint(season_id, rank)` + `UniqueConstraint(season_id, user_id)` — 시즌 정산 재실행 시 중복 박제 방지.
 - `game_coach_messages`: `UniqueConstraint(season_id, target_date, coach_type)` — 슬롯당 1건(시드 멱등 로직의 전제).
-- ORM 관계는 `passive_deletes=True`로 DB의 `ON DELETE CASCADE`에 삭제를 위임(자식 NOT NULL 충돌 방지).
+- ORM 부모 관계는 `cascade="all, delete-orphan"` + `passive_deletes=True`로 DB의 `ON DELETE CASCADE`에
+  삭제를 위임(자식 NOT NULL 충돌 방지). ※ `passive_deletes=True`만으로는 **이미 로드된** 자식을 ORM이
+  `account_id=NULL`로 분리하려다 NOT NULL 위반이 나므로, `cascade="all, delete-orphan"`가 반드시 함께 필요.
 - CheckConstraint(side/leverage 범위 등)는 앱 계층 검증에 맡기고 이번 범위에서 제외(과설계 회피).
 
 ### 2.5 모델 파일 배치
-`backend/shared/game_models.py` 신규 파일 + `shared/models.py`에서 import.
+`backend/shared/game_models.py` 신규 파일. 모델은 `Base` 서브클래스 정의 시점에 `Base.metadata`에
+자동 등록되며, Alembic이 감지하도록 **`alembic/env.py`에서 `import shared.game_models`** 한다
+(`shared/models.py`는 수정하지 않는다 — 양방향 import 시 순환참조로 "partially initialized module"
+에러가 나므로, 의존은 game_models → models 단방향만 유지).
 (게임 모델은 미래 게임 서비스·수집 데몬·admin이 공유하므로 `shared/`가 적합. `apps/game`은 시기상조.)
 
 ---
@@ -190,8 +195,8 @@ WebSocket 수집 데몬의 위치/프로세스 형태는 Phase 2~3 설계에서 
 ## 5. 컨텍스트 & 의존성
 
 ### 5.1 Alembic
-`alembic/env.py`는 `target_metadata = Base.metadata`. 신규 모델을 `shared/models.py`가 import하면
-자동 감지된다. 기존 마이그레이션 5개가 head에 적용돼 있음.
+`alembic/env.py`는 `target_metadata = Base.metadata`. `env.py`에서 `import shared.game_models` 하면
+(게임 모델이 `Base.metadata`에 등록되어) 자동 감지된다. 기존 마이그레이션 5개가 head에 적용돼 있음.
 
 ### 5.2 테스트
 `pyproject.toml`에 `pytest`·`pytest-asyncio` + `[tool.pytest.ini_options]` 구성됨. 기존 백엔드
@@ -230,7 +235,7 @@ pytest-asyncio로 다음을 검증:
 ---
 
 ## 8. 검증 기준 (Definition of Done)
-- [ ] `game_models.py` 6 모델 정의 + `models.py` import
+- [ ] `game_models.py` 6 모델 정의 + `alembic/env.py`에서 `import shared.game_models` 등록
 - [ ] `alembic revision --autogenerate` 결과가 **신규 6테이블 create만** 포함(기존 테이블 alter/drop 없음) — 수동 검토
 - [ ] `alembic upgrade head` 성공, 롤백(`downgrade`) 스크립트도 유효
 - [ ] 시드 실행 → 시즌 1기 + 코치 1건, 재실행 멱등
