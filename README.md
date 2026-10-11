@@ -62,6 +62,12 @@ uv run celery -A apps.collector.celery_app beat   --loglevel=info   # 스케줄�
 uv run python -c "from apps.collector.tasks.universe import collect_all_daily; print(collect_all_daily(source='mst'))"
 # 종목 마스터 소스: STOCK_MASTER_SOURCE=mst(전종목·.mst) | fallback(대형주 20) | auto(기본: mst→실패시 fallback)
 # KIS 초당 호출 제한: KIS_RATE_PER_SEC(기본 8)
+
+# 트레이딩 게임 실시간 시세 수집 데몬 (Phase 2) — ACTIVE 시즌 종목 틱을 Redis stock:tick:{ticker} 로 발행
+# (Celery 아님. 단일 롱커넥션 상주 프로세스. ACTIVE 시즌이 있어야 함: python -m scripts.seed_trading_game)
+MOCK_TICK_STREAM=true uv run python -m apps.collector.run_game_ws   # Mock 모드(장외/키 없이 검증)
+# uv run python -m apps.collector.run_game_ws                       # 실 KIS WS(장중 09:00~15:30 + 키 필요)
+uv run python -m scripts.test_game_ws_sub                           # 다른 터미널: stock:tick:* 수신 확인
 ```
 > ⚠️ 관리자 웹 로그인은 **auth(8001)**, 게시판/글/댓글은 **blog(8000)** 을 사용합니다. 어드민을 테스트하려면 **두 서비스를 모두** 띄워야 합니다.
 
@@ -261,6 +267,8 @@ uv run pytest tests/test_universe_cooldown.py    # 특정 파일
 | `KIS_COOLDOWN_THRESHOLD` | collector | `5` | 연속 연결실패 몇 회에서 적응형 쿨다운 시작 |
 | `KIS_COOLDOWN_BASE_SEC` / `KIS_COOLDOWN_MAX_SEC` | collector | `60` / `600` | 쿨다운 시작·상한(초). 연속실패 지속 시 2배씩 에스컬레이트 |
 | `KIS_ACCOUNT_NO` | collector | (빈값) | 계좌번호(시세조회만이면 생략 가능) |
+| `MOCK_TICK_STREAM` | collector(게임 WS) | (빈값) | `true`면 실 KIS WS 대신 Mock 틱 생성(장외/키 없이 검증). 키 미설정 시 자동 Mock |
+| `MOCK_BASE_PRICE` | collector(게임 WS) | `71500` | Mock 틱 기준가(랜덤워크 시작가) |
 
 ## 🌍 환경 3단계 (local / develop / product)
 
