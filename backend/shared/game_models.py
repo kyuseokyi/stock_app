@@ -30,9 +30,15 @@ from sqlalchemy.types import CHAR, TypeDecorator
 
 from shared.models import Base, TimestampMixin
 
+INITIAL_CASH = Decimal("10000000")
+
 
 class GUID(TypeDecorator):
-    """DB 중립 UUID. PostgreSQL=native UUID, 그 외(sqlite)=CHAR(32) hex."""
+    """DB 중립 UUID. PostgreSQL=native UUID, 그 외(sqlite)=CHAR(32) hex.
+
+    sqlalchemy.Uuid 대신 커스텀 GUID TypeDecorator 를 의도적으로 유지한다
+    (계획에 따라 PG-UUID / CHAR(32) 매핑을 명시적으로 제어하기 위함).
+    """
 
     impl = CHAR
     cache_ok = True
@@ -63,6 +69,7 @@ class GameSeason(Base, TimestampMixin):
     """시즌 마스터. 종목 1개 고정. end_at NULL=무기한/미정."""
 
     __tablename__ = "game_seasons"
+    __table_args__ = (UniqueConstraint("season_number", name="uq_season_number"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     season_number: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -71,10 +78,10 @@ class GameSeason(Base, TimestampMixin):
     start_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     end_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     period_type: Mapped[str | None] = mapped_column(String(20), nullable=True)
-    initial_cash: Mapped[Decimal] = mapped_column(Numeric(15, 2), nullable=False, default=10000000)
+    initial_cash: Mapped[Decimal] = mapped_column(Numeric(15, 2), nullable=False, default=INITIAL_CASH)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="READY")
 
-    accounts: Mapped[list["GameAccount"]] = relationship(back_populates="season")
+    accounts: Mapped[list["GameAccount"]] = relationship(back_populates="season", passive_deletes=True)
 
 
 class GameAccount(Base, TimestampMixin):
@@ -87,21 +94,21 @@ class GameAccount(Base, TimestampMixin):
 
     id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid.uuid4)
     user_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("users.id", ondelete="CASCADE"), index=True, nullable=False
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False
     )
     season_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("game_seasons.id", ondelete="CASCADE"), index=True, nullable=False
     )
-    cash_balance: Mapped[Decimal] = mapped_column(Numeric(15, 2), nullable=False, default=10000000)
-    total_asset: Mapped[Decimal] = mapped_column(Numeric(15, 2), nullable=False, default=10000000)
-    current_roi: Mapped[Decimal] = mapped_column(Numeric(8, 4), nullable=False, default=0)
-    max_roi: Mapped[Decimal] = mapped_column(Numeric(8, 4), nullable=False, default=0)
+    cash_balance: Mapped[Decimal] = mapped_column(Numeric(15, 2), nullable=False, default=INITIAL_CASH)
+    total_asset: Mapped[Decimal] = mapped_column(Numeric(15, 2), nullable=False, default=INITIAL_CASH)
+    current_roi: Mapped[Decimal] = mapped_column(Numeric(8, 4), nullable=False, default=Decimal("0"))
+    max_roi: Mapped[Decimal] = mapped_column(Numeric(8, 4), nullable=False, default=Decimal("0"))
     total_trades: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     win_trades: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
     season: Mapped["GameSeason"] = relationship(back_populates="accounts")
-    positions: Mapped[list["GamePosition"]] = relationship(back_populates="account")
-    trades: Mapped[list["GameTrade"]] = relationship(back_populates="account")
+    positions: Mapped[list["GamePosition"]] = relationship(back_populates="account", passive_deletes=True)
+    trades: Mapped[list["GameTrade"]] = relationship(back_populates="account", passive_deletes=True)
 
 
 class GamePosition(Base, TimestampMixin):
@@ -151,14 +158,18 @@ class HallOfFame(Base):
     """시즌 최종 1~100위 박제."""
 
     __tablename__ = "hall_of_fame"
+    __table_args__ = (
+        UniqueConstraint("season_id", "rank", name="uq_hof_season_rank"),
+        UniqueConstraint("season_id", "user_id", name="uq_hof_season_user"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     season_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("game_seasons.id", ondelete="CASCADE"), index=True, nullable=False
     )
     rank: Mapped[int] = mapped_column(Integer, nullable=False)
-    user_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    user_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("users.id", ondelete="SET NULL"), index=True, nullable=True
     )
     user_nickname: Mapped[str] = mapped_column(String(50), nullable=False)
     final_roi: Mapped[Decimal] = mapped_column(Numeric(8, 4), nullable=False)
@@ -174,6 +185,9 @@ class GameCoachMessage(Base):
     """관리자 스마트 코치 브리핑(모닝/이브닝/인플레이) + 지지/저항선."""
 
     __tablename__ = "game_coach_messages"
+    __table_args__ = (
+        UniqueConstraint("season_id", "target_date", "coach_type", name="uq_coach_slot"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     season_id: Mapped[int] = mapped_column(

@@ -8,7 +8,8 @@ sqlite 에선 CHAR(32) 로 동작하므로 create_all 이 정상 수행된다.
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
+from decimal import Decimal
 
 import pytest
 from sqlalchemy import event
@@ -16,7 +17,14 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from shared.models import Base, User, UserRole
-from shared.game_models import GameSeason, GameAccount, GamePosition
+from shared.game_models import (
+    GameAccount,
+    GameCoachMessage,
+    GamePosition,
+    GameSeason,
+    GameTrade,
+    HallOfFame,
+)
 
 
 @pytest.fixture
@@ -90,6 +98,9 @@ async def test_position_open_links_account(session):
     await session.refresh(pos)
     assert isinstance(pos.id, uuid.UUID)
     assert pos.status == "OPEN"  # default
+    assert pos.account_id == acc.id
+    await session.refresh(acc, ["positions"])
+    assert pos.id in [p.id for p in acc.positions]
 
 
 async def test_account_fk_rejects_missing_user(session):
@@ -97,3 +108,110 @@ async def test_account_fk_rejects_missing_user(session):
     session.add(GameAccount(user_id=999999, season_id=s.id))
     with pytest.raises(IntegrityError):
         await session.commit()
+
+
+async def _make_account(session):
+    u = await _make_user(session)
+    s = await _make_season(session)
+    acc = GameAccount(user_id=u.id, season_id=s.id)
+    session.add(acc)
+    await session.commit()
+    await session.refresh(acc)
+    return u, s, acc
+
+
+async def test_trade_decimal_roundtrip(session):
+    _, _, acc = await _make_account(session)
+    t = GameTrade(
+        account_id=acc.id, side="LONG",
+        entry_price=Decimal("71000"), exit_price=Decimal("72000"),
+        pnl_amount=Decimal("140000"), roi_pct=Decimal("14.0000"),
+        closed_reason="MANUAL",
+    )
+    session.add(t)
+    await session.commit()
+    tid = t.id
+    session.expire_all()
+    got = await session.get(GameTrade, tid)
+    assert isinstance(got.entry_price, Decimal)
+    assert isinstance(got.roi_pct, Decimal)
+    assert got.entry_price == Decimal("71000")
+    assert got.exit_price == Decimal("72000")
+    assert got.pnl_amount == Decimal("140000")
+    assert got.roi_pct == Decimal("14.0000")
+
+
+async def test_hall_of_fame_and_coach_insert(session):
+    u = await _make_user(session)
+    s = await _make_season(session)
+    h = HallOfFame(
+        season_id=s.id, rank=1, user_id=u.id, user_nickname="플레이어",
+        final_roi=Decimal("25.5"), final_asset=Decimal("12550000"),
+        win_rate=Decimal("60.00"),
+    )
+    c = GameCoachMessage(
+        season_id=s.id, target_date=date(2026, 10, 2), coach_type="MORNING",
+        title="모닝 브리핑", summary_nudge="오늘은 관망", content_md="# 본문",
+        support_price=Decimal("70000"), resistance_price=Decimal("73000"),
+    )
+    session.add_all([h, c])
+    await session.commit()
+    await session.refresh(h)
+    await session.refresh(c)
+    assert h.id is not None
+    assert c.id is not None
+
+
+async def test_guid_roundtrip(session):
+    _, _, acc = await _make_account(session)
+    aid = acc.id
+    session.expire_all()
+    from sqlalchemy import select
+    got = (await session.execute(
+        select(GameAccount).where(GameAccount.id == aid)
+    )).scalar_one()
+    assert isinstance(got.id, uuid.UUID)
+    assert got.id == aid
+
+
+async def test_unique_season_number(session):
+    await _make_season(session, number=1)
+    with pytest.raises(IntegrityError):
+        await _make_season(session, number=1)
+    await session.rollback()
+
+
+async def test_unique_hall_of_fame_rank(session):
+    u1 = await _make_user(session, "a")
+    u2 = await _make_user(session, "b")
+    s = await _make_season(session)
+
+    def hof(u):
+        return HallOfFame(
+            season_id=s.id, rank=1, user_id=u.id, user_nickname="x",
+            final_roi=Decimal("1"), final_asset=Decimal("1"), win_rate=Decimal("1"),
+        )
+
+    session.add(hof(u1))
+    await session.commit()
+    session.add(hof(u2))
+    with pytest.raises(IntegrityError):
+        await session.commit()
+    await session.rollback()
+
+
+async def test_unique_coach_slot(session):
+    s = await _make_season(session)
+
+    def msg():
+        return GameCoachMessage(
+            season_id=s.id, target_date=date(2026, 10, 2), coach_type="MORNING",
+            title="t", summary_nudge="n", content_md="c",
+        )
+
+    session.add(msg())
+    await session.commit()
+    session.add(msg())
+    with pytest.raises(IntegrityError):
+        await session.commit()
+    await session.rollback()
