@@ -75,14 +75,17 @@ npm run dev        # http://localhost:5173
 ```
 
 ### 4. 일반 유저 웹 (web_client)
-일반 사용자(B2C)용 반응형 웹. 블로그/커뮤니티 조회 + SSE 실시간 알림 + **임시 로그인(닉네임)으로 댓글 작성**.
-> 임시 로그인은 auth 서비스의 `POST /api/v1/auth/guest`(닉네임→FREE 유저 발급)를 사용합니다. 카카오/구글 OAuth는 추후 동일 토큰 경로로 교체 예정. 댓글 작성 테스트에는 auth(8001)도 함께 띄워야 합니다.
+일반 사용자(B2C)용 반응형 웹. 블로그/커뮤니티 조회 + SSE 실시간 알림 + **임시 로그인(닉네임)으로 댓글 작성**. 디자인은 **토스(Toss) 라이트 스타일**(`docs/mobile_design_language.md`의 토큰을 Tailwind `theme.extend`로 이식 — brand `#3182f6` 등)로 모바일과 통일.
+> 헤더는 **2단 네비(커뮤니티·게임)**. 커뮤니티 섹션에서만 게시판 탭이 보이고, `/game`은 "시즌 준비 중" 스켈레톤(트레이딩 게임 백엔드 Phase 1~5 완성 후 실시간 화면으로 교체). 공통 UI는 `src/components/ui/`(Button·Card·Chip·EmptyState).
+> 임시 로그인은 auth 서비스의 `POST /api/v1/auth/guest`(닉네임→FREE 유저 발급)를 사용합니다. 카카오/구글 OAuth(간편로그인)는 추후 동일 토큰 경로로 교체 예정. 댓글 작성 테스트에는 auth(8001)도 함께 띄워야 합니다.
 ```bash
 cd web_client
 npm install
-npm run dev        # http://localhost:3000
+npm run dev                            # http://localhost:3000
+npm run build -- --mode development    # 빌드 검증(테스트 러너 없음 — 빌드 성공 + 육안)
 ```
 > blog 서비스(8000)만 있으면 조회가 동작합니다. (`VITE_API_BASE_URL` 로 API 주소 오버라이드)
+> `npm run build`(prod 모드)는 `VITE_API_BASE_URL`·`VITE_AUTH_BASE_URL` 누락 시 실패하므로, 로컬 검증은 `.env.development`를 로드하는 `-- --mode development`로 돌립니다.
 
 ### 5. 모바일 앱 (Expo / React Native)
 Expo SDK 57 · React Native 0.86 · expo-router(하단 4탭: 홈/블로그/게임/내정보 — 스크리너·관심종목 탭은 제거됨) · **Unistyles v3**(테마 스타일링) · zustand.
