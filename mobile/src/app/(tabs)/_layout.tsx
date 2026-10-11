@@ -24,13 +24,6 @@ export default function TabsLayout() {
         }}
       />
       <Tabs.Screen
-        name="screener"
-        options={{
-          title: '스크리너',
-          tabBarIcon: ({ color, size }) => <Ionicons name="filter-outline" color={color} size={size} />,
-        }}
-      />
-      <Tabs.Screen
         name="blog"
         options={{
           title: '블로그',
@@ -38,10 +31,12 @@ export default function TabsLayout() {
         }}
       />
       <Tabs.Screen
-        name="watchlist"
+        name="game"
         options={{
-          title: '관심종목',
-          tabBarIcon: ({ color, size }) => <Ionicons name="star-outline" color={color} size={size} />,
+          title: '게임',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="game-controller-outline" color={color} size={size} />
+          ),
         }}
       />
       <Tabs.Screen

@@ -37,8 +37,12 @@
     "zustand": "^5.0.15"
   },
   "devDependencies": {
+    "@react-native/jest-preset": "^0.86.2",
+    "@types/jest": "^30.0.0",
     "@types/react": "~19.2.2",
     "cross-env": "^10.1.0",
+    "jest": "^30.5.2",
+    "jest-expo": "^57.0.5",
     "typescript": "~6.0.3"
   },
   "scripts": {
@@ -67,7 +71,8 @@
     "build:android:prod": "eas build --platform android --profile production --local",
     "lint": "expo lint",
     "typecheck": "tsc --noEmit",
-    "reset-project": "node ./scripts/reset-project.js"
+    "reset-project": "node ./scripts/reset-project.js",
+    "test": "jest"
   },
   "private": true
 }

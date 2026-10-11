@@ -35,31 +35,31 @@ export default function PostListPage() {
 
   return (
     <div>
-      <h1 className="mb-5 text-xl font-bold text-slate-900">
+      <h1 className="mb-5 text-xl font-bold text-ink">
         {boardName(Number(boardId)) || '게시판'}
       </h1>
 
       {error && (
-        <p className="mb-4 rounded-lg bg-red-50 px-4 py-2 text-sm text-red-600">{error}</p>
+        <p className="mb-4 rounded-field bg-up/10 px-4 py-2 text-sm text-up">{error}</p>
       )}
 
       {loading ? (
-        <p className="py-10 text-center text-slate-400">불러오는 중…</p>
+        <p className="py-10 text-center text-ink-muted">불러오는 중…</p>
       ) : data.items.length === 0 ? (
-        <p className="py-10 text-center text-slate-400">아직 게시글이 없습니다.</p>
+        <p className="py-10 text-center text-ink-muted">아직 게시글이 없습니다.</p>
       ) : (
         <ul className="space-y-3">
           {data.items.map((p) => (
             <li key={p.id}>
               <Link
                 to={`/posts/${p.id}`}
-                className="block rounded-xl border border-slate-200 bg-white p-4 transition hover:border-indigo-300 hover:shadow-sm"
+                className="block rounded-card bg-surface p-4 transition hover:bg-line"
               >
-                <h2 className="font-semibold text-slate-900">{p.title}</h2>
-                <p className="mt-1 line-clamp-2 text-sm text-slate-500">
+                <h2 className="font-semibold text-ink">{p.title}</h2>
+                <p className="mt-1 line-clamp-2 text-sm text-ink-muted">
                   {toPreview(p.content)}
                 </p>
-                <p className="mt-2 text-xs text-slate-400">
+                <p className="mt-2 text-xs text-ink-muted">
                   {new Date(p.created_at).toLocaleDateString('ko-KR')} · 조회 {p.view_count}
                 </p>
               </Link>
@@ -69,11 +69,11 @@ export default function PostListPage() {
       )}
 
       {data.total > PAGE_SIZE && (
-        <div className="mt-6 flex items-center justify-center gap-3 text-sm text-slate-500">
+        <div className="mt-6 flex items-center justify-center gap-3 text-sm text-ink-muted">
           <button
             disabled={page <= 1}
             onClick={() => setPage((p) => p - 1)}
-            className="rounded-lg border border-slate-300 px-3 py-1 disabled:opacity-40"
+            className="rounded-field bg-surface px-3 py-1 disabled:opacity-40"
           >
             이전
           </button>
@@ -83,7 +83,7 @@ export default function PostListPage() {
           <button
             disabled={page >= totalPages}
             onClick={() => setPage((p) => p + 1)}
-            className="rounded-lg border border-slate-300 px-3 py-1 disabled:opacity-40"
+            className="rounded-field bg-surface px-3 py-1 disabled:opacity-40"
           >
             다음
           </button>

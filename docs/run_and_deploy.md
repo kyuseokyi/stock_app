@@ -15,7 +15,8 @@
 ## A. 로컬 개발 실행
 
 ### 0. 준비물
-Docker Desktop · **uv**(백엔드 파이썬) · Node 18+(프론트). 백엔드는 `uv`가 `backend/.venv`를 자동 관리하므로 **conda 불필요**(`uv run …`만 사용).
+Docker (또는 WSL2 Docker Engine) · **uv**(백엔드 파이썬) · Node 18+(프론트).
+- **버전 매니저 빠른 참조**: Java `vfox use -g java@17.0.2+8` · Python `conda activate stock_app` · Node `nvm use 20` (상세: [`windows_setup.md`](./windows_setup.md))
 
 ### 1. DB 선택 — 둘 중 하나
 | 방식 | 명령/설정 | 비고 |

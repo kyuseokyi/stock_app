@@ -22,7 +22,13 @@ docker-compose.dev.yml
 ## 🚀 로컬 개발 환경 셋업 (Windows & macOS 공통)
 
 > 💡 일상 실행·서버 배포 **빠른 참조**는 [`docs/run_and_deploy.md`](docs/run_and_deploy.md) 에 정리돼 있습니다(아래는 상세 설명).
-> 🪟 **Windows 사용자**: 상세 개발 환경 셋업(WSL2 Docker 연동, 배치 스크립트 등)은 [`docs/windows_setup.md`](docs/windows_setup.md) 를 참조하세요.
+> 🪟 **Windows 사용자**: 상세 개발 환경 셋업, 버전 관리자(`vfox`/`conda`/`nvm`), WSL2 Docker 연동은 [`docs/windows_setup.md`](docs/windows_setup.md) 를 참조하세요.
+
+### 0. 런타임 버전 관리 (Java / Python / Node)
+다중 프로젝트 및 모바일 빌드 호환성을 위해 각 언어별 버전 매니저가 제공됩니다:
+- **☕ Java (모바일 React Native 빌드)**: `vfox use -g java@17.0.2+8` (버전 전환 시 `JAVA_HOME` 자동 갱신)
+- **🐍 Python (백엔드)**: `conda activate stock_app` (또는 `uv run ...` 직접 사용)
+- **🟢 Node.js (웹/모바일)**: `nvm install 20` / `nvm use 20` (`fnm` 초고속 엔진 기반)
 
 DB 인프라는 **Docker Named Volumes** 기반으로 OS 간 권한/성능 이슈 없이 동작합니다.
 
@@ -56,6 +62,12 @@ uv run celery -A apps.collector.celery_app beat   --loglevel=info   # 스케줄�
 uv run python -c "from apps.collector.tasks.universe import collect_all_daily; print(collect_all_daily(source='mst'))"
 # 종목 마스터 소스: STOCK_MASTER_SOURCE=mst(전종목·.mst) | fallback(대형주 20) | auto(기본: mst→실패시 fallback)
 # KIS 초당 호출 제한: KIS_RATE_PER_SEC(기본 8)
+
+# 트레이딩 게임 실시간 시세 수집 데몬 (Phase 2) — ACTIVE 시즌 종목 틱을 Redis stock:tick:{ticker} 로 발행
+# (Celery 아님. 단일 롱커넥션 상주 프로세스. ACTIVE 시즌이 있어야 함: python -m scripts.seed_trading_game)
+MOCK_TICK_STREAM=true uv run python -m apps.collector.run_game_ws   # Mock 모드(장외/키 없이 검증)
+# uv run python -m apps.collector.run_game_ws                       # 실 KIS WS(장중 09:00~15:30 + 키 필요)
+uv run python -m scripts.test_game_ws_sub                           # 다른 터미널: stock:tick:* 수신 확인
 ```
 > ⚠️ 관리자 웹 로그인은 **auth(8001)**, 게시판/글/댓글은 **blog(8000)** 을 사용합니다. 어드민을 테스트하려면 **두 서비스를 모두** 띄워야 합니다.
 
@@ -69,17 +81,20 @@ npm run dev        # http://localhost:5173
 ```
 
 ### 4. 일반 유저 웹 (web_client)
-일반 사용자(B2C)용 반응형 웹. 블로그/커뮤니티 조회 + SSE 실시간 알림 + **임시 로그인(닉네임)으로 댓글 작성**.
-> 임시 로그인은 auth 서비스의 `POST /api/v1/auth/guest`(닉네임→FREE 유저 발급)를 사용합니다. 카카오/구글 OAuth는 추후 동일 토큰 경로로 교체 예정. 댓글 작성 테스트에는 auth(8001)도 함께 띄워야 합니다.
+일반 사용자(B2C)용 반응형 웹. 블로그/커뮤니티 조회 + SSE 실시간 알림 + **임시 로그인(닉네임)으로 댓글 작성**. 디자인은 **토스(Toss) 라이트 스타일**(`docs/mobile_design_language.md`의 토큰을 Tailwind `theme.extend`로 이식 — brand `#3182f6` 등)로 모바일과 통일.
+> 헤더는 **2단 네비(커뮤니티·게임)**. 커뮤니티 섹션에서만 게시판 탭이 보이고, `/game`은 "시즌 준비 중" 스켈레톤(트레이딩 게임 백엔드 Phase 1~5 완성 후 실시간 화면으로 교체). 공통 UI는 `src/components/ui/`(Button·Card·Chip·EmptyState).
+> 임시 로그인은 auth 서비스의 `POST /api/v1/auth/guest`(닉네임→FREE 유저 발급)를 사용합니다. 카카오/구글 OAuth(간편로그인)는 추후 동일 토큰 경로로 교체 예정. 댓글 작성 테스트에는 auth(8001)도 함께 띄워야 합니다.
 ```bash
 cd web_client
 npm install
-npm run dev        # http://localhost:3000
+npm run dev                            # http://localhost:3000
+npm run build -- --mode development    # 빌드 검증(테스트 러너 없음 — 빌드 성공 + 육안)
 ```
 > blog 서비스(8000)만 있으면 조회가 동작합니다. (`VITE_API_BASE_URL` 로 API 주소 오버라이드)
+> `npm run build`(prod 모드)는 `VITE_API_BASE_URL`·`VITE_AUTH_BASE_URL` 누락 시 실패하므로, 로컬 검증은 `.env.development`를 로드하는 `-- --mode development`로 돌립니다.
 
 ### 5. 모바일 앱 (Expo / React Native)
-Expo SDK 57 · React Native 0.86 · expo-router(하단 5탭: 홈/스크리너/블로그/관심종목/내정보) · **Unistyles v3**(테마 스타일링) · zustand.
+Expo SDK 57 · React Native 0.86 · expo-router(하단 4탭: 홈/블로그/게임/내정보 — 스크리너·관심종목 탭은 제거됨) · **Unistyles v3**(테마 스타일링) · zustand.
 > ⚠️ **Unistyles는 네이티브 코드라 Expo Go에서 실행되지 않습니다.** 반드시 **개발 빌드(dev build)** 로 실행하세요. 스타일 없이 UI 구조만 빠르게 볼 때는 웹(`npm run web`)이 가장 가볍습니다.
 ```bash
 cd mobile
@@ -110,6 +125,8 @@ npm run build:android:prod # 상용(app-bundle) / build:ios:prod
 - **홈 추천 글(큐레이션)**: 관리자 게시글 목록에서 ⭐ 토글로 "홈 추천"을 켜면(`blog_posts.featured_at`), 모바일 홈 탭에 최근에 켠 순으로 노출된다. API: `GET /api/v1/blogs?featured=true`.
 - **블로그(웹 클라이언트 동일 기능)**: 블로그 탭은 게시판(보드) 선택 + 페이지네이션(`GET /boards`, `GET /blogs?board_id=&page=`), 카드 탭 시 **글 상세**(`app/blog/[id].tsx`)로 이동해 본문 HTML을 **WebView**로 렌더(차트 base64 이미지 포함). 상세에서 **댓글 읽기/쓰기**(`GET/POST /blogs/{id}/comments`, 게시판 `comments_enabled` 게이팅).
 - **게스트 로그인**: 내정보 탭에서 닉네임만으로 로그인(`POST /auth/guest`), 토큰은 `expo-secure-store`에 저장, `src/lib/api`가 Bearer 자동 부착 + 401 시 정리(`src/features/auth`, `src/lib/api/auth-token.ts`). (실시간 새글 알림은 웹 SSE와 달리 모바일은 FCM 경로라 후속 과제)
+- **공통 UI**: 공유 컴포넌트는 `mobile/src/ui/`에 있으며 토스 디자인 언어(`docs/mobile_design_language.md`)를 따른다.
+- **테스트/검증**: 순수 로직 단위 테스트는 `cd mobile && npm test`(jest). 화면은 `npx tsc --noEmit`(+ 실기기 확인)로 검증한다. 이 프로젝트에는 eslint가 설정되어 있지 않아 모바일 lint 단계는 없다.
 - **검증(설정 레벨)**: `npx tsc --noEmit` · `npx expo-doctor` · `APP_ENV=production npx expo config --type public --json`
 
 ## 🔄 작업 재개(Resume) 가이드 & 환경 점검
@@ -250,6 +267,8 @@ uv run pytest tests/test_universe_cooldown.py    # 특정 파일
 | `KIS_COOLDOWN_THRESHOLD` | collector | `5` | 연속 연결실패 몇 회에서 적응형 쿨다운 시작 |
 | `KIS_COOLDOWN_BASE_SEC` / `KIS_COOLDOWN_MAX_SEC` | collector | `60` / `600` | 쿨다운 시작·상한(초). 연속실패 지속 시 2배씩 에스컬레이트 |
 | `KIS_ACCOUNT_NO` | collector | (빈값) | 계좌번호(시세조회만이면 생략 가능) |
+| `MOCK_TICK_STREAM` | collector(게임 WS) | (빈값) | `true`면 실 KIS WS 대신 Mock 틱 생성(장외/키 없이 검증). 키 미설정 시 자동 Mock |
+| `MOCK_BASE_PRICE` | collector(게임 WS) | `71500` | Mock 틱 기준가(랜덤워크 시작가) |
 
 ## 🌍 환경 3단계 (local / develop / product)
 

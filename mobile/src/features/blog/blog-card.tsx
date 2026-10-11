@@ -1,7 +1,8 @@
 import { useRouter } from 'expo-router';
-import { Pressable, Text, View } from 'react-native';
+import { Pressable, Text } from 'react-native';
 import { StyleSheet } from 'react-native-unistyles';
 
+import { Card } from '@/ui';
 import type { BlogPost } from './types';
 
 export function stripHtml(html: string): string {
@@ -21,49 +22,28 @@ export function fmtDate(iso: string): string {
 
 export function BlogCard({ post }: { post: BlogPost }) {
   const router = useRouter();
-
   return (
     <Pressable
-      style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
-      onPress={() => router.push(`/blog/${post.id}`)}>
-      <Text style={styles.cardTitle} numberOfLines={1}>
-        {post.title}
-      </Text>
-      <Text style={styles.cardSnippet} numberOfLines={2}>
-        {stripHtml(post.content)}
-      </Text>
-      <Text style={styles.cardMeta}>
-        조회 {post.viewCount} · {fmtDate(post.createdAt)}
-      </Text>
+      onPress={() => router.push(`/blog/${post.id}`)}
+      style={({ pressed }) => [pressed && styles.pressed]}>
+      <Card>
+        <Text style={styles.title} numberOfLines={1}>
+          {post.title}
+        </Text>
+        <Text style={styles.snippet} numberOfLines={2}>
+          {stripHtml(post.content)}
+        </Text>
+        <Text style={styles.meta}>
+          조회 {post.viewCount} · {fmtDate(post.createdAt)}
+        </Text>
+      </Card>
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create((theme) => ({
-  card: {
-    backgroundColor: theme.colors.surface,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    padding: theme.gap(2),
-    gap: theme.gap(0.5),
-  },
-  cardPressed: {
-    opacity: 0.7,
-  },
-  cardTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: theme.colors.text,
-  },
-  cardSnippet: {
-    fontSize: 13,
-    lineHeight: 18,
-    color: theme.colors.textSecondary,
-  },
-  cardMeta: {
-    marginTop: theme.gap(0.5),
-    fontSize: 12,
-    color: theme.colors.textSecondary,
-  },
+  pressed: { opacity: 0.7 },
+  title: { fontSize: 16, fontWeight: '700', color: theme.colors.text },
+  snippet: { fontSize: 13, lineHeight: 18, color: theme.colors.textSecondary },
+  meta: { marginTop: theme.gap(0.5), fontSize: 12, color: theme.colors.textSecondary },
 }));
