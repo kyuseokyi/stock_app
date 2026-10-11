@@ -81,7 +81,9 @@ class GameSeason(Base, TimestampMixin):
     initial_cash: Mapped[Decimal] = mapped_column(Numeric(15, 2), nullable=False, default=INITIAL_CASH)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="READY")
 
-    accounts: Mapped[list["GameAccount"]] = relationship(back_populates="season", passive_deletes=True)
+    accounts: Mapped[list["GameAccount"]] = relationship(
+        back_populates="season", cascade="all, delete-orphan", passive_deletes=True
+    )
 
 
 class GameAccount(Base, TimestampMixin):
@@ -107,8 +109,12 @@ class GameAccount(Base, TimestampMixin):
     win_trades: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
     season: Mapped["GameSeason"] = relationship(back_populates="accounts")
-    positions: Mapped[list["GamePosition"]] = relationship(back_populates="account", passive_deletes=True)
-    trades: Mapped[list["GameTrade"]] = relationship(back_populates="account", passive_deletes=True)
+    positions: Mapped[list["GamePosition"]] = relationship(
+        back_populates="account", cascade="all, delete-orphan", passive_deletes=True
+    )
+    trades: Mapped[list["GameTrade"]] = relationship(
+        back_populates="account", cascade="all, delete-orphan", passive_deletes=True
+    )
 
 
 class GamePosition(Base, TimestampMixin):

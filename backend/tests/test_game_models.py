@@ -12,7 +12,7 @@ from datetime import date, datetime, timezone
 from decimal import Decimal
 
 import pytest
-from sqlalchemy import event
+from sqlalchemy import event, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
@@ -166,7 +166,6 @@ async def test_guid_roundtrip(session):
     _, _, acc = await _make_account(session)
     aid = acc.id
     session.expire_all()
-    from sqlalchemy import select
     got = (await session.execute(
         select(GameAccount).where(GameAccount.id == aid)
     )).scalar_one()
@@ -215,3 +214,23 @@ async def test_unique_coach_slot(session):
     with pytest.raises(IntegrityError):
         await session.commit()
     await session.rollback()
+
+
+async def test_delete_account_cascades_positions(session):
+    u = await _make_user(session)
+    s = await _make_season(session)
+    acc = GameAccount(user_id=u.id, season_id=s.id)
+    session.add(acc)
+    await session.commit()
+    await session.refresh(acc)
+    pos = GamePosition(
+        account_id=acc.id, side="LONG", entry_price=71000, size_amount=1000000
+    )
+    session.add(pos)
+    await session.commit()
+    # load children, then delete parent — must NOT raise (cascade, not NULL-ing)
+    await session.refresh(acc, ["positions"])
+    await session.delete(acc)
+    await session.commit()
+    remaining = (await session.execute(select(GamePosition))).scalars().all()
+    assert remaining == []

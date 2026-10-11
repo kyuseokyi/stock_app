@@ -13,7 +13,7 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 
 from sqlalchemy import select
 
@@ -21,9 +21,12 @@ from shared.database import AsyncSessionLocal
 from shared.game_models import GameCoachMessage, GameSeason
 
 
+KST = timezone(timedelta(hours=9))
+
+
 def _month_start_09() -> datetime:
-    now = datetime.now(timezone.utc)
-    return datetime(now.year, now.month, 1, 9, 0, tzinfo=timezone.utc)
+    now = datetime.now(KST)
+    return datetime(now.year, now.month, 1, 9, 0, tzinfo=KST)
 
 
 async def seed() -> None:
