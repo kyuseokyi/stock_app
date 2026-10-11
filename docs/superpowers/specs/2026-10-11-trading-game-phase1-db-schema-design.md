@@ -53,6 +53,15 @@
 
 ### 2.4 금액은 고정소수(Decimal)
 모든 자본/손익/가격 컬럼은 `Numeric(…, 2~4)`. 부동소수 반올림 오차가 랭킹·PnL에 누적되는 것을 방지.
+시작 자본금은 `INITIAL_CASH = Decimal("10000000")` 상수로 한 곳에 정의하고 재사용(DRY).
+
+### 2.6 데이터 무결성 제약 (Task 1 코드리뷰 반영)
+스키마 확정 단계이므로 무결성 제약을 처음부터 건다(나중에 추가하면 또 마이그레이션 필요):
+- `game_seasons`: `UniqueConstraint(season_number)` — 기수 중복 방지.
+- `hall_of_fame`: `UniqueConstraint(season_id, rank)` + `UniqueConstraint(season_id, user_id)` — 시즌 정산 재실행 시 중복 박제 방지.
+- `game_coach_messages`: `UniqueConstraint(season_id, target_date, coach_type)` — 슬롯당 1건(시드 멱등 로직의 전제).
+- ORM 관계는 `passive_deletes=True`로 DB의 `ON DELETE CASCADE`에 삭제를 위임(자식 NOT NULL 충돌 방지).
+- CheckConstraint(side/leverage 범위 등)는 앱 계층 검증에 맡기고 이번 범위에서 제외(과설계 회피).
 
 ### 2.5 모델 파일 배치
 `backend/shared/game_models.py` 신규 파일 + `shared/models.py`에서 import.
@@ -77,12 +86,13 @@
 | initial_cash | Numeric(15,2) | NOT NULL, default 10000000.00 |
 | status | String(20) | NOT NULL, default 'READY' ('READY'/'ACTIVE'/'FINISHED') |
 | created_at, updated_at | — | TimestampMixin |
+| 제약 | — | `UniqueConstraint(season_number)` = `uq_season_number` |
 
 ### 3.2 `game_accounts` (유저 시즌별 가상 계좌)
 | 컬럼 | 타입 | 제약/기본 |
 |---|---|---|
 | id | UUID | PK, default uuid4 |
-| user_id | **Integer** | FK→users.id (ondelete CASCADE), index |
+| user_id | **Integer** | FK→users.id (ondelete CASCADE) — 별도 index 불필요(아래 UniqueConstraint의 선두 컬럼) |
 | season_id | Integer | FK→game_seasons.id (CASCADE), index |
 | cash_balance | Numeric(15,2) | default 10000000.00 |
 | total_asset | Numeric(15,2) | default 10000000.00 |
@@ -127,13 +137,14 @@
 | id | Integer | PK, autoincrement |
 | season_id | Integer | FK→game_seasons.id (CASCADE), index |
 | rank | Integer | NOT NULL (1~100) |
-| user_id | **Integer** | FK→users.id (CASCADE) |
-| user_nickname | String(50) | NOT NULL |
+| user_id | **Integer** | FK→users.id (**SET NULL**), **nullable**, index (영구 박제 — 유저 삭제돼도 기록 보존) |
+| user_nickname | String(50) | NOT NULL (비정규화, 유저 삭제 대비) |
 | final_roi | Numeric(8,4) | NOT NULL |
 | final_asset | Numeric(15,2) | NOT NULL |
 | win_rate | Numeric(5,2) | NOT NULL |
 | trading_mbti | String(50) | NULL (예 '냉철한 원칙주의자') |
 | created_at | DateTime(tz) | server_default now() |
+| 제약 | — | `UniqueConstraint(season_id, rank)` + `UniqueConstraint(season_id, user_id)` |
 
 ### 3.6 `game_coach_messages` (관리자 스마트 코치)
 | 컬럼 | 타입 | 제약/기본 |
@@ -149,6 +160,7 @@
 | resistance_price | Numeric(12,2) | NULL (추천 저항선) |
 | published_at | DateTime(tz) | server_default now() |
 | author_id | **Integer** | FK→users.id (**SET NULL**), NULL 허용 |
+| 제약 | — | `UniqueConstraint(season_id, target_date, coach_type)` = `uq_coach_slot` |
 
 ### 3.7 관계(Relationship) — 최소한만
 - `GameAccount.positions` ↔ `GamePosition.account`
