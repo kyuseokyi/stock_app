@@ -75,6 +75,9 @@ async def seed() -> None:
                     support_price=71000,
                     resistance_price=73500,
                     author_id=None,
+                    # Phase 5a: published_at 서버 기본값이 없어졌으므로 발행 상태·시각을 명시
+                    status="PUBLISHED",
+                    published_at=datetime.now(timezone.utc),
                 )
             )
             created_coach = True
