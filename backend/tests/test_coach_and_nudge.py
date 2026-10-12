@@ -191,3 +191,105 @@ def test_fetch_closes_excludes_today(monkeypatch):
             SimpleNamespace(date="2026-10-13", close=3.0)]  # 오늘 행은 제외되어야 함
     monkeypatch.setattr(clickhouse_source, "get_candles", lambda s, a, b: rows)
     assert rsi_service._fetch_closes_from_clickhouse("005930", date(2026, 10, 13)) == [1.0, 2.0]
+
+
+# ---------------------------------------------------------------- coach service
+from pydantic import ValidationError
+
+from apps.trading_game.schemas.game_dtos import CoachUpsertRequest
+from apps.trading_game.services import coach_service
+
+
+def _req(season_id, action="draft", **over):
+    kw = dict(
+        season_id=season_id, target_date=date(2026, 10, 13), coach_type="MORNING",
+        title="모닝 브리핑", summary_nudge="반도체 강세 출발", content_md="## 시황\n- 외국인 순매수",
+        support_price=Decimal("70000"), resistance_price=Decimal("75000"), action=action,
+    )
+    kw.update(over)
+    return CoachUpsertRequest(**kw)
+
+
+async def _seed_admin(db) -> User:
+    u = User(nickname="관리자", role=UserRole.ADMIN, is_active=True)
+    db.add(u)
+    await db.commit()
+    await db.refresh(u)
+    return u
+
+
+def test_upsert_request_rejects_support_not_below_resistance():
+    with pytest.raises(ValidationError):
+        _req(1, support_price=Decimal("75000"), resistance_price=Decimal("75000"))
+
+
+async def test_draft_then_publish_then_redraft_conflict(session):
+    season = await _seed_season(session)
+    admin = await _seed_admin(session)
+
+    draft = await coach_service.upsert_coach_message(session, req=_req(season.id), author_id=admin.id)
+    assert draft.status == "DRAFT" and draft.published_at is None
+
+    pub = await coach_service.upsert_coach_message(
+        session, req=_req(season.id, action="publish", title="수정 제목"), author_id=admin.id
+    )
+    assert pub.id == draft.id  # 같은 슬롯 → 덮어쓰기
+    assert pub.status == "PUBLISHED" and pub.published_at is not None
+    assert pub.title == "수정 제목"
+
+    with pytest.raises(coach_service.CoachError) as ei:
+        await coach_service.upsert_coach_message(session, req=_req(season.id), author_id=admin.id)
+    assert ei.value.code == "ALREADY_PUBLISHED"
+
+
+async def test_upsert_unknown_season(session):
+    admin = await _seed_admin(session)
+    with pytest.raises(coach_service.CoachError) as ei:
+        await coach_service.upsert_coach_message(session, req=_req(999), author_id=admin.id)
+    assert ei.value.code == "SEASON_NOT_FOUND"
+
+
+async def test_today_coach_only_published_and_both_slots(session):
+    season = await _seed_season(session)
+    admin = await _seed_admin(session)
+    today = date(2026, 10, 13)
+
+    assert await coach_service.today_coach(session, today) == (season.id, None, None)
+
+    await coach_service.upsert_coach_message(session, req=_req(season.id), author_id=admin.id)  # 초안
+    assert await coach_service.today_coach(session, today) == (season.id, None, None)
+
+    await coach_service.upsert_coach_message(session, req=_req(season.id, action="publish"), author_id=admin.id)
+    _, morning, evening = await coach_service.today_coach(session, today)
+    assert morning is not None and evening is None
+
+    await coach_service.upsert_coach_message(
+        session, req=_req(season.id, action="publish", coach_type="EVENING", title="이브닝"),
+        author_id=admin.id,
+    )
+    _, morning, evening = await coach_service.today_coach(session, today)
+    assert morning.coach_type == "MORNING" and evening.coach_type == "EVENING"
+
+
+async def test_today_coach_without_active_season(session):
+    await _seed_season(session, status="FINISHED")
+    assert await coach_service.today_coach(session, date(2026, 10, 13)) == (None, None, None)
+
+
+async def test_list_slot_messages_includes_drafts_and_push_payload(session):
+    season = await _seed_season(session)
+    admin = await _seed_admin(session)
+    await coach_service.upsert_coach_message(session, req=_req(season.id), author_id=admin.id)
+    rows = await coach_service.list_slot_messages(session, season.id, date(2026, 10, 13))
+    assert [r.status for r in rows] == ["DRAFT"]
+
+    payload = coach_service.coach_push_payload(rows[0])
+    assert payload["type"] == "coach"
+    assert payload["coach_type"] == "MORNING"
+    assert payload["target_date"] == "2026-10-13"
+    assert Decimal(payload["support_price"]) == Decimal("70000")
+    assert Decimal(payload["resistance_price"]) == Decimal("75000")
+
+
+def test_kst_today_is_date():
+    assert isinstance(coach_service.kst_today(), date)

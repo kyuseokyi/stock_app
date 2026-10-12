@@ -1,10 +1,11 @@
 """트레이딩 게임 REST/WS DTO."""
 from __future__ import annotations
 
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class OrderRequest(BaseModel):
@@ -36,3 +37,61 @@ class AccountResponse(BaseModel):
     current_roi: Decimal
     total_trades: int
     win_trades: int
+
+
+# ---------------------------------------------------------------- Phase 5a: coach
+CoachType = Literal["MORNING", "EVENING"]  # 모델의 IN_PLAY 는 5a 범위 밖
+
+
+class CoachUpsertRequest(BaseModel):
+    season_id: int
+    target_date: date
+    coach_type: CoachType
+    title: str = Field(min_length=1, max_length=100)
+    summary_nudge: str = Field(min_length=1, max_length=200)
+    support_price: Decimal | None = Field(default=None, gt=0)
+    resistance_price: Decimal | None = Field(default=None, gt=0)
+    content_md: str = Field(min_length=1)
+    action: Literal["draft", "publish"]
+
+    @model_validator(mode="after")
+    def _support_below_resistance(self) -> "CoachUpsertRequest":
+        if (
+            self.support_price is not None
+            and self.resistance_price is not None
+            and self.support_price >= self.resistance_price
+        ):
+            raise ValueError("지지선은 저항선보다 낮아야 합니다.")
+        return self
+
+
+class CoachMessageResponse(BaseModel):
+    id: int
+    season_id: int
+    target_date: date
+    coach_type: str
+    title: str
+    summary_nudge: str
+    content_md: str
+    support_price: Decimal | None
+    resistance_price: Decimal | None
+    status: str
+    published_at: datetime | None
+
+
+class CoachTodayResponse(BaseModel):
+    target_date: date
+    season_id: int | None
+    morning: CoachMessageResponse | None
+    evening: CoachMessageResponse | None
+    active: CoachMessageResponse | None
+
+
+class SeasonOption(BaseModel):
+    id: int
+    season_number: int
+    ticker: str
+    stock_name: str
+    status: str
+    start_at: datetime
+    end_at: datetime | None
