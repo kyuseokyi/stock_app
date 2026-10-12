@@ -4,7 +4,7 @@ import { getChartData, searchStocks } from '../api/stockClient'
 import { useChartDrawings } from '../hooks/useChartDrawings'
 import type { ECharts } from 'echarts'
 import type { CustomSeriesRenderItemAPI, CustomSeriesRenderItemParams } from 'echarts'
-import type { ChartData, Stock, VolumeProfileBin } from '../types/stock'
+import type { Candle, ChartData, MaOrder, Stock, VolumeProfileBin } from '../types/stock'
 import type {
   ChannelShape,
   DrawingTool,
@@ -13,6 +13,9 @@ import type {
   Shape,
   TextShape,
 } from '../hooks/useChartDrawings'
+
+/** 저장된(id 부여) 채널 도형 */
+type StoredChannel = ChannelShape & { id: string }
 
 /** 데이터 좌표 점 (xi=카테고리 인덱스, price=가격) */
 interface DataPoint {
@@ -159,7 +162,7 @@ const MARKET_BADGE: Record<string, string> = {
   INDEX: 'bg-emerald-50 text-emerald-600',
 }
 
-const MA_ORDER_BADGE: Record<string, { label: string; cls: string }> = {
+const MA_ORDER_BADGE: Record<MaOrder, { label: string; cls: string }> = {
   PERFECT: { label: '정배열', cls: 'bg-red-50 text-red-600' },
   REVERSE: { label: '역배열', cls: 'bg-blue-50 text-blue-600' },
   MIXED: { label: '혼조', cls: 'bg-slate-100 text-slate-500' },
@@ -239,7 +242,7 @@ function computeChannelLines(ch: ChannelCoords, dates: string[]) {
   }
 }
 
-function channelSeries(chart: ChartData, channels: (ChannelShape & { id: string })[], previewChannel: ChannelCoords | null) {
+function channelSeries(chart: ChartData, channels: (StoredChannel)[], previewChannel: ChannelCoords | null) {
   const dates = chart.candles.map((c) => c.date.slice(5))
   const all = previewChannel ? [...channels, previewChannel] : channels
   const out: ChannelLineSeries[] = []
@@ -273,7 +276,7 @@ function buildOption(chart: ChartData, shapes: Shape[] = [], preview: RectPrevie
   }))
   const bb = chart.bollinger
   const { markLine, markArea, markPoint } = buildMarks(chart, shapes, preview)
-  const channels = shapes.filter((s): s is ChannelShape & { id: string } => s.type === 'channel')
+  const channels = shapes.filter((s): s is StoredChannel => s.type === 'channel')
   const chSeries = channelSeries(chart, channels, channelPreview)
   // 편집 모드(도구 미선택): 3중추세선 제어점 P1·P2·P3 에 드래그 핸들(흰 원) 표시.
   const handleSeries =
@@ -441,11 +444,11 @@ export default function ChartSnapshotModal({ open, onClose, onInsert }: ChartSna
   toolRef.current = tool
   const dragStartRef = useRef<DataPoint | null>(null) // 사각형 드래그 시작점
   const chPtsRef = useRef<DataPoint[]>([]) // 채널 진행 점들(첫 선 2점)
-  const candlesRef = useRef<ChartData['candles']>([]) // 최신 캔들(스냅용) — handleChartReady 는 마운트 1회 바인딩이라 stale 클로저 방지
+  const candlesRef = useRef<Candle[]>([]) // 최신 캔들(스냅용) — handleChartReady 는 마운트 1회 바인딩이라 stale 클로저 방지
   candlesRef.current = chart?.candles ?? []
   const shapesRef = useRef<Shape[]>([]) // 최신 도형(편집 히트테스트용, stale 클로저 방지)
   shapesRef.current = shapes
-  const editDragRef = useRef<EditDragState | null>(null) // 편집 드래그 중인 제어점 { id, key:'p1'|'p2'|'p3' }
+  const editDragRef = useRef<EditDragState | null>(null) // 편집 드래그 중인 채널 선 (EditDragState)
   const suppressClickRef = useRef(false) // 핸들 드래그 직후의 click(그리기 추가) 억제
 
   // 그리는 중 ESC → 진행 중 드로잉 취소(모달은 유지)
@@ -549,7 +552,7 @@ export default function ChartSnapshotModal({ open, onClose, onInsert }: ChartSna
       const py = e.offsetY ?? e.zrY
       if (px == null || py == null) return null
       const cs = candlesRef.current
-      for (const ch of shapesRef.current.filter((s): s is ChannelShape & { id: string } => s.type === 'channel')) {
+      for (const ch of shapesRef.current.filter((s): s is StoredChannel => s.type === 'channel')) {
         const pts = [
           { key: 'UL', xi: ch.ux1, price: ch.uy1 },
           { key: 'UR', xi: ch.ux2, price: ch.uy2 },
@@ -610,7 +613,7 @@ export default function ChartSnapshotModal({ open, onClose, onInsert }: ChartSna
       const hit = hitTestHandle(e)
       if (hit) {
         const p = toData(e)
-        const sh = shapesRef.current.find((s) => s.id === hit.id) as (ChannelShape & { id: string }) | undefined // hit.id 는 hitTestHandle 이 channel 도형에서만 뽑은 id
+        const sh = shapesRef.current.find((s) => s.id === hit.id) as (StoredChannel) | undefined // hit.id 는 hitTestHandle 이 channel 도형에서만 뽑은 id
         if (p && sh) {
           const line = hit.key === 'UL' || hit.key === 'UR' ? 'upper' : 'lower'
           const s =
