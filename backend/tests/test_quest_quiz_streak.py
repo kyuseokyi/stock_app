@@ -907,3 +907,63 @@ async def test_router_quiz_disabled(api, maker, fake_redis):
     r = await client.get("/api/game/quiz/random")
     assert r.status_code == 503 and r.json()["detail"]["code"] == "FEATURE_DISABLED"
     assert (await client.post("/api/game/quiz/1/submit", json={"choice": "UP"})).status_code == 503
+
+
+# ---------------------------------------------------------------- quiz generator
+import random
+
+from scripts import generate_chart_quiz as gen
+
+
+def _candles(closes: list[float], start=date(2026, 1, 1)) -> list[dict]:
+    return [
+        {"date": (start + timedelta(days=i)).isoformat(), "open": c, "high": c, "low": c, "close": c, "volume": 100}
+        for i, c in enumerate(closes)
+    ]
+
+
+@pytest.mark.parametrize("closes, pattern", [
+    ([100.0] * 59 + [110.0], "골든크로스"),
+    ([100.0] * 59 + [90.0], "데드크로스"),
+    ([float(i) for i in range(1, 61)], "정배열"),
+    ([float(i) for i in range(60, 0, -1)], "역배열"),
+])
+def test_build_explanation_patterns(closes, pattern):
+    p, md = gen.build_explanation(closes)
+    assert p == pattern
+    assert "RSI(14)" in md and "5일선" in md
+
+
+def test_make_quiz_answer_window_and_filters():
+    closes = [100.0] * 60 + [100.0, 101.0, 102.0, 103.0, 103.0]  # 기준(idx59)=100 → 5봉 뒤 103 → +3%
+    c = _candles(closes)
+    q = gen.make_quiz("005930", c, 59)
+    assert q["answer"] == "UP" and q["actual_change"] == Decimal("3.00")
+    assert len(q["chart_snapshot"]) == 60 and q["chart_snapshot"][-1]["date"] == c[59]["date"]
+    assert q["base_date"] == date.fromisoformat(c[59]["date"])
+    flat = _candles([100.0] * 60 + [100.5] * 5)  # +0.5% → 애매 → 제외
+    assert gen.make_quiz("005930", flat, 59) is None
+    assert gen.make_quiz("005930", c, 58) is None  # 60봉 미만
+    assert gen.make_quiz("005930", c, 60) is None  # 이후 5봉 부족
+
+
+async def test_generate_inserts_and_is_idempotent(maker):
+    closes = [100.0 + (i % 7) * 3 for i in range(120)]  # 5봉 뒤 항상 2.5% 이상 차이
+    candles = _candles(closes)
+
+    def tickers():
+        return ["005930"]
+
+    def fetch(ticker):
+        return candles
+
+    created, skipped = await gen.generate(5, rng=random.Random(0), fetch_tickers=tickers,
+                                          fetch_candles=fetch, session_factory=maker)
+    assert created == 5 and skipped == 0
+    created2, skipped2 = await gen.generate(5, rng=random.Random(0), fetch_tickers=tickers,
+                                            fetch_candles=fetch, session_factory=maker)
+    assert created2 == 0 and skipped2 == 5
+    async with maker() as db:
+        rows = (await db.execute(select(ChartQuiz))).scalars().all()
+    assert len(rows) == 5
+    assert all(r.answer in ("UP", "DOWN") and abs(r.actual_change) >= Decimal("1") for r in rows)
