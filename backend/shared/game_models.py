@@ -14,15 +14,18 @@ from datetime import date, datetime
 from decimal import Decimal
 
 from sqlalchemy import (
+    Boolean,
     Date,
     DateTime,
     ForeignKey,
+    Index,
     Integer,
     Numeric,
     String,
     Text,
     UniqueConstraint,
     func,
+    text,
 )
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -133,6 +136,17 @@ class GamePosition(Base, TimestampMixin):
     stop_loss_price: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
     take_profit_price: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="OPEN")
+    entry_ratio: Mapped[Decimal] = mapped_column(Numeric(5, 4), nullable=False, default=Decimal("0"))
+
+    __table_args__ = (
+        Index(
+            "uq_account_single_open",
+            "account_id",
+            unique=True,
+            postgresql_where=text("status = 'OPEN'"),
+            sqlite_where=text("status = 'OPEN'"),
+        ),
+    )
 
     account: Mapped["GameAccount"] = relationship(back_populates="positions")
 
@@ -152,6 +166,11 @@ class GameTrade(Base):
     exit_price: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
     pnl_amount: Mapped[Decimal] = mapped_column(Numeric(15, 2), nullable=False)
     roi_pct: Mapped[Decimal] = mapped_column(Numeric(8, 4), nullable=False)
+    size_amount: Mapped[Decimal] = mapped_column(Numeric(15, 2), nullable=False, default=Decimal("0"))
+    leverage: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    entry_ratio: Mapped[Decimal] = mapped_column(Numeric(5, 4), nullable=False, default=Decimal("0"))
+    opened_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    had_stop_loss: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     closed_reason: Mapped[str] = mapped_column(String(20), nullable=False)
     closed_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False

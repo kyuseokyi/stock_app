@@ -5,9 +5,18 @@
 """
 from __future__ import annotations
 
+import uuid
+from datetime import datetime, timezone
 from decimal import Decimal
 
+import pytest
+from sqlalchemy import event, select
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
 from apps.trading_game.services import pricing
+from shared.models import Base, User, UserRole
+from shared.game_models import GameAccount, GamePosition, GameSeason, GameTrade, INITIAL_CASH
 
 
 def test_roi_long_no_leverage():
@@ -122,3 +131,65 @@ def test_roi_rejects_bad_side_and_zero_entry():
         pricing.compute_roi_pct("long", Decimal("100"), Decimal("110"), 1)
     with pytest.raises(ValueError):
         pricing.compute_roi_pct("LONG", Decimal("0"), Decimal("110"), 1)
+
+
+@pytest.fixture
+async def session():
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+
+    @event.listens_for(engine.sync_engine, "connect")
+    def _fk_on(dbapi_conn, _rec):
+        dbapi_conn.execute("PRAGMA foreign_keys=ON")
+
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    maker = async_sessionmaker(engine, expire_on_commit=False)
+    async with maker() as s:
+        yield s
+    await engine.dispose()
+
+
+async def _seed_account(session) -> GameAccount:
+    user = User(nickname="플레이어", role=UserRole.FREE, is_active=True)
+    season = GameSeason(
+        season_number=1, ticker="005930", stock_name="삼성전자",
+        start_at=datetime(2026, 10, 1, 9, 0, tzinfo=timezone.utc), status="ACTIVE",
+    )
+    session.add_all([user, season])
+    await session.commit()
+    await session.refresh(user)
+    await session.refresh(season)
+    acc = GameAccount(user_id=user.id, season_id=season.id)
+    session.add(acc)
+    await session.commit()
+    await session.refresh(acc)
+    return acc
+
+
+def _position(acc: GameAccount, **over) -> GamePosition:
+    kw = dict(
+        account_id=acc.id, side="LONG", entry_price=Decimal("100"),
+        size_amount=Decimal("1000000"), entry_ratio=Decimal("0.1"), leverage=1, status="OPEN",
+    )
+    kw.update(over)
+    return GamePosition(**kw)
+
+
+async def test_single_open_position_constraint(session):
+    acc = await _seed_account(session)
+    session.add(_position(acc))
+    await session.commit()
+    session.add(_position(acc))  # 두 번째 OPEN → 부분 유니크 위반
+    with pytest.raises(IntegrityError):
+        await session.commit()
+
+
+async def test_second_open_allowed_after_close(session):
+    acc = await _seed_account(session)
+    p1 = _position(acc)
+    session.add(p1)
+    await session.commit()
+    p1.status = "CLOSED"
+    await session.commit()
+    session.add(_position(acc))  # 이전 것이 CLOSED 라 허용
+    await session.commit()
