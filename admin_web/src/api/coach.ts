@@ -3,7 +3,7 @@ import { gameClient } from './client'
 import type { CoachMessage, CoachUpsertBody, SeasonOption } from '../types/game'
 
 // 데일리 코치 API (trading_game). gameClient 가 없으면(미설정 배포) 명확한 에러.
-function requireGameClient(): AxiosInstance {
+export function requireGameClient(): AxiosInstance {
   if (!gameClient) throw new Error('게임 서버(VITE_GAME_API_URL)가 설정되지 않았습니다.')
   return gameClient
 }

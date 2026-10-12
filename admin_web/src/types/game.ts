@@ -40,3 +40,12 @@ export interface SeasonOption {
   start_at: string
   end_at: string | null
 }
+
+// 기능 on/off (Phase 5b). 출처: game_dtos.FeatureFlagResponse
+export type FeatureFlagKey = 'QUIZ' | 'STREAK'
+
+export interface FeatureFlag {
+  key: FeatureFlagKey
+  enabled: boolean
+  updated_at: string | null
+}

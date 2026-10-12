@@ -22,7 +22,10 @@ const NAV_GROUPS: NavGroup[] = [
   },
   {
     title: '트레이딩 게임',
-    items: [{ to: '/game/coach', label: '데일리 코치', icon: '📣' }],
+    items: [
+      { to: '/game/coach', label: '데일리 코치', icon: '📣' },
+      { to: '/game/settings', label: '기능 설정', icon: '⚙️' },
+    ],
   },
   {
     title: '회원 관리',

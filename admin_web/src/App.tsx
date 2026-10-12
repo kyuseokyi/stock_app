@@ -9,6 +9,7 @@ import BlogDetailPage from './pages/BlogDetailPage'
 import MembersPage from './pages/MembersPage'
 import StatsPage from './pages/StatsPage'
 import TradingGameCoach from './pages/TradingGameCoach'
+import TradingGameSettings from './pages/TradingGameSettings'
 
 export default function App() {
   return (
@@ -31,6 +32,7 @@ export default function App() {
         <Route path="members" element={<MembersPage />} />
         <Route path="stats" element={<StatsPage />} />
         <Route path="game/coach" element={<TradingGameCoach />} />
+        <Route path="game/settings" element={<TradingGameSettings />} />
         <Route path="*" element={<Navigate to="/boards" replace />} />
       </Route>
     </Routes>
