@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from decimal import ROUND_HALF_UP, Decimal
 
-from sqlalchemy import update
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from shared.game_models import INITIAL_CASH, GameAccount
@@ -29,7 +29,11 @@ def principal_increment(amount: Decimal, current_roi_pct: Decimal) -> Decimal:
 
 async def grant_cash(db: AsyncSession, account: GameAccount, amount: Decimal) -> None:
     """현금·총자산 +amount, 원금 조정분 +amount/(1+r). commit 은 호출부 책임(수령 기록과 한 트랜잭션)."""
-    inc = principal_increment(amount, account.current_roi)
+    # 호출부가 들고 있는 ORM 객체는 다른 세션의 청산 등으로 오래된 값일 수 있어 DB 최신 ROI 를 직접 읽는다.
+    roi = await db.scalar(select(GameAccount.current_roi).where(GameAccount.id == account.id))
+    if roi is None:
+        roi = account.current_roi
+    inc = principal_increment(amount, roi)
     await db.execute(
         update(GameAccount)
         .where(GameAccount.id == account.id)

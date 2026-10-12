@@ -129,7 +129,8 @@ async def close_position(
     )
     # 집계 갱신(파이썬 Decimal — sqlite 정수나눗셈 함정 회피).
     # 단일 포지션 규칙상 청산 후 보유 포지션 0 → 총자산 = 현금.
-    acc = await db.get(GameAccount, pos.account_id)
+    # identity map 의 오래된 값으로 total_asset 을 덮어쓰지 않도록 DB 최신값 재적재
+    acc = await db.get(GameAccount, pos.account_id, populate_existing=True)
     acc.total_asset = acc.cash_balance
     base = reward_service.principal(acc)  # Phase 5b: 보상 원금 조정분 포함
     roi_acc = ((acc.cash_balance - base) / base * Decimal("100")).quantize(

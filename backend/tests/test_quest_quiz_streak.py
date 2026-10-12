@@ -8,7 +8,7 @@ from decimal import Decimal
 import httpx
 import pytest
 from fakeredis import aioredis as fake_aioredis
-from sqlalchemy import event, select
+from sqlalchemy import event, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
@@ -181,6 +181,52 @@ def test_principal_increment_formula_and_floor():
     assert reward_service.principal_increment(Decimal("500000"), Decimal("0")) == Decimal("500000.00")
     # ROI -100%(자산 0) → 1+r 하한 0.01
     assert reward_service.principal_increment(Decimal("100"), Decimal("-100")) == Decimal("10000.00")
+
+
+async def test_grant_cash_uses_db_current_roi_not_stale_object(maker):
+    async with maker() as a, maker() as b:
+        user = await _seed_user(a)
+        season = await _seed_season(a)
+        stale = await _seed_account(a, user, season, cash=Decimal("10500000"), roi=Decimal("5"))
+        # 다른 세션이 ROI -20 / 자산 8,000,000 으로 갱신(A 의 객체는 오래된 값 유지)
+        await b.execute(
+            update(GameAccount).where(GameAccount.id == stale.id).values(
+                current_roi=Decimal("-20"),
+                cash_balance=Decimal("8000000"),
+                total_asset=Decimal("8000000"),
+            )
+        )
+        await b.commit()
+        assert stale.current_roi == Decimal("5")
+
+        await reward_service.grant_cash(a, stale, Decimal("500000"))
+        await a.commit()
+
+    async with maker() as c:
+        fresh = await c.get(GameAccount, stale.id)
+        assert fresh.bonus_cash == Decimal("625000.00")  # 500000/0.8 (DB ROI -20 기준)
+
+
+async def test_close_position_keeps_concurrent_reward_in_total_asset(maker):
+    async with maker() as a, maker() as b:
+        user = await _seed_user(a)
+        season = await _seed_season(a)
+        acc = await _seed_account(a, user, season)
+        pos = await order_engine.open_position(
+            a, account=acc, side="LONG", ratio=Decimal("0.25"), leverage=1,
+            entry_price=Decimal("100"), sl_pct=None, tp_pct=None,
+        )
+        # 다른 세션이 보상 지급(+500000) 후 커밋 — A 의 acc 는 오래된 값
+        acc_b = await b.get(GameAccount, acc.id)
+        await reward_service.grant_cash(b, acc_b, Decimal("500000"))
+        await b.commit()
+
+        await order_engine.close_position(a, position_id=pos.id, exit_price=Decimal("100"), reason="MANUAL")
+
+    async with maker() as c:
+        fresh = await c.get(GameAccount, acc.id)
+        assert fresh.cash_balance > Decimal("10400000")
+        assert fresh.total_asset == fresh.cash_balance
 
 
 async def test_close_position_roi_uses_principal(session):
