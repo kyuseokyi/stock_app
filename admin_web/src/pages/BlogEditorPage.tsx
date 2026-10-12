@@ -64,7 +64,7 @@ export default function BlogEditorPage() {
         content: form.content,
       }
       if (isEdit) {
-        await updateBlog(id!, payload)
+        await updateBlog(id!, payload) // isEdit 분기 → id 존재
       } else {
         await createBlog(payload)
       }

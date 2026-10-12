@@ -21,7 +21,7 @@ export default function BlogDetailPage() {
 
   const loadComments = async () => {
     try {
-      setComments(await listComments(id!))
+      setComments(await listComments(id!)) // /blogs/:id 라우트 → id 존재
     } catch {
       setError('댓글을 불러오지 못했습니다.')
     }
@@ -51,7 +51,7 @@ export default function BlogDetailPage() {
     e.preventDefault()
     if (!newComment.trim()) return
     try {
-      await createComment(id!, newComment.trim())
+      await createComment(id!, newComment.trim()) // /blogs/:id 라우트 → id 존재
       setNewComment('')
       loadComments()
     } catch {

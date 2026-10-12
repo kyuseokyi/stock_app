@@ -613,7 +613,7 @@ export default function ChartSnapshotModal({ open, onClose, onInsert }: ChartSna
       const hit = hitTestHandle(e)
       if (hit) {
         const p = toData(e)
-        const sh = shapesRef.current.find((s) => s.id === hit.id) as (StoredChannel) | undefined // hit.id 는 hitTestHandle 이 channel 도형에서만 뽑은 id
+        const sh = shapesRef.current.find((s) => s.id === hit.id) as StoredChannel | undefined // hit.id 는 hitTestHandle 이 channel 도형에서만 뽑은 id
         if (p && sh) {
           const line = hit.key === 'UL' || hit.key === 'UR' ? 'upper' : 'lower'
           const s =
