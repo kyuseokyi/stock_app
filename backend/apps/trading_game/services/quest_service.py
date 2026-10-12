@@ -129,7 +129,7 @@ async def list_progress(
 
 async def claim(
     db: AsyncSession, user_id: int, code: str, *, now: datetime | None = None
-) -> tuple[UserQuestProgress, GameAccount | None]:
+) -> tuple[UserQuestProgress, GameAccount | None, UserBadge | None]:
     quest = QUEST_BY_CODE.get(code)
     if quest is None:
         raise QuestError("QUEST_NOT_FOUND", "존재하지 않는 퀘스트입니다.")
@@ -159,14 +159,20 @@ async def claim(
         .values(claimed_at=now)
     )
     if res.rowcount != 1:
-        await db.rollback()
+        # 0행 갱신 — 변경 없음, rollback 불필요(세션 객체 expire 방지)
         raise QuestError("ALREADY_CLAIMED", "이미 보상을 받았습니다.")
     if account is not None:
         await reward_service.grant_cash(db, account, quest.reward_cash)
-    if quest.reward_badge is not None and await db.get(UserBadge, (user_id, quest.reward_badge)) is None:
-        db.add(UserBadge(user_id=user_id, badge_code=quest.reward_badge, awarded_at=now))
+    badge = None
+    if quest.reward_badge is not None:
+        badge = await db.get(UserBadge, (user_id, quest.reward_badge))
+        if badge is None:
+            badge = UserBadge(user_id=user_id, badge_code=quest.reward_badge, awarded_at=now)
+            db.add(badge)
     await db.commit()
     await db.refresh(row)
     if account is not None:
         await db.refresh(account)
-    return row, account
+    if badge is not None:
+        await db.refresh(badge)
+    return row, account, badge

@@ -508,7 +508,7 @@ async def test_claim_cash_reward_once(session, closes_stub):
     assert e.value.code == "QUEST_NOT_COMPLETED"
 
     await _open(session, user, sl=Decimal("98"))
-    row, acc = await quest_service.claim(session, user.id, "Q1_STOP_LOSS")
+    row, acc, _ = await quest_service.claim(session, user.id, "Q1_STOP_LOSS")
     assert row.claimed_at is not None
     assert acc.season_id == season.id
     assert acc.cash_balance == Decimal("10500000")
@@ -517,6 +517,25 @@ async def test_claim_cash_reward_once(session, closes_stub):
     with pytest.raises(quest_service.QuestError) as e:
         await quest_service.claim(session, user.id, "Q1_STOP_LOSS")
     assert e.value.code == "ALREADY_CLAIMED"
+
+
+async def test_claim_double_claim_guard_with_stale_session(maker, closes_stub):
+    # 세션 A 의 identity map 에 claimed_at=None 이 남은 채로 B 가 먼저 수령 → A 는 조건부 UPDATE 가드로 차단
+    async with maker() as setup:
+        user = await _seed_user(setup)
+        await _seed_season(setup)
+        await _open(setup, user, sl=Decimal("98"))
+    async with maker() as a, maker() as b:
+        stale = await a.get(UserQuestProgress, (user.id, "Q1_STOP_LOSS"))
+        assert stale.claimed_at is None
+        await quest_service.claim(b, user.id, "Q1_STOP_LOSS")
+        assert stale.claimed_at is None  # A 의 메모리 객체는 오래된 값
+        with pytest.raises(quest_service.QuestError) as e:
+            await quest_service.claim(a, user.id, "Q1_STOP_LOSS")
+        assert e.value.code == "ALREADY_CLAIMED"
+    async with maker() as c:
+        acc = (await c.execute(select(GameAccount).where(GameAccount.user_id == user.id))).scalar_one()
+        assert acc.cash_balance == Decimal("10500000")  # 1회만 지급
 
 
 async def test_claim_without_active_season_keeps_unclaimed(session, closes_stub):
@@ -533,8 +552,9 @@ async def test_claim_badge_without_season(session, closes_stub):
     user = await _seed_user(session)
     for _ in range(3):
         await _open(session, user, ratio=0.25)
-    row, acc = await quest_service.claim(session, user.id, "Q3_SMALL_SIZE")
+    row, acc, badge = await quest_service.claim(session, user.id, "Q3_SMALL_SIZE")
     assert acc is None and row.claimed_at is not None
+    assert badge is not None and badge.badge_code == "PRINCIPLED"
     assert await session.get(UserBadge, (user.id, "PRINCIPLED")) is not None
 
 

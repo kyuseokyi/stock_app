@@ -54,12 +54,12 @@ async def claim_quest(
     db: AsyncSession = Depends(get_db),
 ):
     try:
-        row, account = await quest_service.claim(db, user.id, code)
+        row, account, badge = await quest_service.claim(db, user.id, code)
     except quest_service.QuestError as e:
         raise HTTPException(_ERROR_STATUS[e.code], detail={"code": e.code, "message": str(e)})
     quest = quest_service.QUEST_BY_CODE[code]
     return QuestClaimResponse(
         quest=_quest_dto(quest, row),
         cash_balance=account.cash_balance if account else None,
-        badge=_badge_dto(quest.reward_badge, row.claimed_at) if quest.reward_badge else None,
+        badge=_badge_dto(badge.badge_code, badge.awarded_at) if badge else None,
     )
