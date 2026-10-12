@@ -98,3 +98,87 @@ async def test_update_and_my_rank(redis):
     assert mine["total"] == 3
     none_rank = await ranking_service.my_rank(redis, 1, 999)
     assert none_rank["rank"] is None
+
+
+from sqlalchemy import event, select
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
+from shared.models import Base, User, UserRole
+from shared.game_models import (
+    GameAccount, GamePosition, GameSeason, HallOfFame, INITIAL_CASH,
+)
+from apps.trading_game.services import settlement
+
+
+@pytest.fixture
+async def db():
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+
+    @event.listens_for(engine.sync_engine, "connect")
+    def _fk(dbapi_conn, _):
+        dbapi_conn.execute("PRAGMA foreign_keys=ON")
+
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    maker = async_sessionmaker(engine, expire_on_commit=False)
+    async with maker() as s:
+        yield s
+    await engine.dispose()
+
+
+async def _seed_season_with_players(db, end_at):
+    season = GameSeason(
+        season_number=1, ticker="005930", stock_name="삼성전자",
+        start_at=datetime(2026, 10, 1, 9, 0, tzinfo=timezone.utc), end_at=end_at, status="ACTIVE",
+    )
+    db.add(season)
+    await db.commit()
+    await db.refresh(season)
+    for i in range(3):
+        u = User(nickname=f"p{i}", role=UserRole.FREE, is_active=True)
+        db.add(u)
+        await db.commit()
+        await db.refresh(u)
+        acc = GameAccount(user_id=u.id, season_id=season.id, cash_balance=Decimal("0"))
+        db.add(acc)
+        await db.commit()
+        await db.refresh(acc)
+        db.add(GamePosition(
+            account_id=acc.id, side="LONG", entry_price=Decimal("100"),
+            size_amount=INITIAL_CASH, entry_ratio=Decimal("1.0"), leverage=1, status="OPEN",
+        ))
+        await db.commit()
+    return season
+
+
+async def test_settlement_closes_archives_and_rolls_over(db):
+    past = datetime(2026, 9, 30, 11, 0, tzinfo=timezone.utc)
+    season = await _seed_season_with_players(db, end_at=past)
+    result = await settlement.settle_due_season(
+        db, redis=None, close_price_provider=lambda t: Decimal("110")
+    )
+    assert result is not None
+    opens = (await db.execute(select(GamePosition).where(GamePosition.status == "OPEN"))).scalars().all()
+    assert opens == []
+    hof = (await db.execute(select(HallOfFame).where(HallOfFame.season_id == season.id))).scalars().all()
+    assert len(hof) == 3
+    assert all(h.trading_mbti for h in hof)
+    await db.refresh(season)
+    assert season.status == "FINISHED"
+    nxt = (await db.execute(select(GameSeason).where(GameSeason.season_number == 2))).scalar_one()
+    assert nxt.status == "ACTIVE" and nxt.ticker == "005930"
+
+
+async def test_settlement_idempotent(db):
+    past = datetime(2026, 9, 30, 11, 0, tzinfo=timezone.utc)
+    await _seed_season_with_players(db, end_at=past)
+    await settlement.settle_due_season(db, None, lambda t: Decimal("110"))
+    second = await settlement.settle_due_season(db, None, lambda t: Decimal("110"))
+    assert second is None
+    seasons = (await db.execute(select(GameSeason))).scalars().all()
+    assert len(seasons) == 2
+
+
+async def test_settlement_skips_open_ended(db):
+    await _seed_season_with_players(db, end_at=None)
+    assert await settlement.settle_due_season(db, None, lambda t: Decimal("110")) is None
