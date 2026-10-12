@@ -72,7 +72,7 @@ MOCK_TICK_STREAM=true uv run python -m apps.collector.run_game_ws   # Mock 모�
 uv run python -m scripts.test_game_ws_sub                           # 다른 터미널: stock:tick:* 수신 확인
 ```
 
-#### 트레이딩 게임 서비스 (Port 8003, Phase 3·4·5a)
+#### 트레이딩 게임 서비스 (Port 8003, Phase 3·4·5a·5b)
 실시간 가상 주문/체결 엔진 + 클라이언트 WebSocket 게이트웨이 + 실시간 랭킹/시즌 정산. 원클릭 진입(LONG/SHORT·레버리지 1x/2x/5x·비중 25/50/100%) → 현재가 즉시 체결 → 틱마다 TP/SL/마진콜 자동청산, WS로 틱·개인손익·시장심리 push.
 ```bash
 # ⚠️ 반드시 단일 워커(인메모리 WS 레지스트리/틱 리스너) — lifespan 이 Redis stock:tick:* 구독
@@ -86,6 +86,13 @@ uv run uvicorn apps.trading_game.main:app --reload --port 8003 --workers 1
 - **시즌 정산(Phase 4)**: Celery beat `settle_trading_season` 매일 20:40 KST → 말일 도래 시 ClickHouse 당일 종가로 전액 강제청산 → 명예의 전당 박제(+Trading MBTI) → 시즌 FINISHED + 차기 시즌 자동 생성(멱등). worker+beat 가동 필요(`uv run celery -A apps.collector.celery_app worker/beat`).
 - **데일리 스마트 코치(Phase 5a)**: 관리자 `PUT /api/game/admin/coach-messages`(슬롯 upsert, `action=draft|publish` — 발행된 슬롯은 초안 저장 불가 409), `GET /api/game/admin/coach-messages?season_id&target_date`, `GET /api/game/admin/seasons`(ADMIN). 유저 `GET /api/game/coach/today`(KST 오늘·활성 시즌의 발행분, `active`=이브닝 우선). 발행 시 WS로 `{type:"coach", season_id, ...}` 전원 push(활성 시즌·오늘(KST) 브리핑일 때만).
 - **스마트 넛지(Phase 5a)**: `POST /api/game/orders`·`POST /api/game/positions/{id}/close` 응답에 `nudges[]`(WARNING 과열 추격 RSI≥80 LONG · ADVICE 100%+5x · PRAISE 손절/수동 ROI −3~−1%). 자동청산(STOP_LOSS)은 WS `{type:"nudge", position_id, nudge}`. 넛지는 best-effort(실패해도 주문·청산 정상). RSI는 Wilder(14) = ClickHouse 일봉(오늘 이전) + 현재가, 종가 캐시 `game:rsi:closes:{ticker}:{YYYYMMDD}`(26h). fan-out 큐 포화 시 오래된 항목부터 드롭되므로 WS 넛지도 유실될 수 있음(best-effort).
+- **Phase 5b API**: 유저 `GET /api/game/quests`, `POST /api/game/quests/{code}/claim`(Q1 손절·Q2 골든크로스·Q3' 주문 비중 선택지 25/50/100% 중 최소=25% 이하), `GET /api/game/academy/quiz`, `POST /api/game/academy/submit`, `GET /api/game/quiz/random`, `POST /api/game/quiz/{id}/submit`, `GET /api/game/streak/my`. 관리자 `GET /api/game/admin/feature-flags`, `PUT /api/game/admin/feature-flags/{key}`.
+- **5배 레버리지 잠금**: 아카데미 3문항 통과 전 5배 주문은 403 `LEVERAGE_LOCKED`. 이미 열린 5배 포지션은 영향 없음.
+- **보상과 랭킹**: 보상은 원금 조정분(`bonus_cash`)을 `b/(1+ROI)`만큼 함께 늘려 지급 직후 ROI 불변.
+- **야간 차트 퀴즈**: `GET /quiz/random`은 `id, chart_snapshot, time_limit_sec`만 반환(종목·날짜 숨김, 가격은 첫 종가=100으로 정규화해 정답 조회 방지). `POST /quiz/{id}/submit`에서 정답·`actual_change`·해설과 함께 `ticker, base_date` 공개. 보상은 KST 하루 최대 3회, 유저별 제출을 계정 행 락으로 직렬화해 동시 요청에도 상한 유지, 서버측 제한시간 10초+3초 유예.
+- **RSI·골든크로스 조회**: ClickHouse 조회는 각 2초 타임아웃, 타임아웃 시 60초 음성 캐시로 재대기 방지(best-effort).
+- **기능 플래그**: QUIZ·STREAK, admin_web "트레이딩 게임 > ⚙️ 기능 설정", Redis 30초 캐시(변경 시 즉시 무효화).
+- **퀴즈 생성**: `cd backend && uv run python -m scripts.generate_chart_quiz --count 50 [--seed N]` — 로컬/개발 DB 전용, 재실행 멱등. 종가 ≤ 0 이거나 일간 등락 ±30% 초과(미반영 분할 등) 구간은 제외하고, 캔들 없는 종목 수를 출력.
 - 에뮬레이터 검증 시: `adb reverse tcp:8003 tcp:8003` 추가.
 
 > ⚠️ 관리자 웹 로그인은 **auth(8001)**, 게시판/글/댓글은 **blog(8000)** 을 사용합니다. 어드민을 테스트하려면 **두 서비스를 모두** 띄워야 합니다.
