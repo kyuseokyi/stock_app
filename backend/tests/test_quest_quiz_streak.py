@@ -681,3 +681,50 @@ async def test_5x_locked_until_academy_passed(api, maker, order_env):
         await academy_service.submit(db, user.id, ALL_CORRECT)
     r = await client.post("/api/game/orders", json=_order(season.id, leverage=5))
     assert r.status_code == 201, r.text
+
+
+# ---------------------------------------------------------------- order hooks
+async def test_order_updates_quest_and_streak(api, maker, order_env):
+    client, set_user = api
+    async with maker() as db:
+        season = await _seed_season(db)
+        user = await _seed_user(db)
+    set_user(user)
+    r = await client.post("/api/game/orders", json=_order(season.id, ratio=0.25, stop_loss_pct=0.02))
+    assert r.status_code == 201, r.text
+    async with maker() as db:
+        q1 = await db.get(UserQuestProgress, (user.id, "Q1_STOP_LOSS"))
+        q3 = await db.get(UserQuestProgress, (user.id, "Q3_SMALL_SIZE"))
+        st = await db.get(UserStreak, user.id)
+    assert q1 is not None and q1.completed_at is not None
+    assert q3 is not None and q3.progress == 1
+    assert st is not None and st.current_streak == 1
+
+
+async def test_order_succeeds_when_hooks_fail(api, maker, order_env, monkeypatch):
+    client, set_user = api
+    async with maker() as db:
+        season = await _seed_season(db)
+        user = await _seed_user(db)
+    set_user(user)
+
+    async def boom(*a, **k):
+        raise RuntimeError("hook bug")
+
+    monkeypatch.setattr(orders_router.quest_service, "on_order_opened", boom)
+    monkeypatch.setattr(orders_router.streak_service, "touch", boom)
+    r = await client.post("/api/game/orders", json=_order(season.id, stop_loss_pct=0.02))
+    assert r.status_code == 201, r.text
+    assert r.json()["status"] == "OPEN" and r.json()["stop_loss_price"] is not None
+
+
+async def test_order_streak_off_not_recorded(api, maker, order_env, fake_redis):
+    client, set_user = api
+    async with maker() as db:
+        season = await _seed_season(db)
+        user = await _seed_user(db)
+        await feature_flag_service.set_flag(db, fake_redis, "STREAK", False)
+    set_user(user)
+    assert (await client.post("/api/game/orders", json=_order(season.id))).status_code == 201
+    async with maker() as db:
+        assert await db.get(UserStreak, user.id) is None

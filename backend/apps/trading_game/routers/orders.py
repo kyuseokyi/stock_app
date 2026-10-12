@@ -20,7 +20,8 @@ from apps.trading_game.schemas.game_dtos import (
     AccountResponse, NudgeDTO, OrderRequest, OrderResultResponse, PositionResponse,
 )
 from apps.trading_game.services import (
-    account_service, academy_service, market_clock, nudge_engine, order_engine, pricing, ranking_service, rsi_service,
+    account_service, academy_service, market_clock, nudge_engine, order_engine, pricing, quest_service,
+    ranking_service, rsi_service, streak_service,
 )
 
 router = APIRouter(prefix="/api/game", tags=["trading-game"])
@@ -109,6 +110,36 @@ def _close_nudges(closed_reason: str, roi_pct: Decimal | None) -> list[NudgeDTO]
         return []
 
 
+async def _after_open_hooks(
+    db: AsyncSession, redis, user_id: int, body: OrderRequest, ticker: str,
+    entry_price: Decimal, stop_loss_price: Decimal | None,
+) -> None:
+    """퀘스트·Streak 갱신 — best-effort(실패해도 체결 응답 유지).
+
+    응답 DTO 를 만든 '뒤'에 호출할 것: 실패 시 rollback 이 세션 객체를 expire 시킨다.
+    """
+    try:
+        await quest_service.on_order_opened(
+            db, redis, user_id, side=body.side, ratio=body.ratio,
+            stop_loss_price=stop_loss_price, ticker=ticker, entry_price=entry_price,
+        )
+    except Exception:
+        log.warning("퀘스트 갱신 실패(주문은 정상 체결) user=%s", user_id, exc_info=True)
+        await _safe_rollback(db)
+    try:
+        await streak_service.touch(db, redis, user_id)
+    except Exception:
+        log.warning("Streak 갱신 실패(주문은 정상 체결) user=%s", user_id, exc_info=True)
+        await _safe_rollback(db)
+
+
+async def _safe_rollback(db: AsyncSession) -> None:
+    try:
+        await db.rollback()
+    except Exception:
+        log.warning("훅 실패 후 rollback 실패", exc_info=True)
+
+
 @router.post("/orders", response_model=OrderResultResponse, status_code=status.HTTP_201_CREATED)
 async def open_order(
     body: OrderRequest,
@@ -148,6 +179,9 @@ async def open_order(
     pnl = pricing.compute_pnl(pos.size_amount, roi)
     dto = _position_dto(pos, roi, pnl)
     nudges = await _open_nudges(redis, season.ticker, body, entry_price)
+    await _after_open_hooks(
+        db, redis, user.id, body, season.ticker, entry_price, dto.stop_loss_price
+    )
     return OrderResultResponse(**dto.model_dump(), nudges=nudges)
 
 
