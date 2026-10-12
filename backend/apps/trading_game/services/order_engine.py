@@ -8,8 +8,8 @@ from sqlalchemy import update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from shared.game_models import INITIAL_CASH, GameAccount, GamePosition, GameTrade
-from apps.trading_game.services import pricing
+from shared.game_models import GameAccount, GamePosition, GameTrade
+from apps.trading_game.services import pricing, reward_service
 
 MIN_ORDER_AMOUNT = Decimal("100000")  # 최소 주문 10만 원
 
@@ -131,7 +131,8 @@ async def close_position(
     # 단일 포지션 규칙상 청산 후 보유 포지션 0 → 총자산 = 현금.
     acc = await db.get(GameAccount, pos.account_id)
     acc.total_asset = acc.cash_balance
-    roi_acc = ((acc.cash_balance - INITIAL_CASH) / INITIAL_CASH * Decimal("100")).quantize(
+    base = reward_service.principal(acc)  # Phase 5b: 보상 원금 조정분 포함
+    roi_acc = ((acc.cash_balance - base) / base * Decimal("100")).quantize(
         Decimal("0.0001"), rounding=ROUND_HALF_UP
     )
     acc.current_roi = roi_acc

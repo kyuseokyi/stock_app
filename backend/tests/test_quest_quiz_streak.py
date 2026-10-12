@@ -144,3 +144,78 @@ async def test_quiz_unique_ticker_base_date(session):
         ))
     with pytest.raises(IntegrityError):
         await session.commit()
+
+
+# ---------------------------------------------------------------- reward / principal
+from apps.trading_game.services import order_engine, reward_service, tick_listener
+
+
+def _realized_roi(acc: GameAccount) -> Decimal:
+    base = reward_service.principal(acc)
+    return ((acc.cash_balance - base) / base * Decimal("100")).quantize(Decimal("0.0001"))
+
+
+@pytest.mark.parametrize("cash, roi", [
+    (Decimal("10500000"), Decimal("5")),
+    (Decimal("8000000"), Decimal("-20")),
+    (Decimal("10000000"), Decimal("0")),
+])
+async def test_grant_cash_keeps_realized_roi(session, cash, roi):
+    user = await _seed_user(session)
+    season = await _seed_season(session)
+    acc = await _seed_account(session, user, season, cash=cash, roi=roi)
+    assert _realized_roi(acc) == roi
+
+    await reward_service.grant_cash(session, acc, Decimal("500000"))
+    await session.commit()
+    await session.refresh(acc)
+
+    assert acc.cash_balance == cash + Decimal("500000")
+    assert acc.total_asset == cash + Decimal("500000")
+    assert acc.current_roi == roi  # 저장 ROI 는 건드리지 않음
+    assert abs(_realized_roi(acc) - roi) <= Decimal("0.0001")
+
+
+def test_principal_increment_formula_and_floor():
+    assert reward_service.principal_increment(Decimal("500000"), Decimal("-20")) == Decimal("625000.00")
+    assert reward_service.principal_increment(Decimal("500000"), Decimal("0")) == Decimal("500000.00")
+    # ROI -100%(자산 0) → 1+r 하한 0.01
+    assert reward_service.principal_increment(Decimal("100"), Decimal("-100")) == Decimal("10000.00")
+
+
+async def test_close_position_roi_uses_principal(session):
+    user = await _seed_user(session)
+    season = await _seed_season(session)
+    acc = await _seed_account(session, user, season, cash=Decimal("11000000"))
+    acc.bonus_cash = Decimal("1000000")  # 원금 11,000,000
+    await session.commit()
+
+    pos = await order_engine.open_position(
+        session, account=acc, side="LONG", ratio=Decimal("0.25"), leverage=1,
+        entry_price=Decimal("100"), sl_pct=None, tp_pct=None,
+    )
+    await order_engine.close_position(session, position_id=pos.id, exit_price=Decimal("100"), reason="MANUAL")
+    await session.refresh(acc)
+    base = Decimal("11000000")
+    expected = ((acc.cash_balance - base) / base * Decimal("100")).quantize(Decimal("0.0001"))
+    assert acc.current_roi == expected
+    assert acc.current_roi < 0  # 수수료만큼 손실(INITIAL_CASH 기준이었다면 약 +10%)
+
+
+async def test_live_rank_roi_uses_principal(maker, monkeypatch):
+    redis = fake_aioredis.FakeRedis(decode_responses=True)
+    monkeypatch.setattr(tick_listener, "AsyncSessionLocal", maker)
+    monkeypatch.setattr(tick_listener.deps, "get_redis", lambda: redis)
+    async with maker() as db:
+        user = await _seed_user(db)
+        season = await _seed_season(db)
+        acc = await _seed_account(db, user, season, cash=Decimal("11000000"))
+        acc.bonus_cash = Decimal("1000000")
+        await db.commit()
+        await order_engine.open_position(
+            db, account=acc, side="LONG", ratio=Decimal("0.25"), leverage=1,
+            entry_price=Decimal("100"), sl_pct=None, tp_pct=None,
+        )
+    await tick_listener._push_personal_pnl("005930", Decimal("100"))
+    score = await redis.zscore(f"game:season:{season.id}:ranking", str(user.id))
+    assert score is not None and -1 < score < 0  # 원금 11M 기준(수수료만큼 소폭 음수)

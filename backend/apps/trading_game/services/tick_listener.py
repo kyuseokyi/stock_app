@@ -10,10 +10,10 @@ import redis.asyncio as aioredis
 from sqlalchemy import select
 
 from shared.database import AsyncSessionLocal
-from shared.game_models import INITIAL_CASH, GameAccount, GamePosition, GameSeason
+from shared.game_models import GameAccount, GamePosition, GameSeason
 from apps.trading_game import deps
 from apps.trading_game.services import (
-    account_service, liquidation_service, nudge_engine, pricing, ranking_service,
+    account_service, liquidation_service, nudge_engine, pricing, ranking_service, reward_service,
 )
 from apps.trading_game.services.connection_manager import manager
 
@@ -48,7 +48,7 @@ async def _push_personal_pnl(ticker: str, price: Decimal) -> None:
         for pos, acc in rows.all():
             roi = pricing.compute_roi_pct(pos.side, pos.entry_price, price, pos.leverage)
             pnl = pricing.compute_pnl(pos.size_amount, roi)
-            live = ranking_service.compute_live_roi(acc.cash_balance, pos, price, INITIAL_CASH)
+            live = ranking_service.compute_live_roi(acc.cash_balance, pos, price, reward_service.principal(acc))
             await ranking_service.update_rank(redis, acc.season_id, acc.user_id, live)
             if acc.user_id in connected:
                 await manager.send_to_user(acc.user_id, {
