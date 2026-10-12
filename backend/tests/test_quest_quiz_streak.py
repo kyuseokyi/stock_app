@@ -728,3 +728,133 @@ async def test_order_streak_off_not_recorded(api, maker, order_env, fake_redis):
     assert (await client.post("/api/game/orders", json=_order(season.id))).status_code == 201
     async with maker() as db:
         assert await db.get(UserStreak, user.id) is None
+
+
+# ---------------------------------------------------------------- chart quiz
+from apps.trading_game.services import quiz_service
+
+T0 = datetime(2026, 10, 13, 12, 0, tzinfo=timezone.utc)  # KST 21:00
+
+
+async def _seed_quizzes(db, n: int, answer: str = "UP") -> list[ChartQuiz]:
+    out = []
+    for i in range(n):
+        q = ChartQuiz(
+            ticker="005930", base_date=date(2026, 1, 1) + timedelta(days=i), pattern_type="정배열",
+            chart_snapshot=[{"date": "2026-01-01", "open": 1.0, "high": 1.0, "low": 1.0, "close": 1.0, "volume": 1}],
+            answer=answer, actual_change=Decimal("2.50"), explanation=f"해설{i}",
+        )
+        db.add(q)
+        out.append(q)
+    await db.commit()
+    return out
+
+
+async def test_serve_random_excludes_attempted_and_exhausts(session):
+    user = await _seed_user(session)
+    await _seed_quizzes(session, 2)
+    a = await quiz_service.serve_random(session, user.id, now=T0)
+    b = await quiz_service.serve_random(session, user.id, now=T0)
+    assert a.id != b.id
+    with pytest.raises(quiz_service.QuizError) as e:
+        await quiz_service.serve_random(session, user.id, now=T0)
+    assert e.value.code == "NO_QUIZ_AVAILABLE"
+
+
+async def test_submit_correct_rewards_and_rejects_resubmit(session):
+    user = await _seed_user(session)
+    await _seed_season(session)
+    q = (await _seed_quizzes(session, 1))[0]
+    await quiz_service.serve_random(session, user.id, now=T0)
+    res = await quiz_service.submit(session, user.id, q.id, "UP", now=T0 + timedelta(seconds=5))
+    assert res.correct is True and res.rewarded is True and res.timed_out is False
+    acc = (await session.execute(select(GameAccount).where(GameAccount.user_id == user.id))).scalar_one()
+    await session.refresh(acc)
+    assert acc.cash_balance == Decimal("10200000")
+    with pytest.raises(quiz_service.QuizError) as e:
+        await quiz_service.submit(session, user.id, q.id, "UP", now=T0 + timedelta(seconds=6))
+    assert e.value.code == "ALREADY_SUBMITTED"
+
+
+async def test_submit_not_served(session):
+    user = await _seed_user(session)
+    q = (await _seed_quizzes(session, 1))[0]
+    with pytest.raises(quiz_service.QuizError) as e:
+        await quiz_service.submit(session, user.id, q.id, "UP", now=T0)
+    assert e.value.code == "QUIZ_NOT_SERVED"
+
+
+@pytest.mark.parametrize("elapsed, timed_out", [(13, False), (13.5, True)])
+async def test_submit_time_limit(session, elapsed, timed_out):
+    user = await _seed_user(session)
+    await _seed_season(session)
+    q = (await _seed_quizzes(session, 1))[0]
+    await quiz_service.serve_random(session, user.id, now=T0)
+    res = await quiz_service.submit(session, user.id, q.id, "UP", now=T0 + timedelta(seconds=elapsed))
+    assert res.timed_out is timed_out
+    assert res.correct is (not timed_out)
+    assert res.rewarded is (not timed_out)
+
+
+async def test_submit_wrong_no_reward(session):
+    user = await _seed_user(session)
+    await _seed_season(session)
+    q = (await _seed_quizzes(session, 1))[0]
+    await quiz_service.serve_random(session, user.id, now=T0)
+    res = await quiz_service.submit(session, user.id, q.id, "DOWN", now=T0 + timedelta(seconds=3))
+    assert res.correct is False and res.rewarded is False
+
+
+async def test_daily_reward_limit_three(session):
+    user = await _seed_user(session)
+    await _seed_season(session)
+    await _seed_quizzes(session, 5)
+    rewarded = []
+    for _ in range(4):
+        q = await quiz_service.serve_random(session, user.id, now=T0)
+        res = await quiz_service.submit(session, user.id, q.id, "UP", now=T0 + timedelta(seconds=2))
+        rewarded.append(res.rewarded)
+    assert rewarded == [True, True, True, False]
+    # 다음 날(KST)에는 다시 보상
+    t1 = T0 + timedelta(days=1)
+    q = await quiz_service.serve_random(session, user.id, now=t1)
+    assert (await quiz_service.submit(session, user.id, q.id, "UP", now=t1 + timedelta(seconds=2))).rewarded is True
+
+
+async def test_router_quiz_flow(api, maker, fake_redis):
+    client, set_user = api
+    async with maker() as db:
+        user = await _seed_user(db)
+        await _seed_season(db)
+        await _seed_quizzes(db, 1)
+    set_user(user)
+    r = await client.get("/api/game/quiz/random")
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert set(data) == {"id", "ticker", "chart_snapshot", "time_limit_sec"}
+    assert data["time_limit_sec"] == 10
+
+    r = await client.post(f"/api/game/quiz/{data['id']}/submit", json={"choice": "UP"})
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["correct"] is True and body["answer"] == "UP" and body["rewarded"] is True
+    assert body["explanation"] == "해설0" and body["streak"]["current_streak"] == 1
+
+    r = await client.post(f"/api/game/quiz/{data['id']}/submit", json={"choice": "UP"})
+    assert r.status_code == 409 and r.json()["detail"]["code"] == "ALREADY_SUBMITTED"
+    r = await client.get("/api/game/quiz/random")
+    assert r.status_code == 404 and r.json()["detail"]["code"] == "NO_QUIZ_AVAILABLE"
+    assert (await client.post("/api/game/quiz/999/submit", json={"choice": "UP"})).status_code == 409
+    assert (await client.post(f"/api/game/quiz/{data['id']}/submit", json={"choice": "SIDE"})).status_code == 422
+
+
+async def test_router_quiz_disabled(api, maker, fake_redis):
+    client, set_user = api
+    async with maker() as db:
+        user = await _seed_user(db)
+        await _seed_quizzes(db, 1)
+        await feature_flag_service.set_flag(db, fake_redis, "QUIZ", False)
+    set_user(user)
+    r = await client.get("/api/game/quiz/random")
+    assert r.status_code == 503 and r.json()["detail"]["code"] == "FEATURE_DISABLED"
+    assert (await client.post("/api/game/quiz/1/submit", json={"choice": "UP"})).status_code == 503

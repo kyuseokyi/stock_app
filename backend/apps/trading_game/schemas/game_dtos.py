@@ -180,3 +180,26 @@ class AcademyResultItem(BaseModel):
 class AcademySubmitResponse(BaseModel):
     unlocked: bool
     results: list[AcademyResultItem]
+
+
+class QuizQuestionResponse(BaseModel):
+    id: int
+    ticker: str
+    chart_snapshot: list[dict]
+    time_limit_sec: int
+
+
+class QuizSubmitRequest(BaseModel):
+    choice: Literal["UP", "DOWN"]
+
+
+class QuizSubmitResponse(BaseModel):
+    correct: bool
+    answer: str
+    actual_change: Decimal
+    pattern_type: str
+    explanation: str
+    rewarded: bool
+    reward_cash: int
+    timed_out: bool
+    streak: StreakResponse | None
