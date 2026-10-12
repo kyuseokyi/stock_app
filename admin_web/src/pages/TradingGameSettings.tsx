@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import type { AxiosError } from 'axios'
 import { GAME_API_URL } from '../config'
 import { listFeatureFlags, updateFeatureFlag } from '../api/featureFlags'
@@ -32,12 +32,23 @@ function SettingsPanel() {
   const [loading, setLoading] = useState(true)
   const [pending, setPending] = useState<FeatureFlagKey | null>(null)
 
-  useEffect(() => {
+  const [loadFailed, setLoadFailed] = useState(false)
+
+  const load = useCallback(() => {
+    setLoading(true)
+    setLoadFailed(false)
     listFeatureFlags()
-      .then(setFlags)
-      .catch((e: unknown) => showToast(errorMessage(e), { icon: '⚠️' }))
+      .then((rows) => setFlags(rows.filter((f): f is FeatureFlag => f.key in FLAG_META)))
+      .catch((e: unknown) => {
+        setLoadFailed(true)
+        showToast(errorMessage(e), { icon: '⚠️' })
+      })
       .finally(() => setLoading(false))
   }, [])
+
+  useEffect(() => {
+    load()
+  }, [load])
 
   const toggle = async (flag: FeatureFlag) => {
     const next = !flag.enabled
@@ -48,7 +59,7 @@ function SettingsPanel() {
       setFlags((prev) => prev.map((f) => (f.key === saved.key ? saved : f)))
       showToast(`${FLAG_META[flag.key].title} ${next ? '켜짐' : '꺼짐'}`, { icon: next ? '✅' : '⏸️' })
     } catch (e) {
-      setFlags((prev) => prev.map((f) => (f.key === flag.key ? flag : f))) // 원상복구
+      setFlags((prev) => prev.map((f) => (f.key === flag.key ? { ...f, enabled: flag.enabled } : f))) // enabled 만 원상복구
       showToast(errorMessage(e), { icon: '⚠️' })
     } finally {
       setPending(null)
@@ -60,6 +71,17 @@ function SettingsPanel() {
       <h2 className="mb-6 text-2xl font-bold text-slate-900">기능 설정</h2>
       {loading ? (
         <p className="text-sm text-slate-400">불러오는 중…</p>
+      ) : loadFailed ? (
+        <div className="rounded-xl border border-slate-200 bg-white px-5 py-6 text-center">
+          <p className="text-sm text-slate-600">기능 설정을 불러오지 못했습니다.</p>
+          <button
+            type="button"
+            onClick={load}
+            className="mt-3 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
+          >
+            다시 시도
+          </button>
+        </div>
       ) : (
         <ul className="space-y-3">
           {flags.map((flag) => (
@@ -68,7 +90,7 @@ function SettingsPanel() {
               className="flex items-center justify-between gap-4 rounded-xl border border-slate-200 bg-white px-5 py-4"
             >
               <div>
-                <p className="font-medium text-slate-900">{FLAG_META[flag.key].title}</p>
+                <p id={`flag-title-${flag.key}`} className="font-medium text-slate-900">{FLAG_META[flag.key].title}</p>
                 <p className="mt-1 text-sm text-slate-500">{FLAG_META[flag.key].description}</p>
                 <p className="mt-1 text-xs text-slate-400">마지막 변경: {formatTime(flag.updated_at)}</p>
               </div>
@@ -76,14 +98,15 @@ function SettingsPanel() {
                 type="button"
                 role="switch"
                 aria-checked={flag.enabled}
-                aria-label={FLAG_META[flag.key].title}
+                aria-labelledby={`flag-title-${flag.key}`}
                 disabled={pending !== null}
                 onClick={() => toggle(flag)}
-                className={`relative inline-flex h-7 w-12 shrink-0 items-center rounded-full transition disabled:opacity-50 ${
+                className={`relative inline-flex h-7 w-12 shrink-0 items-center rounded-full transition focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 disabled:opacity-50 ${
                   flag.enabled ? 'bg-indigo-600' : 'bg-slate-300'
                 }`}
               >
                 <span
+                  aria-hidden="true"
                   className={`inline-block h-5 w-5 rounded-full bg-white shadow transition ${
                     flag.enabled ? 'translate-x-6' : 'translate-x-1'
                   }`}
