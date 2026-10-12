@@ -96,7 +96,10 @@ function CoachEditor() {
         setForm(found ? toForm(found) : EMPTY_FORM)
       })
       .catch((e: unknown) => {
-        if (!cancelled) showToast(errorMessage(e), { icon: '⚠️' })
+        if (cancelled) return
+        setCurrent(null)
+        setForm(EMPTY_FORM)
+        showToast(errorMessage(e), { icon: '⚠️' })
       })
       .finally(() => {
         if (!cancelled) setLoading(false)
@@ -155,7 +158,8 @@ function CoachEditor() {
       type="button"
       onClick={() => setCoachType(t)}
       aria-pressed={coachType === t}
-      className={`rounded-lg px-4 py-2 text-sm font-medium transition ${
+      disabled={saving}
+      className={`rounded-lg px-4 py-2 text-sm font-medium transition disabled:opacity-50 ${
         coachType === t ? 'bg-indigo-600 text-white' : 'border border-slate-300 text-slate-600 hover:bg-slate-50'
       }`}
     >
@@ -187,7 +191,8 @@ function CoachEditor() {
             <select
               value={seasonId ?? ''}
               onChange={(e) => setSeasonId(e.target.value === '' ? null : Number(e.target.value))}
-              className={inputCls}
+              disabled={saving}
+              className={`${inputCls} disabled:opacity-50`}
             >
               {seasons.length === 0 && <option value="">시즌 없음</option>}
               {seasons.map((s) => (
@@ -203,7 +208,8 @@ function CoachEditor() {
               type="date"
               value={targetDate}
               onChange={(e) => setTargetDate(e.target.value)}
-              className={inputCls}
+              disabled={saving}
+              className={`${inputCls} disabled:opacity-50`}
             />
           </div>
           <div>
