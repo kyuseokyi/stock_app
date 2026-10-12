@@ -193,3 +193,42 @@ async def test_second_open_allowed_after_close(session):
     await session.commit()
     session.add(_position(acc))  # 이전 것이 CLOSED 라 허용
     await session.commit()
+
+
+from datetime import time as dtime
+from apps.trading_game.services import market_clock
+
+
+def test_parse_windows_default():
+    w = market_clock.parse_windows(None)
+    assert w == [(dtime(9, 0), dtime(15, 30)), (dtime(16, 0), dtime(20, 0))]
+
+
+def test_parse_windows_custom():
+    w = market_clock.parse_windows("09:00-12:00,13:00-15:00")
+    assert w == [(dtime(9, 0), dtime(12, 0)), (dtime(13, 0), dtime(15, 0))]
+
+
+def test_in_window_regular_session():
+    now = datetime(2026, 10, 12, 10, 30, tzinfo=market_clock.KST)
+    assert market_clock.in_trading_window(now, market_clock.parse_windows(None)) is True
+
+
+def test_in_window_excludes_premarket():
+    now = datetime(2026, 10, 12, 8, 30, tzinfo=market_clock.KST)  # NXT 프리마켓
+    assert market_clock.in_trading_window(now, market_clock.parse_windows(None)) is False
+
+
+def test_in_window_aftermarket():
+    now = datetime(2026, 10, 12, 18, 0, tzinfo=market_clock.KST)
+    assert market_clock.in_trading_window(now, market_clock.parse_windows(None)) is True
+
+
+def test_in_window_night_closed():
+    now = datetime(2026, 10, 12, 21, 0, tzinfo=market_clock.KST)
+    assert market_clock.in_trading_window(now, market_clock.parse_windows(None)) is False
+
+
+def test_price_fresh():
+    assert market_clock.is_price_fresh(1000.0, 1005.0, 10) is True
+    assert market_clock.is_price_fresh(1000.0, 1015.0, 10) is False
