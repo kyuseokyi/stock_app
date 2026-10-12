@@ -72,7 +72,7 @@ MOCK_TICK_STREAM=true uv run python -m apps.collector.run_game_ws   # Mock 모�
 uv run python -m scripts.test_game_ws_sub                           # 다른 터미널: stock:tick:* 수신 확인
 ```
 
-#### 트레이딩 게임 서비스 (Port 8003, Phase 3·4)
+#### 트레이딩 게임 서비스 (Port 8003, Phase 3·4·5a)
 실시간 가상 주문/체결 엔진 + 클라이언트 WebSocket 게이트웨이 + 실시간 랭킹/시즌 정산. 원클릭 진입(LONG/SHORT·레버리지 1x/2x/5x·비중 25/50/100%) → 현재가 즉시 체결 → 틱마다 TP/SL/마진콜 자동청산, WS로 틱·개인손익·시장심리 push.
 ```bash
 # ⚠️ 반드시 단일 워커(인메모리 WS 레지스트리/틱 리스너) — lifespan 이 Redis stock:tick:* 구독
@@ -84,6 +84,8 @@ uv run uvicorn apps.trading_game.main:app --reload --port 8003 --workers 1
 - **주문 이중 게이트**: 거래 세션 창 + 최신가 신선도. 둘 다 통과해야 체결(세션 밖/시세 끊김 → 409).
 - **실시간 랭킹(Phase 4)**: Redis ZSET(`game:season:{id}:ranking`)에 매 틱 보유자 라이브 ROI·청산 시 실현 ROI 반영. 조회 — `GET /api/game/seasons/{id}/leaderboard`(Top100), `GET /api/game/seasons/{id}/my-rank`, `GET /api/game/hall-of-fame`.
 - **시즌 정산(Phase 4)**: Celery beat `settle_trading_season` 매일 20:40 KST → 말일 도래 시 ClickHouse 당일 종가로 전액 강제청산 → 명예의 전당 박제(+Trading MBTI) → 시즌 FINISHED + 차기 시즌 자동 생성(멱등). worker+beat 가동 필요(`uv run celery -A apps.collector.celery_app worker/beat`).
+- **데일리 스마트 코치(Phase 5a)**: 관리자 `PUT /api/game/admin/coach-messages`(슬롯 upsert, `action=draft|publish` — 발행된 슬롯은 초안 저장 불가 409), `GET /api/game/admin/coach-messages?season_id&target_date`, `GET /api/game/admin/seasons`(ADMIN). 유저 `GET /api/game/coach/today`(KST 오늘·활성 시즌의 발행분, `active`=이브닝 우선). 발행 시 WS로 `{type:"coach", ...}` 전원 push.
+- **스마트 넛지(Phase 5a)**: `POST /api/game/orders`·`POST /api/game/positions/{id}/close` 응답에 `nudges[]`(WARNING 과열 추격 RSI≥80 LONG · ADVICE 100%+5x · PRAISE 손절/수동 ROI −3~−1%). 자동청산(STOP_LOSS)은 WS `{type:"nudge", position_id, nudge}`. 넛지는 best-effort(실패해도 주문·청산 정상). RSI는 Wilder(14) = ClickHouse 일봉(오늘 이전) + 현재가, 종가 캐시 `game:rsi:closes:{ticker}:{YYYYMMDD}`(26h).
 - 에뮬레이터 검증 시: `adb reverse tcp:8003 tcp:8003` 추가.
 
 > ⚠️ 관리자 웹 로그인은 **auth(8001)**, 게시판/글/댓글은 **blog(8000)** 을 사용합니다. 어드민을 테스트하려면 **두 서비스를 모두** 띄워야 합니다.
@@ -99,6 +101,7 @@ npm run dev        # http://localhost:5173
 - admin_web 은 **TypeScript(strict)** 다. `npm run build` = `tsc --noEmit && vite build` 이므로 타입 에러가 있으면 빌드(및 Docker 배포 빌드)가 실패한다. 타입만 확인하려면 `npx tsc --noEmit`.
 - 로컬에서 배포용 빌드를 확인할 때는 VITE_* 가 필수다: `VITE_API_BASE_URL=http://x VITE_AUTH_BASE_URL=http://x VITE_STOCK_API_URL=http://x npm run build`.
 - API 응답 타입은 `admin_web/src/types/`(백엔드 pydantic·GraphQL 스키마 기준)에 있다. 백엔드 응답 스키마를 바꾸면 여기도 함께 갱신한다.
+- **트레이딩 게임 > 데일리 코치**(`/game/coach`)는 trading_game(8003)을 호출한다. `VITE_GAME_API_URL`은 **선택** 변수 — dev 에서 미설정 시 `http://localhost:8003`, 배포 빌드에서 미설정이면 화면에 "게임 서버 미연결" 안내(빌드는 실패하지 않음). trading_game 운영 배포 전까지 필수 목록(`vite.config.js` REQUIRED)에 넣지 않는다.
 
 ### 4. 일반 유저 웹 (web_client)
 일반 사용자(B2C)용 반응형 웹. 블로그/커뮤니티 조회 + SSE 실시간 알림 + **임시 로그인(닉네임)으로 댓글 작성**. 디자인은 **토스(Toss) 라이트 스타일**(`docs/mobile_design_language.md`의 토큰을 Tailwind `theme.extend`로 이식 — brand `#3182f6` 등)로 모바일과 통일.
@@ -280,6 +283,7 @@ uv run pytest tests/test_universe_cooldown.py    # 특정 파일
 | `VITE_API_BASE_URL` | admin_web | `http://localhost:8000/api/v1` | 블로그 API |
 | `VITE_AUTH_BASE_URL` | admin_web | `http://localhost:8001/api/v1` | 인증 API |
 | `VITE_STOCK_API_URL` | admin_web | `http://localhost:8002/graphql` | 주식 API(GraphQL) — 차트 삽입 종목검색/차트 |
+| `VITE_GAME_API_URL` | admin_web | (선택) dev 미설정 시 `http://localhost:8003` | 트레이딩 게임 API — 데일리 코치. 배포 미설정 시 "미연결" 안내 |
 | `VITE_AUTH_BASE_URL` | web_client | `http://localhost:8001/api/v1` | 인증 API — 임시 로그인(닉네임) |
 | `KIS_MODE` | collector | `vps` | KIS 접속 모드 — `vps`(모의투자) \| `prod`(실서버) |
 | `KIS_APP_KEY` / `KIS_APP_SECRET` | collector | (빈값) | KIS OpenAPI 앱키/시크릿 (비우면 Mock 수집 폴백) |

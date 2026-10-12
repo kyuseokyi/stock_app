@@ -47,6 +47,7 @@
 - [x] **Phase 2 — 실시간 WS 수집 데몬** : KIS `H0STCNT0` 파서 + async WS 클라이언트(approval_key·재연결·무효키 재발급) + Mock 생성기 → Redis `stock:tick:{ticker}` 발행(`apps/collector/run_game_ws.py`). Mock E2E 검증
 - [x] **Phase 3 — 가상 주문/체결 엔진 + WS 게이트웨이** : 독립 앱 `apps/trading_game`(포트 8003, 단일워커). 원클릭 진입(LONG/SHORT·레버리지 1/2/5·비중 25/50/100%) → 현재가 즉시체결, 틱마다 TP/SL/마진콜 자동청산, WS로 틱·개인손익·시장심리 push. 이중 게이트(거래세션창+신선도), 조건부청산 동시성, 원금손실 클램프, 계좌 집계 갱신. publisher가 `stock:latest` 최신가 캐시 기록. 85 pytest green
 - [x] **Phase 4 — 실시간 랭킹 + 시즌 정산 + Trading MBTI** : Redis ZSET Top100(라이브 ROI 매 틱 + 청산 실현 ROI) + `/leaderboard`·`/my-rank`·`/hall-of-fame` REST. Celery beat 매일 20:40 → 말일 ClickHouse 당일 종가로 전액 강제청산 → 명예의 전당 박제(+MBTI 4분류) → FINISHED+차기시즌 원자적 생성(멱등). 101 pytest green. 최종리뷰 치명결함 2건(HOF 닉네임 스키마·async 엔진 dispose) 수정
+- [x] **Phase 5a — 데일리 스마트 코치 + 스마트 넛지** : 코치 슬롯 초안/발행(`status`, 마이그레이션 `c3d4e5f6a7b8`) + 관리자 REST·유저 `/coach/today` + 발행 WS push. admin_web `/game/coach`(TS, 마크다운 미리보기 DOMPurify). 넛지 3종(과열 추격·과레버리지·원칙 손절) REST `nudges[]` + 자동청산 WS(fan-out 큐), Wilder RSI(14) 일일 캐시. 모두 best-effort. 통합 스모크(일회용 PG) 통과 · 시드 published_at 회귀 수정
 
 ### 문서
 - [x] 기능별 설계 스펙(`docs/superpowers/specs/`)
@@ -102,7 +103,8 @@
 - [x] **서브페이즈 2 — 한투 실시간 WebSocket 수집 데몬(`H0STCNT0`) + Redis Pub/Sub 발행** (완료, 위 참조)
 - [x] **서브페이즈 3** — 클라이언트 WS 게이트웨이(틱 중계) + 원클릭 즉시 체결(롱/숏, 레버리지 1x/2x/5x, TP/SL·마진콜 자동 청산) ✅ (위 완료 섹션 참조, 포트 8003)
 - [x] **서브페이즈 4** — Redis ZSET 기반 실시간 랭킹(Top 100) & 말일 명예의 전당 아카이빙(시즌 정산 스케줄러) + Trading MBTI ✅ (위 완료 섹션 참조)
-- [ ] **서브페이즈 5** — 관리자 데일리 스마트 코치(모닝 시황/지지·저항선 + 이브닝 복기) via `admin_web` + 인게임 넛지·퀘스트·야간 차트 퀴즈
+- [x] **서브페이즈 5a** — 관리자 데일리 스마트 코치(모닝 시황/지지·저항선 + 이브닝 복기) via `admin_web` + 인게임 스마트 넛지 ✅ (위 완료 섹션 참조)
+- [ ] **서브페이즈 5b** — 단계별 퀘스트·보상, 아카데미(5x 레버리지 해금 퀴즈), 야간/주말 10초 차트 패턴 퀴즈 + Streak
 - [ ] **서브페이즈 6** — 프론트(web_client·mobile) 실시간 트레이딩 화면(현재 "시즌 준비 중" 스켈레톤 교체)
 
 ### 상시 백로그
@@ -110,6 +112,8 @@
 - [ ] 테스트(pytest / Vitest / Playwright)
 - [ ] 실 FCM 전환(`PUSH_BACKEND=fcm` + 자격증명)
 - [ ] web_client TypeScript 전환 (서브페이즈 6 직전, admin_web과 동일 방식)
+- [ ] **trading_game 운영 배포** — prod compose 미포함. 운영 호스트 8003은 `blog_api`가 사용 중이므로 포트 재배정 필요. Cloudflare 서브도메인·KIS WS 데몬(`run_game_ws`) 포함, 이후 admin_web 빌드에 `VITE_GAME_API_URL` 주입
+- [ ] admin_web `prose` 스타일 — `@tailwindcss/typography` 미설치로 에디터/코치 미리보기의 제목·목록 스타일이 약함(기존 RichTextEditor 포함, 도입 시 시각 회귀 확인)
 - [x] **버그: 차트 삽입 모달 버튼이 글 폼을 submit** — `ChartSnapshotModal` 버튼 7개에 `type="button"` 누락 + 모달이 `BlogEditorPage` `<form>` 내부 렌더 → 수정 화면에서 그리기 도구 클릭 시 글이 저장·이동됨(TS 전환 이전부터 존재, 2026-10-12 스모크에서 발견 → 같은 날 수정·브라우저 재검증)
 
 ---
