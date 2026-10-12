@@ -1,6 +1,7 @@
 """트레이딩 게임 REST — 주문 진입/수동청산/조회."""
 from __future__ import annotations
 
+import logging
 import uuid
 from decimal import Decimal
 
@@ -18,6 +19,7 @@ from apps.trading_game.schemas.game_dtos import AccountResponse, OrderRequest, P
 from apps.trading_game.services import account_service, market_clock, order_engine, pricing, ranking_service
 
 router = APIRouter(prefix="/api/game", tags=["trading-game"])
+log = logging.getLogger("trading_game.orders")
 
 
 def _position_dto(
@@ -122,7 +124,10 @@ async def close_order(
     )
     if trade is None:
         raise HTTPException(status.HTTP_409_CONFLICT, "이미 청산된 포지션입니다.")
-    await ranking_service.sync_account_rank(deps.get_redis(), db, account.id)
+    try:
+        await ranking_service.sync_account_rank(deps.get_redis(), db, account.id)
+    except Exception:
+        log.warning("랭킹 동기화 실패(청산은 정상 완료) account=%s", account.id, exc_info=True)
     refreshed = await db.get(GamePosition, pos.id)
     return _position_dto(refreshed, trade.roi_pct, trade.pnl_amount)
 
