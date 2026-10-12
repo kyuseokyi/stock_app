@@ -100,6 +100,18 @@ async def _seed_account(db, user, season, *, cash=Decimal("10000000"), roi=Decim
     return acc
 
 
+def _redis():
+    """서비스 호출용 빈 fakeredis(최신가 없음)."""
+    return fake_aioredis.FakeRedis(decode_responses=True)
+
+
+async def _set_latest(redis, ticker: str, price) -> None:
+    """market_clock.read_latest 가 읽는 stock:latest:{ticker} 포맷({price, ts})으로 기록."""
+    import json
+    import time
+    await redis.set(f"stock:latest:{ticker}", json.dumps({"price": float(price), "ts": time.time()}))
+
+
 # ---------------------------------------------------------------- models
 async def test_phase5b_tables_roundtrip(session):
     user = await _seed_user(session)
@@ -166,7 +178,7 @@ async def test_grant_cash_keeps_realized_roi(session, cash, roi):
     acc = await _seed_account(session, user, season, cash=cash, roi=roi)
     assert _realized_roi(acc) == roi
 
-    await reward_service.grant_cash(session, acc, Decimal("500000"))
+    await reward_service.grant_cash(session, acc, Decimal("500000"), redis=_redis())
     await session.commit()
     await session.refresh(acc)
 
@@ -199,7 +211,7 @@ async def test_grant_cash_uses_db_current_roi_not_stale_object(maker):
         await b.commit()
         assert stale.current_roi == Decimal("5")
 
-        await reward_service.grant_cash(a, stale, Decimal("500000"))
+        await reward_service.grant_cash(a, stale, Decimal("500000"), redis=_redis())
         await a.commit()
 
     async with maker() as c:
@@ -218,7 +230,9 @@ async def test_close_position_keeps_concurrent_reward_in_total_asset(maker):
         )
         # 다른 세션이 보상 지급(+500000) 후 커밋 — A 의 acc 는 오래된 값
         acc_b = await b.get(GameAccount, acc.id)
-        await reward_service.grant_cash(b, acc_b, Decimal("500000"))
+        r = _redis()
+        await _set_latest(r, "005930", Decimal("100"))  # 보유 포지션 → 실시간 시세로 원금 산정
+        await reward_service.grant_cash(b, acc_b, Decimal("500000"), redis=r)
         await b.commit()
 
         await order_engine.close_position(a, position_id=pos.id, exit_price=Decimal("100"), reason="MANUAL")
@@ -265,6 +279,45 @@ async def test_live_rank_roi_uses_principal(maker, monkeypatch):
     await tick_listener._push_personal_pnl("005930", Decimal("100"))
     score = await redis.zscore(f"game:season:{season.id}:ranking", str(user.id))
     assert score is not None and -1 < score < 0  # 원금 11M 기준(수수료만큼 소폭 음수)
+
+
+async def test_grant_cash_with_open_position_uses_live_roi(session):
+    from apps.trading_game.services import ranking_service
+    user = await _seed_user(session)
+    season = await _seed_season(session)
+    acc = await _seed_account(session, user, season)  # 현금 10M, 실현 ROI 0%
+    pos = await order_engine.open_position(
+        session, account=acc, side="LONG", ratio=Decimal("1.0"), leverage=1,
+        entry_price=Decimal("100"), sl_pct=None, tp_pct=None,
+    )
+    redis = _redis()
+    price = Decimal("20")
+    await _set_latest(redis, "005930", price)
+    await session.refresh(acc)
+    before = ranking_service.compute_live_roi(acc.cash_balance, pos, price, reward_service.principal(acc))
+    assert before < Decimal("-79")  # 실시간 약 -80% (저장 ROI 는 0%)
+
+    await reward_service.grant_cash(session, acc, Decimal("2100000"), redis=redis)
+    await session.commit()
+    await session.refresh(acc)
+    after = ranking_service.compute_live_roi(acc.cash_balance, pos, price, reward_service.principal(acc))
+    assert abs(after - before) <= Decimal("0.0001")
+
+    await order_engine.close_position(session, position_id=pos.id, exit_price=price, reason="MANUAL")
+    await session.refresh(acc)
+    assert abs(acc.current_roi - before) <= Decimal("0.01")
+
+
+async def test_grant_cash_open_position_without_price_raises(session):
+    user = await _seed_user(session)
+    season = await _seed_season(session)
+    acc = await _seed_account(session, user, season)
+    await order_engine.open_position(
+        session, account=acc, side="LONG", ratio=Decimal("0.5"), leverage=1,
+        entry_price=Decimal("100"), sl_pct=None, tp_pct=None,
+    )
+    with pytest.raises(reward_service.RewardUnavailable):
+        await reward_service.grant_cash(session, acc, Decimal("500000"), redis=_redis())
 
 
 # ---------------------------------------------------------------- feature flags
@@ -531,18 +584,18 @@ async def test_claim_cash_reward_once(session, closes_stub):
     user = await _seed_user(session)
     season = await _seed_season(session)
     with pytest.raises(quest_service.QuestError) as e:
-        await quest_service.claim(session, user.id, "Q1_STOP_LOSS")
+        await quest_service.claim(session, user.id, "Q1_STOP_LOSS", redis=_redis())
     assert e.value.code == "QUEST_NOT_COMPLETED"
 
     await _open(session, user, sl=Decimal("98"))
-    row, acc, _ = await quest_service.claim(session, user.id, "Q1_STOP_LOSS")
+    row, acc, _ = await quest_service.claim(session, user.id, "Q1_STOP_LOSS", redis=_redis())
     assert row.claimed_at is not None
     assert acc.season_id == season.id
     assert acc.cash_balance == Decimal("10500000")
     assert acc.bonus_cash == Decimal("500000.00")  # ROI 0% → 같은 금액
 
     with pytest.raises(quest_service.QuestError) as e:
-        await quest_service.claim(session, user.id, "Q1_STOP_LOSS")
+        await quest_service.claim(session, user.id, "Q1_STOP_LOSS", redis=_redis())
     assert e.value.code == "ALREADY_CLAIMED"
 
 
@@ -555,10 +608,10 @@ async def test_claim_double_claim_guard_with_stale_session(maker, closes_stub):
     async with maker() as a, maker() as b:
         stale = await a.get(UserQuestProgress, (user.id, "Q1_STOP_LOSS"))
         assert stale.claimed_at is None
-        await quest_service.claim(b, user.id, "Q1_STOP_LOSS")
+        await quest_service.claim(b, user.id, "Q1_STOP_LOSS", redis=_redis())
         assert stale.claimed_at is None  # A 의 메모리 객체는 오래된 값
         with pytest.raises(quest_service.QuestError) as e:
-            await quest_service.claim(a, user.id, "Q1_STOP_LOSS")
+            await quest_service.claim(a, user.id, "Q1_STOP_LOSS", redis=_redis())
         assert e.value.code == "ALREADY_CLAIMED"
     async with maker() as c:
         acc = (await c.execute(select(GameAccount).where(GameAccount.user_id == user.id))).scalar_one()
@@ -570,16 +623,47 @@ async def test_claim_without_active_season_keeps_unclaimed(session, closes_stub)
     await _seed_season(session, status="FINISHED")
     await _open(session, user, sl=Decimal("98"))
     with pytest.raises(quest_service.QuestError) as e:
-        await quest_service.claim(session, user.id, "Q1_STOP_LOSS")
+        await quest_service.claim(session, user.id, "Q1_STOP_LOSS", redis=_redis())
     assert e.value.code == "NO_ACTIVE_SEASON"
     assert (await _progress(session, user, "Q1_STOP_LOSS")).claimed_at is None
+
+
+async def test_claim_expired_active_season_is_not_reward_eligible(session, closes_stub):
+    user = await _seed_user(session)
+    season = await _seed_season(session)
+    season.end_at = datetime.now(timezone.utc) - timedelta(minutes=1)  # ACTIVE 이지만 종료시각 경과(정산 대기)
+    await session.commit()
+    await _open(session, user, sl=Decimal("98"))
+    with pytest.raises(quest_service.QuestError) as e:
+        await quest_service.claim(session, user.id, "Q1_STOP_LOSS", redis=_redis())
+    assert e.value.code == "NO_ACTIVE_SEASON"
+    assert (await _progress(session, user, "Q1_STOP_LOSS")).claimed_at is None
+
+
+async def test_claim_price_unavailable_keeps_unclaimed(session, closes_stub):
+    user = await _seed_user(session)
+    season = await _seed_season(session)
+    acc = await _seed_account(session, user, season)
+    await order_engine.open_position(
+        session, account=acc, side="LONG", ratio=Decimal("0.5"), leverage=1,
+        entry_price=Decimal("100"), sl_pct=None, tp_pct=None,
+    )
+    cash_before, acc_id, uid = acc.cash_balance, acc.id, user.id  # rollback 후 expire 대비
+    await _open(session, user, sl=Decimal("98"))
+    with pytest.raises(quest_service.QuestError) as e:
+        await quest_service.claim(session, uid, "Q1_STOP_LOSS", redis=_redis())  # 최신가 없음
+    assert e.value.code == "PRICE_UNAVAILABLE"
+    row = await session.get(UserQuestProgress, (uid, "Q1_STOP_LOSS"), populate_existing=True)
+    assert row.completed_at is not None and row.claimed_at is None
+    fresh = await session.get(GameAccount, acc_id, populate_existing=True)
+    assert fresh.cash_balance == cash_before and fresh.bonus_cash == Decimal("0")
 
 
 async def test_claim_badge_without_season(session, closes_stub):
     user = await _seed_user(session)
     for _ in range(3):
         await _open(session, user, ratio=0.25)
-    row, acc, badge = await quest_service.claim(session, user.id, "Q3_SMALL_SIZE")
+    row, acc, badge = await quest_service.claim(session, user.id, "Q3_SMALL_SIZE", redis=_redis())
     assert acc is None and row.claimed_at is not None
     assert badge is not None and badge.badge_code == "PRINCIPLED"
     assert await session.get(UserBadge, (user.id, "PRINCIPLED")) is not None
@@ -587,7 +671,7 @@ async def test_claim_badge_without_season(session, closes_stub):
 
 async def test_claim_unknown_quest(session):
     with pytest.raises(quest_service.QuestError) as e:
-        await quest_service.claim(session, 1, "NOPE")
+        await quest_service.claim(session, 1, "NOPE", redis=_redis())
     assert e.value.code == "QUEST_NOT_FOUND"
 
 
@@ -824,13 +908,13 @@ async def test_submit_correct_rewards_and_rejects_resubmit(session):
     await _seed_season(session)
     q = (await _seed_quizzes(session, 1))[0]
     await quiz_service.serve_random(session, user.id, now=T0)
-    res = await quiz_service.submit(session, user.id, q.id, "UP", now=T0 + timedelta(seconds=5))
+    res = await quiz_service.submit(session, user.id, q.id, "UP", redis=_redis(), now=T0 + timedelta(seconds=5))
     assert res.correct is True and res.rewarded is True and res.timed_out is False
     acc = (await session.execute(select(GameAccount).where(GameAccount.user_id == user.id))).scalar_one()
     await session.refresh(acc)
     assert acc.cash_balance == Decimal("10200000")
     with pytest.raises(quiz_service.QuizError) as e:
-        await quiz_service.submit(session, user.id, q.id, "UP", now=T0 + timedelta(seconds=6))
+        await quiz_service.submit(session, user.id, q.id, "UP", redis=_redis(), now=T0 + timedelta(seconds=6))
     assert e.value.code == "ALREADY_SUBMITTED"
 
 
@@ -838,7 +922,7 @@ async def test_submit_not_served(session):
     user = await _seed_user(session)
     q = (await _seed_quizzes(session, 1))[0]
     with pytest.raises(quiz_service.QuizError) as e:
-        await quiz_service.submit(session, user.id, q.id, "UP", now=T0)
+        await quiz_service.submit(session, user.id, q.id, "UP", redis=_redis(), now=T0)
     assert e.value.code == "QUIZ_NOT_SERVED"
 
 
@@ -848,7 +932,7 @@ async def test_submit_time_limit(session, elapsed, timed_out):
     await _seed_season(session)
     q = (await _seed_quizzes(session, 1))[0]
     await quiz_service.serve_random(session, user.id, now=T0)
-    res = await quiz_service.submit(session, user.id, q.id, "UP", now=T0 + timedelta(seconds=elapsed))
+    res = await quiz_service.submit(session, user.id, q.id, "UP", redis=_redis(), now=T0 + timedelta(seconds=elapsed))
     assert res.timed_out is timed_out
     assert res.correct is (not timed_out)
     assert res.rewarded is (not timed_out)
@@ -859,7 +943,7 @@ async def test_submit_wrong_no_reward(session):
     await _seed_season(session)
     q = (await _seed_quizzes(session, 1))[0]
     await quiz_service.serve_random(session, user.id, now=T0)
-    res = await quiz_service.submit(session, user.id, q.id, "DOWN", now=T0 + timedelta(seconds=3))
+    res = await quiz_service.submit(session, user.id, q.id, "DOWN", redis=_redis(), now=T0 + timedelta(seconds=3))
     assert res.correct is False and res.rewarded is False
 
 
@@ -870,20 +954,20 @@ async def test_daily_reward_limit_three(session):
     rewarded = []
     for _ in range(4):
         q = await quiz_service.serve_random(session, user.id, now=T0)
-        res = await quiz_service.submit(session, user.id, q.id, "UP", now=T0 + timedelta(seconds=2))
+        res = await quiz_service.submit(session, user.id, q.id, "UP", redis=_redis(), now=T0 + timedelta(seconds=2))
         rewarded.append(res.rewarded)
     assert rewarded == [True, True, True, False]
     # 다음 날(KST)에는 다시 보상
     t1 = T0 + timedelta(days=1)
     q = await quiz_service.serve_random(session, user.id, now=t1)
-    assert (await quiz_service.submit(session, user.id, q.id, "UP", now=t1 + timedelta(seconds=2))).rewarded is True
+    assert (await quiz_service.submit(session, user.id, q.id, "UP", redis=_redis(), now=t1 + timedelta(seconds=2))).rewarded is True
 
 
 async def test_submit_correct_without_season_no_reward(session):
     user = await _seed_user(session)
     q = (await _seed_quizzes(session, 1))[0]
     await quiz_service.serve_random(session, user.id, now=T0)
-    res = await quiz_service.submit(session, user.id, q.id, "UP", now=T0 + timedelta(seconds=2))
+    res = await quiz_service.submit(session, user.id, q.id, "UP", redis=_redis(), now=T0 + timedelta(seconds=2))
     assert res.correct is True and res.rewarded is False
     assert (await session.execute(select(GameAccount))).scalars().all() == []
 
@@ -898,11 +982,11 @@ async def test_submit_already_submitted_guard_with_stale_session(maker):
     async with maker() as a, maker() as b:
         stale = await a.get(UserQuizAttempt, (user.id, q.id))
         assert stale.submitted_at is None
-        res = await quiz_service.submit(b, user.id, q.id, "UP", now=T0 + timedelta(seconds=2))
+        res = await quiz_service.submit(b, user.id, q.id, "UP", redis=_redis(), now=T0 + timedelta(seconds=2))
         assert res.rewarded is True
         assert stale.submitted_at is None  # A 의 메모리 객체는 오래된 값
         with pytest.raises(quiz_service.QuizError) as e:
-            await quiz_service.submit(a, user.id, q.id, "UP", now=T0 + timedelta(seconds=3))
+            await quiz_service.submit(a, user.id, q.id, "UP", redis=_redis(), now=T0 + timedelta(seconds=3))
         assert e.value.code == "ALREADY_SUBMITTED"
     async with maker() as c:
         acc = (await c.execute(select(GameAccount).where(GameAccount.user_id == user.id))).scalar_one()

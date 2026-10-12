@@ -220,6 +220,21 @@ async def test_settlement_hof_ordering_and_winrate(db):
     assert hof[1].win_rate == Decimal("0.00")
 
 
+async def test_settlement_excludes_zero_trade_accounts(db):
+    past = datetime(2026, 9, 30, 11, 0, tzinfo=timezone.utc)
+    season = await _seed_season_with_players(db, end_at=past)  # 3명: 정산 청산으로 거래 1회씩
+    idle = User(nickname="quiz_only", role=UserRole.FREE, is_active=True)
+    db.add(idle); await db.commit(); await db.refresh(idle)
+    # 퀴즈·퀘스트 보상만 받은 무거래 계좌(ROI 0%) — 손실 계좌들보다 ROI 가 높아도 전당 제외
+    db.add(GameAccount(user_id=idle.id, season_id=season.id, cash_balance=Decimal("10200000"),
+                       total_asset=Decimal("10200000"), bonus_cash=Decimal("200000"), total_trades=0))
+    await db.commit()
+    await settlement.settle_due_season(db, None, lambda t: Decimal("90"))
+    hof = (await db.execute(select(HallOfFame).where(HallOfFame.season_id == season.id))).scalars().all()
+    assert len(hof) == 3
+    assert idle.id not in {h.user_id for h in hof}
+
+
 async def test_settlement_aborts_when_no_close_price(db):
     past = datetime(2026, 9, 30, 11, 0, tzinfo=timezone.utc)
     season = await _seed_season_with_players(db, end_at=past)

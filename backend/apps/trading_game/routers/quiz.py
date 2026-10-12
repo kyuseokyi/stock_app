@@ -59,7 +59,7 @@ async def submit_quiz(
 ):
     await _require_quiz_enabled(db)
     try:
-        res = await quiz_service.submit(db, user.id, quiz_id, body.choice)
+        res = await quiz_service.submit(db, user.id, quiz_id, body.choice, redis=deps.get_redis())
     except quiz_service.QuizError as e:
         raise HTTPException(_ERROR_STATUS.get(e.code, status.HTTP_400_BAD_REQUEST), detail={"code": e.code, "message": str(e)})
     quiz = res.quiz

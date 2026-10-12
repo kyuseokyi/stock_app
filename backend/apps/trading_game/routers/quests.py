@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from shared.auth import get_current_user
 from shared.database import get_db
 from shared.models import User
+from apps.trading_game import deps
 from apps.trading_game.schemas.game_dtos import (
     BadgeDTO, QuestClaimResponse, QuestListResponse, QuestResponse,
 )
@@ -19,6 +20,7 @@ _ERROR_STATUS = {
     "QUEST_NOT_COMPLETED": status.HTTP_409_CONFLICT,
     "ALREADY_CLAIMED": status.HTTP_409_CONFLICT,
     "NO_ACTIVE_SEASON": status.HTTP_409_CONFLICT,
+    "PRICE_UNAVAILABLE": status.HTTP_409_CONFLICT,
 }
 
 
@@ -54,7 +56,7 @@ async def claim_quest(
     db: AsyncSession = Depends(get_db),
 ):
     try:
-        row, account, badge = await quest_service.claim(db, user.id, code)
+        row, account, badge = await quest_service.claim(db, user.id, code, redis=deps.get_redis())
     except quest_service.QuestError as e:
         raise HTTPException(_ERROR_STATUS[e.code], detail={"code": e.code, "message": str(e)})
     quest = quest_service.QUEST_BY_CODE[code]

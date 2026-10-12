@@ -8,6 +8,7 @@
 """
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
 from decimal import Decimal
@@ -18,6 +19,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from shared.game_models import ChartQuiz, GameAccount, UserQuizAttempt
 from apps.trading_game.services import account_service, coach_service, reward_service
+
+log = logging.getLogger("trading_game.quiz")
 
 QUIZ_TIME_LIMIT_SECONDS = 10
 QUIZ_GRACE_SECONDS = 3
@@ -94,7 +97,7 @@ async def _rewarded_count(db: AsyncSession, user_id: int, day: date) -> int:
 
 
 async def submit(
-    db: AsyncSession, user_id: int, quiz_id: int, choice: str, *, now: datetime | None = None
+    db: AsyncSession, user_id: int, quiz_id: int, choice: str, *, redis, now: datetime | None = None
 ) -> SubmitResult:
     now = now or datetime.now(timezone.utc)
     attempt = await db.get(UserQuizAttempt, (user_id, quiz_id))
@@ -111,7 +114,7 @@ async def submit(
     account: GameAccount | None = None
     if correct:
         season = await account_service.get_active_season(db)
-        if season is not None:
+        if season is not None and account_service.season_is_tradable(season):  # 정산 대기 시즌엔 보상 없음
             # 최초 생성 시에만 commit(계좌 행만 다룸) — 제출 기록은 아직 쓰지 않았다
             account = await account_service.get_or_create_account(db, user_id, season.id)
 
@@ -137,12 +140,17 @@ async def submit(
     if account is not None:
         today = coach_service.kst_today(now)
         if await _rewarded_count(db, user_id, today) < DAILY_REWARD_LIMIT:
-            await reward_service.grant_cash(db, account, Decimal(quiz.reward_cash))
-            await db.execute(
-                update(UserQuizAttempt)
-                .where(UserQuizAttempt.user_id == user_id, UserQuizAttempt.quiz_id == quiz_id)
-                .values(rewarded=True, reward_date=today)
-            )
-            rewarded = True
+            try:
+                await reward_service.grant_cash(db, account, Decimal(quiz.reward_cash), redis=redis)
+            except reward_service.RewardUnavailable:
+                # 쓰기 전에 실패 — 제출 기록은 유지하고 보상만 생략
+                log.warning("퀴즈 보상 생략 — 보유 포지션 시세 없음 user=%s quiz=%s", user_id, quiz_id)
+            else:
+                await db.execute(
+                    update(UserQuizAttempt)
+                    .where(UserQuizAttempt.user_id == user_id, UserQuizAttempt.quiz_id == quiz_id)
+                    .values(rewarded=True, reward_date=today)
+                )
+                rewarded = True
     await db.commit()
     return SubmitResult(quiz=quiz, correct=correct, timed_out=timed_out, rewarded=rewarded)

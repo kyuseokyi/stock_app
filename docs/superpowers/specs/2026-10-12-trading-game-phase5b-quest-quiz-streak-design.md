@@ -9,7 +9,7 @@
 
 | 항목 | 결정 |
 |---|---|
-| 보상 처리 | **원금 동반 가산(펀드 입금 방식)**: 보상 b 지급 시 `cash_balance`·`total_asset`은 b 증가, 원금 조정분 `bonus_cash`는 `b / (1 + current_roi/100)` 증가. 원금 = `INITIAL_CASH + bonus_cash`, ROI = (자산 − 원금)/원금. → 지급 직후 실현 ROI가 정확히 불변(같은 금액을 원금에 더하면 ROI가 0 쪽으로 희석되는 문제를 피함). |
+| 보상 처리 | **원금 동반 가산(펀드 입금 방식)**: 보상 b 지급 시 `cash_balance`·`total_asset`은 b 증가, 원금 조정분 `bonus_cash`는 `b / (1 + r/100)` 증가 — r 은 지급 시점 ROI로, 포지션 보유 중이면 최신가 평가 실시간 ROI(랭킹과 같은 마크), 없으면 실현 `current_roi`. 원금 = `INITIAL_CASH + bonus_cash`, ROI = (자산 − 원금)/원금. → 지급 직후 (실시간) ROI가 불변(같은 금액을 원금에 더하면 ROI가 0 쪽으로 희석되는 문제를 피함). 보유 중 시세 없음 → 퀘스트 409 `PRICE_UNAVAILABLE`(미수령 유지·재시도) / 퀴즈 보상 생략. |
 | 퀘스트 | Q1 손절선 걸고 첫 거래(+50만) / Q2 골든크로스 LONG 진입(+100만) / Q3' 최소 비중(25% 이하) 진입 3회('원칙주의자' 배지 — 주문 비중 선택지가 25/50/100%뿐이라 기획서의 20%는 달성 불가하므로 최소 선택지 25%로 정의). 원안 Q4(랭킹 보너스)는 랭킹 오염이라 제외. 진행도는 **유저 단위 영구 1회성**, 보상은 **수령 시점 활성 시즌 계좌**로 지급. |
 | 퀴즈 출처 | ClickHouse 일봉 기반 **자동 생성 스크립트**(관리자 입력 없음) |
 | 기능 on/off | **어드민 토글** — `game_feature_flags` 테이블(QUIZ, STREAK), 재시작 없이 즉시 반영 |
@@ -40,9 +40,11 @@ ORM은 `shared/game_models.py`에 추가한다. 검증은 일회용 로컬 docke
 - `services/tick_listener.py`의 `compute_live_roi(..., INITIAL_CASH)` 호출 → 분모 인자에 `INITIAL_CASH + acc.bonus_cash`
 - 헬퍼 `principal(acc) -> Decimal`을 `reward_service`에 두어 한곳에서 계산한다(order_engine·tick_listener가 import — 의존 방향 단순화).
 
-보상 지급은 `reward_service.grant_cash(db, account, amount)` 하나로 통일한다: `cash_balance`·`total_asset`은 `amount`, `bonus_cash`는 `amount / max(1 + current_roi/100, 0.01)`(0.01원 반올림)만큼 원자적 UPDATE로 증가시킨다. `current_roi`는 건드리지 않는다.
+보상 지급은 `reward_service.grant_cash(db, account, amount, *, redis)` 하나로 통일한다: 계좌 행을 `SELECT ... FOR UPDATE`로 잠그고 최신값으로 재적재한 뒤, `cash_balance`·`total_asset`은 `amount`, `bonus_cash`는 `amount / max(1 + r/100, 0.01)`(0.01원 반올림)만큼 원자적 UPDATE로 증가시킨다. r 은 '현재 NAV' 기준 ROI — OPEN 포지션이 없으면 `current_roi`, 있으면 시즌 종목의 최신가(`market_clock.read_latest`, 신선도 무관 — 랭킹과 같은 마지막 평가가)로 `ranking_service.compute_live_roi`. 보유 중인데 최신가가 없으면 `RewardUnavailable` → 퀘스트 수령은 rollback 후 409 `PRICE_UNAVAILABLE`(미수령 유지, 잠시 후 재시도), 퀴즈는 제출만 기록하고 보상 생략(`rewarded=false`, 경고 로그). `current_roi`는 건드리지 않는다. 보상은 거래 가능한 시즌(`season_is_tradable`: ACTIVE 이고 `end_at` 미경과)의 계좌에만 지급 — 정산 대기 시즌이면 퀘스트 `NO_ACTIVE_SEASON`, 퀴즈 보상 없음.
 
-근거: 실현 자산 A = P(1+r)일 때 원금을 P' = P + b/(1+r)로 두면 (A+b)/P' = 1+r → ROI 불변. 같은 금액 b를 원금에 더하면 (A−P)/(P+b)로 0 쪽으로 희석되어, 마이너스 계좌가 보상만으로 순위가 오르는 악용이 생긴다. 보유 포지션이 열려 있을 때의 실시간 ROI는 근사(다음 청산 시 정확히 재계산). 1+r 하한 0.01은 ROI −100%(자산 0) 방어.
+근거: 현재 자산 A = P(1+r)일 때 원금을 P' = P + b/(1+r)로 두면 (A+b)/P' = 1+r → ROI 불변. 같은 금액 b를 원금에 더하면 (A−P)/(P+b)로 0 쪽으로 희석되어, 마이너스 계좌가 보상만으로 순위가 오르는 악용이 생긴다. 포지션 보유 중에 실현 ROI를 쓰면 같은 악용이 생긴다(예: 실현 0%·실시간 −80% 계좌에 2,100,000 지급 시 실시간 ROI 약 −66%로 개선, 청산하면 그대로 확정) — 그래서 보유 중에는 실시간 ROI로 원금을 늘린다. 지급 이후의 손익은 늘어난 원금 기준으로 측정된다(펀드 입금과 동일). 1+r 하한 0.01은 ROI −100%(자산 0) 방어.
+
+시즌 정산의 명예의 전당 순위는 `total_trades > 0` 계좌만 대상 — 퀴즈·퀘스트 보상만 받은 무거래 계좌(ROI 0%)가 손실 낸 실제 플레이어보다 앞서 자리를 차지하지 않게 한다.
 
 ## 3. 유저 API (trading_game 8003, 로그인 필수)
 
@@ -51,7 +53,7 @@ Router → Service → ORM. 신규 라우터 `routers/quests.py`, `routers/acade
 | 엔드포인트 | 동작 |
 |---|---|
 | `GET /api/game/quests` | Q1·Q2·Q3' 각각 `code, title, description, reward_cash 또는 reward_badge, progress, target, completed, claimed` + 보유 배지 목록 |
-| `POST /api/game/quests/{code}/claim` | 미달성 409 `QUEST_NOT_COMPLETED`, 수령됨 409 `ALREADY_CLAIMED`, 활성 시즌 없음 409 `NO_ACTIVE_SEASON`, 알 수 없는 코드 404. `UPDATE ... SET claimed_at=now() WHERE claimed_at IS NULL AND completed_at IS NOT NULL`의 rowcount로 중복 방지 후 `grant_cash` 또는 배지 지급. 응답: 갱신된 퀘스트 + 계좌 잔고 |
+| `POST /api/game/quests/{code}/claim` | 미달성 409 `QUEST_NOT_COMPLETED`, 수령됨 409 `ALREADY_CLAIMED`, 활성(거래 가능) 시즌 없음 409 `NO_ACTIVE_SEASON`, 보유 포지션 시세 없음 409 `PRICE_UNAVAILABLE`, 알 수 없는 코드 404. `UPDATE ... SET claimed_at=now() WHERE claimed_at IS NULL AND completed_at IS NOT NULL`의 rowcount로 중복 방지 후 `grant_cash` 또는 배지 지급. 응답: 갱신된 퀘스트 + 계좌 잔고 |
 | `GET /api/game/academy/quiz` | 3문항(`id, question, choices[]`) — 정답 제외. `unlocked` 여부 포함 |
 | `POST /api/game/academy/submit` | `{answers: {id: choice_index}}`. 전부 정답이면 `unlocked_leverage_5x=True, passed_at=now()`. 응답: 문항별 정오·해설, `unlocked`. `attempts`+1 |
 | `GET /api/game/quiz/random` | QUIZ off → 503 `FEATURE_DISABLED`. 시도하지 않은 퀴즈 1개를 무작위 선택, `user_quiz_attempts`(served_at=now) 삽입. 응답: `id, chart_snapshot(날짜 제거·첫 종가=100 정규화), time_limit_sec=10` (ticker 제외 — 정답 검색 방지; answer·actual_change·explanation·pattern_type 제외). 남은 문제 없음 → 404 `NO_QUIZ_AVAILABLE` |
@@ -98,6 +100,7 @@ Streak 규칙(KST 날짜): `last_activity_date == today` → 변화 없음 / `==
 | 남은 퀴즈 없음 | 404 `NO_QUIZ_AVAILABLE` |
 | 미배정/재제출 | 409 `QUIZ_NOT_SERVED` / `ALREADY_SUBMITTED` |
 | 퀘스트 수령 실패 | 409 `QUEST_NOT_COMPLETED` / `ALREADY_CLAIMED` / `NO_ACTIVE_SEASON`, 404 미지정 코드 |
+| 보상 시세 없음(포지션 보유 중 최신가 없음) | 퀘스트 409 `PRICE_UNAVAILABLE`(미수령 유지, 잠시 후 재시도) / 퀴즈는 보상 생략(`rewarded=false`) |
 
 퀘스트·Streak 훅 예외는 로그만 남기고 주문 응답은 성공. 해금 검사만 필수 경로.
 

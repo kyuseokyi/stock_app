@@ -88,7 +88,7 @@ uv run uvicorn apps.trading_game.main:app --reload --port 8003 --workers 1
 - **스마트 넛지(Phase 5a)**: `POST /api/game/orders`·`POST /api/game/positions/{id}/close` 응답에 `nudges[]`(WARNING 과열 추격 RSI≥80 LONG · ADVICE 100%+5x · PRAISE 손절/수동 ROI −3~−1%). 자동청산(STOP_LOSS)은 WS `{type:"nudge", position_id, nudge}`. 넛지는 best-effort(실패해도 주문·청산 정상). RSI는 Wilder(14) = ClickHouse 일봉(오늘 이전) + 현재가, 종가 캐시 `game:rsi:closes:{ticker}:{YYYYMMDD}`(26h). fan-out 큐 포화 시 오래된 항목부터 드롭되므로 WS 넛지도 유실될 수 있음(best-effort).
 - **Phase 5b API**: 유저 `GET /api/game/quests`, `POST /api/game/quests/{code}/claim`(Q1 손절·Q2 골든크로스·Q3' 주문 비중 선택지 25/50/100% 중 최소=25% 이하), `GET /api/game/academy/quiz`, `POST /api/game/academy/submit`, `GET /api/game/quiz/random`, `POST /api/game/quiz/{id}/submit`, `GET /api/game/streak/my`. 관리자 `GET /api/game/admin/feature-flags`, `PUT /api/game/admin/feature-flags/{key}`.
 - **5배 레버리지 잠금**: 아카데미 3문항 통과 전 5배 주문은 403 `LEVERAGE_LOCKED`. 이미 열린 5배 포지션은 영향 없음.
-- **보상과 랭킹**: 보상은 원금 조정분(`bonus_cash`)을 `b/(1+ROI)`만큼 함께 늘려 지급 직후 ROI 불변.
+- **보상과 랭킹**: 보상은 원금 조정분(`bonus_cash`)을 `b/(1+ROI)`만큼 함께 늘려 지급 직후 ROI 불변(포지션 보유 중엔 최신가 기준 실시간 ROI, 시세 없으면 퀘스트 409 `PRICE_UNAVAILABLE`·퀴즈 보상 생략). 시즌 정산 명예의 전당은 무거래(`total_trades=0`) 계좌 제외.
 - **야간 차트 퀴즈**: `GET /quiz/random`은 `id, chart_snapshot, time_limit_sec`만 반환(종목·날짜 숨김, 가격은 첫 종가=100으로 정규화해 정답 조회 방지). `POST /quiz/{id}/submit`에서 정답·`actual_change`·해설과 함께 `ticker, base_date` 공개. 보상은 KST 하루 최대 3회, 유저별 제출을 계정 행 락으로 직렬화해 동시 요청에도 상한 유지, 서버측 제한시간 10초+3초 유예.
 - **RSI·골든크로스 조회**: ClickHouse 조회는 각 2초 타임아웃, 타임아웃 시 60초 음성 캐시로 재대기 방지(best-effort).
 - **기능 플래그**: QUIZ·STREAK, admin_web "트레이딩 게임 > ⚙️ 기능 설정", Redis 30초 캐시(변경 시 즉시 무효화).

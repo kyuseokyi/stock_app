@@ -59,10 +59,11 @@ async def settle_due_season(db: AsyncSession, redis, close_price_provider) -> di
             closed += 1
 
     # 2~3) 최종순위 → 명예의 전당(상위 100). current_roi 동률 시 id 오름차순으로 결정적 순위.
+    # 무거래 계좌(퀴즈·퀘스트 보상만, ROI 0%)는 제외 — 손실 낸 실제 플레이어보다 앞서지 않도록.
     acc_rows = await db.execute(
         select(GameAccount, User.nickname)
         .join(User, GameAccount.user_id == User.id)
-        .where(GameAccount.season_id == season.id)
+        .where(GameAccount.season_id == season.id, GameAccount.total_trades > 0)
         .order_by(GameAccount.current_roi.desc(), GameAccount.id.asc())
         .limit(100)
     )

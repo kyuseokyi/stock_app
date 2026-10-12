@@ -48,7 +48,7 @@ QUEST_BY_CODE = {q.code: q for q in QUESTS}
 
 
 class QuestError(Exception):
-    """code: QUEST_NOT_FOUND | QUEST_NOT_COMPLETED | ALREADY_CLAIMED | NO_ACTIVE_SEASON"""
+    """code: QUEST_NOT_FOUND | QUEST_NOT_COMPLETED | ALREADY_CLAIMED | NO_ACTIVE_SEASON | PRICE_UNAVAILABLE"""
 
     def __init__(self, code: str, message: str) -> None:
         super().__init__(message)
@@ -132,7 +132,7 @@ async def list_progress(
 
 
 async def claim(
-    db: AsyncSession, user_id: int, code: str, *, now: datetime | None = None
+    db: AsyncSession, user_id: int, code: str, *, redis, now: datetime | None = None
 ) -> tuple[UserQuestProgress, GameAccount | None, UserBadge | None]:
     quest = QUEST_BY_CODE.get(code)
     if quest is None:
@@ -146,7 +146,8 @@ async def claim(
     account = None
     if quest.reward_cash is not None:
         season = await account_service.get_active_season(db)
-        if season is None:
+        # 종료시각이 지난(정산 대기) ACTIVE 시즌은 거래 불가 → 보상 대상 아님
+        if season is None or not account_service.season_is_tradable(season):
             raise QuestError("NO_ACTIVE_SEASON", "진행 중인 시즌이 없어 보상을 받을 수 없습니다.")
         account = await account_service.get_or_create_account(db, user_id, season.id)
 
@@ -166,7 +167,13 @@ async def claim(
         # 0행 갱신 — 변경 없음, rollback 불필요(세션 객체 expire 방지)
         raise QuestError("ALREADY_CLAIMED", "이미 보상을 받았습니다.")
     if account is not None:
-        await reward_service.grant_cash(db, account, quest.reward_cash)
+        try:
+            await reward_service.grant_cash(db, account, quest.reward_cash, redis=redis)
+        except reward_service.RewardUnavailable:
+            await db.rollback()  # 수령 표시(claimed_at) 되돌림 — 시세 회복 후 재시도 가능
+            raise QuestError(
+                "PRICE_UNAVAILABLE", "시세를 확인할 수 없어 지금은 보상을 받을 수 없습니다. 잠시 후 다시 시도하세요."
+            )
     badge = None
     if quest.reward_badge is not None:
         badge = await db.get(UserBadge, (user_id, quest.reward_badge))
