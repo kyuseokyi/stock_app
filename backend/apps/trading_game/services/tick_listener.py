@@ -71,20 +71,22 @@ async def run_listener(redis_url: str, stop: asyncio.Event) -> None:
                 continue
             redis = aioredis.from_url(redis_url, decode_responses=True)
             pubsub = redis.pubsub()
-            await pubsub.subscribe(f"stock:tick:{season.ticker}")
-            log.info("구독 시작 stock:tick:%s", season.ticker)
-            backoff = 1
-            async for msg in pubsub.listen():
-                if stop.is_set():
-                    break
-                if msg.get("type") != "message":
-                    continue
-                try:
-                    await _handle_tick(msg["data"])
-                except Exception:
-                    log.exception("틱 처리 실패 — skip")
-            await pubsub.aclose()
-            await redis.aclose()
+            try:
+                await pubsub.subscribe(f"stock:tick:{season.ticker}")
+                log.info("구독 시작 stock:tick:%s", season.ticker)
+                async for msg in pubsub.listen():
+                    if stop.is_set():
+                        break
+                    if msg.get("type") != "message":
+                        continue
+                    backoff = 1  # 실제 데이터 수신 성공 → 백오프 리셋
+                    try:
+                        await _handle_tick(msg["data"])
+                    except Exception:
+                        log.exception("틱 처리 실패 — skip")
+            finally:
+                await pubsub.aclose()
+                await redis.aclose()
         except asyncio.CancelledError:
             break
         except Exception:

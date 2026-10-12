@@ -48,14 +48,19 @@ class ConnectionManager:
 
     async def broadcast(self, payload: dict) -> None:
         text = json.dumps(payload, ensure_ascii=False)
-        for user_id, conns in list(self._conns.items()):
-            for ws in list(conns):
-                await self._safe_send(user_id, ws, text)
+        tasks = [
+            self._safe_send(user_id, ws, text)
+            for user_id, conns in list(self._conns.items())
+            for ws in list(conns)
+        ]
+        if tasks:
+            await asyncio.gather(*tasks)
 
     async def send_to_user(self, user_id: int, payload: dict) -> None:
         text = json.dumps(payload, ensure_ascii=False)
-        for ws in list(self._conns.get(user_id, set())):
-            await self._safe_send(user_id, ws, text)
+        tasks = [self._safe_send(user_id, ws, text) for ws in list(self._conns.get(user_id, set()))]
+        if tasks:
+            await asyncio.gather(*tasks)
 
 
 manager = ConnectionManager()
