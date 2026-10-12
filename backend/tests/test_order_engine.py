@@ -414,3 +414,41 @@ def test_season_is_tradable_variants():
         GameSeason(**base, status="ACTIVE", end_at=datetime(2000, 1, 1, tzinfo=timezone.utc))
     ) is False
     assert account_service.season_is_tradable(GameSeason(**base, status="FINISHED", end_at=None)) is False
+
+
+from apps.trading_game.services import liquidation_service
+
+
+async def test_check_and_liquidate_triggers_take_profit(session):
+    acc = await _seed_account(session)
+    pos = await order_engine.open_position(
+        session, account=acc, side="LONG", ratio=Decimal("1.0"),
+        leverage=1, entry_price=Decimal("100"), sl_pct=None, tp_pct=Decimal("0.10"),
+    )
+    # TP=110 도달 → 자동청산
+    trades = await liquidation_service.check_and_liquidate(session, "005930", Decimal("110"))
+    assert len(trades) == 1
+    assert trades[0].closed_reason == "TAKE_PROFIT"
+    closed = await session.get(GamePosition, pos.id)
+    assert closed.status == "CLOSED"
+
+
+async def test_check_and_liquidate_skips_untriggered(session):
+    acc = await _seed_account(session)
+    await order_engine.open_position(
+        session, account=acc, side="LONG", ratio=Decimal("1.0"),
+        leverage=1, entry_price=Decimal("100"), sl_pct=Decimal("0.05"), tp_pct=Decimal("0.10"),
+    )
+    trades = await liquidation_service.check_and_liquidate(session, "005930", Decimal("101"))
+    assert trades == []
+
+
+async def test_check_and_liquidate_other_ticker_untouched(session):
+    acc = await _seed_account(session)
+    await order_engine.open_position(
+        session, account=acc, side="LONG", ratio=Decimal("1.0"),
+        leverage=1, entry_price=Decimal("100"), sl_pct=None, tp_pct=Decimal("0.10"),
+    )
+    # 시즌 종목은 005930 이므로 다른 종목 틱으로는 청산 안 됨
+    trades = await liquidation_service.check_and_liquidate(session, "000660", Decimal("110"))
+    assert trades == []
