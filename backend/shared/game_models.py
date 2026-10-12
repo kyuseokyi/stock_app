@@ -207,7 +207,7 @@ class HallOfFame(Base):
 
 
 class GameCoachMessage(Base):
-    """관리자 스마트 코치 브리핑(모닝/이브닝/인플레이) + 지지/저항선."""
+    """관리자 스마트 코치 브리핑(모닝/이브닝/인플레이) + 지지/저항선. (Phase 5a: status 로 초안/발행 구분)"""
 
     __tablename__ = "game_coach_messages"
     __table_args__ = (
@@ -225,8 +225,13 @@ class GameCoachMessage(Base):
     content_md: Mapped[str] = mapped_column(Text, nullable=False)
     support_price: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
     resistance_price: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
-    published_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False
+    # DRAFT(임시저장) | PUBLISHED(발행). 기존 행 호환을 위해 서버 기본값 PUBLISHED.
+    status: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="PUBLISHED", server_default="PUBLISHED"
+    )
+    # 발행 시각 — PUBLISHED 로 전환될 때 서비스가 기록. 초안은 NULL.
+    published_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
     )
     author_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
