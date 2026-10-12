@@ -28,6 +28,7 @@ celery_app = Celery(
         "apps.collector.tasks.ohlcv",
         "apps.collector.tasks.backfill",
         "apps.collector.tasks.universe",
+        "apps.collector.tasks.settle_season",
     ],
 )
 
