@@ -49,4 +49,8 @@ celery_app.conf.beat_schedule = {
         "schedule": crontab(hour=20, minute=30),
         # 마스터 소스는 STOCK_MASTER_SOURCE(기본 auto: .mst→실패시 fallback)
     },
+    "settle-trading-season": {
+        "task": "settle_trading_season",
+        "schedule": crontab(hour=20, minute=40),
+    },
 }
