@@ -54,3 +54,47 @@ def test_mbti_bull_sniper():
         _trade(side="LONG", pnl="-50", ratio="0.25", had_sl=False, hold_sec=7200),
     ]
     assert mbti_analyzer.classify_mbti(trades) == "황소 저격수"
+
+
+import pytest
+from fakeredis import aioredis as fake_aioredis
+
+from apps.trading_game.services import ranking_service
+
+
+@pytest.fixture
+async def redis():
+    r = fake_aioredis.FakeRedis(decode_responses=True)
+    yield r
+    await r.aclose()
+
+
+def test_compute_live_roi_flat_cash():
+    roi = ranking_service.compute_live_roi(
+        Decimal("11000000"), None, Decimal("100"), Decimal("10000000")
+    )
+    assert roi == Decimal("10.0000")
+
+
+def test_compute_live_roi_with_open_position():
+    class _P:
+        side = "LONG"
+        entry_price = Decimal("100")
+        size_amount = Decimal("5000000")
+        leverage = 1
+    roi = ranking_service.compute_live_roi(
+        Decimal("5000000"), _P(), Decimal("110"), Decimal("10000000")
+    )
+    assert roi > Decimal("4")
+
+
+async def test_update_and_my_rank(redis):
+    await ranking_service.update_rank(redis, 1, 10, Decimal("5.5"))
+    await ranking_service.update_rank(redis, 1, 20, Decimal("12.3"))
+    await ranking_service.update_rank(redis, 1, 30, Decimal("-2.0"))
+    mine = await ranking_service.my_rank(redis, 1, 20)
+    assert mine["rank"] == 1
+    assert mine["roi_pct"] == 12.3
+    assert mine["total"] == 3
+    none_rank = await ranking_service.my_rank(redis, 1, 999)
+    assert none_rank["rank"] is None
