@@ -10,8 +10,11 @@ import redis.asyncio as aioredis
 from sqlalchemy import select
 
 from shared.database import AsyncSessionLocal
-from shared.game_models import GameAccount, GamePosition, GameSeason
-from apps.trading_game.services import account_service, liquidation_service, pricing
+from shared.game_models import INITIAL_CASH, GameAccount, GamePosition, GameSeason
+from apps.trading_game import deps
+from apps.trading_game.services import (
+    account_service, liquidation_service, pricing, ranking_service,
+)
 from apps.trading_game.services.connection_manager import manager
 
 log = logging.getLogger("trading_game.listener")
@@ -34,7 +37,7 @@ async def _push_personal_pnl(ticker: str, price: Decimal) -> None:
         return
     async with AsyncSessionLocal() as db:
         rows = await db.execute(
-            select(GamePosition, GameAccount.user_id)
+            select(GamePosition, GameAccount)
             .join(GameAccount, GamePosition.account_id == GameAccount.id)
             .join(GameSeason, GameAccount.season_id == GameSeason.id)
             .where(
@@ -44,15 +47,17 @@ async def _push_personal_pnl(ticker: str, price: Decimal) -> None:
                 GameAccount.user_id.in_(uids),
             )
         )
-        for pos, user_id in rows.all():
+        for pos, acc in rows.all():
             roi = pricing.compute_roi_pct(pos.side, pos.entry_price, price, pos.leverage)
             pnl = pricing.compute_pnl(pos.size_amount, roi)
-            await manager.send_to_user(user_id, {
+            await manager.send_to_user(acc.user_id, {
                 "type": "position_pnl",
                 "position_id": str(pos.id),
                 "roi_pct": float(roi),
                 "pnl_amount": float(pnl),
             })
+            live = ranking_service.compute_live_roi(acc.cash_balance, pos, price, INITIAL_CASH)
+            await ranking_service.update_rank(deps.get_redis(), acc.season_id, acc.user_id, live)
 
 
 def _enqueue_fanout(tick: dict, price: Decimal) -> None:
@@ -96,7 +101,9 @@ async def _handle_tick(raw: str) -> None:
     price = Decimal(str(tick["price"]))
     # 청산은 리스너 코루틴에서 인라인(정확성 우선)
     async with AsyncSessionLocal() as db:
-        await liquidation_service.check_and_liquidate(db, ticker, price)
+        trades = await liquidation_service.check_and_liquidate(db, ticker, price)
+        for tr in trades:
+            await ranking_service.sync_account_rank(deps.get_redis(), db, tr.account_id)
     # fan-out 은 별도 워커로 위임(느린 클라이언트가 청산/소비를 막지 않게)
     _enqueue_fanout(tick, price)
 

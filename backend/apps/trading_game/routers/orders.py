@@ -15,7 +15,7 @@ from shared.models import User
 from shared.game_models import INITIAL_CASH, GameAccount, GamePosition, GameSeason
 from apps.trading_game import deps
 from apps.trading_game.schemas.game_dtos import AccountResponse, OrderRequest, PositionResponse
-from apps.trading_game.services import account_service, market_clock, order_engine, pricing
+from apps.trading_game.services import account_service, market_clock, order_engine, pricing, ranking_service
 
 router = APIRouter(prefix="/api/game", tags=["trading-game"])
 
@@ -122,6 +122,7 @@ async def close_order(
     )
     if trade is None:
         raise HTTPException(status.HTTP_409_CONFLICT, "이미 청산된 포지션입니다.")
+    await ranking_service.sync_account_rank(deps.get_redis(), db, account.id)
     refreshed = await db.get(GamePosition, pos.id)
     return _position_dto(refreshed, trade.roi_pct, trade.pnl_amount)
 
