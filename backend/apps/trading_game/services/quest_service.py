@@ -76,6 +76,10 @@ async def _golden_cross_now(redis, ticker: str, price: Decimal) -> bool:
         closes = await asyncio.wait_for(
             rsi_service.cached_closes(redis, ticker), timeout=GOLDEN_CROSS_TIMEOUT_SECONDS
         )
+    except asyncio.TimeoutError:
+        await rsi_service.mark_closes_unavailable(redis, ticker)
+        log.warning("골든크로스 종가 조회 실패/지연 — Q2 판정 생략", exc_info=True)
+        return False
     except Exception:
         log.warning("골든크로스 종가 조회 실패/지연 — Q2 판정 생략", exc_info=True)
         return False

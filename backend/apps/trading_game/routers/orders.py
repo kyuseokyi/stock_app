@@ -88,6 +88,10 @@ async def _open_nudges(redis, ticker: str, body: OrderRequest, entry_price: Deci
             rsi = await asyncio.wait_for(
                 rsi_service.current_rsi(redis, ticker, entry_price), timeout=RSI_TIMEOUT_SECONDS
             )
+        except asyncio.TimeoutError:
+            await rsi_service.mark_closes_unavailable(redis, ticker)
+            log.warning("RSI 조회 실패/지연 — 과열 넛지만 생략", exc_info=True)
+            rsi = None
         except Exception:
             log.warning("RSI 조회 실패/지연 — 과열 넛지만 생략", exc_info=True)
             rsi = None

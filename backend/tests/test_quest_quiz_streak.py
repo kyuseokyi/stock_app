@@ -292,6 +292,14 @@ async def test_flag_default_on_cache_and_invalidate(session):
     assert await redis.get("game:flag:QUIZ") == "0"
 
 
+async def test_flag_cache_hit_ignores_db_change(session):
+    redis = fake_aioredis.FakeRedis(decode_responses=True)
+    assert await feature_flag_service.is_enabled(session, redis, "QUIZ") is True  # 캐시 적재
+    await session.merge(GameFeatureFlag(key="QUIZ", enabled=False))  # Redis 를 거치지 않는 직접 변경
+    await session.commit()
+    assert await feature_flag_service.is_enabled(session, redis, "QUIZ") is True  # 캐시 히트
+
+
 async def test_flag_redis_error_falls_back_to_db(session):
     session.add(GameFeatureFlag(key="STREAK", enabled=False))
     await session.commit()
@@ -356,6 +364,24 @@ async def test_touch_flow_and_highest(session):
     assert (r.current_streak, r.highest_streak) == (1, 2)
 
 
+def test_kst_today_midnight_boundary_for_streak():
+    from apps.trading_game.services import coach_service
+
+    utc_late = datetime(2026, 10, 12, 15, 30, tzinfo=timezone.utc)  # KST 10/13 00:30
+    assert coach_service.kst_today(utc_late) == date(2026, 10, 13)
+    assert coach_service.kst_today(datetime(2026, 10, 12, 14, 59, tzinfo=timezone.utc)) == date(2026, 10, 12)
+
+
+async def test_touch_uses_kst_date_at_midnight_boundary(session):
+    from apps.trading_game.services import coach_service
+
+    redis = fake_aioredis.FakeRedis(decode_responses=True)
+    user = await _seed_user(session)
+    kst = coach_service.kst_today(datetime(2026, 10, 12, 15, 30, tzinfo=timezone.utc))
+    r = await streak_service.touch(session, redis, user.id, today=kst)
+    assert r.last_activity_date == date(2026, 10, 13)
+
+
 async def test_touch_noop_when_streak_disabled(session):
     redis = fake_aioredis.FakeRedis(decode_responses=True)
     user = await _seed_user(session)
@@ -400,6 +426,7 @@ def test_golden_cross_within(extra, expected):
 def test_golden_cross_flat_and_short_input():
     assert indicators.golden_cross_within([100.0] * 40) is False
     assert indicators.golden_cross_within([100.0] * 10 + [110.0]) is False
+    assert indicators.golden_cross_within([100.0] * 21 + [110.0]) is False  # 22봉 < slow+within(23)
 
 
 async def test_cached_closes_caches_and_neg_caches():
@@ -640,6 +667,20 @@ async def test_academy_submit_unlock_and_retry(session):
     assert row.unlocked_leverage_5x is True and row.passed_at is not None and row.attempts == 2
 
 
+async def test_academy_wrong_after_pass_keeps_unlock(session):
+    user = await _seed_user(session)
+    _, unlocked = await academy_service.submit(session, user.id, ALL_CORRECT)
+    assert unlocked is True
+    passed_at = (await session.get(UserAcademy, user.id)).passed_at
+
+    wrong = {q.id: (q.answer + 1) % len(q.choices) for q in academy_service.QUESTIONS}
+    _, unlocked = await academy_service.submit(session, user.id, wrong)
+    assert unlocked is True
+    await session.refresh(await session.get(UserAcademy, user.id))
+    row = await session.get(UserAcademy, user.id)
+    assert row.unlocked_leverage_5x is True and row.passed_at == passed_at and row.attempts == 2
+
+
 async def test_academy_missing_answer_is_wrong(session):
     user = await _seed_user(session)
     partial = {k: v for k, v in ALL_CORRECT.items() if k != academy_service.QUESTIONS[-1].id}
@@ -684,6 +725,23 @@ async def test_5x_locked_until_academy_passed(api, maker, order_env):
 
 
 # ---------------------------------------------------------------- order hooks
+async def test_rsi_timeout_marks_closes_unavailable(api, maker, order_env, fake_redis, monkeypatch):
+    async def slow(*a, **k):
+        await asyncio.sleep(5)
+
+    monkeypatch.setattr(orders_router.rsi_service, "current_rsi", slow)
+    monkeypatch.setattr(orders_router, "RSI_TIMEOUT_SECONDS", 0.05)
+    client, set_user = api
+    async with maker() as db:
+        season = await _seed_season(db)
+        user = await _seed_user(db)
+    set_user(user)
+    r = await client.post("/api/game/orders", json=_order(season.id))
+    assert r.status_code == 201, r.text
+    today = datetime.now(rsi_service.KST).date()
+    assert await fake_redis.get(rsi_service._cache_key("005930", today) + ":neg") == "1"
+
+
 async def test_order_updates_quest_and_streak(api, maker, order_env):
     client, set_user = api
     async with maker() as db:

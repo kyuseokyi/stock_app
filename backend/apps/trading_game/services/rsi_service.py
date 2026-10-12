@@ -101,6 +101,15 @@ async def cached_closes(
         return None
 
 
+async def mark_closes_unavailable(redis, ticker: str, *, today: date | None = None) -> None:
+    """타임아웃 등으로 종가 조회가 지연된 종목을 짧게 음성 캐시 — 같은 주문 내 중복 CH 대기 방지."""
+    today = today or datetime.now(KST).date()
+    try:
+        await redis.set(f"{_cache_key(ticker, today)}:neg", "1", ex=NEG_CACHE_TTL_SECONDS)
+    except Exception:
+        log.warning("종가 음성캐시 설정 실패 ticker=%s", ticker, exc_info=True)
+
+
 async def current_rsi(
     redis,
     ticker: str,
