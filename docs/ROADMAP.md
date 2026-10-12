@@ -21,6 +21,7 @@
 - [x] 게시판/게시글/댓글 CRUD
 - [x] 게시판별 댓글 on/off 토글 (`comments_enabled`)
 - [x] TipTap 리치 에디터, 반응형 레이아웃 + 사이드바
+- [x] **admin_web TypeScript(strict) 전환** — 24개 파일, 백엔드 스키마 기반 DTO 타입(`src/types/`), build에 `tsc --noEmit` 포함. 트랜스파일 결과 동일성 검증 + 브라우저 스모크 통과
 - [x] 새 글 실시간 알림: 웹 SSE(Redis pub/sub) + 모바일 FCM(Mock)
 
 ### 주식 API (stock_api, GraphQL)
@@ -108,6 +109,8 @@
 - [ ] 이중추세선 조작 방식 재정의(대기 중)
 - [ ] 테스트(pytest / Vitest / Playwright)
 - [ ] 실 FCM 전환(`PUSH_BACKEND=fcm` + 자격증명)
+- [ ] web_client TypeScript 전환 (서브페이즈 6 직전, admin_web과 동일 방식)
+- [ ] **버그: 차트 삽입 모달 버튼이 글 폼을 submit** — `ChartSnapshotModal` 버튼에 `type="button"` 누락 + 모달이 `BlogEditorPage` `<form>` 내부 렌더 → 수정 화면에서 그리기 도구 클릭 시 글이 저장·이동됨(TS 전환 이전부터 존재, 2026-10-12 스모크에서 발견)
 
 ---
 

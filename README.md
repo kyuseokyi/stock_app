@@ -14,7 +14,7 @@ backend/
 │   └── collector/   # 수집·알림 워커 (Celery) — 새 글 FCM 푸시(Mock)
 ├── shared/          # 공통 DB 모델·세션·JWT 검증·보안
 └── alembic/         # DB 마이그레이션
-admin_web/           # 관리자 웹 (React + Vite + TailwindCSS)             (포트 5173)
+admin_web/           # 관리자 웹 (React + Vite + TailwindCSS, TypeScript)  (포트 5173)
 web_client/          # 일반 유저 웹 (React + Vite + Tailwind + Zustand)   (포트 3000)
 docs/                # 아키텍처·기획·프롬프트 문서
 docker-compose.dev.yml
@@ -96,6 +96,9 @@ cd admin_web
 npm install
 npm run dev        # http://localhost:5173
 ```
+- admin_web 은 **TypeScript(strict)** 다. `npm run build` = `tsc --noEmit && vite build` 이므로 타입 에러가 있으면 빌드(및 Docker 배포 빌드)가 실패한다. 타입만 확인하려면 `npx tsc --noEmit`.
+- 로컬에서 배포용 빌드를 확인할 때는 VITE_* 가 필수다: `VITE_API_BASE_URL=http://x VITE_AUTH_BASE_URL=http://x VITE_STOCK_API_URL=http://x npm run build`.
+- API 응답 타입은 `admin_web/src/types/`(백엔드 pydantic·GraphQL 스키마 기준)에 있다. 백엔드 응답 스키마를 바꾸면 여기도 함께 갱신한다.
 
 ### 4. 일반 유저 웹 (web_client)
 일반 사용자(B2C)용 반응형 웹. 블로그/커뮤니티 조회 + SSE 실시간 알림 + **임시 로그인(닉네임)으로 댓글 작성**. 디자인은 **토스(Toss) 라이트 스타일**(`docs/mobile_design_language.md`의 토큰을 Tailwind `theme.extend`로 이식 — brand `#3182f6` 등)로 모바일과 통일.
