@@ -1,7 +1,7 @@
 """트레이딩 게임 PostgreSQL ORM 모델 (핵심 6테이블).
 
 Phase 1 범위: 시즌/계좌/포지션/거래/명예의전당/코치메시지.
-교육·소셜 테이블(chart_quiz_pool, user_streaks, private_leagues)은 추후 Phase.
+Phase 5b: 퀘스트·배지·아카데미·차트 퀴즈·Streak·기능 플래그. private_leagues 는 추후 Phase.
 
 users.id 가 Integer 이므로 유저 참조 FK(user_id/author_id)는 Integer,
 게임 내부 PK(계좌/포지션/거래)는 UUID 를 쓴다. UUID 는 PostgreSQL 에선 네이티브
@@ -20,6 +20,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    JSON,
     Numeric,
     String,
     Text,
@@ -110,6 +111,10 @@ class GameAccount(Base, TimestampMixin):
     max_roi: Mapped[Decimal] = mapped_column(Numeric(8, 4), nullable=False, default=Decimal("0"))
     total_trades: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     win_trades: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    # Phase 5b: 보상 지급 시 늘어나는 원금 조정분(펀드 입금 방식). 원금 = INITIAL_CASH + bonus_cash.
+    bonus_cash: Mapped[Decimal] = mapped_column(
+        Numeric(15, 2), nullable=False, default=Decimal("0"), server_default="0"
+    )
 
     season: Mapped["GameSeason"] = relationship(back_populates="accounts")
     positions: Mapped[list["GamePosition"]] = relationship(
@@ -236,4 +241,118 @@ class GameCoachMessage(Base):
     )
     author_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+
+
+# ---------------------------------------------------------------- Phase 5b: 교육·습관 테이블
+
+
+class UserQuestProgress(Base):
+    """유저별 퀘스트 진행(영구 1회성). 퀘스트 정의는 코드 상수(quest_service.QUESTS)."""
+
+    __tablename__ = "user_quest_progress"
+
+    user_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    quest_code: Mapped[str] = mapped_column(String(30), primary_key=True)
+    progress: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    claimed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class UserBadge(Base):
+    """보유 배지(퀘스트 보상)."""
+
+    __tablename__ = "user_badges"
+
+    user_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    badge_code: Mapped[str] = mapped_column(String(30), primary_key=True)
+    awarded_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class UserAcademy(Base):
+    """아카데미 수료 상태 — 5배 레버리지 해금 플래그."""
+
+    __tablename__ = "user_academy"
+
+    user_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    unlocked_leverage_5x: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
+    passed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+
+
+class ChartQuiz(Base):
+    """야간 차트 패턴 퀴즈 풀(자동 생성). (ticker, base_date) 유일."""
+
+    __tablename__ = "chart_quiz_pool"
+    __table_args__ = (UniqueConstraint("ticker", "base_date", name="uq_quiz_ticker_base_date"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    ticker: Mapped[str] = mapped_column(String(20), nullable=False)
+    base_date: Mapped[date] = mapped_column(Date, nullable=False)
+    pattern_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    chart_snapshot: Mapped[list] = mapped_column(JSON, nullable=False)  # OHLCV dict 배열(기준일까지)
+    answer: Mapped[str] = mapped_column(String(10), nullable=False)  # 'UP' / 'DOWN'
+    actual_change: Mapped[Decimal] = mapped_column(Numeric(6, 2), nullable=False)
+    explanation: Mapped[str] = mapped_column(Text, nullable=False)
+    reward_cash: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=200000, server_default="200000"
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class UserQuizAttempt(Base):
+    """퀴즈 출제·제출 기록. served_at 으로 서버가 제한시간을 판정한다."""
+
+    __tablename__ = "user_quiz_attempts"
+
+    user_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    quiz_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("chart_quiz_pool.id", ondelete="CASCADE"), primary_key=True
+    )
+    served_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    choice: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    is_correct: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    rewarded: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
+    reward_date: Mapped[date | None] = mapped_column(Date, nullable=True)  # 보상 지급 KST 날짜(일일 한도)
+    submitted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class UserStreak(Base):
+    """연속 출석(KST 날짜 기준)."""
+
+    __tablename__ = "user_streaks"
+
+    user_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    current_streak: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    highest_streak: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    last_activity_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+
+
+class GameFeatureFlag(Base):
+    """기능 on/off(QUIZ, STREAK). 행이 없으면 서비스가 ON 으로 간주."""
+
+    __tablename__ = "game_feature_flags"
+
+    key: Mapped[str] = mapped_column(String(30), primary_key=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="true")
+    updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=True
     )
