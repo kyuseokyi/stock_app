@@ -182,3 +182,59 @@ async def test_settlement_idempotent(db):
 async def test_settlement_skips_open_ended(db):
     await _seed_season_with_players(db, end_at=None)
     assert await settlement.settle_due_season(db, None, lambda t: Decimal("110")) is None
+
+
+def test_next_month_bounds_rollover_and_leap():
+    from apps.trading_game.services.settlement import next_month_bounds, KST
+    s, e = next_month_bounds(datetime(2026, 12, 31, 20, 0, tzinfo=KST))
+    assert (s.year, s.month, s.day, s.hour) == (2027, 1, 1, 9)
+    assert (e.year, e.month, e.day, e.hour) == (2027, 1, 31, 20)
+    s2, e2 = next_month_bounds(datetime(2028, 1, 31, 20, 0, tzinfo=KST))
+    assert (e2.month, e2.day) == (2, 29)  # 윤년 2028
+
+
+async def test_settlement_hof_ordering_and_winrate(db):
+    past = datetime(2026, 9, 30, 11, 0, tzinfo=timezone.utc)
+    season = GameSeason(
+        season_number=1, ticker="005930", stock_name="삼성전자",
+        start_at=datetime(2026, 9, 1, 9, 0, tzinfo=timezone.utc), end_at=past, status="ACTIVE",
+    )
+    db.add(season); await db.commit(); await db.refresh(season)
+    for i, entry in enumerate([Decimal("100"), Decimal("200")]):  # 승자/패자
+        u = User(nickname=f"u{i}", role=UserRole.FREE, is_active=True)
+        db.add(u); await db.commit(); await db.refresh(u)
+        acc = GameAccount(user_id=u.id, season_id=season.id, cash_balance=Decimal("0"))
+        db.add(acc); await db.commit(); await db.refresh(acc)
+        db.add(GamePosition(
+            account_id=acc.id, side="LONG", entry_price=entry,
+            size_amount=INITIAL_CASH, entry_ratio=Decimal("1.0"), leverage=1, status="OPEN",
+        ))
+        await db.commit()
+    await settlement.settle_due_season(db, None, lambda t: Decimal("110"))
+    hof = (await db.execute(
+        select(HallOfFame).where(HallOfFame.season_id == season.id).order_by(HallOfFame.rank)
+    )).scalars().all()
+    assert [h.rank for h in hof] == [1, 2]
+    assert hof[0].final_roi > hof[1].final_roi
+    assert hof[0].win_rate == Decimal("100.00")
+    assert hof[1].win_rate == Decimal("0.00")
+
+
+async def test_settlement_aborts_when_no_close_price(db):
+    past = datetime(2026, 9, 30, 11, 0, tzinfo=timezone.utc)
+    season = await _seed_season_with_players(db, end_at=past)
+    result = await settlement.settle_due_season(db, None, lambda t: None)
+    assert result is None
+    await db.refresh(season)
+    assert season.status == "ACTIVE"  # 종가 없으면 정산 안 함, 시즌 유지
+
+
+async def test_settlement_next_season_dates(db):
+    from apps.trading_game.services.settlement import KST
+    past = datetime(2026, 9, 30, 11, 0, tzinfo=timezone.utc)  # 9월 말일 → 다음달=10월
+    await _seed_season_with_players(db, end_at=past)
+    await settlement.settle_due_season(db, None, lambda t: Decimal("110"))
+    nxt = (await db.execute(select(GameSeason).where(GameSeason.season_number == 2))).scalar_one()
+    s = nxt.start_at.astimezone(KST); e = nxt.end_at.astimezone(KST)
+    assert (s.month, s.day, s.hour) == (10, 1, 9)
+    assert (e.month, e.day, e.hour) == (10, 31, 20)

@@ -4,7 +4,7 @@ from __future__ import annotations
 import calendar
 import logging
 from datetime import datetime, timedelta, timezone
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -58,12 +58,12 @@ async def settle_due_season(db: AsyncSession, redis, close_price_provider) -> di
         if trade is not None:
             closed += 1
 
-    # 2~3) 최종순위 → 명예의 전당(상위 100)
+    # 2~3) 최종순위 → 명예의 전당(상위 100). current_roi 동률 시 id 오름차순으로 결정적 순위.
     acc_rows = await db.execute(
         select(GameAccount, User.nickname)
         .join(User, GameAccount.user_id == User.id)
         .where(GameAccount.season_id == season.id)
-        .order_by(GameAccount.current_roi.desc())
+        .order_by(GameAccount.current_roi.desc(), GameAccount.id.asc())
         .limit(100)
     )
     archived = 0
@@ -78,31 +78,40 @@ async def settle_due_season(db: AsyncSession, redis, close_price_provider) -> di
         trades = (await db.execute(
             select(GameTrade).where(GameTrade.account_id == acc.id)
         )).scalars().all()
-        win_rate = round(acc.win_trades / acc.total_trades * 100, 2) if acc.total_trades else 0
+        if acc.total_trades:
+            win_rate = (Decimal(acc.win_trades) / acc.total_trades * Decimal("100")).quantize(
+                Decimal("0.01"), rounding=ROUND_HALF_UP
+            )
+        else:
+            win_rate = Decimal("0.00")
         db.add(HallOfFame(
             season_id=season.id, rank=rank, user_id=acc.user_id, user_nickname=nick,
             final_roi=acc.current_roi, final_asset=acc.total_asset,
-            win_rate=Decimal(str(win_rate)), trading_mbti=mbti_analyzer.classify_mbti(trades),
+            win_rate=win_rate, trading_mbti=mbti_analyzer.classify_mbti(trades),
         ))
         archived += 1
     await db.commit()
 
-    # 4) 시즌 FINISHED
-    season.status = "FINISHED"
-    await db.commit()
-
-    # 5) 차기 시즌 생성(멱등: season_number 중복이면 skip)
+    # 4~5) 시즌 FINISHED + 차기 시즌 생성을 한 트랜잭션으로(원자적).
+    # 둘을 분리하면 사이 크래시 시 ACTIVE 시즌이 사라져 게임이 영구 정지된다.
     next_num = season.season_number + 1
     dup = await db.execute(select(GameSeason).where(GameSeason.season_number == next_num))
     next_season_num = None
     if dup.scalar_one_or_none() is None:
+        # 차기 시즌 창은 이번 시즌 end_at(말일) 기준 '다음 달'. 워커가 한 달 이상
+        # 멈췄다면 이미 만료된 시즌이 생성될 수 있고, 다음 실행에서 연쇄 정산된다(의도된 동작).
         start, end = next_month_bounds(end_at.astimezone(KST))
         db.add(GameSeason(
             season_number=next_num, ticker=season.ticker, stock_name=season.stock_name,
             start_at=start, end_at=end, status="ACTIVE", initial_cash=INITIAL_CASH,
         ))
-        await db.commit()
         next_season_num = next_num
+    season.status = "FINISHED"
+    await db.commit()
 
+    log.info(
+        "시즌 %s 정산 완료 — closed=%s archived=%s next=%s",
+        season.season_number, closed, archived, next_season_num,
+    )
     return {"settled_season": season.season_number, "closed": closed,
             "archived": archived, "next_season": next_season_num}
