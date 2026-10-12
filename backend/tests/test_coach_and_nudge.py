@@ -67,3 +67,54 @@ async def test_coach_message_status_defaults_to_published(session):
     await session.commit()
     await session.refresh(msg)
     assert msg.status == "PUBLISHED"
+
+
+# ---------------------------------------------------------------- nudge engine
+from apps.trading_game.services import nudge_engine
+
+
+def _codes(nudges):
+    return [n.code for n in nudges]
+
+
+@pytest.mark.parametrize("rsi, expected", [(79.99, []), (80.0, ["OVERBOUGHT_CHASE"]), (None, [])])
+def test_open_overbought_threshold(rsi, expected):
+    assert _codes(nudge_engine.nudges_for_open(side="LONG", ratio=0.25, leverage=1, rsi=rsi)) == expected
+
+
+def test_open_short_never_overbought_warning():
+    assert nudge_engine.nudges_for_open(side="SHORT", ratio=0.25, leverage=1, rsi=95.0) == []
+
+
+@pytest.mark.parametrize("ratio, leverage, expected", [
+    (1.0, 5, ["OVERLEVERAGE"]),
+    (1.0, 2, []),
+    (0.5, 5, []),
+])
+def test_open_overleverage(ratio, leverage, expected):
+    assert _codes(nudge_engine.nudges_for_open(side="SHORT", ratio=ratio, leverage=leverage, rsi=None)) == expected
+
+
+def test_open_warning_and_advice_together_in_order():
+    nudges = nudge_engine.nudges_for_open(side="LONG", ratio=1.0, leverage=5, rsi=85.0)
+    assert _codes(nudges) == ["OVERBOUGHT_CHASE", "OVERLEVERAGE"]
+    assert [n.type for n in nudges] == ["WARNING", "ADVICE"]
+
+
+@pytest.mark.parametrize("reason, roi, expected", [
+    ("STOP_LOSS", Decimal("-0.99"), []),
+    ("STOP_LOSS", Decimal("-1"), ["PRINCIPLED_STOP"]),
+    ("MANUAL", Decimal("-2.5"), ["PRINCIPLED_STOP"]),
+    ("STOP_LOSS", Decimal("-3"), ["PRINCIPLED_STOP"]),
+    ("STOP_LOSS", Decimal("-3.01"), []),
+    ("TAKE_PROFIT", Decimal("-2"), []),
+    ("MARGIN_CALL", Decimal("-2"), []),
+])
+def test_close_principled_stop(reason, roi, expected):
+    assert _codes(nudge_engine.nudges_for_close(closed_reason=reason, roi_pct=roi)) == expected
+
+
+def test_nudge_to_dict_shape():
+    n = nudge_engine.nudges_for_close(closed_reason="MANUAL", roi_pct=Decimal("-2"))[0]
+    assert n.to_dict() == {"type": "PRAISE", "code": "PRINCIPLED_STOP", "message": n.message}
+    assert n.message.startswith("💡")
