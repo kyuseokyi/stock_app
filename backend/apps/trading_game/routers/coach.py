@@ -13,7 +13,7 @@ from shared.models import User
 from apps.trading_game.schemas.game_dtos import (
     CoachMessageResponse, CoachTodayResponse, CoachUpsertRequest, SeasonOption,
 )
-from apps.trading_game.services import coach_service, connection_manager
+from apps.trading_game.services import account_service, coach_service, connection_manager
 
 router = APIRouter(prefix="/api/game", tags=["trading-game-coach"])
 log = logging.getLogger("trading_game.coach")
@@ -37,7 +37,13 @@ async def upsert_coach_message(
         raise HTTPException(_ERROR_STATUS[e.code], str(e))
     if body.action == "publish":
         try:
-            await connection_manager.manager.broadcast(coach_service.coach_push_payload(msg))
+            active = await account_service.get_active_season(db)
+            if (
+                active is not None
+                and active.id == msg.season_id
+                and msg.target_date == coach_service.kst_today()
+            ):
+                await connection_manager.manager.broadcast(coach_service.coach_push_payload(msg))
         except Exception:
             log.warning("코치 발행 WS push 실패(발행은 정상 완료) id=%s", msg.id, exc_info=True)
     return coach_service.to_dto(msg)

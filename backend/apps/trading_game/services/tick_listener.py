@@ -123,8 +123,11 @@ async def _handle_tick(raw: str) -> None:
     async with AsyncSessionLocal() as db:
         results = await liquidation_service.liquidate_for_tick(db, ticker, price)
         for r in results:
-            await ranking_service.sync_account_rank(deps.get_redis(), db, r.trade.account_id)
-            _queue_close_nudges(r)  # 인라인 send 금지 — 큐로 위임
+            _queue_close_nudges(r)  # 인라인 send 금지 — 큐로 위임(랭킹 실패와 무관하게 먼저 적재)
+            try:
+                await ranking_service.sync_account_rank(deps.get_redis(), db, r.trade.account_id)
+            except Exception:
+                log.warning("랭킹 동기화 실패(청산은 정상 완료) account=%s", r.trade.account_id, exc_info=True)
     # fan-out 은 별도 워커로 위임(느린 클라이언트가 청산/소비를 막지 않게)
     _enqueue_fanout(tick, price)
 

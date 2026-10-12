@@ -81,12 +81,16 @@ RSI_TIMEOUT_SECONDS = 2.0
 
 async def _open_nudges(redis, ticker: str, body: OrderRequest, entry_price: Decimal) -> list[NudgeDTO]:
     """진입 넛지 — 실패·지연 시 빈 목록(체결 응답을 막지 않는 best-effort)."""
-    try:
-        rsi = None
-        if body.side == "LONG":
+    rsi = None
+    if body.side == "LONG":
+        try:
             rsi = await asyncio.wait_for(
                 rsi_service.current_rsi(redis, ticker, entry_price), timeout=RSI_TIMEOUT_SECONDS
             )
+        except Exception:
+            log.warning("RSI 조회 실패/지연 — 과열 넛지만 생략", exc_info=True)
+            rsi = None
+    try:
         found = nudge_engine.nudges_for_open(
             side=body.side, ratio=body.ratio, leverage=body.leverage, rsi=rsi
         )

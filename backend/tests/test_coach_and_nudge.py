@@ -56,17 +56,16 @@ async def test_coach_message_draft_has_null_published_at(session):
     assert msg.published_at is None
 
 
-async def test_coach_message_status_defaults_to_published(session):
+async def test_coach_message_orm_default_is_draft(session):
     season = await _seed_season(session)
     msg = GameCoachMessage(
         season_id=season.id, target_date=date(2026, 10, 13), coach_type="EVENING",
         title="t", summary_nudge="s", content_md="c",
-        published_at=datetime(2026, 10, 13, 11, 0, tzinfo=timezone.utc),
     )
     session.add(msg)
     await session.commit()
     await session.refresh(msg)
-    assert msg.status == "PUBLISHED"
+    assert msg.status == "DRAFT"
 
 
 # ---------------------------------------------------------------- nudge engine
@@ -169,17 +168,26 @@ async def test_current_rsi_caches_closes_per_day():
 
 async def test_current_rsi_returns_none_on_provider_error_and_does_not_cache_empty():
     redis = fake_aioredis.FakeRedis(decode_responses=True)
+    calls = {"boom": 0, "empty": 0}
 
     async def boom(ticker, today):
+        calls["boom"] += 1
         raise RuntimeError("clickhouse down")
 
     async def empty(ticker, today):
+        calls["empty"] += 1
         return []
 
     today = date(2026, 10, 13)
     assert await rsi_service.current_rsi(redis, "005930", Decimal("1"), today=today, closes_provider=boom) is None
-    assert await rsi_service.current_rsi(redis, "005930", Decimal("1"), today=today, closes_provider=empty) is None
+    assert await rsi_service.current_rsi(redis, "000660", Decimal("1"), today=today, closes_provider=empty) is None
     assert await redis.get("game:rsi:closes:005930:20261013") is None
+    assert await redis.get("game:rsi:closes:000660:20261013") is None
+    # 음성 캐시 창 안의 재호출은 provider 를 다시 치지 않는다
+    assert await rsi_service.current_rsi(redis, "005930", Decimal("1"), today=today, closes_provider=boom) is None
+    assert await rsi_service.current_rsi(redis, "000660", Decimal("1"), today=today, closes_provider=empty) is None
+    assert calls == {"boom": 1, "empty": 1}
+    assert 0 < await redis.ttl("game:rsi:closes:005930:20261013:neg") <= 60
 
 
 def test_fetch_closes_excludes_today(monkeypatch):
@@ -285,6 +293,7 @@ async def test_list_slot_messages_includes_drafts_and_push_payload(session):
 
     payload = coach_service.coach_push_payload(rows[0])
     assert payload["type"] == "coach"
+    assert payload["season_id"] == season.id
     assert payload["coach_type"] == "MORNING"
     assert payload["target_date"] == "2026-10-13"
     assert Decimal(payload["support_price"]) == Decimal("70000")
@@ -361,6 +370,7 @@ async def test_router_admin_upsert_flow_and_broadcast(api, maker, monkeypatch):
         sent.append(payload)
 
     monkeypatch.setattr(connection_manager.manager, "broadcast", fake_broadcast)
+    monkeypatch.setattr(coach_service, "kst_today", lambda: date(2026, 10, 13))
 
     r = await client.put("/api/game/admin/coach-messages", json=_body(season.id))
     assert r.status_code == 200 and r.json()["status"] == "DRAFT"
@@ -391,8 +401,29 @@ async def test_router_publish_succeeds_even_if_broadcast_fails(api, maker, monke
         raise RuntimeError("ws down")
 
     monkeypatch.setattr(connection_manager.manager, "broadcast", boom)
+    monkeypatch.setattr(coach_service, "kst_today", lambda: date(2026, 10, 13))
     r = await client.put("/api/game/admin/coach-messages", json=_body(season.id, action="publish"))
     assert r.status_code == 200 and r.json()["status"] == "PUBLISHED"
+
+
+async def test_router_publish_future_date_does_not_broadcast(api, maker, monkeypatch):
+    client, set_user = api
+    async with maker() as db:
+        season = await _seed_season(db)
+        set_user(await _seed_admin(db))
+    sent = []
+
+    async def fake_broadcast(payload):
+        sent.append(payload)
+
+    monkeypatch.setattr(connection_manager.manager, "broadcast", fake_broadcast)
+    monkeypatch.setattr(coach_service, "kst_today", lambda: date(2026, 10, 13))
+    r = await client.put(
+        "/api/game/admin/coach-messages",
+        json=_body(season.id, action="publish", target_date="2026-10-20"),
+    )
+    assert r.status_code == 200 and r.json()["status"] == "PUBLISHED"
+    assert sent == []
 
 
 async def test_router_non_admin_forbidden_and_validation(api, maker):
@@ -527,6 +558,24 @@ async def test_open_order_nudge_failure_does_not_break_order(api, maker, monkeyp
     assert r.json()["nudges"] == []
 
 
+async def test_open_order_rsi_timeout_keeps_overleverage(api, maker, monkeypatch, order_env):
+    client, set_user = api
+    async with maker() as db:
+        season = await _seed_season(db)
+        set_user(await _seed_player(db))
+
+    async def slow(*a, **k):
+        await _asyncio.sleep(1)
+
+    monkeypatch.setattr(orders_router, "RSI_TIMEOUT_SECONDS", 0.05)
+    monkeypatch.setattr(orders_router.rsi_service, "current_rsi", slow)
+    r = await client.post("/api/game/orders", json={
+        "season_id": season.id, "side": "LONG", "ratio": 1.0, "leverage": 5,
+    })
+    assert r.status_code == 201, r.text
+    assert [n["code"] for n in r.json()["nudges"]] == ["OVERLEVERAGE"]
+
+
 async def test_manual_close_praise_nudge(api, maker, order_env):
     client, set_user = api
     async with maker() as db:
@@ -627,6 +676,19 @@ async def test_handle_tick_stop_loss_enqueues_praise_nudge(listener_db, fresh_qu
     assert payload["type"] == "nudge"
     assert payload["position_id"] == str(pos.id)
     assert payload["nudge"]["code"] == "PRINCIPLED_STOP"
+
+
+async def test_handle_tick_rank_sync_failure_still_queues_nudge_and_tick(listener_db, fresh_queue, monkeypatch):
+    async with listener_db() as db:
+        await _seed_open_position(db, sl=Decimal("98"))
+
+    async def boom(*a, **k):
+        raise RuntimeError("redis down")
+
+    monkeypatch.setattr(tick_listener.ranking_service, "sync_account_rank", boom)
+    await tick_listener._handle_tick(json.dumps({"ticker": "005930", "price": 98}))
+    kinds = sorted(i[0] for i in _drain(fresh_queue))
+    assert kinds == ["nudge", "tick"]
 
 
 async def test_handle_tick_take_profit_enqueues_no_nudge(listener_db, fresh_queue):

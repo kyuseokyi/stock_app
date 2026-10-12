@@ -8,6 +8,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import Awaitable, Callable, Sequence
@@ -51,9 +52,15 @@ def _fetch_closes_from_clickhouse(ticker: str, today: date) -> list[float]:
     return closes[-CLOSES_LOOKBACK:]
 
 
+# 타임아웃 후에도 스레드는 계속 돌므로 기본 executor(DNS 등 공용) 고갈 방지용 전용 풀
+_CH_EXECUTOR = ThreadPoolExecutor(max_workers=2, thread_name_prefix="rsi-ch")
+NEG_CACHE_TTL_SECONDS = 60
+
+
 async def clickhouse_closes(ticker: str, today: date) -> list[float]:
-    """동기 ClickHouse 조회를 스레드로 위임(이벤트 루프 블로킹 방지)."""
-    return await asyncio.to_thread(_fetch_closes_from_clickhouse, ticker, today)
+    """동기 ClickHouse 조회를 전용 스레드풀로 위임(이벤트 루프 블로킹 방지)."""
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(_CH_EXECUTOR, _fetch_closes_from_clickhouse, ticker, today)
 
 
 def _cache_key(ticker: str, today: date) -> str:
@@ -71,14 +78,23 @@ async def current_rsi(
     """오늘 이전 종가(캐시) + live_price 로 RSI 계산. 실패·데이터 부족 시 None."""
     today = today or datetime.now(KST).date()
     key = _cache_key(ticker, today)
+    neg_key = f"{key}:neg"
     try:
         raw = await redis.get(key)
         if raw is not None:
             closes = [float(x) for x in json.loads(raw)]
         else:
-            closes = await closes_provider(ticker, today)
-            if closes:  # 빈 결과는 캐시하지 않음(수집 지연 시 재시도)
+            if await redis.get(neg_key) is not None:  # 직전 실패/빈 응답 — 짧게 재조회 억제
+                return None
+            try:
+                closes = await closes_provider(ticker, today)
+            except Exception:
+                await redis.set(neg_key, "1", ex=NEG_CACHE_TTL_SECONDS)
+                raise
+            if closes:
                 await redis.set(key, json.dumps(closes), ex=CACHE_TTL_SECONDS)
+            else:  # 빈 결과는 양성 캐시하지 않음(수집 지연 시 재시도) — 음성 캐시만 60초
+                await redis.set(neg_key, "1", ex=NEG_CACHE_TTL_SECONDS)
         return wilder_rsi([*closes, float(live_price)])
     except Exception:
         log.warning("RSI 계산 실패 ticker=%s — 넛지 생략", ticker, exc_info=True)

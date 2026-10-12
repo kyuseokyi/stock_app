@@ -225,9 +225,10 @@ class GameCoachMessage(Base):
     content_md: Mapped[str] = mapped_column(Text, nullable=False)
     support_price: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
     resistance_price: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
-    # DRAFT(임시저장) | PUBLISHED(발행). 기존 행 호환을 위해 서버 기본값 PUBLISHED.
+    # DRAFT(임시저장) | PUBLISHED(발행). ORM 기본은 DRAFT(안전). server_default PUBLISHED 는
+    # 마이그레이션에서 기존 행 백필 전용.
     status: Mapped[str] = mapped_column(
-        String(20), nullable=False, default="PUBLISHED", server_default="PUBLISHED"
+        String(20), nullable=False, default="DRAFT", server_default="PUBLISHED"
     )
     # 발행 시각 — PUBLISHED 로 전환될 때 서비스가 기록. 초안은 NULL.
     published_at: Mapped[datetime | None] = mapped_column(

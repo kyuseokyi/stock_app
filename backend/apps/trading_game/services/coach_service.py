@@ -130,6 +130,7 @@ def coach_push_payload(msg: GameCoachMessage) -> dict:
     """발행 시 WS broadcast 페이로드(JSON 직렬화 가능)."""
     return {
         "type": "coach",
+        "season_id": msg.season_id,
         "coach_type": msg.coach_type,
         "target_date": msg.target_date.isoformat(),
         "title": msg.title,
