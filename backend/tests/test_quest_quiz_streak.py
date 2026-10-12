@@ -592,3 +592,92 @@ async def test_router_quests(api, maker, fake_redis, closes_stub):
     r = await client.post("/api/game/quests/Q2_GOLDEN_CROSS/claim")
     assert r.status_code == 409 and r.json()["detail"]["code"] == "QUEST_NOT_COMPLETED"
     assert (await client.post("/api/game/quests/NOPE/claim")).status_code == 404
+
+
+# ---------------------------------------------------------------- academy + 5x lock
+from apps.trading_game.routers import orders as orders_router
+from apps.trading_game.services import academy_service
+
+ALL_CORRECT = {q.id: q.answer for q in academy_service.QUESTIONS}
+
+
+@pytest.fixture
+def order_env(monkeypatch, fake_redis, closes_stub):
+    """거래창·신선가 고정 + RSI/종가 CH 조회 차단. price["v"] 로 가격 변경."""
+    price = {"v": Decimal("100")}
+
+    async def fresh(_redis, _ticker):
+        return price["v"]
+
+    async def no_rsi(*a, **k):
+        return None
+
+    monkeypatch.setattr(orders_router.market_clock, "in_trading_window", lambda *a, **k: True)
+    monkeypatch.setattr(orders_router, "_require_fresh_price", fresh)
+    monkeypatch.setattr(orders_router.rsi_service, "current_rsi", no_rsi)
+    return price
+
+
+def _order(season_id, **over):
+    b = {"season_id": season_id, "side": "LONG", "ratio": 0.5, "leverage": 1}
+    b.update(over)
+    return b
+
+
+async def test_academy_submit_unlock_and_retry(session):
+    user = await _seed_user(session)
+    wrong = dict(ALL_CORRECT)
+    first = academy_service.QUESTIONS[0]
+    wrong[first.id] = (first.answer + 1) % len(first.choices)
+    results, unlocked = await academy_service.submit(session, user.id, wrong)
+    assert unlocked is False
+    assert [r["correct"] for r in results] == [False, True, True]
+    assert await academy_service.is_unlocked(session, user.id) is False
+
+    results, unlocked = await academy_service.submit(session, user.id, ALL_CORRECT)
+    assert unlocked is True and all(r["correct"] for r in results)
+    row = await session.get(UserAcademy, user.id)
+    assert row.unlocked_leverage_5x is True and row.passed_at is not None and row.attempts == 2
+
+
+async def test_academy_missing_answer_is_wrong(session):
+    user = await _seed_user(session)
+    partial = {k: v for k, v in ALL_CORRECT.items() if k != academy_service.QUESTIONS[-1].id}
+    _, unlocked = await academy_service.submit(session, user.id, partial)
+    assert unlocked is False
+
+
+async def test_router_academy_quiz_hides_answers(api, maker):
+    client, set_user = api
+    async with maker() as db:
+        set_user(await _seed_user(db))
+    r = await client.get("/api/game/academy/quiz")
+    assert r.status_code == 200
+    data = r.json()
+    assert data["unlocked"] is False and len(data["questions"]) == 3
+    assert all(set(q) == {"id", "question", "choices"} for q in data["questions"])
+
+    r = await client.post(
+        "/api/game/academy/submit", json={"answers": {str(k): v for k, v in ALL_CORRECT.items()}}
+    )
+    assert r.status_code == 200 and r.json()["unlocked"] is True
+    assert all("explanation" in x for x in r.json()["results"])
+
+
+async def test_5x_locked_until_academy_passed(api, maker, order_env):
+    client, set_user = api
+    async with maker() as db:
+        season = await _seed_season(db)
+        user = await _seed_user(db)
+    set_user(user)
+    r = await client.post("/api/game/orders", json=_order(season.id, leverage=5))
+    assert r.status_code == 403 and r.json()["detail"]["code"] == "LEVERAGE_LOCKED"
+
+    r = await client.post("/api/game/orders", json=_order(season.id, leverage=2))
+    assert r.status_code == 201, r.text
+    assert (await client.post(f"/api/game/positions/{r.json()['id']}/close")).status_code == 200
+
+    async with maker() as db:
+        await academy_service.submit(db, user.id, ALL_CORRECT)
+    r = await client.post("/api/game/orders", json=_order(season.id, leverage=5))
+    assert r.status_code == 201, r.text

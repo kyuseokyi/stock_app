@@ -9,7 +9,7 @@ from sqlalchemy import event
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from shared.models import Base, User, UserRole
-from shared.game_models import GameCoachMessage, GameSeason
+from shared.game_models import GameCoachMessage, GameSeason, UserAcademy
 
 
 @pytest.fixture
@@ -523,11 +523,19 @@ async def _seed_player(db) -> User:
     return u
 
 
+async def _seed_unlocked_player(db) -> User:
+    """Phase 5b: 5배 레버리지는 아카데미 해금자만 주문 가능."""
+    u = await _seed_player(db)
+    db.add(UserAcademy(user_id=u.id, unlocked_leverage_5x=True))
+    await db.commit()
+    return u
+
+
 async def test_open_order_returns_warning_and_advice(api, maker, monkeypatch, order_env):
     client, set_user = api
     async with maker() as db:
         season = await _seed_season(db)
-        set_user(await _seed_player(db))
+        set_user(await _seed_unlocked_player(db))
 
     async def hot_rsi(*a, **k):
         return 85.0
@@ -562,7 +570,7 @@ async def test_open_order_rsi_timeout_keeps_overleverage(api, maker, monkeypatch
     client, set_user = api
     async with maker() as db:
         season = await _seed_season(db)
-        set_user(await _seed_player(db))
+        set_user(await _seed_unlocked_player(db))
 
     async def slow(*a, **k):
         await _asyncio.sleep(1)

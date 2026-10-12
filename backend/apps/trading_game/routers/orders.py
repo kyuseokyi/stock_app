@@ -20,7 +20,7 @@ from apps.trading_game.schemas.game_dtos import (
     AccountResponse, NudgeDTO, OrderRequest, OrderResultResponse, PositionResponse,
 )
 from apps.trading_game.services import (
-    account_service, market_clock, nudge_engine, order_engine, pricing, ranking_service, rsi_service,
+    account_service, academy_service, market_clock, nudge_engine, order_engine, pricing, ranking_service, rsi_service,
 )
 
 router = APIRouter(prefix="/api/game", tags=["trading-game"])
@@ -118,6 +118,14 @@ async def open_order(
     season = await account_service.get_active_season(db)
     if season is None or season.id != body.season_id or not account_service.season_is_tradable(season):
         raise HTTPException(status.HTTP_409_CONFLICT, "거래 가능한 ACTIVE 시즌이 아닙니다.")
+
+    # Phase 5b: 5배 레버리지는 아카데미 통과자만(필수 게이트 — 체결 전에 거부)
+    if body.leverage == 5 and not await academy_service.is_unlocked(db, user.id):
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            detail={"code": "LEVERAGE_LOCKED",
+                    "message": "5배 레버리지는 아카데미 리스크 관리 퀴즈를 통과해야 사용할 수 있습니다."},
+        )
 
     # 이중 게이트: 거래 세션 창 + 최신가 신선도
     redis = deps.get_redis()

@@ -153,3 +153,30 @@ class QuestClaimResponse(BaseModel):
     quest: QuestResponse
     cash_balance: Decimal | None  # 현금 보상일 때 지급 후 잔고
     badge: BadgeDTO | None
+
+
+class AcademyQuestionDTO(BaseModel):
+    id: int
+    question: str
+    choices: list[str]
+
+
+class AcademyQuizResponse(BaseModel):
+    unlocked: bool
+    questions: list[AcademyQuestionDTO]
+
+
+class AcademySubmitRequest(BaseModel):
+    answers: dict[int, int]  # 문항 id → 선택 인덱스(0-based)
+
+
+class AcademyResultItem(BaseModel):
+    id: int
+    correct: bool
+    answer: int
+    explanation: str
+
+
+class AcademySubmitResponse(BaseModel):
+    unlocked: bool
+    results: list[AcademyResultItem]
