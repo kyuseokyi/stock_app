@@ -72,8 +72,8 @@ MOCK_TICK_STREAM=true uv run python -m apps.collector.run_game_ws   # Mock 모�
 uv run python -m scripts.test_game_ws_sub                           # 다른 터미널: stock:tick:* 수신 확인
 ```
 
-#### 트레이딩 게임 서비스 (Port 8003, Phase 3)
-실시간 가상 주문/체결 엔진 + 클라이언트 WebSocket 게이트웨이. 원클릭 진입(LONG/SHORT·레버리지 1x/2x/5x·비중 25/50/100%) → 현재가 즉시 체결 → 틱마다 TP/SL/마진콜 자동청산, WS로 틱·개인손익·시장심리 push.
+#### 트레이딩 게임 서비스 (Port 8003, Phase 3·4)
+실시간 가상 주문/체결 엔진 + 클라이언트 WebSocket 게이트웨이 + 실시간 랭킹/시즌 정산. 원클릭 진입(LONG/SHORT·레버리지 1x/2x/5x·비중 25/50/100%) → 현재가 즉시 체결 → 틱마다 TP/SL/마진콜 자동청산, WS로 틱·개인손익·시장심리 push.
 ```bash
 # ⚠️ 반드시 단일 워커(인메모리 WS 레지스트리/틱 리스너) — lifespan 이 Redis stock:tick:* 구독
 cd backend
@@ -82,6 +82,8 @@ uv run uvicorn apps.trading_game.main:app --reload --port 8003 --workers 1
 - **선행**: Phase 2 수집 데몬(`apps.collector.run_game_ws`)이 돌아 `stock:tick:*`·`stock:latest:*` 를 채워야 주문 체결 가능(장외엔 `MOCK_TICK_STREAM=true`). ACTIVE 시즌 시드 필요(`python -m scripts.seed_trading_game`).
 - **환경변수**: `REDIS_URL`(기본 `redis://localhost:6379/0`) · `TRADING_WINDOWS`(기본 `09:00-15:30,16:00-20:00` KST — KRX 정규장+애프터마켓, NXT 프리마켓 제외) · `STALE_SECONDS`(기본 `10` — 최신가가 이보다 오래되면 주문 거부).
 - **주문 이중 게이트**: 거래 세션 창 + 최신가 신선도. 둘 다 통과해야 체결(세션 밖/시세 끊김 → 409).
+- **실시간 랭킹(Phase 4)**: Redis ZSET(`game:season:{id}:ranking`)에 매 틱 보유자 라이브 ROI·청산 시 실현 ROI 반영. 조회 — `GET /api/game/seasons/{id}/leaderboard`(Top100), `GET /api/game/seasons/{id}/my-rank`, `GET /api/game/hall-of-fame`.
+- **시즌 정산(Phase 4)**: Celery beat `settle_trading_season` 매일 20:40 KST → 말일 도래 시 ClickHouse 당일 종가로 전액 강제청산 → 명예의 전당 박제(+Trading MBTI) → 시즌 FINISHED + 차기 시즌 자동 생성(멱등). worker+beat 가동 필요(`uv run celery -A apps.collector.celery_app worker/beat`).
 - 에뮬레이터 검증 시: `adb reverse tcp:8003 tcp:8003` 추가.
 
 > ⚠️ 관리자 웹 로그인은 **auth(8001)**, 게시판/글/댓글은 **blog(8000)** 을 사용합니다. 어드민을 테스트하려면 **두 서비스를 모두** 띄워야 합니다.
