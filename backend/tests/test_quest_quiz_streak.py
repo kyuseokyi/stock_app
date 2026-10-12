@@ -378,3 +378,44 @@ async def test_router_streak_my(api, maker, fake_redis):
         await feature_flag_service.set_flag(db, fake_redis, "STREAK", False)
     r = await client.get("/api/game/streak/my")
     assert r.json() == {"current_streak": 1, "highest_streak": 1, "last_activity_date": "2026-10-13", "enabled": False}
+
+
+# ---------------------------------------------------------------- indicators / closes cache
+from apps.trading_game.services import indicators, rsi_service
+
+_BASE = [100.0] * 22  # MA5 == MA20 == 100 (교차 직전 '<=' 상태)
+
+
+@pytest.mark.parametrize("extra, expected", [
+    ([110.0], True),                       # 오늘 교차
+    ([110.0, 110.0], True),                # 어제 교차
+    ([110.0, 110.0, 110.0], True),         # 2거래일 전 교차(3거래일 이내)
+    ([110.0, 110.0, 110.0, 110.0], False), # 3거래일 전 교차(4거래일째) — 불성립
+    ([110.0, 60.0], False),                # 교차했지만 현재 MA5 < MA20
+])
+def test_golden_cross_within(extra, expected):
+    assert indicators.golden_cross_within(_BASE + extra) is expected
+
+
+def test_golden_cross_flat_and_short_input():
+    assert indicators.golden_cross_within([100.0] * 40) is False
+    assert indicators.golden_cross_within([100.0] * 10 + [110.0]) is False
+
+
+async def test_cached_closes_caches_and_neg_caches():
+    redis = fake_aioredis.FakeRedis(decode_responses=True)
+    calls = []
+
+    async def provider(ticker, today):
+        calls.append(ticker)
+        return [1.0, 2.0]
+
+    assert await rsi_service.cached_closes(redis, "005930", today=D, closes_provider=provider) == [1.0, 2.0]
+    assert await rsi_service.cached_closes(redis, "005930", today=D, closes_provider=provider) == [1.0, 2.0]
+    assert calls == ["005930"]  # 두 번째는 캐시
+
+    async def boom(ticker, today):
+        raise RuntimeError("ch down")
+
+    assert await rsi_service.cached_closes(redis, "000660", today=D, closes_provider=boom) is None
+    assert await redis.get(f"game:rsi:closes:000660:{D:%Y%m%d}:neg") == "1"

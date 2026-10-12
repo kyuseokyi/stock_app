@@ -1,4 +1,5 @@
 """과열 판단용 Wilder RSI(14) — 일봉 종가(오늘 이전) + 실시간 현재가 (Phase 5a).
+종가 캐시(cached_closes)는 Phase 5b 골든크로스 판정에서도 재사용한다.
 
 종가 배열은 하루 단위로 Redis 에 캐시해 주문마다 ClickHouse 를 치지 않는다.
 모든 실패는 None(넛지 미발생)으로 흡수한다 — 주문 경로를 막지 않는 best-effort.
@@ -67,6 +68,39 @@ def _cache_key(ticker: str, today: date) -> str:
     return f"game:rsi:closes:{ticker}:{today:%Y%m%d}"
 
 
+async def cached_closes(
+    redis,
+    ticker: str,
+    *,
+    today: date | None = None,
+    closes_provider: ClosesProvider = clickhouse_closes,
+) -> list[float] | None:
+    """오늘 이전 일봉 종가(하루 단위 캐시). 실패·빈 결과는 None — 예외를 던지지 않는다."""
+    today = today or datetime.now(KST).date()
+    key = _cache_key(ticker, today)
+    neg_key = f"{key}:neg"
+    try:
+        raw = await redis.get(key)
+        if raw is not None:
+            return [float(x) for x in json.loads(raw)]
+        if await redis.get(neg_key) is not None:  # 직전 실패/빈 응답 — 짧게 재조회 억제
+            return None
+        try:
+            closes = await closes_provider(ticker, today)
+        except Exception:
+            await redis.set(neg_key, "1", ex=NEG_CACHE_TTL_SECONDS)
+            raise
+        if closes:
+            await redis.set(key, json.dumps(closes), ex=CACHE_TTL_SECONDS)
+            return closes
+        # 빈 결과는 양성 캐시하지 않음(수집 지연 시 재시도) — 음성 캐시만 60초
+        await redis.set(neg_key, "1", ex=NEG_CACHE_TTL_SECONDS)
+        return None
+    except Exception:
+        log.warning("종가 조회 실패 ticker=%s", ticker, exc_info=True)
+        return None
+
+
 async def current_rsi(
     redis,
     ticker: str,
@@ -76,25 +110,10 @@ async def current_rsi(
     closes_provider: ClosesProvider = clickhouse_closes,
 ) -> float | None:
     """오늘 이전 종가(캐시) + live_price 로 RSI 계산. 실패·데이터 부족 시 None."""
-    today = today or datetime.now(KST).date()
-    key = _cache_key(ticker, today)
-    neg_key = f"{key}:neg"
+    closes = await cached_closes(redis, ticker, today=today, closes_provider=closes_provider)
+    if not closes:
+        return None
     try:
-        raw = await redis.get(key)
-        if raw is not None:
-            closes = [float(x) for x in json.loads(raw)]
-        else:
-            if await redis.get(neg_key) is not None:  # 직전 실패/빈 응답 — 짧게 재조회 억제
-                return None
-            try:
-                closes = await closes_provider(ticker, today)
-            except Exception:
-                await redis.set(neg_key, "1", ex=NEG_CACHE_TTL_SECONDS)
-                raise
-            if closes:
-                await redis.set(key, json.dumps(closes), ex=CACHE_TTL_SECONDS)
-            else:  # 빈 결과는 양성 캐시하지 않음(수집 지연 시 재시도) — 음성 캐시만 60초
-                await redis.set(neg_key, "1", ex=NEG_CACHE_TTL_SECONDS)
         return wilder_rsi([*closes, float(live_price)])
     except Exception:
         log.warning("RSI 계산 실패 ticker=%s — 넛지 생략", ticker, exc_info=True)
