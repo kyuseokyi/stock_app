@@ -459,3 +459,98 @@ async def test_router_coach_today_without_active_season(api, maker, monkeypatch)
     data = r.json()
     assert data["season_id"] is None and data["morning"] is None
     assert data["evening"] is None and data["active"] is None
+
+
+# ---------------------------------------------------------------- orders + nudges
+from apps.trading_game.routers import orders as orders_router
+
+
+@pytest.fixture
+def order_env(monkeypatch):
+    """거래창·신선가·Redis 를 고정. price["v"] 를 바꿔가며 사용."""
+    price = {"v": Decimal("100")}
+    redis = fake_aioredis.FakeRedis(decode_responses=True)
+
+    async def fresh(_redis, _ticker):
+        return price["v"]
+
+    async def no_rsi(*a, **k):
+        return None
+
+    monkeypatch.setattr(orders_router.market_clock, "in_trading_window", lambda *a, **k: True)
+    monkeypatch.setattr(orders_router, "_require_fresh_price", fresh)
+    monkeypatch.setattr(orders_router.deps, "get_redis", lambda: redis)
+    monkeypatch.setattr(orders_router.rsi_service, "current_rsi", no_rsi)  # 기본: CH 조회 차단
+    return price
+
+
+async def _seed_player(db) -> User:
+    u = User(nickname="플레이어", role=UserRole.FREE, is_active=True)
+    db.add(u)
+    await db.commit()
+    await db.refresh(u)
+    return u
+
+
+async def test_open_order_returns_warning_and_advice(api, maker, monkeypatch, order_env):
+    client, set_user = api
+    async with maker() as db:
+        season = await _seed_season(db)
+        set_user(await _seed_player(db))
+
+    async def hot_rsi(*a, **k):
+        return 85.0
+
+    monkeypatch.setattr(orders_router.rsi_service, "current_rsi", hot_rsi)
+    r = await client.post("/api/game/orders", json={
+        "season_id": season.id, "side": "LONG", "ratio": 1.0, "leverage": 5,
+    })
+    assert r.status_code == 201, r.text
+    assert [n["code"] for n in r.json()["nudges"]] == ["OVERBOUGHT_CHASE", "OVERLEVERAGE"]
+    assert r.json()["status"] == "OPEN"
+
+
+async def test_open_order_nudge_failure_does_not_break_order(api, maker, monkeypatch, order_env):
+    client, set_user = api
+    async with maker() as db:
+        season = await _seed_season(db)
+        set_user(await _seed_player(db))
+
+    def boom(**kw):
+        raise RuntimeError("nudge bug")
+
+    monkeypatch.setattr(orders_router.nudge_engine, "nudges_for_open", boom)
+    r = await client.post("/api/game/orders", json={
+        "season_id": season.id, "side": "SHORT", "ratio": 0.25, "leverage": 1,
+    })
+    assert r.status_code == 201
+    assert r.json()["nudges"] == []
+
+
+async def test_manual_close_praise_nudge(api, maker, order_env):
+    client, set_user = api
+    async with maker() as db:
+        season = await _seed_season(db)
+        set_user(await _seed_player(db))
+    r = await client.post("/api/game/orders", json={
+        "season_id": season.id, "side": "LONG", "ratio": 0.25, "leverage": 1,
+    })
+    assert r.status_code == 201, r.text
+    pos_id = r.json()["id"]
+    order_env["v"] = Decimal("98.5")  # LONG 1x: -1.5% - 0.03% = -1.53%
+    r = await client.post(f"/api/game/positions/{pos_id}/close")
+    assert r.status_code == 200, r.text
+    assert [n["code"] for n in r.json()["nudges"]] == ["PRINCIPLED_STOP"]
+
+
+async def test_active_positions_response_has_no_nudges_field(api, maker, order_env):
+    client, set_user = api
+    async with maker() as db:
+        season = await _seed_season(db)
+        set_user(await _seed_player(db))
+    await client.post("/api/game/orders", json={
+        "season_id": season.id, "side": "LONG", "ratio": 0.25, "leverage": 1,
+    })
+    r = await client.get("/api/game/positions/active", params={"season_id": season.id})
+    assert r.status_code == 200
+    assert len(r.json()) == 1 and "nudges" not in r.json()[0]

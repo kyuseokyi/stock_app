@@ -30,6 +30,17 @@ class PositionResponse(BaseModel):
     pnl_amount: Decimal | None = None
 
 
+class NudgeDTO(BaseModel):
+    type: str      # WARNING | PRAISE | ADVICE
+    code: str
+    message: str
+
+
+class OrderResultResponse(PositionResponse):
+    """진입/수동청산 응답 — PositionResponse + 교육 넛지(Phase 5a). /positions/active 는 미사용."""
+    nudges: list[NudgeDTO] = Field(default_factory=list)
+
+
 class AccountResponse(BaseModel):
     season_id: int
     cash_balance: Decimal

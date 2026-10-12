@@ -1,6 +1,7 @@
 """트레이딩 게임 REST — 주문 진입/수동청산/조회."""
 from __future__ import annotations
 
+import asyncio
 import logging
 import uuid
 from decimal import Decimal
@@ -15,8 +16,12 @@ from shared.database import get_db
 from shared.models import User
 from shared.game_models import INITIAL_CASH, GameAccount, GamePosition, GameSeason
 from apps.trading_game import deps
-from apps.trading_game.schemas.game_dtos import AccountResponse, OrderRequest, PositionResponse
-from apps.trading_game.services import account_service, market_clock, order_engine, pricing, ranking_service
+from apps.trading_game.schemas.game_dtos import (
+    AccountResponse, NudgeDTO, OrderRequest, OrderResultResponse, PositionResponse,
+)
+from apps.trading_game.services import (
+    account_service, market_clock, nudge_engine, order_engine, pricing, ranking_service, rsi_service,
+)
 
 router = APIRouter(prefix="/api/game", tags=["trading-game"])
 log = logging.getLogger("trading_game.orders")
@@ -71,7 +76,36 @@ async def _require_fresh_price(redis, ticker: str) -> Decimal:
     return Decimal(str(price))
 
 
-@router.post("/orders", response_model=PositionResponse, status_code=status.HTTP_201_CREATED)
+RSI_TIMEOUT_SECONDS = 2.0
+
+
+async def _open_nudges(redis, ticker: str, body: OrderRequest, entry_price: Decimal) -> list[NudgeDTO]:
+    """진입 넛지 — 실패·지연 시 빈 목록(체결 응답을 막지 않는 best-effort)."""
+    try:
+        rsi = None
+        if body.side == "LONG":
+            rsi = await asyncio.wait_for(
+                rsi_service.current_rsi(redis, ticker, entry_price), timeout=RSI_TIMEOUT_SECONDS
+            )
+        found = nudge_engine.nudges_for_open(
+            side=body.side, ratio=body.ratio, leverage=body.leverage, rsi=rsi
+        )
+        return [NudgeDTO(**n.to_dict()) for n in found]
+    except Exception:
+        log.warning("진입 넛지 생성 실패(주문은 정상 체결)", exc_info=True)
+        return []
+
+
+def _close_nudges(closed_reason: str, roi_pct: Decimal | None) -> list[NudgeDTO]:
+    try:
+        found = nudge_engine.nudges_for_close(closed_reason=closed_reason, roi_pct=roi_pct)
+        return [NudgeDTO(**n.to_dict()) for n in found]
+    except Exception:
+        log.warning("청산 넛지 생성 실패(청산은 정상 완료)", exc_info=True)
+        return []
+
+
+@router.post("/orders", response_model=OrderResultResponse, status_code=status.HTTP_201_CREATED)
 async def open_order(
     body: OrderRequest,
     user: User = Depends(get_current_user),
@@ -100,10 +134,12 @@ async def open_order(
         raise HTTPException(code, str(e))
     roi = pricing.compute_roi_pct(pos.side, pos.entry_price, entry_price, pos.leverage)
     pnl = pricing.compute_pnl(pos.size_amount, roi)
-    return _position_dto(pos, roi, pnl)
+    dto = _position_dto(pos, roi, pnl)
+    nudges = await _open_nudges(redis, season.ticker, body, entry_price)
+    return OrderResultResponse(**dto.model_dump(), nudges=nudges)
 
 
-@router.post("/positions/{position_id}/close", response_model=PositionResponse)
+@router.post("/positions/{position_id}/close", response_model=OrderResultResponse)
 async def close_order(
     position_id: uuid.UUID,
     user: User = Depends(get_current_user),
@@ -129,7 +165,8 @@ async def close_order(
     except Exception:
         log.warning("랭킹 동기화 실패(청산은 정상 완료) account=%s", account.id, exc_info=True)
     refreshed = await db.get(GamePosition, pos.id)
-    return _position_dto(refreshed, trade.roi_pct, trade.pnl_amount)
+    dto = _position_dto(refreshed, trade.roi_pct, trade.pnl_amount)
+    return OrderResultResponse(**dto.model_dump(), nudges=_close_nudges("MANUAL", trade.roi_pct))
 
 
 @router.get("/positions/active", response_model=list[PositionResponse])
