@@ -117,3 +117,10 @@ class FeatureFlagResponse(BaseModel):
 
 class FeatureFlagUpdate(BaseModel):
     enabled: bool
+
+
+class StreakResponse(BaseModel):
+    current_streak: int
+    highest_streak: int
+    last_activity_date: date | None
+    enabled: bool

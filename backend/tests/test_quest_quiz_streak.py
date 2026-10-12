@@ -325,3 +325,56 @@ async def test_router_feature_flags_admin_only(api, maker, fake_redis):
     assert [(f["key"], f["enabled"]) for f in r.json()] == [("QUIZ", False), ("STREAK", True)]
 
     assert (await client.put("/api/game/admin/feature-flags/NOPE", json={"enabled": True})).status_code == 404
+
+
+# ---------------------------------------------------------------- streak
+from apps.trading_game.services import streak_service
+
+D = date(2026, 10, 13)
+
+
+@pytest.mark.parametrize("current, last, expected", [
+    (0, None, 1),
+    (3, D, 3),                       # 같은 날 — 유지
+    (3, D - timedelta(days=1), 4),   # 어제 — +1
+    (3, D - timedelta(days=2), 1),   # 하루 이상 공백 — 초기화
+])
+def test_next_streak(current, last, expected):
+    assert streak_service.next_streak(current, last, D) == expected
+
+
+async def test_touch_flow_and_highest(session):
+    redis = fake_aioredis.FakeRedis(decode_responses=True)
+    user = await _seed_user(session)
+    r = await streak_service.touch(session, redis, user.id, today=D)
+    assert (r.current_streak, r.highest_streak, r.last_activity_date) == (1, 1, D)
+    r = await streak_service.touch(session, redis, user.id, today=D)
+    assert r.current_streak == 1
+    r = await streak_service.touch(session, redis, user.id, today=D + timedelta(days=1))
+    assert (r.current_streak, r.highest_streak) == (2, 2)
+    r = await streak_service.touch(session, redis, user.id, today=D + timedelta(days=4))
+    assert (r.current_streak, r.highest_streak) == (1, 2)
+
+
+async def test_touch_noop_when_streak_disabled(session):
+    redis = fake_aioredis.FakeRedis(decode_responses=True)
+    user = await _seed_user(session)
+    await feature_flag_service.set_flag(session, redis, "STREAK", False)
+    assert await streak_service.touch(session, redis, user.id, today=D) is None
+    assert await session.get(UserStreak, user.id) is None
+
+
+async def test_router_streak_my(api, maker, fake_redis):
+    client, set_user = api
+    async with maker() as db:
+        user = await _seed_user(db)
+    set_user(user)
+    r = await client.get("/api/game/streak/my")
+    assert r.status_code == 200
+    assert r.json() == {"current_streak": 0, "highest_streak": 0, "last_activity_date": None, "enabled": True}
+
+    async with maker() as db:
+        await streak_service.touch(db, fake_redis, user.id, today=D)
+        await feature_flag_service.set_flag(db, fake_redis, "STREAK", False)
+    r = await client.get("/api/game/streak/my")
+    assert r.json() == {"current_streak": 1, "highest_streak": 1, "last_activity_date": "2026-10-13", "enabled": False}
