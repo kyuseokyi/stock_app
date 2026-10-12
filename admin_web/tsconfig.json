@@ -11,9 +11,7 @@
     "jsx": "react-jsx",
     "strict": true,
     "noFallthroughCasesInSwitch": true,
-    "skipLibCheck": true,
-    "allowJs": true,
-    "checkJs": false
+    "skipLibCheck": true
   },
   "include": ["src"]
 }
