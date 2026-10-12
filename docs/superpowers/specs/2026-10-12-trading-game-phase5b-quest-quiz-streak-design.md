@@ -9,8 +9,8 @@
 
 | 항목 | 결정 |
 |---|---|
-| 보상 처리 | **원금 동반 가산**: 보상 시 `cash_balance`·`total_asset`과 함께 계좌 `bonus_cash`도 같은 금액 증가. ROI 분모 = `INITIAL_CASH + bonus_cash` → 보상은 ROI(랭킹)를 바꾸지 않는다. |
-| 퀘스트 | Q1 손절선 걸고 첫 거래(+50만) / Q2 골든크로스 LONG 진입(+100만) / Q3' 비중 20% 이하 진입 3회('원칙주의자' 배지). 원안 Q4(랭킹 보너스)는 랭킹 오염이라 제외. 진행도는 **유저 단위 영구 1회성**, 보상은 **수령 시점 활성 시즌 계좌**로 지급. |
+| 보상 처리 | **원금 동반 가산(펀드 입금 방식)**: 보상 b 지급 시 `cash_balance`·`total_asset`은 b 증가, 원금 조정분 `bonus_cash`는 `b / (1 + current_roi/100)` 증가. 원금 = `INITIAL_CASH + bonus_cash`, ROI = (자산 − 원금)/원금. → 지급 직후 실현 ROI가 정확히 불변(같은 금액을 원금에 더하면 ROI가 0 쪽으로 희석되는 문제를 피함). |
+| 퀘스트 | Q1 손절선 걸고 첫 거래(+50만) / Q2 골든크로스 LONG 진입(+100만) / Q3' 최소 비중(25% 이하) 진입 3회('원칙주의자' 배지 — 주문 비중 선택지가 25/50/100%뿐이라 기획서의 20%는 달성 불가하므로 최소 선택지 25%로 정의). 원안 Q4(랭킹 보너스)는 랭킹 오염이라 제외. 진행도는 **유저 단위 영구 1회성**, 보상은 **수령 시점 활성 시즌 계좌**로 지급. |
 | 퀴즈 출처 | ClickHouse 일봉 기반 **자동 생성 스크립트**(관리자 입력 없음) |
 | 기능 on/off | **어드민 토글** — `game_feature_flags` 테이블(QUIZ, STREAK), 재시작 없이 즉시 반영 |
 | Streak | KST 하루 중 **주문 1회 이상 또는 퀴즈 제출 1회 이상**이면 유지. 별도 on/off. |
@@ -27,7 +27,7 @@
 | `user_badges` | PK(`user_id`, `badge_code` String(30)), `awarded_at` timestamptz server_default now() |
 | `user_academy` | PK `user_id`, `unlocked_leverage_5x` Boolean default false, `passed_at` timestamptz NULL, `attempts` Integer default 0 |
 | `chart_quiz_pool` | `id` Serial PK, `ticker` String(20), `base_date` Date, `pattern_type` String(50), `chart_snapshot` JSON(OHLCV 배열), `answer` String(10) ('UP'/'DOWN'), `actual_change` Numeric(6,2), `explanation` Text, `reward_cash` Integer default 200000, `created_at`. **유니크 `(ticker, base_date)`** |
-| `user_quiz_attempts` | PK(`user_id`, `quiz_id` FK chart_quiz_pool CASCADE), `served_at` timestamptz, `choice` String(10) NULL, `is_correct` Boolean NULL, `rewarded` Boolean default false, `submitted_at` timestamptz NULL |
+| `user_quiz_attempts` | PK(`user_id`, `quiz_id` FK chart_quiz_pool CASCADE), `served_at` timestamptz, `choice` String(10) NULL, `is_correct` Boolean NULL, `rewarded` Boolean default false, `reward_date` Date NULL(보상 지급 KST 날짜 — 일일 3회 한도 집계용), `submitted_at` timestamptz NULL |
 | `user_streaks` | PK `user_id`, `current_streak` Integer default 0, `highest_streak` Integer default 0, `last_activity_date` Date NULL |
 | `game_feature_flags` | PK `key` String(30), `enabled` Boolean, `updated_at` timestamptz. 마이그레이션에서 `QUIZ`·`STREAK`를 `enabled=true`로 시드. |
 
@@ -38,9 +38,11 @@ ORM은 `shared/game_models.py`에 추가한다. 검증은 일회용 로컬 docke
 `INITIAL_CASH`로 나누는 곳을 모두 `INITIAL_CASH + acc.bonus_cash`로 바꾼다.
 - `services/order_engine.py` `close_position`의 `roi_acc`
 - `services/tick_listener.py`의 `compute_live_roi(..., INITIAL_CASH)` 호출 → 분모 인자에 `INITIAL_CASH + acc.bonus_cash`
-- 헬퍼 `principal(acc) -> Decimal`을 `account_service`에 두어 한곳에서 계산한다.
+- 헬퍼 `principal(acc) -> Decimal`을 `reward_service`에 두어 한곳에서 계산한다(order_engine·tick_listener가 import — 의존 방향 단순화).
 
-보상 지급은 `reward_service.grant_cash(db, account, amount)` 하나로 통일한다: `cash_balance`, `total_asset`, `bonus_cash`를 같은 금액만큼 원자적 UPDATE로 증가시킨다. `current_roi`는 건드리지 않는다.
+보상 지급은 `reward_service.grant_cash(db, account, amount)` 하나로 통일한다: `cash_balance`·`total_asset`은 `amount`, `bonus_cash`는 `amount / max(1 + current_roi/100, 0.01)`(0.01원 반올림)만큼 원자적 UPDATE로 증가시킨다. `current_roi`는 건드리지 않는다.
+
+근거: 실현 자산 A = P(1+r)일 때 원금을 P' = P + b/(1+r)로 두면 (A+b)/P' = 1+r → ROI 불변. 같은 금액 b를 원금에 더하면 (A−P)/(P+b)로 0 쪽으로 희석되어, 마이너스 계좌가 보상만으로 순위가 오르는 악용이 생긴다. 보유 포지션이 열려 있을 때의 실시간 ROI는 근사(다음 청산 시 정확히 재계산). 1+r 하한 0.01은 ROI −100%(자산 0) 방어.
 
 ## 3. 유저 API (trading_game 8003, 로그인 필수)
 
@@ -69,7 +71,7 @@ Router → Service → ORM. 신규 라우터 `routers/quests.py`, `routers/acade
 주문 성공 직후(`routers/orders.py` POST /orders), 넛지 계산과 같은 위치에서 각각 독립 try/except:
 - `quest_service.on_order_opened(db, user_id, *, side, ratio, stop_loss_price, ticker, entry_price)`
   - Q1: `stop_loss_price`가 있으면 완료
-  - Q3': `ratio <= 0.2`면 progress+1, 3 도달 시 완료
+  - Q3': `ratio <= 0.25`면 progress+1, 3 도달 시 완료
   - Q2: `side == 'LONG'`이고 골든크로스 조건이면 완료. 일봉 종가(오늘 이전, 5a `rsi_service`의 ClickHouse 경로·캐시 재사용) + 현재가로 MA5·MA20을 계산하여 **최근 3거래일 이내(오늘 포함)에 MA5가 MA20을 아래→위로 교차**했고 현재 MA5 > MA20이면 성립. CH 조회는 `asyncio.wait_for(2초)`, 실패·지연 시 Q2 판정만 생략.
   - 이미 완료된 퀘스트는 건드리지 않는다.
 - `streak_service.touch(db, user_id, today=kst_today())` — STREAK off면 no-op.
@@ -101,14 +103,15 @@ Streak 규칙(KST 날짜): `last_activity_date == today` → 변화 없음 / `==
 
 ## 8. 테스트 (`backend/tests/test_quest_quiz_streak.py`, aiosqlite)
 
-- ROI 불변: 보상 전후 `compute_live_roi`·청산 `current_roi`가 동일
+- ROI 불변: 양수·음수·0 ROI 계좌에서 보상 전후 실현 ROI `(자산−원금)/원금` 동일, 이후 청산 `current_roi`가 원금 기준으로 계산됨, ROI −100% 하한
 - 퀘스트: Q1, Q2(교차 3거래일 이내 성립 / 4거래일째 불성립 / SHORT 불성립 / CH 실패 시 생략), Q3' 진행도, 중복 수령 방지, 활성 시즌 없음 409, 배지 지급
 - 아카데미: 전부 정답 해금, 1개 오답 미해금, 미해금 5배 403, 1·2배 영향 없음, 해금 후 5배 성공
 - 퀴즈: 응답에 answer/explanation 미포함, 푼 문제 재출제 없음, 13초 초과 오답, 하루 보상 3회 제한, off 시 503, 미배정 409
 - Streak: 같은 날 유지, 다음 날 +1, 공백 후 1, KST 자정 경계, off 시 미갱신, 주문·퀴즈 양쪽 훅
 - 기능 설정: 비관리자 403, 토글 시 캐시 무효화, 미지정 key 404
 - 생성 스크립트: `build_explanation` 분기, ±1% 미만 제외, 유니크 중복 건너뜀
-- 회귀: 기존 150개 전부 통과
+- 회귀: 기존 150개 전부 통과. 단 `test_coach_and_nudge.py`의 라우터 5배 주문 테스트 2건(`test_open_order_returns_warning_and_advice`, `test_open_order_rsi_timeout_keeps_overleverage`)은 잠금 정책상 **해금 시드 후 주문**하도록 수정한다(의도된 동작 변경).
+- 훅 순서: 주문 응답 DTO를 먼저 만든 뒤 훅을 실행한다(훅 실패 시 rollback이 세션 객체를 expire시켜도 응답에 영향 없음).
 - admin_web: `tsc --noEmit` + build, 기능 설정 화면 브라우저 스모크(일회용 PG)
 
 ## 9. 문서
