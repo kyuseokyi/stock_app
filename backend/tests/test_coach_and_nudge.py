@@ -291,8 +291,23 @@ async def test_list_slot_messages_includes_drafts_and_push_payload(session):
     assert Decimal(payload["resistance_price"]) == Decimal("75000")
 
 
+async def test_list_slot_messages_orders_morning_then_evening(session):
+    season = await _seed_season(session)
+    admin = await _seed_admin(session)
+    await coach_service.upsert_coach_message(
+        session, req=_req(season.id, coach_type="EVENING", title="이브닝"), author_id=admin.id)
+    await coach_service.upsert_coach_message(session, req=_req(season.id), author_id=admin.id)
+    rows = await coach_service.list_slot_messages(session, season.id, date(2026, 10, 13))
+    assert [m.coach_type for m in rows] == ["MORNING", "EVENING"]
+
+
 def test_kst_today_is_date():
     assert isinstance(coach_service.kst_today(), date)
+
+
+def test_kst_today_crosses_midnight_utc():
+    assert coach_service.kst_today(datetime(2026, 10, 12, 15, 30, tzinfo=timezone.utc)) == date(2026, 10, 13)
+    assert coach_service.kst_today(datetime(2026, 10, 12, 14, 59, tzinfo=timezone.utc)) == date(2026, 10, 12)
 
 
 # ---------------------------------------------------------------- coach router
@@ -392,6 +407,8 @@ async def test_router_non_admin_forbidden_and_validation(api, maker):
     set_user(player)
     assert (await client.put("/api/game/admin/coach-messages", json=_body(season.id))).status_code == 403
     assert (await client.get("/api/game/admin/seasons")).status_code == 403
+    assert (await client.get("/api/game/admin/coach-messages",
+                             params={"season_id": season.id, "target_date": "2026-10-13"})).status_code == 403
 
     set_user(admin)
     bad = _body(season.id, support_price=80000, resistance_price=75000)
@@ -428,3 +445,17 @@ async def test_router_coach_today(api, maker, monkeypatch):
                      json=_body(season.id, action="publish", coach_type="EVENING", title="이브닝"))
     data = (await client.get("/api/game/coach/today")).json()
     assert data["active"]["coach_type"] == "EVENING"
+
+
+async def test_router_coach_today_without_active_season(api, maker, monkeypatch):
+    client, set_user = api
+    async with maker() as db:
+        await _seed_season(db, status="FINISHED")
+        admin = await _seed_admin(db)
+    set_user(admin)
+    monkeypatch.setattr(coach_service, "kst_today", lambda: date(2026, 10, 13))
+    r = await client.get("/api/game/coach/today")
+    assert r.status_code == 200
+    data = r.json()
+    assert data["season_id"] is None and data["morning"] is None
+    assert data["evening"] is None and data["active"] is None

@@ -9,7 +9,7 @@ from datetime import date, datetime, timezone
 from decimal import Decimal
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import select
+from sqlalchemy import case, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -18,6 +18,7 @@ from apps.trading_game.schemas.game_dtos import CoachMessageResponse, CoachUpser
 from apps.trading_game.services import account_service
 
 KST = ZoneInfo("Asia/Seoul")
+_SLOT_ORDER = case({"MORNING": 0, "EVENING": 1, "IN_PLAY": 2}, value=GameCoachMessage.coach_type, else_=9)
 
 
 class CoachError(Exception):
@@ -28,8 +29,8 @@ class CoachError(Exception):
         self.code = code
 
 
-def kst_today() -> date:
-    return datetime.now(KST).date()
+def kst_today(now: datetime | None = None) -> date:
+    return (now or datetime.now(timezone.utc)).astimezone(KST).date()
 
 
 async def _get_slot(db: AsyncSession, season_id: int, target_date: date, coach_type: str) -> GameCoachMessage | None:
@@ -84,7 +85,7 @@ async def list_slot_messages(db: AsyncSession, season_id: int, target_date: date
     rows = await db.execute(
         select(GameCoachMessage)
         .where(GameCoachMessage.season_id == season_id, GameCoachMessage.target_date == target_date)
-        .order_by(GameCoachMessage.coach_type.desc())  # MORNING, EVENING 순
+        .order_by(_SLOT_ORDER)  # MORNING, EVENING 순
     )
     return list(rows.scalars().all())
 
