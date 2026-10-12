@@ -1,0 +1,145 @@
+"""Redis 구독 → 자동청산(인라인) + fan-out(별도 태스크). lifespan 백그라운드."""
+from __future__ import annotations
+
+import asyncio
+import json
+import logging
+from decimal import Decimal
+
+import redis.asyncio as aioredis
+from sqlalchemy import select
+
+from shared.database import AsyncSessionLocal
+from shared.game_models import GameAccount, GamePosition, GameSeason
+from apps.trading_game.services import account_service, liquidation_service, pricing
+from apps.trading_game.services.connection_manager import manager
+
+log = logging.getLogger("trading_game.listener")
+
+_FANOUT_MAXSIZE = 256
+_fanout_q: asyncio.Queue | None = None
+
+
+def _get_fanout_queue() -> asyncio.Queue:
+    global _fanout_q
+    if _fanout_q is None:
+        _fanout_q = asyncio.Queue(maxsize=_FANOUT_MAXSIZE)
+    return _fanout_q
+
+
+async def _push_personal_pnl(ticker: str, price: Decimal) -> None:
+    """현재 WS 접속 유저들의 보유 포지션 평가손익을 개인 push."""
+    uids = manager.user_ids()
+    if not uids:
+        return
+    async with AsyncSessionLocal() as db:
+        rows = await db.execute(
+            select(GamePosition, GameAccount.user_id)
+            .join(GameAccount, GamePosition.account_id == GameAccount.id)
+            .join(GameSeason, GameAccount.season_id == GameSeason.id)
+            .where(
+                GamePosition.status == "OPEN",
+                GameSeason.ticker == ticker,
+                GameSeason.status == "ACTIVE",
+                GameAccount.user_id.in_(uids),
+            )
+        )
+        for pos, user_id in rows.all():
+            roi = pricing.compute_roi_pct(pos.side, pos.entry_price, price, pos.leverage)
+            pnl = pricing.compute_pnl(pos.size_amount, roi)
+            await manager.send_to_user(user_id, {
+                "type": "position_pnl",
+                "position_id": str(pos.id),
+                "roi_pct": float(roi),
+                "pnl_amount": float(pnl),
+            })
+
+
+def _enqueue_fanout(tick: dict, price: Decimal) -> None:
+    """fan-out 작업을 큐에 적재(가득 차면 가장 오래된 것 드롭 — 청산/소비를 막지 않음)."""
+    q = _get_fanout_queue()
+    if q.full():
+        try:
+            q.get_nowait()
+        except asyncio.QueueEmpty:
+            pass
+    try:
+        q.put_nowait((tick, price))
+    except asyncio.QueueFull:
+        pass
+
+
+async def fanout_worker(stop: asyncio.Event) -> None:
+    """큐에서 틱을 받아 WS 브로드캐스트 + 개인손익 push(리스너와 분리된 경로)."""
+    q = _get_fanout_queue()
+    while not stop.is_set():
+        try:
+            tick, price = await asyncio.wait_for(q.get(), timeout=1.0)
+        except asyncio.TimeoutError:
+            continue
+        except asyncio.CancelledError:
+            break
+        try:
+            await manager.broadcast({
+                "type": "tick", "ticker": tick["ticker"], "price": tick["price"],
+                "timestamp": tick.get("timestamp"),
+            })
+            await _push_personal_pnl(tick["ticker"], price)
+        except Exception:
+            log.exception("fan-out 실패 — skip")
+    log.info("fan-out 워커 종료")
+
+
+async def _handle_tick(raw: str) -> None:
+    tick = json.loads(raw)
+    ticker = tick["ticker"]
+    price = Decimal(str(tick["price"]))
+    # 청산은 리스너 코루틴에서 인라인(정확성 우선)
+    async with AsyncSessionLocal() as db:
+        await liquidation_service.check_and_liquidate(db, ticker, price)
+    # fan-out 은 별도 워커로 위임(느린 클라이언트가 청산/소비를 막지 않게)
+    _enqueue_fanout(tick, price)
+
+
+async def run_listener(redis_url: str, stop: asyncio.Event) -> None:
+    """ACTIVE 시즌 종목을 구독. 끊김 시 지수 백오프 재연결."""
+    backoff = 1
+    while not stop.is_set():
+        try:
+            async with AsyncSessionLocal() as db:
+                season = await account_service.get_active_season(db)
+            if season is None:
+                log.warning("ACTIVE 시즌 없음 — 리스너 대기")
+                try:
+                    await asyncio.wait_for(stop.wait(), timeout=10)
+                except asyncio.TimeoutError:
+                    pass
+                continue
+            redis = aioredis.from_url(redis_url, decode_responses=True)
+            pubsub = redis.pubsub()
+            try:
+                await pubsub.subscribe(f"stock:tick:{season.ticker}")
+                log.info("구독 시작 stock:tick:%s", season.ticker)
+                async for msg in pubsub.listen():
+                    if stop.is_set():
+                        break
+                    if msg.get("type") != "message":
+                        continue
+                    backoff = 1  # 실제 데이터 수신 성공 → 백오프 리셋
+                    try:
+                        await _handle_tick(msg["data"])
+                    except Exception:
+                        log.exception("틱 처리 실패 — skip")
+            finally:
+                await pubsub.aclose()
+                await redis.aclose()
+        except asyncio.CancelledError:
+            break
+        except Exception:
+            log.exception("리스너 오류 — %ss 후 재연결", backoff)
+            try:
+                await asyncio.wait_for(stop.wait(), timeout=backoff)
+            except asyncio.TimeoutError:
+                pass
+            backoff = min(backoff * 2, 30)
+    log.info("틱 리스너 종료")

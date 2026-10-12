@@ -1,6 +1,6 @@
 # Stock App 로드맵 & 진행 현황
 
-> 최종 업데이트: 2026-08-05
+> 최종 업데이트: 2026-10-12
 
 한국투자증권 API 기반 주식 데이터 파이프라인 + 블로그/커뮤니티 + 관리자/유저 웹/모바일 풀스택 모노레포의 진행 현황과 향후 단계.
 
@@ -35,6 +35,15 @@
 ### web_client (일반 유저 웹)
 - [x] 블로그 조회(목록/상세/댓글) + SSE 토스트
 - [x] 임시 로그인(닉네임) + 댓글 작성
+- [x] **토스 디자인 언어 적용** + 2단 네비(커뮤니티·게임), `/game` "시즌 준비 중" 스켈레톤, 공통 UI(`src/components/ui/` Button·Card·Chip·EmptyState)
+- [x] 홈 추천글(featured) — 관리자 큐레이션 글을 홈 상단 노출
+
+### 모바일 앱 (Expo) — 토스 토대
+- [x] **토스 디자인 전체 통일**(`docs/mobile_design_language.md`) + 네비 재편(하단 4탭: 홈/블로그/게임/내정보), `/game` 빈 상태 스켈레톤(웹과 동일 문구). Unistyles v3.
+
+### 트레이딩 게임 (Trading Game)
+- [x] **Phase 1 — DB 스키마** : 핵심 6테이블(seasons/accounts/positions/trades/hall_of_fame/coach_messages) SQLAlchemy+Alembic, 무결성 제약, 멱등 시드(시즌1기 005930 ACTIVE). 유저 FK=Integer, 게임 PK=UUID(GUID TypeDecorator)
+- [x] **Phase 2 — 실시간 WS 수집 데몬** : KIS `H0STCNT0` 파서 + async WS 클라이언트(approval_key·재연결·무효키 재발급) + Mock 생성기 → Redis `stock:tick:{ticker}` 발행(`apps/collector/run_game_ws.py`). Mock E2E 검증
 
 ### 문서
 - [x] 기능별 설계 스펙(`docs/superpowers/specs/`)
@@ -73,22 +82,25 @@
 - [ ] 결과 카드 UI + 정렬/편집, 차트 상세(웹 스플릿뷰)
 
 ### Phase 3 — web_client 확장
+- [x] 토스 디자인 + 2단 네비 + 게임 스켈레톤 (위 완료 섹션 참조)
 - [ ] 종목 상세/차트 화면 (어드민 차트+드로잉 컴포넌트 재사용)
-- [ ] 소셜 로그인(카카오/구글) 실연동 → 임시 로그인 대체
+- [ ] 소셜 로그인(카카오/구글) 실연동 → 임시 로그인 대체 *(User 모델 provider/provider_id/social_token 필드는 준비됨, 엔드포인트·프론트 미구현)*
 
-### Phase 4 — 모바일 앱 (Expo) *(초기화 완료)*
-- [x] 앱 셋업 — Expo SDK 57/RN 0.86, expo-router 하단 5탭(홈/스크리너/블로그/관심종목/내정보), **Unistyles v3** 테마 스타일링(상승=빨강/하락=파랑, adaptiveThemes), zustand. `app.config.js`로 dev/prod 앱이름·bundleId 동적 분리(`StockApp Dev`/`com.stockapp.dev` ↔ `StockApp`/`com.stockapp`), `eas.json` dev/preview/prod 프로필, `EXPO_PUBLIC_*` env 분리. 검증: tsc·expo-doctor 21/21·expo config
-- [ ] 블로그/스크리너/차트 화면 + 차트 드로잉 (현재 각 탭은 플레이스홀더)
+### Phase 4 — 모바일 앱 (Expo) *(토스 토대·네비 완료)*
+- [x] 앱 셋업 — Expo SDK 57/RN 0.86, **Unistyles v3** 테마(상승=빨강/하락=파랑, adaptiveThemes), zustand. `app.config.js` dev/prod 앱이름·bundleId 분리, `eas.json` 프로필, `EXPO_PUBLIC_*` env 분리
+- [x] **토스 디자인 전체 적용 + 네비 재편** — 하단 4탭(홈/블로그/게임/내정보, 스크리너·관심종목 탭 제거), 블로그(목록/상세/댓글)·홈 추천글·게임 스켈레톤 동작. 에뮬레이터 육안 검증 완료
+- [ ] 스크리너/차트 화면 + 차트 드로잉
 - [ ] 실제 FCM 푸시(현재 Mock 대체)
 
 ### Phase 5 — 실시간 트레이딩 게임 (Trading Game) & 에듀테인먼트
-- [ ] **마스터 기획 완료** (`docs/trading_game_plan.md`)
-- [ ] 1달 1종목 고정 시즌제 & 가상 1,000만 원 지급
-- [ ] 한투 실시간 WebSocket 수집 데몬 (`H0STCNT0`) + Redis Pub/Sub 중계
-- [ ] 원클릭 즉시 체결 (BUY/SELL, 롱/숏, 1x~5x 레버리지, TP/SL 자동 청산)
-- [ ] Redis ZSET 기반 실시간 랭킹 (Top 100) & 말일 명예의 전당 아카이빙
-- [ ] 관리자 데일리 스마트 코치 (모닝 시황/지지·저항선 + 이브닝 마감 복기) via `admin_web`
-- [ ] 24시간 교육 모듈: 인게임 실시간 넛지, 듀오링고형 퀘스트, 야간 10초 차트 퀴즈
+> 마스터 기획·단계 프롬프트 확정(`docs/trading_game_plan.md`, `docs/prompts/trading_game/`). 6개 서브페이즈로 분해.
+- [x] **기획 1달 1종목 고정 시즌제 & 가상 1,000만 원** (기획 확정)
+- [x] **서브페이즈 1 — DB 스키마** (완료, 위 참조)
+- [x] **서브페이즈 2 — 한투 실시간 WebSocket 수집 데몬(`H0STCNT0`) + Redis Pub/Sub 발행** (완료, 위 참조)
+- [ ] **서브페이즈 3** — 클라이언트 WS 게이트웨이(틱 중계) + 원클릭 즉시 체결(BUY/SELL, 롱/숏, 1x~5x 레버리지, TP/SL 자동 청산)
+- [ ] **서브페이즈 4** — Redis ZSET 기반 실시간 랭킹(Top 100) & 말일 명예의 전당 아카이빙(시즌 정산 스케줄러)
+- [ ] **서브페이즈 5** — 관리자 데일리 스마트 코치(모닝 시황/지지·저항선 + 이브닝 복기) via `admin_web` + 인게임 넛지·퀘스트·야간 차트 퀴즈
+- [ ] **서브페이즈 6** — 프론트(web_client·mobile) 실시간 트레이딩 화면(현재 "시즌 준비 중" 스켈레톤 교체)
 
 ### 상시 백로그
 - [ ] 이중추세선 조작 방식 재정의(대기 중)
