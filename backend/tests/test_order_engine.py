@@ -232,3 +232,70 @@ def test_in_window_night_closed():
 def test_price_fresh():
     assert market_clock.is_price_fresh(1000.0, 1005.0, 10) is True
     assert market_clock.is_price_fresh(1000.0, 1015.0, 10) is False
+
+
+from apps.trading_game.services import account_service, order_engine
+
+
+async def test_get_or_create_account_grants_initial_cash(session):
+    acc = await _seed_account(session)
+    got = await account_service.get_or_create_account(session, acc.user_id, acc.season_id)
+    assert got.id == acc.id
+    assert got.cash_balance == INITIAL_CASH
+
+
+async def test_open_position_deducts_cash_and_sets_tp_sl(session):
+    acc = await _seed_account(session)
+    pos = await order_engine.open_position(
+        session, account=acc, side="LONG", ratio=Decimal("0.5"),
+        leverage=2, entry_price=Decimal("100"),
+        sl_pct=Decimal("0.05"), tp_pct=Decimal("0.10"),
+    )
+    assert pos.size_amount == INITIAL_CASH * Decimal("0.5")
+    assert pos.stop_loss_price == Decimal("95.00")
+    assert pos.take_profit_price == Decimal("110.00")
+    await session.refresh(acc)
+    assert acc.cash_balance == INITIAL_CASH - pos.size_amount
+
+
+async def test_open_position_rejects_below_minimum(session):
+    acc = await _seed_account(session)
+    # 잔고를 30만으로 낮춰 ratio 0.25 진입 시 size=75,000 < 최소 10만 → 거부 유도
+    acc.cash_balance = Decimal("300000")
+    await session.commit()
+    with pytest.raises(order_engine.OrderError):
+        await order_engine.open_position(
+            session, account=acc, side="LONG", ratio=Decimal("0.25"),
+            leverage=1, entry_price=Decimal("100"), sl_pct=None, tp_pct=None,
+        )  # 300,000 × 0.25 = 75,000 < 100,000 최소
+
+
+async def test_close_position_returns_principal_plus_pnl(session):
+    acc = await _seed_account(session)
+    pos = await order_engine.open_position(
+        session, account=acc, side="LONG", ratio=Decimal("1.0"),
+        leverage=1, entry_price=Decimal("100"), sl_pct=None, tp_pct=None,
+    )
+    trade = await order_engine.close_position(
+        session, position_id=pos.id, exit_price=Decimal("110"), reason="MANUAL"
+    )
+    assert trade is not None
+    assert trade.closed_reason == "MANUAL"
+    assert trade.roi_pct == Decimal("9.97")  # +10% - 0.03
+    await session.refresh(acc)
+    assert acc.total_trades == 1
+    assert acc.win_trades == 1  # pnl > 0
+
+
+async def test_close_position_idempotent_on_already_closed(session):
+    acc = await _seed_account(session)
+    pos = await order_engine.open_position(
+        session, account=acc, side="LONG", ratio=Decimal("1.0"),
+        leverage=1, entry_price=Decimal("100"), sl_pct=None, tp_pct=None,
+    )
+    first = await order_engine.close_position(session, position_id=pos.id, exit_price=Decimal("110"), reason="MANUAL")
+    second = await order_engine.close_position(session, position_id=pos.id, exit_price=Decimal("120"), reason="MANUAL")
+    assert first is not None
+    assert second is None  # 이미 CLOSED → no-op
+    await session.refresh(acc)
+    assert acc.total_trades == 1
