@@ -1,0 +1,80 @@
+"""데일리 스마트 코치 REST (Phase 5a) — 관리자 발행 + 유저 오늘 코칭 조회."""
+from __future__ import annotations
+
+import logging
+from datetime import date
+
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from shared.auth import get_current_user, require_admin
+from shared.database import get_db
+from shared.models import User
+from apps.trading_game.schemas.game_dtos import (
+    CoachMessageResponse, CoachTodayResponse, CoachUpsertRequest, SeasonOption,
+)
+from apps.trading_game.services import coach_service, connection_manager
+
+router = APIRouter(prefix="/api/game", tags=["trading-game-coach"])
+log = logging.getLogger("trading_game.coach")
+
+_ERROR_STATUS = {
+    "SEASON_NOT_FOUND": status.HTTP_404_NOT_FOUND,
+    "ALREADY_PUBLISHED": status.HTTP_409_CONFLICT,
+    "SLOT_CONFLICT": status.HTTP_409_CONFLICT,
+}
+
+
+@router.put("/admin/coach-messages", response_model=CoachMessageResponse)
+async def upsert_coach_message(
+    body: CoachUpsertRequest,
+    admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    try:
+        msg = await coach_service.upsert_coach_message(db, req=body, author_id=admin.id)
+    except coach_service.CoachError as e:
+        raise HTTPException(_ERROR_STATUS[e.code], str(e))
+    if body.action == "publish":
+        try:
+            await connection_manager.manager.broadcast(coach_service.coach_push_payload(msg))
+        except Exception:
+            log.warning("코치 발행 WS push 실패(발행은 정상 완료) id=%s", msg.id, exc_info=True)
+    return coach_service.to_dto(msg)
+
+
+@router.get("/admin/coach-messages", response_model=list[CoachMessageResponse])
+async def list_coach_messages(
+    season_id: int,
+    target_date: date,
+    _admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    rows = await coach_service.list_slot_messages(db, season_id, target_date)
+    return [coach_service.to_dto(m) for m in rows]
+
+
+@router.get("/admin/seasons", response_model=list[SeasonOption])
+async def list_seasons(
+    _admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    return [
+        SeasonOption(
+            id=s.id, season_number=s.season_number, ticker=s.ticker, stock_name=s.stock_name,
+            status=s.status, start_at=s.start_at, end_at=s.end_at,
+        )
+        for s in await coach_service.list_seasons(db)
+    ]
+
+
+@router.get("/coach/today", response_model=CoachTodayResponse)
+async def coach_today(
+    _user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    today = coach_service.kst_today()
+    season_id, morning, evening = await coach_service.today_coach(db, today)
+    m = coach_service.to_dto(morning) if morning else None
+    e = coach_service.to_dto(evening) if evening else None
+    return CoachTodayResponse(target_date=today, season_id=season_id, morning=m, evening=e, active=e or m)

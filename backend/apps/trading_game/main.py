@@ -16,7 +16,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from shared.cors import build_allowed_origins
 from apps.trading_game import deps
-from apps.trading_game.routers import leaderboard, orders, ws_gateway
+from apps.trading_game.routers import coach, leaderboard, orders, ws_gateway
 from apps.trading_game.services.tick_listener import fanout_worker, run_listener
 
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
@@ -51,6 +51,7 @@ app.add_middleware(
 app.include_router(orders.router)
 app.include_router(ws_gateway.router)
 app.include_router(leaderboard.router)
+app.include_router(coach.router)
 
 
 @app.get("/health", tags=["health"])

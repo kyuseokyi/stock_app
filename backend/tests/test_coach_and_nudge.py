@@ -293,3 +293,138 @@ async def test_list_slot_messages_includes_drafts_and_push_payload(session):
 
 def test_kst_today_is_date():
     assert isinstance(coach_service.kst_today(), date)
+
+
+# ---------------------------------------------------------------- coach router
+import httpx
+
+from shared.auth import get_current_user
+from shared.database import get_db
+from apps.trading_game.main import app
+from apps.trading_game.services import connection_manager
+
+
+@pytest.fixture
+async def api(maker):
+    """(client, set_user) — get_db 는 테스트 엔진, 인증 유저는 set_user 로 교체."""
+    state: dict = {}
+
+    async def _db():
+        async with maker() as s:
+            yield s
+
+    async def _user():
+        return state["user"]
+
+    app.dependency_overrides[get_db] = _db
+    app.dependency_overrides[get_current_user] = _user
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        yield client, (lambda u: state.__setitem__("user", u))
+    app.dependency_overrides.clear()
+
+
+def _body(season_id, action="draft", **over):
+    b = {
+        "season_id": season_id, "target_date": "2026-10-13", "coach_type": "MORNING",
+        "title": "모닝 브리핑", "summary_nudge": "반도체 강세", "content_md": "## 시황",
+        "support_price": 70000, "resistance_price": 75000, "action": action,
+    }
+    b.update(over)
+    return b
+
+
+async def test_router_admin_upsert_flow_and_broadcast(api, maker, monkeypatch):
+    client, set_user = api
+    async with maker() as db:
+        season = await _seed_season(db)
+        admin = await _seed_admin(db)
+    set_user(admin)
+    sent = []
+
+    async def fake_broadcast(payload):
+        sent.append(payload)
+
+    monkeypatch.setattr(connection_manager.manager, "broadcast", fake_broadcast)
+
+    r = await client.put("/api/game/admin/coach-messages", json=_body(season.id))
+    assert r.status_code == 200 and r.json()["status"] == "DRAFT"
+    assert sent == []  # 초안은 push 없음
+
+    r = await client.put("/api/game/admin/coach-messages", json=_body(season.id, action="publish"))
+    assert r.status_code == 200 and r.json()["status"] == "PUBLISHED"
+    assert len(sent) == 1 and sent[0]["type"] == "coach"
+
+    r = await client.put("/api/game/admin/coach-messages", json=_body(season.id))
+    assert r.status_code == 409
+
+    r = await client.get("/api/game/admin/coach-messages",
+                         params={"season_id": season.id, "target_date": "2026-10-13"})
+    assert r.status_code == 200 and len(r.json()) == 1
+
+    r = await client.get("/api/game/admin/seasons")
+    assert r.status_code == 200 and r.json()[0]["ticker"] == "005930"
+
+
+async def test_router_publish_succeeds_even_if_broadcast_fails(api, maker, monkeypatch):
+    client, set_user = api
+    async with maker() as db:
+        season = await _seed_season(db)
+        set_user(await _seed_admin(db))
+
+    async def boom(payload):
+        raise RuntimeError("ws down")
+
+    monkeypatch.setattr(connection_manager.manager, "broadcast", boom)
+    r = await client.put("/api/game/admin/coach-messages", json=_body(season.id, action="publish"))
+    assert r.status_code == 200 and r.json()["status"] == "PUBLISHED"
+
+
+async def test_router_non_admin_forbidden_and_validation(api, maker):
+    client, set_user = api
+    async with maker() as db:
+        season = await _seed_season(db)
+        player = User(nickname="플레이어", role=UserRole.FREE, is_active=True)
+        db.add(player)
+        await db.commit()
+        await db.refresh(player)
+        admin = await _seed_admin(db)
+    set_user(player)
+    assert (await client.put("/api/game/admin/coach-messages", json=_body(season.id))).status_code == 403
+    assert (await client.get("/api/game/admin/seasons")).status_code == 403
+
+    set_user(admin)
+    bad = _body(season.id, support_price=80000, resistance_price=75000)
+    assert (await client.put("/api/game/admin/coach-messages", json=bad)).status_code == 422
+    assert (await client.put("/api/game/admin/coach-messages", json=_body(999))).status_code == 404
+    bad_type = _body(season.id, coach_type="IN_PLAY")
+    assert (await client.put("/api/game/admin/coach-messages", json=bad_type)).status_code == 422
+
+
+async def test_router_coach_today(api, maker, monkeypatch):
+    client, set_user = api
+    async with maker() as db:
+        season = await _seed_season(db)
+        admin = await _seed_admin(db)
+    set_user(admin)
+    monkeypatch.setattr(coach_service, "kst_today", lambda: date(2026, 10, 13))
+
+    async def noop(payload):
+        return None
+
+    monkeypatch.setattr(connection_manager.manager, "broadcast", noop)
+
+    r = await client.get("/api/game/coach/today")
+    assert r.status_code == 200
+    assert r.json() == {"target_date": "2026-10-13", "season_id": season.id,
+                        "morning": None, "evening": None, "active": None}
+
+    await client.put("/api/game/admin/coach-messages", json=_body(season.id, action="publish"))
+    data = (await client.get("/api/game/coach/today")).json()
+    assert data["morning"]["title"] == "모닝 브리핑"
+    assert data["active"]["coach_type"] == "MORNING"
+
+    await client.put("/api/game/admin/coach-messages",
+                     json=_body(season.id, action="publish", coach_type="EVENING", title="이브닝"))
+    data = (await client.get("/api/game/coach/today")).json()
+    assert data["active"]["coach_type"] == "EVENING"
