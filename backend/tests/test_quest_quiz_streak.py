@@ -967,3 +967,35 @@ async def test_generate_inserts_and_is_idempotent(maker):
         rows = (await db.execute(select(ChartQuiz))).scalars().all()
     assert len(rows) == 5
     assert all(r.answer in ("UP", "DOWN") and abs(r.actual_change) >= Decimal("1") for r in rows)
+
+
+def test_make_quiz_skips_zero_close_and_extreme_moves():
+    base = [100.0] * 60 + [100.0] * 4 + [108.0]
+    assert gen.make_quiz("005930", _candles(base), 59) is not None  # 대조군
+    zero = list(base)
+    zero[30] = 0.0  # 윈도우 내 종가 0
+    assert gen.make_quiz("005930", _candles(zero), 59) is None
+    zero_base = list(base)
+    zero_base[59] = 0.0  # 기준일 종가 0 → ZeroDivisionError 금지
+    assert gen.make_quiz("005930", _candles(zero_base), 59) is None
+    spike = [100.0] * 30 + [140.0] * 35 + [150.0]  # +40% 하루 급등
+    assert gen.make_quiz("005930", _candles(spike[:60] + [140.0] * 4 + [150.0]), 59) is None
+    ok = [100.0] * 30 + [129.0] * 30 + [129.0] * 4 + [140.0]  # +29% 허용, 미래 +8.5%
+    q = gen.make_quiz("005930", _candles(ok), 59)
+    assert q is not None and q["answer"] == "UP"
+
+
+def test_make_quiz_boundary_one_percent_and_down():
+    up = gen.make_quiz("005930", _candles([100.0] * 64 + [101.0]), 59)
+    assert up["answer"] == "UP" and up["actual_change"] == Decimal("1.00")
+    down = gen.make_quiz("005930", _candles([100.0] * 64 + [98.0]), 59)
+    assert down["answer"] == "DOWN" and down["actual_change"] == Decimal("-2.00")
+
+
+async def test_generate_dedups_within_run(maker):
+    closes = [100.0 + (i % 7) * 3 for i in range(66)]  # 유효 base_idx 는 59, 60 둘뿐
+    candles = _candles(closes)
+    created, skipped = await gen.generate(
+        2, rng=random.Random(0), fetch_tickers=lambda: ["005930"],
+        fetch_candles=lambda t: candles, session_factory=maker)
+    assert created == 2 and skipped == 0

@@ -30,6 +30,18 @@ WINDOW = 60
 HORIZON = 5
 MIN_ABS_CHANGE = 1.0
 LOOKBACK_DAYS = 3 * 365
+MAX_DAILY_MOVE = 0.30  # KRX 가격제한폭
+
+
+def _valid_series(closes: list[float]) -> bool:
+    """종가열이 퀴즈로 쓸 만한지 검사한다.
+
+    종가가 0 이하인 값이 있거나(결측·데이터 오류), 연속 종가 간 변동이
+    가격제한폭(MAX_DAILY_MOVE)을 넘으면(미반영 분할 등 가짜 급등락) False.
+    """
+    if any(c <= 0 for c in closes):
+        return False
+    return all(abs(closes[i] / closes[i - 1] - 1) <= MAX_DAILY_MOVE for i in range(1, len(closes)))
 
 
 def _avg(xs: list[float]) -> float:
@@ -70,6 +82,9 @@ def make_quiz(ticker: str, candles: list[dict], base_idx: int) -> dict | None:
     if base_idx < WINDOW - 1 or base_idx + HORIZON >= len(candles):
         return None
     window = candles[base_idx - WINDOW + 1:base_idx + 1]
+    span = candles[base_idx - WINDOW + 1:base_idx + HORIZON + 1]
+    if not _valid_series([float(c["close"]) for c in span]):
+        return None
     base_close = float(candles[base_idx]["close"])
     future_close = float(candles[base_idx + HORIZON]["close"])
     change = round((future_close - base_close) / base_close * 100, 2)
@@ -136,6 +151,7 @@ async def generate(
     cache: dict[str, list[dict]] = {}
     quizzes: list[dict] = []
     seen: set[tuple[str, date]] = set()
+    empty_tickers: set[str] = set()
     tries = 0
     while tickers and len(quizzes) < count and tries < count * 20:
         tries += 1
@@ -143,6 +159,8 @@ async def generate(
         if t not in cache:
             cache[t] = fetch_candles(t)
         candles = cache[t]
+        if not candles:
+            empty_tickers.add(t)
         if len(candles) < WINDOW + HORIZON:
             continue
         q = make_quiz(t, candles, rng.randint(WINDOW - 1, len(candles) - HORIZON - 1))
@@ -150,6 +168,8 @@ async def generate(
             continue
         seen.add((t, q["base_date"]))
         quizzes.append(q)
+    if empty_tickers:
+        print(f"[generate_chart_quiz] 캔들 없음(CH 장애/미수집 가능) 종목 수={len(empty_tickers)}")
     async with session_factory() as db:
         return await insert_quizzes(db, quizzes)
 
