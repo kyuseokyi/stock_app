@@ -4,12 +4,12 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
-from datetime import date, timedelta
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
 import redis.asyncio as aioredis
 
-from shared.database import AsyncSessionLocal
+from shared.database import AsyncSessionLocal, engine
 from apps.collector.celery_app import celery_app
 from apps.stock_api.services.clickhouse_source import get_candles
 from apps.trading_game.services import settlement
@@ -18,14 +18,19 @@ log = logging.getLogger("trading_game.settle_task")
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 
 
+_KST = timezone(timedelta(hours=9))
+
+
 def clickhouse_close_price(ticker: str) -> Decimal | None:
-    """최근 7일 범위의 마지막 종가(FINAL) → Decimal. 없으면 None."""
-    end = date.today()
-    start = end - timedelta(days=7)
-    candles = get_candles(ticker, start.isoformat(), end.isoformat())
+    """당일(KST) 종가(FINAL)만 반환. 수집 실패 등으로 당일 종가가 없으면 None(정산 보류)."""
+    today = datetime.now(_KST).date()
+    candles = get_candles(ticker, (today - timedelta(days=7)).isoformat(), today.isoformat())
     if not candles:
         return None
-    return Decimal(str(candles[-1].close))
+    last = candles[-1]
+    if str(last.date)[:10] != today.isoformat():  # 당일 종가가 아니면 보류
+        return None
+    return Decimal(str(last.close))
 
 
 async def _run() -> dict | None:
@@ -35,6 +40,7 @@ async def _run() -> dict | None:
             return await settlement.settle_due_season(db, redis, clickhouse_close_price)
     finally:
         await redis.aclose()
+        await engine.dispose()
 
 
 @celery_app.task(name="settle_trading_season")

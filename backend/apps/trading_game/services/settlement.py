@@ -85,7 +85,7 @@ async def settle_due_season(db: AsyncSession, redis, close_price_provider) -> di
         else:
             win_rate = Decimal("0.00")
         db.add(HallOfFame(
-            season_id=season.id, rank=rank, user_id=acc.user_id, user_nickname=nick,
+            season_id=season.id, rank=rank, user_id=acc.user_id, user_nickname=(nick or f"user{acc.user_id}"),
             final_roi=acc.current_roi, final_asset=acc.total_asset,
             win_rate=win_rate, trading_mbti=mbti_analyzer.classify_mbti(trades),
         ))
@@ -108,6 +108,10 @@ async def settle_due_season(db: AsyncSession, redis, close_price_provider) -> di
         next_season_num = next_num
     season.status = "FINISHED"
     await db.commit()
+
+    if redis is not None:
+        from apps.trading_game.services.ranking_service import ranking_key
+        await redis.delete(ranking_key(season.id))
 
     log.info(
         "시즌 %s 정산 완료 — closed=%s archived=%s next=%s",

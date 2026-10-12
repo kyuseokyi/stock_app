@@ -238,3 +238,31 @@ async def test_settlement_next_season_dates(db):
     s = nxt.start_at.astimezone(KST); e = nxt.end_at.astimezone(KST)
     assert (s.month, s.day, s.hour) == (10, 1, 9)
     assert (e.month, e.day, e.hour) == (10, 31, 20)
+
+
+async def test_settlement_mbti_from_real_trades(db):
+    from shared.game_models import GameTrade
+    past = datetime(2026, 9, 30, 11, 0, tzinfo=timezone.utc)
+    season = GameSeason(
+        season_number=1, ticker="005930", stock_name="삼성전자",
+        start_at=datetime(2026, 9, 1, 9, 0, tzinfo=timezone.utc), end_at=past, status="ACTIVE",
+    )
+    db.add(season); await db.commit(); await db.refresh(season)
+    u = User(nickname="disciplined", role=UserRole.FREE, is_active=True)
+    db.add(u); await db.commit(); await db.refresh(u)
+    acc = GameAccount(user_id=u.id, season_id=season.id, cash_balance=INITIAL_CASH,
+                      total_trades=3, win_trades=2)
+    db.add(acc); await db.commit(); await db.refresh(acc)
+    opened = datetime(2026, 9, 2, 9, 0, tzinfo=timezone.utc)
+    for i in range(3):  # SL 설정 100% → 냉철한 원칙주의자
+        db.add(GameTrade(
+            account_id=acc.id, side="LONG", entry_price=Decimal("100"), exit_price=Decimal("105"),
+            pnl_amount=Decimal("100"), roi_pct=Decimal("5"), closed_reason="MANUAL",
+            size_amount=Decimal("2500000"), leverage=1, entry_ratio=Decimal("0.25"),
+            opened_at=opened, had_stop_loss=True,
+        ))
+    await db.commit()
+    await settlement.settle_due_season(db, None, lambda t: Decimal("110"))
+    hof = (await db.execute(select(HallOfFame).where(HallOfFame.season_id == season.id))).scalars().all()
+    assert len(hof) == 1
+    assert hof[0].trading_mbti == "냉철한 원칙주의자"

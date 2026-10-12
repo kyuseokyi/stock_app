@@ -31,10 +31,8 @@ def _get_fanout_queue() -> asyncio.Queue:
 
 
 async def _push_personal_pnl(ticker: str, price: Decimal) -> None:
-    """현재 WS 접속 유저들의 보유 포지션 평가손익을 개인 push."""
-    uids = manager.user_ids()
-    if not uids:
-        return
+    """활성 시즌 보유자 전원의 라이브 ROI 를 ZADD(랭킹), 접속자에겐 개인손익 push."""
+    connected = set(manager.user_ids())
     async with AsyncSessionLocal() as db:
         rows = await db.execute(
             select(GamePosition, GameAccount)
@@ -44,20 +42,19 @@ async def _push_personal_pnl(ticker: str, price: Decimal) -> None:
                 GamePosition.status == "OPEN",
                 GameSeason.ticker == ticker,
                 GameSeason.status == "ACTIVE",
-                GameAccount.user_id.in_(uids),
             )
         )
+        redis = deps.get_redis()
         for pos, acc in rows.all():
             roi = pricing.compute_roi_pct(pos.side, pos.entry_price, price, pos.leverage)
             pnl = pricing.compute_pnl(pos.size_amount, roi)
-            await manager.send_to_user(acc.user_id, {
-                "type": "position_pnl",
-                "position_id": str(pos.id),
-                "roi_pct": float(roi),
-                "pnl_amount": float(pnl),
-            })
             live = ranking_service.compute_live_roi(acc.cash_balance, pos, price, INITIAL_CASH)
-            await ranking_service.update_rank(deps.get_redis(), acc.season_id, acc.user_id, live)
+            await ranking_service.update_rank(redis, acc.season_id, acc.user_id, live)
+            if acc.user_id in connected:
+                await manager.send_to_user(acc.user_id, {
+                    "type": "position_pnl", "position_id": str(pos.id),
+                    "roi_pct": float(roi), "pnl_amount": float(pnl),
+                })
 
 
 def _enqueue_fanout(tick: dict, price: Decimal) -> None:

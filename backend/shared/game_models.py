@@ -196,7 +196,7 @@ class HallOfFame(Base):
     user_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("users.id", ondelete="SET NULL"), index=True, nullable=True
     )
-    user_nickname: Mapped[str] = mapped_column(String(50), nullable=False)
+    user_nickname: Mapped[str] = mapped_column(String(100), nullable=False)
     final_roi: Mapped[Decimal] = mapped_column(Numeric(8, 4), nullable=False)
     final_asset: Mapped[Decimal] = mapped_column(Numeric(15, 2), nullable=False)
     win_rate: Mapped[Decimal] = mapped_column(Numeric(5, 2), nullable=False)
