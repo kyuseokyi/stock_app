@@ -1,11 +1,11 @@
-import axios from 'axios'
+import axios, { type AxiosError, type AxiosInstance } from 'axios'
 import { API_BASE_URL as BLOG_BASE_URL, AUTH_BASE_URL } from '../config'
 
 // 마이크로서비스별 base URL(빌드 타임 주입, 폴백/fail-fast 는 ../config 참조).
 // 운영에서는 Cloudflare 터널이 각 서브도메인(blog/auth.haezean.com)으로 라우팅한다.
 
 // 공통 인터셉터를 붙인 axios 인스턴스 팩토리
-function makeClient(baseURL) {
+function makeClient(baseURL: string): AxiosInstance {
   const instance = axios.create({
     baseURL,
     headers: { 'Content-Type': 'application/json' },
@@ -21,7 +21,7 @@ function makeClient(baseURL) {
   // 401 응답 시 토큰 정리 후 로그인 화면으로
   instance.interceptors.response.use(
     (res) => res,
-    (error) => {
+    (error: AxiosError) => {
       if (error.response?.status === 401) {
         localStorage.removeItem('token')
         localStorage.removeItem('user')
