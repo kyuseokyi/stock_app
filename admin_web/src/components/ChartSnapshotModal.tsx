@@ -711,7 +711,7 @@ export default function ChartSnapshotModal({ open, onClose, onInsert }: ChartSna
       <div className="flex max-h-[90vh] w-full max-w-[1344px] flex-col overflow-hidden rounded-2xl bg-white p-5 shadow-xl">
         <div className="mb-3 flex items-center justify-between">
           <h3 className="text-lg font-bold text-slate-900">차트 삽입 — 종목 검색</h3>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600" aria-label="닫기">
+          <button type="button" onClick={onClose} className="text-slate-400 hover:text-slate-600" aria-label="닫기">
             ✕
           </button>
         </div>
@@ -738,7 +738,7 @@ export default function ChartSnapshotModal({ open, onClose, onInsert }: ChartSna
             <ul className="absolute z-10 mt-1 max-h-56 w-full overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-lg">
               {results.map((s) => (
                 <li key={s.symbol}>
-                  <button
+                  <button type="button"
                     onClick={() => handleSelect(s)}
                     className="flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-slate-50"
                   >
@@ -846,7 +846,7 @@ export default function ChartSnapshotModal({ open, onClose, onInsert }: ChartSna
               { key: 'rect', label: '사각형 ▭' },
               { key: 'text', label: '텍스트 T' },
             ] satisfies { key: DrawingTool; label: string }[]).map((b) => (
-              <button
+              <button type="button"
                 key={b.key}
                 onClick={() => toggleTool(b.key)}
                 className={`rounded-lg border px-2.5 py-1 ${
@@ -859,7 +859,7 @@ export default function ChartSnapshotModal({ open, onClose, onInsert }: ChartSna
               </button>
             ))}
             {shapes.length > 0 && (
-              <button
+              <button type="button"
                 onClick={clearAll}
                 className="rounded-lg border border-slate-300 px-2.5 py-1 text-slate-500 hover:bg-slate-50"
               >
@@ -895,7 +895,7 @@ export default function ChartSnapshotModal({ open, onClose, onInsert }: ChartSna
                 {s.type === 'channel' && `3중추세선 ${i + 1}`}
                 {s.type === 'rect' && `사각형 ${i + 1}`}
                 {s.type === 'text' && `텍스트: ${s.text}`}
-                <button
+                <button type="button"
                   onClick={() => removeShape(s.id)}
                   className="text-slate-400 hover:text-red-500"
                   aria-label="삭제"
@@ -951,13 +951,13 @@ export default function ChartSnapshotModal({ open, onClose, onInsert }: ChartSna
         </div>
 
         <div className="mt-4 flex justify-end gap-2">
-          <button
+          <button type="button"
             onClick={onClose}
             className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
           >
             취소
           </button>
-          <button
+          <button type="button"
             onClick={handleInsert}
             disabled={!chart}
             className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-40"
