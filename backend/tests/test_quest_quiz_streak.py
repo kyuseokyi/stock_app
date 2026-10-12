@@ -419,3 +419,156 @@ async def test_cached_closes_caches_and_neg_caches():
 
     assert await rsi_service.cached_closes(redis, "000660", today=D, closes_provider=boom) is None
     assert await redis.get(f"game:rsi:closes:000660:{D:%Y%m%d}:neg") == "1"
+
+
+# ---------------------------------------------------------------- quests
+from apps.trading_game.services import quest_service
+
+
+@pytest.fixture
+def closes_stub(monkeypatch):
+    """rsi_service.cached_closes 를 고정(기본: 데이터 없음). value["v"] 로 교체(예외 객체면 raise)."""
+    value: dict = {"v": None}
+
+    async def stub(redis, ticker, **kw):
+        if isinstance(value["v"], Exception):
+            raise value["v"]
+        return value["v"]
+
+    monkeypatch.setattr(rsi_service, "cached_closes", stub)
+    return value
+
+
+async def _open(session, user, *, side="LONG", ratio=0.5, sl=None, price="110"):
+    await quest_service.on_order_opened(
+        session, fake_aioredis.FakeRedis(decode_responses=True), user.id,
+        side=side, ratio=ratio, stop_loss_price=sl, ticker="005930", entry_price=Decimal(price),
+    )
+
+
+async def _progress(session, user, code):
+    return await session.get(UserQuestProgress, (user.id, code), populate_existing=True)
+
+
+async def test_q1_stop_loss_completes(session, closes_stub):
+    user = await _seed_user(session)
+    await _open(session, user, sl=None)
+    assert (await _progress(session, user, "Q1_STOP_LOSS")) is None
+    await _open(session, user, sl=Decimal("98"))
+    row = await _progress(session, user, "Q1_STOP_LOSS")
+    assert row.progress == 1 and row.completed_at is not None
+
+
+async def test_q3_small_size_three_times(session, closes_stub):
+    user = await _seed_user(session)
+    await _open(session, user, ratio=0.5)
+    assert (await _progress(session, user, "Q3_SMALL_SIZE")) is None
+    for _ in range(3):
+        await _open(session, user, ratio=0.25)
+    row = await _progress(session, user, "Q3_SMALL_SIZE")
+    assert row.progress == 3 and row.completed_at is not None
+    await _open(session, user, ratio=0.25)
+    assert (await _progress(session, user, "Q3_SMALL_SIZE")).progress == 3  # 완료 후 고정
+
+
+async def test_q2_golden_cross_long_only(session, closes_stub):
+    user = await _seed_user(session)
+    closes_stub["v"] = [100.0] * 22  # + 현재가 110 → 오늘 교차
+    await _open(session, user, side="SHORT")
+    row = await _progress(session, user, "Q2_GOLDEN_CROSS")
+    assert row is None or row.completed_at is None
+    await _open(session, user, side="LONG", price="110")
+    assert (await _progress(session, user, "Q2_GOLDEN_CROSS")).completed_at is not None
+
+
+async def test_q2_skipped_on_closes_failure_or_timeout(session, closes_stub, monkeypatch):
+    user = await _seed_user(session)
+    closes_stub["v"] = RuntimeError("ch down")
+    await _open(session, user, side="LONG", sl=Decimal("98"))  # 예외 없이 진행
+    assert (await _progress(session, user, "Q1_STOP_LOSS")).completed_at is not None
+    row = await _progress(session, user, "Q2_GOLDEN_CROSS")
+    assert row is None or row.completed_at is None
+
+    async def slow(redis, ticker, **kw):
+        await asyncio.sleep(1)
+        return [100.0] * 22
+
+    monkeypatch.setattr(rsi_service, "cached_closes", slow)
+    monkeypatch.setattr(quest_service, "GOLDEN_CROSS_TIMEOUT_SECONDS", 0.05)
+    await _open(session, user, side="LONG", price="110")
+    row = await _progress(session, user, "Q2_GOLDEN_CROSS")
+    assert row is None or row.completed_at is None
+
+
+async def test_claim_cash_reward_once(session, closes_stub):
+    user = await _seed_user(session)
+    season = await _seed_season(session)
+    with pytest.raises(quest_service.QuestError) as e:
+        await quest_service.claim(session, user.id, "Q1_STOP_LOSS")
+    assert e.value.code == "QUEST_NOT_COMPLETED"
+
+    await _open(session, user, sl=Decimal("98"))
+    row, acc = await quest_service.claim(session, user.id, "Q1_STOP_LOSS")
+    assert row.claimed_at is not None
+    assert acc.season_id == season.id
+    assert acc.cash_balance == Decimal("10500000")
+    assert acc.bonus_cash == Decimal("500000.00")  # ROI 0% → 같은 금액
+
+    with pytest.raises(quest_service.QuestError) as e:
+        await quest_service.claim(session, user.id, "Q1_STOP_LOSS")
+    assert e.value.code == "ALREADY_CLAIMED"
+
+
+async def test_claim_without_active_season_keeps_unclaimed(session, closes_stub):
+    user = await _seed_user(session)
+    await _seed_season(session, status="FINISHED")
+    await _open(session, user, sl=Decimal("98"))
+    with pytest.raises(quest_service.QuestError) as e:
+        await quest_service.claim(session, user.id, "Q1_STOP_LOSS")
+    assert e.value.code == "NO_ACTIVE_SEASON"
+    assert (await _progress(session, user, "Q1_STOP_LOSS")).claimed_at is None
+
+
+async def test_claim_badge_without_season(session, closes_stub):
+    user = await _seed_user(session)
+    for _ in range(3):
+        await _open(session, user, ratio=0.25)
+    row, acc = await quest_service.claim(session, user.id, "Q3_SMALL_SIZE")
+    assert acc is None and row.claimed_at is not None
+    assert await session.get(UserBadge, (user.id, "PRINCIPLED")) is not None
+
+
+async def test_claim_unknown_quest(session):
+    with pytest.raises(quest_service.QuestError) as e:
+        await quest_service.claim(session, 1, "NOPE")
+    assert e.value.code == "QUEST_NOT_FOUND"
+
+
+async def test_router_quests(api, maker, fake_redis, closes_stub):
+    client, set_user = api
+    async with maker() as db:
+        user = await _seed_user(db)
+        await _seed_season(db)
+        await quest_service.on_order_opened(
+            db, fake_redis, user.id, side="SHORT", ratio=0.5,
+            stop_loss_price=Decimal("98"), ticker="005930", entry_price=Decimal("100"),
+        )
+    set_user(user)
+    r = await client.get("/api/game/quests")
+    assert r.status_code == 200
+    data = r.json()
+    assert [q["code"] for q in data["quests"]] == ["Q1_STOP_LOSS", "Q2_GOLDEN_CROSS", "Q3_SMALL_SIZE"]
+    q1 = data["quests"][0]
+    assert q1["completed"] is True and q1["claimed"] is False and q1["target"] == 1
+    assert data["badges"] == []
+
+    r = await client.post("/api/game/quests/Q1_STOP_LOSS/claim")
+    assert r.status_code == 200, r.text
+    assert r.json()["quest"]["claimed"] is True
+    assert Decimal(r.json()["cash_balance"]) == Decimal("10500000")
+
+    r = await client.post("/api/game/quests/Q1_STOP_LOSS/claim")
+    assert r.status_code == 409 and r.json()["detail"]["code"] == "ALREADY_CLAIMED"
+    r = await client.post("/api/game/quests/Q2_GOLDEN_CROSS/claim")
+    assert r.status_code == 409 and r.json()["detail"]["code"] == "QUEST_NOT_COMPLETED"
+    assert (await client.post("/api/game/quests/NOPE/claim")).status_code == 404

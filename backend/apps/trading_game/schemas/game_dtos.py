@@ -124,3 +124,32 @@ class StreakResponse(BaseModel):
     highest_streak: int
     last_activity_date: date | None
     enabled: bool
+
+
+class QuestResponse(BaseModel):
+    code: str
+    title: str
+    description: str
+    target: int
+    progress: int
+    reward_cash: Decimal | None
+    reward_badge: str | None
+    completed: bool
+    claimed: bool
+
+
+class BadgeDTO(BaseModel):
+    code: str
+    name: str
+    awarded_at: datetime | None
+
+
+class QuestListResponse(BaseModel):
+    quests: list[QuestResponse]
+    badges: list[BadgeDTO]
+
+
+class QuestClaimResponse(BaseModel):
+    quest: QuestResponse
+    cash_balance: Decimal | None  # 현금 보상일 때 지급 후 잔고
+    badge: BadgeDTO | None
