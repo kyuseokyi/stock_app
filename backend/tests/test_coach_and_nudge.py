@@ -554,3 +554,103 @@ async def test_active_positions_response_has_no_nudges_field(api, maker, order_e
     r = await client.get("/api/game/positions/active", params={"season_id": season.id})
     assert r.status_code == 200
     assert len(r.json()) == 1 and "nudges" not in r.json()[0]
+
+
+# ---------------------------------------------------------------- auto-close nudge (WS)
+import asyncio as _asyncio
+
+from shared.game_models import GameAccount, GamePosition
+from apps.trading_game.services import liquidation_service, tick_listener
+
+
+async def _seed_open_position(db, *, sl=None, tp=None) -> tuple[int, GamePosition]:
+    season = await _seed_season(db)
+    user = await _seed_player(db)
+    acc = GameAccount(user_id=user.id, season_id=season.id)
+    db.add(acc)
+    await db.commit()
+    await db.refresh(acc)
+    pos = GamePosition(
+        account_id=acc.id, side="LONG", entry_price=Decimal("100"), size_amount=Decimal("1000000"),
+        entry_ratio=Decimal("0.1"), leverage=1, status="OPEN",
+        stop_loss_price=sl, take_profit_price=tp,
+    )
+    db.add(pos)
+    await db.commit()
+    await db.refresh(pos)
+    return user.id, pos
+
+
+async def test_liquidate_for_tick_returns_user_id(session):
+    user_id, pos = await _seed_open_position(session, sl=Decimal("98"))
+    results = await liquidation_service.liquidate_for_tick(session, "005930", Decimal("98"))
+    assert len(results) == 1
+    assert results[0].user_id == user_id
+    assert results[0].trade.closed_reason == "STOP_LOSS"
+    # 하위 호환 래퍼는 여전히 GameTrade 목록(이미 청산되어 빈 목록)
+    assert await liquidation_service.check_and_liquidate(session, "005930", Decimal("98")) == []
+
+
+@pytest.fixture
+def fresh_queue(monkeypatch):
+    q: _asyncio.Queue = _asyncio.Queue(maxsize=256)
+    monkeypatch.setattr(tick_listener, "_fanout_q", q)
+    return q
+
+
+@pytest.fixture
+def listener_db(maker, monkeypatch):
+    monkeypatch.setattr(tick_listener, "AsyncSessionLocal", maker)
+    redis = fake_aioredis.FakeRedis(decode_responses=True)
+    monkeypatch.setattr(tick_listener.deps, "get_redis", lambda: redis)
+    return maker
+
+
+def _drain(q):
+    items = []
+    while not q.empty():
+        items.append(q.get_nowait())
+    return items
+
+
+async def test_handle_tick_stop_loss_enqueues_praise_nudge(listener_db, fresh_queue):
+    async with listener_db() as db:
+        user_id, pos = await _seed_open_position(db, sl=Decimal("98"))  # 98 → -2% - 0.03%
+    await tick_listener._handle_tick(json.dumps({"ticker": "005930", "price": 98}))
+    items = _drain(fresh_queue)
+    nudges = [i for i in items if i[0] == "nudge"]
+    ticks = [i for i in items if i[0] == "tick"]
+    assert len(ticks) == 1
+    assert len(nudges) == 1
+    _, uid, payload = nudges[0]
+    assert uid == user_id
+    assert payload["type"] == "nudge"
+    assert payload["position_id"] == str(pos.id)
+    assert payload["nudge"]["code"] == "PRINCIPLED_STOP"
+
+
+async def test_handle_tick_take_profit_enqueues_no_nudge(listener_db, fresh_queue):
+    async with listener_db() as db:
+        await _seed_open_position(db, tp=Decimal("105"))
+    await tick_listener._handle_tick(json.dumps({"ticker": "005930", "price": 105}))
+    assert [i[0] for i in _drain(fresh_queue)] == ["tick"]
+
+
+async def test_fanout_worker_sends_nudge_to_user(fresh_queue, monkeypatch):
+    sent = []
+
+    async def fake_send(user_id, payload):
+        sent.append((user_id, payload))
+
+    monkeypatch.setattr(tick_listener.manager, "send_to_user", fake_send)
+    stop = _asyncio.Event()
+    tick_listener._enqueue_nudge(7, "pos-1", {"type": "PRAISE", "code": "PRINCIPLED_STOP", "message": "m"})
+    task = _asyncio.create_task(tick_listener.fanout_worker(stop))
+    for _ in range(50):
+        if sent:
+            break
+        await _asyncio.sleep(0.02)
+    stop.set()
+    await task
+    assert sent == [(7, {"type": "nudge", "position_id": "pos-1",
+                         "nudge": {"type": "PRAISE", "code": "PRINCIPLED_STOP", "message": "m"}})]

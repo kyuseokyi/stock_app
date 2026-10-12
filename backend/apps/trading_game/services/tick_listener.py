@@ -13,7 +13,7 @@ from shared.database import AsyncSessionLocal
 from shared.game_models import INITIAL_CASH, GameAccount, GamePosition, GameSeason
 from apps.trading_game import deps
 from apps.trading_game.services import (
-    account_service, liquidation_service, pricing, ranking_service,
+    account_service, liquidation_service, nudge_engine, pricing, ranking_service,
 )
 from apps.trading_game.services.connection_manager import manager
 
@@ -57,8 +57,8 @@ async def _push_personal_pnl(ticker: str, price: Decimal) -> None:
                 })
 
 
-def _enqueue_fanout(tick: dict, price: Decimal) -> None:
-    """fan-out 작업을 큐에 적재(가득 차면 가장 오래된 것 드롭 — 청산/소비를 막지 않음)."""
+def _enqueue(item: tuple) -> None:
+    """fan-out 큐 적재(가득 차면 가장 오래된 것 드롭 — 청산/소비를 막지 않음)."""
     q = _get_fanout_queue()
     if q.full():
         try:
@@ -66,9 +66,27 @@ def _enqueue_fanout(tick: dict, price: Decimal) -> None:
         except asyncio.QueueEmpty:
             pass
     try:
-        q.put_nowait((tick, price))
+        q.put_nowait(item)
     except asyncio.QueueFull:
         pass
+
+
+def _enqueue_fanout(tick: dict, price: Decimal) -> None:
+    _enqueue(("tick", tick, price))
+
+
+def _enqueue_nudge(user_id: int, position_id: str, nudge: dict) -> None:
+    _enqueue(("nudge", user_id, {"type": "nudge", "position_id": position_id, "nudge": nudge}))
+
+
+def _queue_close_nudges(result: liquidation_service.LiquidationResult) -> None:
+    """자동청산 넛지를 큐에 적재 — 실패해도 청산·랭킹에 영향 없음(best-effort)."""
+    try:
+        trade = result.trade
+        for n in nudge_engine.nudges_for_close(closed_reason=trade.closed_reason, roi_pct=trade.roi_pct):
+            _enqueue_nudge(result.user_id, str(trade.position_id), n.to_dict())
+    except Exception:
+        log.warning("자동청산 넛지 적재 실패 — skip", exc_info=True)
 
 
 async def fanout_worker(stop: asyncio.Event) -> None:
@@ -76,12 +94,17 @@ async def fanout_worker(stop: asyncio.Event) -> None:
     q = _get_fanout_queue()
     while not stop.is_set():
         try:
-            tick, price = await asyncio.wait_for(q.get(), timeout=1.0)
+            item = await asyncio.wait_for(q.get(), timeout=1.0)
         except asyncio.TimeoutError:
             continue
         except asyncio.CancelledError:
             break
         try:
+            if item[0] == "nudge":
+                _, user_id, payload = item
+                await manager.send_to_user(user_id, payload)
+                continue
+            _, tick, price = item
             await manager.broadcast({
                 "type": "tick", "ticker": tick["ticker"], "price": tick["price"],
                 "timestamp": tick.get("timestamp"),
@@ -98,9 +121,10 @@ async def _handle_tick(raw: str) -> None:
     price = Decimal(str(tick["price"]))
     # 청산은 리스너 코루틴에서 인라인(정확성 우선)
     async with AsyncSessionLocal() as db:
-        trades = await liquidation_service.check_and_liquidate(db, ticker, price)
-        for tr in trades:
-            await ranking_service.sync_account_rank(deps.get_redis(), db, tr.account_id)
+        results = await liquidation_service.liquidate_for_tick(db, ticker, price)
+        for r in results:
+            await ranking_service.sync_account_rank(deps.get_redis(), db, r.trade.account_id)
+            _queue_close_nudges(r)  # 인라인 send 금지 — 큐로 위임
     # fan-out 은 별도 워커로 위임(느린 클라이언트가 청산/소비를 막지 않게)
     _enqueue_fanout(tick, price)
 
