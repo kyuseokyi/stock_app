@@ -43,9 +43,9 @@ async def random_quiz(
     try:
         quiz = await quiz_service.serve_random(db, user.id)
     except quiz_service.QuizError as e:
-        raise HTTPException(_ERROR_STATUS[e.code], detail={"code": e.code, "message": str(e)})
+        raise HTTPException(_ERROR_STATUS.get(e.code, status.HTTP_400_BAD_REQUEST), detail={"code": e.code, "message": str(e)})
     return QuizQuestionResponse(
-        id=quiz.id, ticker=quiz.ticker, chart_snapshot=quiz.chart_snapshot,
+        id=quiz.id, chart_snapshot=quiz_service.masked_snapshot(quiz.chart_snapshot),
         time_limit_sec=quiz_service.QUIZ_TIME_LIMIT_SECONDS,
     )
 
@@ -61,7 +61,7 @@ async def submit_quiz(
     try:
         res = await quiz_service.submit(db, user.id, quiz_id, body.choice)
     except quiz_service.QuizError as e:
-        raise HTTPException(_ERROR_STATUS[e.code], detail={"code": e.code, "message": str(e)})
+        raise HTTPException(_ERROR_STATUS.get(e.code, status.HTTP_400_BAD_REQUEST), detail={"code": e.code, "message": str(e)})
     quiz = res.quiz
     streak = None
     try:  # best-effort — 채점 결과는 항상 반환(rollback 하지 않음: quiz 속성 expire 방지)
@@ -77,7 +77,7 @@ async def submit_quiz(
         correct=res.correct, answer=quiz.answer, actual_change=quiz.actual_change,
         pattern_type=quiz.pattern_type, explanation=quiz.explanation,
         rewarded=res.rewarded, reward_cash=quiz.reward_cash if res.rewarded else 0,
-        timed_out=res.timed_out, streak=streak,
+        timed_out=res.timed_out, ticker=quiz.ticker, base_date=quiz.base_date, streak=streak,
     )
 
 

@@ -15,7 +15,7 @@
 | 기능 on/off | **어드민 토글** — `game_feature_flags` 테이블(QUIZ, STREAK), 재시작 없이 즉시 반영 |
 | Streak | KST 하루 중 **주문 1회 이상 또는 퀴즈 제출 1회 이상**이면 유지. 별도 on/off. |
 | 아카데미 | **즉시 잠금**: 리스크 관리 3문항(코드 고정) 전부 정답 시 `unlocked_leverage_5x`. 미해금 5배 주문은 403. 기존 열린 5배 포지션은 유지. 재응시 무제한. |
-| 퀴즈 보상 한도 | 정답 +20만, **KST 하루 3회까지** |
+| 퀴즈 보상 한도 | 정답 +20만, **KST 하루 3회까지**. 계좌 행 잠금(FOR UPDATE)으로 유저별 직렬화 — 동시 제출에도 한도 유지 |
 | 퀴즈 제한시간 | 서버 검증: `served_at` 기준 **10초 + 여유 3초** 초과 제출은 오답 |
 
 ## 1. DB 변경 (Alembic 마이그레이션 1개, down_revision `c3d4e5f6a7b8`)
@@ -54,8 +54,8 @@ Router → Service → ORM. 신규 라우터 `routers/quests.py`, `routers/acade
 | `POST /api/game/quests/{code}/claim` | 미달성 409 `QUEST_NOT_COMPLETED`, 수령됨 409 `ALREADY_CLAIMED`, 활성 시즌 없음 409 `NO_ACTIVE_SEASON`, 알 수 없는 코드 404. `UPDATE ... SET claimed_at=now() WHERE claimed_at IS NULL AND completed_at IS NOT NULL`의 rowcount로 중복 방지 후 `grant_cash` 또는 배지 지급. 응답: 갱신된 퀘스트 + 계좌 잔고 |
 | `GET /api/game/academy/quiz` | 3문항(`id, question, choices[]`) — 정답 제외. `unlocked` 여부 포함 |
 | `POST /api/game/academy/submit` | `{answers: {id: choice_index}}`. 전부 정답이면 `unlocked_leverage_5x=True, passed_at=now()`. 응답: 문항별 정오·해설, `unlocked`. `attempts`+1 |
-| `GET /api/game/quiz/random` | QUIZ off → 503 `FEATURE_DISABLED`. 시도하지 않은 퀴즈 1개를 무작위 선택, `user_quiz_attempts`(served_at=now) 삽입. 응답: `id, ticker, chart_snapshot, time_limit_sec=10` (answer·actual_change·explanation·pattern_type 제외). 남은 문제 없음 → 404 `NO_QUIZ_AVAILABLE` |
-| `POST /api/game/quiz/{id}/submit` | `{choice: 'UP'|'DOWN'}`. QUIZ off → 503. 시도 행 없음 → 409 `QUIZ_NOT_SERVED`, 이미 제출 → 409 `ALREADY_SUBMITTED`. `now - served_at > 13초`면 오답(`timed_out=true`). 정답 + 오늘(KST) 보상 3회 미만 + 활성 시즌 있음 → `grant_cash(reward_cash)`, `rewarded=true`. Streak 갱신. 응답: `correct, answer, actual_change, pattern_type, explanation, rewarded, reward_cash, timed_out, streak` |
+| `GET /api/game/quiz/random` | QUIZ off → 503 `FEATURE_DISABLED`. 시도하지 않은 퀴즈 1개를 무작위 선택, `user_quiz_attempts`(served_at=now) 삽입. 응답: `id, chart_snapshot(날짜 제거·첫 종가=100 정규화), time_limit_sec=10` (ticker 제외 — 정답 검색 방지; answer·actual_change·explanation·pattern_type 제외). 남은 문제 없음 → 404 `NO_QUIZ_AVAILABLE` |
+| `POST /api/game/quiz/{id}/submit` | `{choice: 'UP'|'DOWN'}`. QUIZ off → 503. 시도 행 없음 → 409 `QUIZ_NOT_SERVED`, 이미 제출 → 409 `ALREADY_SUBMITTED`. `now - served_at > 13초`면 오답(`timed_out=true`). 정답 + 오늘(KST) 보상 3회 미만 + 활성 시즌 있음 → `grant_cash(reward_cash)`, `rewarded=true`. Streak 갱신. 응답: `correct, answer, actual_change, pattern_type, explanation, rewarded, reward_cash, timed_out, ticker, base_date, streak` (제출 후 종목·기준일 공개) |
 | `GET /api/game/streak/my` | `current_streak, highest_streak, last_activity_date, enabled` |
 
 5배 레버리지 잠금: `POST /api/game/orders`에서 `leverage == 5`이고 `user_academy.unlocked_leverage_5x`가 아니면 주문 처리 **전에** 403 `LEVERAGE_LOCKED`. 1·2배 주문 경로는 변경 없음.

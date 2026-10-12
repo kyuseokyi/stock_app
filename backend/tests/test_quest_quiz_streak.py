@@ -821,6 +821,52 @@ async def test_daily_reward_limit_three(session):
     assert (await quiz_service.submit(session, user.id, q.id, "UP", now=t1 + timedelta(seconds=2))).rewarded is True
 
 
+async def test_submit_correct_without_season_no_reward(session):
+    user = await _seed_user(session)
+    q = (await _seed_quizzes(session, 1))[0]
+    await quiz_service.serve_random(session, user.id, now=T0)
+    res = await quiz_service.submit(session, user.id, q.id, "UP", now=T0 + timedelta(seconds=2))
+    assert res.correct is True and res.rewarded is False
+    assert (await session.execute(select(GameAccount))).scalars().all() == []
+
+
+async def test_submit_already_submitted_guard_with_stale_session(maker):
+    # 세션 A 의 identity map 에 submitted_at=None 이 남은 채로 B 가 먼저 제출 → A 는 조건부 UPDATE 가드로 차단
+    async with maker() as setup:
+        user = await _seed_user(setup)
+        await _seed_season(setup)
+        q = (await _seed_quizzes(setup, 1))[0]
+        await quiz_service.serve_random(setup, user.id, now=T0)
+    async with maker() as a, maker() as b:
+        stale = await a.get(UserQuizAttempt, (user.id, q.id))
+        assert stale.submitted_at is None
+        res = await quiz_service.submit(b, user.id, q.id, "UP", now=T0 + timedelta(seconds=2))
+        assert res.rewarded is True
+        assert stale.submitted_at is None  # A 의 메모리 객체는 오래된 값
+        with pytest.raises(quiz_service.QuizError) as e:
+            await quiz_service.submit(a, user.id, q.id, "UP", now=T0 + timedelta(seconds=3))
+        assert e.value.code == "ALREADY_SUBMITTED"
+    async with maker() as c:
+        acc = (await c.execute(select(GameAccount).where(GameAccount.user_id == user.id))).scalar_one()
+        assert acc.cash_balance == Decimal("10200000")  # 1회만 지급
+
+
+def test_masked_snapshot_normalizes_and_drops_date():
+    snap = [
+        {"date": "2026-01-01", "open": 50.0, "high": 60.0, "low": 40.0, "close": 50.0, "volume": 1000},
+        {"date": "2026-01-02", "open": 50.0, "high": 75.0, "low": 49.0, "close": 75.0, "volume": 2000},
+    ]
+    out = quiz_service.masked_snapshot(snap)
+    assert out == [
+        {"open": 100.0, "high": 120.0, "low": 80.0, "close": 100.0, "volume": 1000},
+        {"open": 100.0, "high": 150.0, "low": 98.0, "close": 150.0, "volume": 2000},
+    ]
+    assert "date" in snap[0]  # 원본 불변
+    assert quiz_service.masked_snapshot([]) == []
+    zero = quiz_service.masked_snapshot([{"date": "d", "open": 1, "high": 1, "low": 1, "close": 0, "volume": 5}])
+    assert zero == [{"open": 1, "high": 1, "low": 1, "close": 0, "volume": 5}]
+
+
 async def test_router_quiz_flow(api, maker, fake_redis):
     client, set_user = api
     async with maker() as db:
@@ -831,14 +877,17 @@ async def test_router_quiz_flow(api, maker, fake_redis):
     r = await client.get("/api/game/quiz/random")
     assert r.status_code == 200, r.text
     data = r.json()
-    assert set(data) == {"id", "ticker", "chart_snapshot", "time_limit_sec"}
+    assert set(data) == {"id", "chart_snapshot", "time_limit_sec"}
     assert data["time_limit_sec"] == 10
+    assert all("date" not in c for c in data["chart_snapshot"])
+    assert data["chart_snapshot"][0]["close"] == 100
 
     r = await client.post(f"/api/game/quiz/{data['id']}/submit", json={"choice": "UP"})
     assert r.status_code == 200, r.text
     body = r.json()
     assert body["correct"] is True and body["answer"] == "UP" and body["rewarded"] is True
     assert body["explanation"] == "해설0" and body["streak"]["current_streak"] == 1
+    assert body["ticker"] == "005930" and body["base_date"] == "2026-01-01"
 
     r = await client.post(f"/api/game/quiz/{data['id']}/submit", json={"choice": "UP"})
     assert r.status_code == 409 and r.json()["detail"]["code"] == "ALREADY_SUBMITTED"

@@ -183,8 +183,8 @@ class AcademySubmitResponse(BaseModel):
 
 
 class QuizQuestionResponse(BaseModel):
+    """출제 — 정답 검색 방지를 위해 종목·날짜 은닉, 가격은 첫 종가=100 정규화."""
     id: int
-    ticker: str
     chart_snapshot: list[dict]
     time_limit_sec: int
 
@@ -202,4 +202,6 @@ class QuizSubmitResponse(BaseModel):
     rewarded: bool
     reward_cash: int
     timed_out: bool
+    ticker: str  # 제출 후 공개
+    base_date: date
     streak: StreakResponse | None

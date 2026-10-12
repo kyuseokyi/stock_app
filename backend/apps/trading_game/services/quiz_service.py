@@ -2,7 +2,9 @@
 
 출제 시 served_at 을 기록하고 제출 시 서버가 제한시간(10초 + 여유 3초)을 판정한다.
 정답 보상은 KST 하루 3회까지, 활성 시즌 계좌로 reward_service.grant_cash.
-(일일 한도는 동시 제출 경합에서 드물게 1회 초과될 수 있다 — 허용.)
+제출은 계좌 행 잠금(SELECT ... FOR UPDATE, PG)으로 유저별 직렬화되고 제출 기록·보상·수령 표시가
+한 트랜잭션으로 커밋되므로, 동시 제출에도 일일 보상 한도가 유지된다.
+출제 응답은 정답 검색을 막기 위해 종목·날짜를 숨기고 가격을 정규화한다(masked_snapshot).
 """
 from __future__ import annotations
 
@@ -14,7 +16,7 @@ from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from shared.game_models import ChartQuiz, UserQuizAttempt
+from shared.game_models import ChartQuiz, GameAccount, UserQuizAttempt
 from apps.trading_game.services import account_service, coach_service, reward_service
 
 QUIZ_TIME_LIMIT_SECONDS = 10
@@ -37,6 +39,24 @@ class SubmitResult:
     correct: bool
     timed_out: bool
     rewarded: bool
+
+
+_PRICE_KEYS = ("open", "high", "low", "close")
+
+
+def masked_snapshot(snapshot: list[dict]) -> list[dict]:
+    """출제용 차트 — date 제거, 첫 캔들 종가=100 으로 가격 정규화(거래량 유지). 원본은 변경하지 않는다."""
+    items = [{k: v for k, v in c.items() if k != "date"} for c in snapshot]
+    if not items:
+        return items
+    first_close = items[0].get("close") or 0
+    if not first_close:
+        return items
+    for c in items:
+        for k in _PRICE_KEYS:
+            if c.get(k) is not None:
+                c[k] = round(c[k] / first_close * 100, 4)
+    return items
 
 
 def _as_utc(dt: datetime) -> datetime:
@@ -88,6 +108,18 @@ async def submit(
     timed_out = elapsed > QUIZ_TIME_LIMIT_SECONDS + QUIZ_GRACE_SECONDS
     correct = (not timed_out) and choice == quiz.answer
 
+    account: GameAccount | None = None
+    if correct:
+        season = await account_service.get_active_season(db)
+        if season is not None:
+            # 최초 생성 시에만 commit(계좌 행만 다룸) — 제출 기록은 아직 쓰지 않았다
+            account = await account_service.get_or_create_account(db, user_id, season.id)
+
+    if account is not None:
+        # 같은 유저의 동시 제출을 계좌 행 잠금으로 직렬화 — 일일 보상 개수 집계가 일관되게 유지된다
+        # (PG FOR UPDATE; SQLite 는 무시하지만 단일 writer 라 문제없음)
+        await db.execute(select(GameAccount).where(GameAccount.id == account.id).with_for_update())
+
     res = await db.execute(
         update(UserQuizAttempt)
         .where(
@@ -98,16 +130,13 @@ async def submit(
         .values(choice=choice, is_correct=correct, submitted_at=now)
     )
     if res.rowcount != 1:
-        await db.rollback()
+        # 0행 갱신 — 변경 없음, rollback 불필요(세션 객체 expire 방지)
         raise QuizError("ALREADY_SUBMITTED", "이미 제출한 퀴즈입니다.")
 
     rewarded = False
-    if correct:
+    if account is not None:
         today = coach_service.kst_today(now)
-        season = await account_service.get_active_season(db)
-        if season is not None and await _rewarded_count(db, user_id, today) < DAILY_REWARD_LIMIT:
-            await db.commit()  # 제출 기록 확정(get_or_create_account 가 commit 할 수 있음)
-            account = await account_service.get_or_create_account(db, user_id, season.id)
+        if await _rewarded_count(db, user_id, today) < DAILY_REWARD_LIMIT:
             await reward_service.grant_cash(db, account, Decimal(quiz.reward_cash))
             await db.execute(
                 update(UserQuizAttempt)
