@@ -2,7 +2,16 @@
 // 우측 하단에 표시한다(별도 상태관리/라이브러리 없이 어디서든 호출 가능).
 //   showToast('저장되었습니다')            // 기본(🔔)
 //   showToast('이름을 입력하세요', { icon: '⚠️' })
-export function showToast(text, { icon = '🔔' } = {}) {
+
+/** 'app:toast' CustomEvent 의 detail 형태(NotificationToaster 가 수신) */
+export interface ToastDetail {
+  text: string
+  icon: string
+}
+
+export function showToast(text: string, { icon = '🔔' }: { icon?: string } = {}): void {
   if (!text) return
-  window.dispatchEvent(new CustomEvent('app:toast', { detail: { text, icon } }))
+  window.dispatchEvent(
+    new CustomEvent<ToastDetail>('app:toast', { detail: { text, icon } }),
+  )
 }
