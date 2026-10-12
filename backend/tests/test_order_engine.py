@@ -452,3 +452,16 @@ async def test_check_and_liquidate_other_ticker_untouched(session):
     # 시즌 종목은 005930 이므로 다른 종목 틱으로는 청산 안 됨
     trades = await liquidation_service.check_and_liquidate(session, "000660", Decimal("110"))
     assert trades == []
+
+
+from apps.trading_game.services.connection_manager import sentiment_from_counts
+
+
+def test_sentiment_ratio():
+    s = sentiment_from_counts(long_count=65, short_count=35)
+    assert s == {"long_pct": 65.0, "short_pct": 35.0}
+
+
+def test_sentiment_zero_positions():
+    s = sentiment_from_counts(long_count=0, short_count=0)
+    assert s == {"long_pct": 0.0, "short_pct": 0.0}
