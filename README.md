@@ -10,6 +10,7 @@ backend/
 │   ├── auth/        # 인증 서비스 — 로그인/JWT 발급·검증, 관리자 시드   (포트 8001)
 │   ├── blog/        # 블로그 서비스 — 게시판/게시글/댓글 CRUD, SSE 알림 (포트 8000)
 │   ├── stock_api/   # 주식 API 서비스 — GraphQL 종목검색/차트(온더플라이) (포트 8002)
+│   ├── trading_game/# 트레이딩 게임 — 가상 주문/체결 엔진 + 실시간 WS 게이트웨이 (포트 8003)
 │   └── collector/   # 수집·알림 워커 (Celery) — 새 글 FCM 푸시(Mock)
 ├── shared/          # 공통 DB 모델·세션·JWT 검증·보안
 └── alembic/         # DB 마이그레이션
@@ -49,6 +50,7 @@ uv run python -m apps.auth.seed_admin     # 관리자 시드 (최초 1회)
 uv run uvicorn apps.auth.main:app      --reload --port 8001   # 인증(로그인)
 uv run uvicorn apps.blog.main:app      --reload --port 8000   # 블로그(게시판/글/댓글/SSE)
 uv run uvicorn apps.stock_api.main:app --reload --port 8002   # 주식 API(GraphQL /graphql)
+uv run uvicorn apps.trading_game.main:app --reload --port 8003 --workers 1  # 트레이딩 게임(주문/체결·WS, 단일워커 필수)
 
 # 데이터 수집/알림 워커 (Celery)
 uv run celery -A apps.collector.celery_app worker --loglevel=info
@@ -69,6 +71,19 @@ MOCK_TICK_STREAM=true uv run python -m apps.collector.run_game_ws   # Mock 모�
 # uv run python -m apps.collector.run_game_ws                       # 실 KIS WS(장중 09:00~15:30 + 키 필요)
 uv run python -m scripts.test_game_ws_sub                           # 다른 터미널: stock:tick:* 수신 확인
 ```
+
+#### 트레이딩 게임 서비스 (Port 8003, Phase 3)
+실시간 가상 주문/체결 엔진 + 클라이언트 WebSocket 게이트웨이. 원클릭 진입(LONG/SHORT·레버리지 1x/2x/5x·비중 25/50/100%) → 현재가 즉시 체결 → 틱마다 TP/SL/마진콜 자동청산, WS로 틱·개인손익·시장심리 push.
+```bash
+# ⚠️ 반드시 단일 워커(인메모리 WS 레지스트리/틱 리스너) — lifespan 이 Redis stock:tick:* 구독
+cd backend
+uv run uvicorn apps.trading_game.main:app --reload --port 8003 --workers 1
+```
+- **선행**: Phase 2 수집 데몬(`apps.collector.run_game_ws`)이 돌아 `stock:tick:*`·`stock:latest:*` 를 채워야 주문 체결 가능(장외엔 `MOCK_TICK_STREAM=true`). ACTIVE 시즌 시드 필요(`python -m scripts.seed_trading_game`).
+- **환경변수**: `REDIS_URL`(기본 `redis://localhost:6379/0`) · `TRADING_WINDOWS`(기본 `09:00-15:30,16:00-20:00` KST — KRX 정규장+애프터마켓, NXT 프리마켓 제외) · `STALE_SECONDS`(기본 `10` — 최신가가 이보다 오래되면 주문 거부).
+- **주문 이중 게이트**: 거래 세션 창 + 최신가 신선도. 둘 다 통과해야 체결(세션 밖/시세 끊김 → 409).
+- 에뮬레이터 검증 시: `adb reverse tcp:8003 tcp:8003` 추가.
+
 > ⚠️ 관리자 웹 로그인은 **auth(8001)**, 게시판/글/댓글은 **blog(8000)** 을 사용합니다. 어드민을 테스트하려면 **두 서비스를 모두** 띄워야 합니다.
 
 기본 관리자 계정: `admin@stock.app` / `admin1234`
@@ -144,8 +159,8 @@ npm run build:android:prod # 상용(app-bundle) / build:ios:prod
 docker compose -f docker-compose.dev.yml ps
 
 # 앱 서비스 포트 점유 확인 (● 떠 있으면 실행 중)
-for p in 8001 8000 8002 5173 3000; do lsof -ti:$p >/dev/null 2>&1 && echo "$p ●실행중" || echo "$p ○정지"; done
-# 8001 auth · 8000 blog · 8002 stock_api · 5173 admin_web · 3000 web_client
+for p in 8001 8000 8002 8003 5173 3000; do lsof -ti:$p >/dev/null 2>&1 && echo "$p ●실행중" || echo "$p ○정지"; done
+# 8001 auth · 8000 blog · 8002 stock_api · 8003 trading_game · 5173 admin_web · 3000 web_client
 
 # Celery 워커
 pgrep -fl "celery.*worker" || echo "celery ○정지"
@@ -176,6 +191,7 @@ cd ../web_client && npm run dev   # 유저웹 3000  (blog 8000 + 댓글작성 �
 | 유저 웹 블로그 조회 | Docker(postgres) + blog(8000) + web_client(3000) |
 | 유저 웹 임시 로그인 + 댓글 작성 | 위 + auth(8001) |
 | 새 글 실시간 알림(SSE)·푸시(Mock) | 위 + Redis(도커) + celery worker |
+| 트레이딩 게임(가상 주문/체결·실시간 WS) | Docker(postgres+redis) + auth(8001) + trading_game(8003, `--workers 1`) + 수집 데몬(`run_game_ws`, Mock 가능) + ACTIVE 시즌 시드 |
 
 ### 4. 마이그레이션/시드 (스키마·계정 변경 시에만)
 ```bash
@@ -188,7 +204,7 @@ uv run python -m apps.auth.seed_admin   # 관리자 계정 없을 때 (admin@sto
 ### 5. 종료
 ```bash
 # 앱 서비스만 정리 (포트 kill)
-for p in 8001 8000 8002 5173 3000; do lsof -ti:$p | xargs kill -9 2>/dev/null; done
+for p in 8001 8000 8002 8003 5173 3000; do lsof -ti:$p | xargs kill -9 2>/dev/null; done
 pkill -f "celery.*worker"
 
 docker compose -f docker-compose.dev.yml stop   # DB 인프라 정지(데이터 유지)
