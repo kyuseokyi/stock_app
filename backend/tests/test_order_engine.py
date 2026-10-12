@@ -299,3 +299,118 @@ async def test_close_position_idempotent_on_already_closed(session):
     assert second is None  # 이미 CLOSED → no-op
     await session.refresh(acc)
     assert acc.total_trades == 1
+
+
+async def test_close_position_restores_cash(session):
+    acc = await _seed_account(session)
+    pos = await order_engine.open_position(
+        session, account=acc, side="LONG", ratio=Decimal("1.0"),
+        leverage=1, entry_price=Decimal("100"), sl_pct=None, tp_pct=None,
+    )
+    trade = await order_engine.close_position(
+        session, position_id=pos.id, exit_price=Decimal("110"), reason="MANUAL"
+    )
+    await session.refresh(acc)
+    assert acc.cash_balance == INITIAL_CASH + trade.pnl_amount
+    assert trade.pnl_amount == (INITIAL_CASH * Decimal("9.97") / Decimal("100")).quantize(Decimal("0.01"))
+
+
+async def test_close_losing_position(session):
+    acc = await _seed_account(session)
+    pos = await order_engine.open_position(
+        session, account=acc, side="LONG", ratio=Decimal("1.0"),
+        leverage=1, entry_price=Decimal("100"), sl_pct=None, tp_pct=None,
+    )
+    trade = await order_engine.close_position(
+        session, position_id=pos.id, exit_price=Decimal("90"), reason="STOP_LOSS"
+    )
+    assert trade.pnl_amount < 0
+    await session.refresh(acc)
+    assert acc.win_trades == 0
+    assert acc.total_trades == 1
+    assert acc.cash_balance == INITIAL_CASH + trade.pnl_amount
+
+
+async def test_close_short_position_profit_on_drop(session):
+    acc = await _seed_account(session)
+    pos = await order_engine.open_position(
+        session, account=acc, side="SHORT", ratio=Decimal("1.0"),
+        leverage=1, entry_price=Decimal("100"), sl_pct=None, tp_pct=None,
+    )
+    trade = await order_engine.close_position(
+        session, position_id=pos.id, exit_price=Decimal("90"), reason="MANUAL"
+    )
+    assert trade.side == "SHORT"
+    assert trade.roi_pct == Decimal("9.97")
+    await session.refresh(acc)
+    assert acc.win_trades == 1
+
+
+async def test_close_margin_call_clamps_to_principal(session):
+    acc = await _seed_account(session)
+    pos = await order_engine.open_position(
+        session, account=acc, side="LONG", ratio=Decimal("1.0"),
+        leverage=5, entry_price=Decimal("100"), sl_pct=None, tp_pct=None,
+    )
+    # -30% × 5x = -150% → 원금 초과 손실 → 클램프
+    trade = await order_engine.close_position(
+        session, position_id=pos.id, exit_price=Decimal("70"), reason="MARGIN_CALL"
+    )
+    assert trade.pnl_amount == -pos.size_amount
+    await session.refresh(acc)
+    assert acc.cash_balance == Decimal("0.00")
+
+
+async def test_close_nonexistent_position_returns_none(session):
+    await _seed_account(session)
+    result = await order_engine.close_position(
+        session, position_id=uuid.uuid4(), exit_price=Decimal("100"), reason="MANUAL"
+    )
+    assert result is None
+
+
+async def test_close_snapshots_trade_fields(session):
+    acc = await _seed_account(session)
+    pos = await order_engine.open_position(
+        session, account=acc, side="LONG", ratio=Decimal("0.5"),
+        leverage=2, entry_price=Decimal("100"), sl_pct=Decimal("0.05"), tp_pct=None,
+    )
+    trade = await order_engine.close_position(
+        session, position_id=pos.id, exit_price=Decimal("110"), reason="MANUAL"
+    )
+    assert trade.size_amount == pos.size_amount
+    assert trade.leverage == 2
+    assert trade.entry_ratio == Decimal("0.5000")
+    assert trade.had_stop_loss is True
+    assert trade.opened_at is not None
+    closed = await session.get(GamePosition, pos.id)
+    assert closed.status == "CLOSED"
+
+
+async def test_second_open_raises_already_open(session):
+    acc = await _seed_account(session)
+    await order_engine.open_position(
+        session, account=acc, side="LONG", ratio=Decimal("0.25"),
+        leverage=1, entry_price=Decimal("100"), sl_pct=None, tp_pct=None,
+    )
+    with pytest.raises(order_engine.OrderError) as ei:
+        await order_engine.open_position(
+            session, account=acc, side="LONG", ratio=Decimal("0.25"),
+            leverage=1, entry_price=Decimal("100"), sl_pct=None, tp_pct=None,
+        )
+    assert ei.value.code == "ALREADY_OPEN"
+
+
+def test_season_is_tradable_variants():
+    base = dict(
+        season_number=1, ticker="005930", stock_name="삼성",
+        start_at=datetime(2026, 10, 1, tzinfo=timezone.utc),
+    )
+    assert account_service.season_is_tradable(GameSeason(**base, status="ACTIVE", end_at=None)) is True
+    assert account_service.season_is_tradable(
+        GameSeason(**base, status="ACTIVE", end_at=datetime(2999, 1, 1, tzinfo=timezone.utc))
+    ) is True
+    assert account_service.season_is_tradable(
+        GameSeason(**base, status="ACTIVE", end_at=datetime(2000, 1, 1, tzinfo=timezone.utc))
+    ) is False
+    assert account_service.season_is_tradable(GameSeason(**base, status="FINISHED", end_at=None)) is False

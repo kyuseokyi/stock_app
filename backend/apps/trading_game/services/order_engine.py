@@ -2,9 +2,10 @@
 from __future__ import annotations
 
 import uuid
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 
 from sqlalchemy import update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from shared.game_models import GameAccount, GamePosition, GameTrade
@@ -14,7 +15,14 @@ MIN_ORDER_AMOUNT = Decimal("100000")  # 최소 주문 10만 원
 
 
 class OrderError(Exception):
-    """주문 거부(최소금액 미만, 잔고 부족 등). 라우터가 422 로 변환."""
+    """주문 거부. code 로 라우터가 상태코드를 매핑한다.
+
+    MIN_AMOUNT / INSUFFICIENT_CASH → 422, ALREADY_OPEN → 409.
+    """
+
+    def __init__(self, message: str, code: str = "INVALID"):
+        super().__init__(message)
+        self.code = code
 
 
 async def open_position(
@@ -30,9 +38,9 @@ async def open_position(
 ) -> GamePosition:
     size_amount = (account.cash_balance * ratio).quantize(Decimal("0.01"))
     if size_amount < MIN_ORDER_AMOUNT:
-        raise OrderError(f"최소 주문 금액({MIN_ORDER_AMOUNT}) 미만입니다.")
+        raise OrderError(f"최소 주문 금액({MIN_ORDER_AMOUNT}) 미만입니다.", code="MIN_AMOUNT")
     if size_amount > account.cash_balance:
-        raise OrderError("잔고가 부족합니다.")
+        raise OrderError("잔고가 부족합니다.", code="INSUFFICIENT_CASH")
 
     sl_price, tp_price = pricing.tp_sl_prices(side, entry_price, sl_pct, tp_pct)
     pos = GamePosition(
@@ -47,13 +55,20 @@ async def open_position(
         status="OPEN",
     )
     db.add(pos)
-    await db.execute(
-        update(GameAccount)
-        .where(GameAccount.id == account.id)
-        .values(cash_balance=GameAccount.cash_balance - size_amount)
-    )
-    await db.commit()
+    try:
+        # autoflush 가 INSERT 를 내보내므로 유니크 위반은 execute 에서도 발생 가능
+        await db.execute(
+            update(GameAccount)
+            .where(GameAccount.id == account.id)
+            .values(cash_balance=GameAccount.cash_balance - size_amount)
+        )
+        await db.commit()
+    except IntegrityError:
+        # 1계좌 1활성포지션 부분 유니크 인덱스 위반(동시 더블클릭 등)
+        await db.rollback()
+        raise OrderError("이미 보유 중인 포지션이 있습니다.", code="ALREADY_OPEN")
     await db.refresh(pos)
+    await db.refresh(account)
     return pos
 
 
@@ -65,6 +80,17 @@ async def close_position(
     if pos is None or pos.status != "OPEN":
         return None
 
+    # 손익을 상태 변경 '전'에 계산(계산 중 예외가 나도 미변경 상태 유지)
+    roi = pricing.compute_roi_pct(pos.side, pos.entry_price, exit_price, pos.leverage)
+    pnl = pricing.compute_pnl(pos.size_amount, roi)
+    # 원금 초과 손실 방지: 실현 손익은 -원금 이하로 내려가지 않음(원장·현금 일치)
+    if pnl < -pos.size_amount:
+        pnl = -pos.size_amount
+        roi = (pnl / pos.size_amount * Decimal("100")).quantize(
+            Decimal("0.0001"), rounding=ROUND_HALF_UP
+        )
+    return_amount = pos.size_amount + pnl  # 위 클램프로 항상 >= 0
+
     res = await db.execute(
         update(GamePosition)
         .where(GamePosition.id == position_id, GamePosition.status == "OPEN")
@@ -73,10 +99,6 @@ async def close_position(
     if res.rowcount != 1:
         await db.rollback()
         return None
-
-    roi = pricing.compute_roi_pct(pos.side, pos.entry_price, exit_price, pos.leverage)
-    pnl = pricing.compute_pnl(pos.size_amount, roi)
-    return_amount = max(Decimal("0"), pos.size_amount + pnl)
 
     trade = GameTrade(
         account_id=pos.account_id,
