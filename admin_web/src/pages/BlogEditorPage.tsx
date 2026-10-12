@@ -1,17 +1,24 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { listBoards } from '../api/boards'
 import { createBlog, getBlog, updateBlog } from '../api/blogs'
 import RichTextEditor from '../components/RichTextEditor'
 import { showToast } from '../lib/toast'
+import type { BoardOut } from '../types/api'
+
+interface BlogForm {
+  board_id: number | string // select 값('')·로드된 게시글(number) 모두 수용
+  title: string
+  content: string
+}
 
 export default function BlogEditorPage() {
   const { id } = useParams()
   const isEdit = Boolean(id)
   const navigate = useNavigate()
 
-  const [boards, setBoards] = useState([])
-  const [form, setForm] = useState({ board_id: '', title: '', content: '' })
+  const [boards, setBoards] = useState<BoardOut[]>([])
+  const [form, setForm] = useState<BlogForm>({ board_id: '', title: '', content: '' })
   const [loading, setLoading] = useState(isEdit)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -23,7 +30,8 @@ export default function BlogEditorPage() {
 
   useEffect(() => {
     if (!isEdit) return
-    getBlog(id)
+    // isEdit === Boolean(id) 이므로 이 분기에서 id 는 존재
+    getBlog(id!)
       .then((p) =>
         setForm({ board_id: p.board_id, title: p.title, content: p.content }),
       )
@@ -31,9 +39,12 @@ export default function BlogEditorPage() {
       .finally(() => setLoading(false))
   }, [id, isEdit])
 
-  const setField = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }))
+  const setField =
+    (k: keyof BlogForm) =>
+    (e: ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
+      setForm((f) => ({ ...f, [k]: e.target.value }))
 
-  const onSubmit = async (e) => {
+  const onSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     if (submittingRef.current) return // 이미 저장 중이면 무시(중복 등록 방지)
     setError('')
@@ -53,7 +64,7 @@ export default function BlogEditorPage() {
         content: form.content,
       }
       if (isEdit) {
-        await updateBlog(id, payload)
+        await updateBlog(id!, payload)
       } else {
         await createBlog(payload)
       }

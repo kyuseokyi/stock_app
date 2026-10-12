@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { getBlog } from '../api/blogs'
 import { listBoards } from '../api/boards'
@@ -7,20 +7,21 @@ import {
   deleteComment,
   listComments,
 } from '../api/comments'
+import type { BlogOut, CommentOut } from '../types/api'
 
 export default function BlogDetailPage() {
   const { id } = useParams()
-  const [post, setPost] = useState(null)
+  const [post, setPost] = useState<BlogOut | null>(null)
   const [boardName, setBoardName] = useState('')
   const [commentsEnabled, setCommentsEnabled] = useState(true)
-  const [comments, setComments] = useState([])
+  const [comments, setComments] = useState<CommentOut[]>([])
   const [newComment, setNewComment] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
 
   const loadComments = async () => {
     try {
-      setComments(await listComments(id))
+      setComments(await listComments(id!))
     } catch {
       setError('댓글을 불러오지 못했습니다.')
     }
@@ -29,7 +30,8 @@ export default function BlogDetailPage() {
   useEffect(() => {
     ;(async () => {
       try {
-        const p = await getBlog(id)
+        // /blogs/:id 라우트 전용 페이지 → id 는 항상 존재
+        const p = await getBlog(id!)
         setPost(p)
         const boards = await listBoards()
         const b = boards.find((bd) => bd.id === p.board_id)
@@ -45,11 +47,11 @@ export default function BlogDetailPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id])
 
-  const onAddComment = async (e) => {
+  const onAddComment = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     if (!newComment.trim()) return
     try {
-      await createComment(id, newComment.trim())
+      await createComment(id!, newComment.trim())
       setNewComment('')
       loadComments()
     } catch {
@@ -57,7 +59,7 @@ export default function BlogDetailPage() {
     }
   }
 
-  const onDeleteComment = async (commentId) => {
+  const onDeleteComment = async (commentId: number) => {
     if (!confirm('이 댓글을 삭제할까요?')) return
     try {
       await deleteComment(commentId)

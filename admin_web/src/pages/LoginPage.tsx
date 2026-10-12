@@ -1,25 +1,28 @@
-import { useState } from 'react'
-import { useLocation, useNavigate } from 'react-router-dom'
+import { useState, type FormEvent } from 'react'
+import { useLocation, useNavigate, type Location } from 'react-router-dom'
+import type { AxiosError } from 'axios'
 import { login } from '../api/auth'
 
 export default function LoginPage() {
   const navigate = useNavigate()
   const location = useLocation()
-  const from = location.state?.from?.pathname || '/boards'
+  const from =
+    (location.state as { from?: Location } | null)?.from?.pathname || '/boards'
 
   const [email, setEmail] = useState('admin@stock.app')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
-  const onSubmit = async (e) => {
+  const onSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     setError('')
     setLoading(true)
     try {
       await login(email.trim(), password)
       navigate(from, { replace: true })
-    } catch (err) {
+    } catch (caught) {
+      const err = caught as AxiosError
       if (!err.response) {
         // 응답 자체가 없음 = 백엔드 미실행/CORS/네트워크 문제
         setError(

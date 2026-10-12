@@ -3,14 +3,15 @@ import { Link, useNavigate } from 'react-router-dom'
 import { listBoards } from '../api/boards'
 import { deleteBlog, listBlogs, updateBlog } from '../api/blogs'
 import { showToast } from '../lib/toast'
+import type { BlogListOut, BlogOut, BoardOut } from '../types/api'
 
 const PAGE_SIZE = 10
 
 export default function BlogListPage() {
   const navigate = useNavigate()
-  const [boards, setBoards] = useState([])
+  const [boards, setBoards] = useState<BoardOut[]>([])
   const [boardId, setBoardId] = useState('')
-  const [data, setData] = useState({ total: 0, items: [], page: 1, size: PAGE_SIZE })
+  const [data, setData] = useState<BlogListOut>({ total: 0, items: [], page: 1, size: PAGE_SIZE })
   const [page, setPage] = useState(1)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -41,10 +42,10 @@ export default function BlogListPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [boardId, page])
 
-  const boardName = (id) => boards.find((b) => b.id === id)?.name ?? '-'
+  const boardName = (id: number) => boards.find((b) => b.id === id)?.name ?? '-'
   const totalPages = Math.max(1, Math.ceil(data.total / PAGE_SIZE))
 
-  const onDelete = async (id) => {
+  const onDelete = async (id: number) => {
     if (!confirm('이 게시글을 삭제할까요?')) return
     const prev = data
     // 낙관적 제거: 목록을 통째로 다시 그리지 않고 해당 행만 즉시 제거(깜빡임 방지)
@@ -63,7 +64,7 @@ export default function BlogListPage() {
     }
   }
 
-  const onToggleFeatured = async (post) => {
+  const onToggleFeatured = async (post: BlogOut) => {
     const next = !post.featured_at
     const prev = data
     // 낙관적 반영: 해당 행만 즉시 갱신(깜빡임 방지)

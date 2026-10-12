@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import { createBoard, deleteBoard, listBoards, updateBoard } from '../api/boards'
 import { showToast } from '../lib/toast'
+import type { BoardOut } from '../types/api'
 
 export default function BoardsPage() {
-  const [boards, setBoards] = useState([])
+  const [boards, setBoards] = useState<BoardOut[]>([])
   const [name, setName] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -24,7 +25,7 @@ export default function BoardsPage() {
     load()
   }, [])
 
-  const onCreate = async (e) => {
+  const onCreate = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     if (!name.trim()) {
       showToast('게시판 이름을 입력하세요.', { icon: '⚠️' })
@@ -41,7 +42,7 @@ export default function BoardsPage() {
     }
   }
 
-  const onDelete = async (id) => {
+  const onDelete = async (id: number) => {
     if (!confirm('이 게시판을 삭제할까요? (하위 게시글도 함께 삭제됩니다)')) return
     try {
       await deleteBoard(id)
@@ -51,7 +52,7 @@ export default function BoardsPage() {
     }
   }
 
-  const onToggleComments = async (board) => {
+  const onToggleComments = async (board: BoardOut) => {
     try {
       await updateBoard(board.id, { comments_enabled: !board.comments_enabled })
       load()
