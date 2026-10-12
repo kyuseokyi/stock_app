@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 
 from fastapi import WebSocket
@@ -45,6 +46,8 @@ class ConnectionManager:
             await asyncio.wait_for(ws.send_text(text), timeout=SEND_TIMEOUT)
         except Exception:
             await self.disconnect(user_id, ws)
+            with contextlib.suppress(Exception):
+                await ws.close(code=1011)
 
     async def broadcast(self, payload: dict) -> None:
         text = json.dumps(payload, ensure_ascii=False)

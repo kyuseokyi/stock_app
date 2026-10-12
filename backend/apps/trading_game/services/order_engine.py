@@ -8,7 +8,7 @@ from sqlalchemy import update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from shared.game_models import GameAccount, GamePosition, GameTrade
+from shared.game_models import INITIAL_CASH, GameAccount, GamePosition, GameTrade
 from apps.trading_game.services import pricing
 
 MIN_ORDER_AMOUNT = Decimal("100000")  # 최소 주문 10만 원
@@ -97,7 +97,8 @@ async def close_position(
         .values(status="CLOSED")
     )
     if res.rowcount != 1:
-        await db.rollback()
+        # 레이스(이미 CLOSED)로 0행 변경 — 변경된 것이 없으므로 rollback 하지 않는다.
+        # (rollback 은 세션의 모든 ORM 객체를 expire 시켜 호출부 루프에서 MissingGreenlet 유발.)
         return None
 
     trade = GameTrade(
@@ -126,6 +127,16 @@ async def close_position(
             win_trades=GameAccount.win_trades + win_inc,
         )
     )
+    # 집계 갱신(파이썬 Decimal — sqlite 정수나눗셈 함정 회피).
+    # 단일 포지션 규칙상 청산 후 보유 포지션 0 → 총자산 = 현금.
+    acc = await db.get(GameAccount, pos.account_id)
+    acc.total_asset = acc.cash_balance
+    roi_acc = ((acc.cash_balance - INITIAL_CASH) / INITIAL_CASH * Decimal("100")).quantize(
+        Decimal("0.0001"), rounding=ROUND_HALF_UP
+    )
+    acc.current_roi = roi_acc
+    if roi_acc > acc.max_roi:
+        acc.max_roi = roi_acc
     await db.commit()
     await db.refresh(trade)
     return trade

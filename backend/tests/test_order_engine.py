@@ -465,3 +465,18 @@ def test_sentiment_ratio():
 def test_sentiment_zero_positions():
     s = sentiment_from_counts(long_count=0, short_count=0)
     assert s == {"long_pct": 0.0, "short_pct": 0.0}
+
+
+async def test_close_updates_account_aggregates(session):
+    acc = await _seed_account(session)
+    pos = await order_engine.open_position(
+        session, account=acc, side="LONG", ratio=Decimal("1.0"),
+        leverage=1, entry_price=Decimal("100"), sl_pct=None, tp_pct=None,
+    )
+    await order_engine.close_position(
+        session, position_id=pos.id, exit_price=Decimal("110"), reason="MANUAL"
+    )
+    await session.refresh(acc)
+    assert acc.total_asset == acc.cash_balance          # 청산 후 총자산=현금
+    assert acc.current_roi == Decimal("9.9700")         # +9.97%
+    assert acc.max_roi == Decimal("9.9700")

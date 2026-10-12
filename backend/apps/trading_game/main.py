@@ -15,8 +15,9 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from shared.cors import build_allowed_origins
+from apps.trading_game import deps
 from apps.trading_game.routers import orders, ws_gateway
-from apps.trading_game.services.tick_listener import run_listener
+from apps.trading_game.services.tick_listener import fanout_worker, run_listener
 
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 
@@ -25,15 +26,18 @@ REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 async def lifespan(app: FastAPI):
     stop = asyncio.Event()
     listener = asyncio.create_task(run_listener(REDIS_URL, stop))
+    fanout = asyncio.create_task(fanout_worker(stop))
     sentiment = asyncio.create_task(ws_gateway._sentiment_loop(stop))
     try:
         yield
     finally:
         stop.set()
-        for task in (listener, sentiment):
+        for task in (listener, fanout, sentiment):
             task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await task
+        with contextlib.suppress(Exception):
+            await deps.get_redis().aclose()
 
 
 app = FastAPI(title="Stock App - Trading Game", version="0.1.0", lifespan=lifespan)

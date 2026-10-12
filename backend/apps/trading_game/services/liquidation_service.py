@@ -15,7 +15,11 @@ async def _open_positions_for_ticker(db: AsyncSession, ticker: str) -> list[Game
         select(GamePosition)
         .join(GameAccount, GamePosition.account_id == GameAccount.id)
         .join(GameSeason, GameAccount.season_id == GameSeason.id)
-        .where(GamePosition.status == "OPEN", GameSeason.ticker == ticker)
+        .where(
+            GamePosition.status == "OPEN",
+            GameSeason.ticker == ticker,
+            GameSeason.status == "ACTIVE",
+        )
     )
     return list(rows.scalars().all())
 

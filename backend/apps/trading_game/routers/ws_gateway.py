@@ -11,6 +11,7 @@ from sqlalchemy import func, select
 
 from shared.database import AsyncSessionLocal
 from shared.security import decode_token
+from shared.models import User
 from shared.game_models import GameAccount, GamePosition
 from apps.trading_game.services import account_service
 from apps.trading_game.services.connection_manager import manager, sentiment_from_counts
@@ -60,6 +61,13 @@ async def game_stream(ws: WebSocket, token: str = Query(...)):
         user_id = int(sub)
     except (jwt.PyJWTError, ValueError, TypeError):
         await ws.accept()  # accept 후 close 해야 4401 코드가 클라이언트에 전달됨
+        await ws.close(code=4401)
+        return
+    # REST 와 동일하게 유저 존재·활성 검증(비활성/삭제 유저 차단)
+    async with AsyncSessionLocal() as db:
+        user = await db.get(User, user_id)
+    if user is None or not user.is_active:
+        await ws.accept()
         await ws.close(code=4401)
         return
     await manager.connect(user_id, ws)

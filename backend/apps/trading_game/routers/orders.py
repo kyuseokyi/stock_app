@@ -35,7 +35,7 @@ async def _read_latest_price(redis, ticker: str) -> Decimal | None:
     """최신가가 있고 신선하면 Decimal 가격, 아니면 None. (조회용 — 예외 없이)"""
     try:
         latest = await market_clock.read_latest(redis, ticker)
-    except RedisError:
+    except (RedisError, ValueError):
         return None
     if latest is None:
         return None
@@ -55,6 +55,8 @@ async def _require_fresh_price(redis, ticker: str) -> Decimal:
         latest = await market_clock.read_latest(redis, ticker)
     except RedisError:
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "시세 서버에 연결할 수 없습니다.")
+    except ValueError:
+        raise HTTPException(status.HTTP_409_CONFLICT, "시세 데이터가 올바르지 않습니다.")
     if latest is None:
         raise HTTPException(status.HTTP_409_CONFLICT, "시세 수신이 중단되었습니다.")
     try:
