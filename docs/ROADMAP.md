@@ -110,7 +110,7 @@
 - [ ] 테스트(pytest / Vitest / Playwright)
 - [ ] 실 FCM 전환(`PUSH_BACKEND=fcm` + 자격증명)
 - [ ] web_client TypeScript 전환 (서브페이즈 6 직전, admin_web과 동일 방식)
-- [ ] **버그: 차트 삽입 모달 버튼이 글 폼을 submit** — `ChartSnapshotModal` 버튼에 `type="button"` 누락 + 모달이 `BlogEditorPage` `<form>` 내부 렌더 → 수정 화면에서 그리기 도구 클릭 시 글이 저장·이동됨(TS 전환 이전부터 존재, 2026-10-12 스모크에서 발견)
+- [x] **버그: 차트 삽입 모달 버튼이 글 폼을 submit** — `ChartSnapshotModal` 버튼 7개에 `type="button"` 누락 + 모달이 `BlogEditorPage` `<form>` 내부 렌더 → 수정 화면에서 그리기 도구 클릭 시 글이 저장·이동됨(TS 전환 이전부터 존재, 2026-10-12 스모크에서 발견 → 같은 날 수정·브라우저 재검증)
 
 ---
 
