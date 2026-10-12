@@ -32,3 +32,16 @@ def test_next_tick_change_relative_to_base():
     new_price, tick = next_tick("005930", 72000.0, BASE)
     assert tick["change_price"] == int(round(new_price - BASE))
     assert tick["change_rate"] == round((new_price / BASE - 1) * 100, 2)
+
+
+def test_publisher_builds_latest_payload():
+    """publish 시 stock:latest 에 넣을 price/ts 페이로드를 만든다(순수 헬퍼)."""
+    from apps.collector.game_ws.publisher import build_latest_payload
+    import json
+
+    tick = {"ticker": "005930", "price": 71500, "timestamp": "2026-10-12T09:00:05+09:00"}
+    raw = build_latest_payload(tick)
+    data = json.loads(raw)
+    assert data["price"] == 71500
+    assert isinstance(data["ts"], (int, float))
+    assert data["ts"] > 0
