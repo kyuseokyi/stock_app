@@ -1,8 +1,18 @@
 import { NavLink } from 'react-router-dom'
 import { useUiStore } from '../store/ui'
 
+interface NavItem {
+  to: string
+  label: string
+  icon: string
+}
+interface NavGroup {
+  title: string
+  items: NavItem[]
+}
+
 // 사이드바 메뉴 정의 (그룹 → 항목)
-const NAV_GROUPS = [
+const NAV_GROUPS: NavGroup[] = [
   {
     title: '블로그 관리',
     items: [
@@ -20,7 +30,7 @@ const NAV_GROUPS = [
   },
 ]
 
-const linkClass = ({ isActive }) =>
+const linkClass = ({ isActive }: { isActive: boolean }) =>
   `flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition ${
     isActive ? 'bg-indigo-600 text-white' : 'text-slate-600 hover:bg-slate-100'
   }`

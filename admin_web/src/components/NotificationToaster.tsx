@@ -1,4 +1,11 @@
 import { useEffect, useState } from 'react'
+import type { ToastDetail } from '../lib/toast'
+
+interface Toast {
+  id: string
+  text: string
+  icon: string
+}
 
 const STREAM_URL =
   (import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1') +
@@ -6,15 +13,15 @@ const STREAM_URL =
 
 // SSE 알림 수신 → 우측 하단 토스트 표시
 export default function NotificationToaster() {
-  const [toasts, setToasts] = useState([])
+  const [toasts, setToasts] = useState<Toast[]>([])
 
   useEffect(() => {
     const es = new EventSource(STREAM_URL)
 
-    const onNotification = (e) => {
-      let payload = {}
+    const onNotification = (e: MessageEvent<string>) => {
+      let payload: { type?: string; title?: string } = {}
       try {
-        payload = JSON.parse(e.data)
+        payload = JSON.parse(e.data) as { type?: string; title?: string }
       } catch {
         return
       }
@@ -39,8 +46,8 @@ export default function NotificationToaster() {
 
   // 클라이언트 수동 토스트(showToast → window 'app:toast' 이벤트) 수신
   useEffect(() => {
-    const onToast = (e) => {
-      const { text, icon = '🔔' } = e.detail || {}
+    const onToast = (e: Event) => {
+      const { text, icon = '🔔' } = (e as CustomEvent<Partial<ToastDetail>>).detail || {}
       if (!text) return
       const id = `${Date.now()}-${Math.random()}`
       setToasts((prev) => [...prev, { id, text, icon }])
@@ -52,7 +59,7 @@ export default function NotificationToaster() {
     return () => window.removeEventListener('app:toast', onToast)
   }, [])
 
-  const dismiss = (id) => setToasts((prev) => prev.filter((t) => t.id !== id))
+  const dismiss = (id: string) => setToasts((prev) => prev.filter((t) => t.id !== id))
 
   return (
     <div className="pointer-events-none fixed bottom-4 right-4 z-50 flex w-[min(20rem,calc(100vw-2rem))] flex-col gap-2">

@@ -1,5 +1,6 @@
 import { lazy, Suspense, useEffect, useState } from 'react'
 import { useEditor, EditorContent } from '@tiptap/react'
+import type { Editor } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import Link from '@tiptap/extension-link'
 import Image from '@tiptap/extension-image'
@@ -8,16 +9,16 @@ import Image from '@tiptap/extension-image'
 const ChartSnapshotModal = lazy(() => import('./ChartSnapshotModal'))
 
 // 툴바 버튼 공통 스타일
-const btn = (active) =>
+const btn = (active: boolean) =>
   `rounded px-2 py-1 text-sm font-medium transition ${
     active ? 'bg-indigo-600 text-white' : 'text-slate-600 hover:bg-slate-100'
   }`
 
-function Toolbar({ editor, onChartClick }) {
+function Toolbar({ editor, onChartClick }: { editor: Editor | null; onChartClick: () => void }) {
   if (!editor) return null
 
   const addLink = () => {
-    const prev = editor.getAttributes('link').href
+    const prev = editor.getAttributes('link').href as string | undefined
     const url = window.prompt('링크 URL', prev || 'https://')
     if (url === null) return
     if (url === '') {
@@ -69,7 +70,12 @@ function Toolbar({ editor, onChartClick }) {
   )
 }
 
-export default function RichTextEditor({ value, onChange }) {
+interface RichTextEditorProps {
+  value: string
+  onChange: (html: string) => void
+}
+
+export default function RichTextEditor({ value, onChange }: RichTextEditorProps) {
   const [chartOpen, setChartOpen] = useState(false)
   const editor = useEditor({
     extensions: [
@@ -95,7 +101,7 @@ export default function RichTextEditor({ value, onChange }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value, editor])
 
-  const insertChart = (dataURL) => {
+  const insertChart = (dataURL: string) => {
     editor?.chain().focus().setImage({ src: dataURL, alt: '차트 스냅샷' }).run()
   }
 
