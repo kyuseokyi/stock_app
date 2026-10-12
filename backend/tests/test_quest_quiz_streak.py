@@ -265,3 +265,63 @@ async def test_live_rank_roi_uses_principal(maker, monkeypatch):
     await tick_listener._push_personal_pnl("005930", Decimal("100"))
     score = await redis.zscore(f"game:season:{season.id}:ranking", str(user.id))
     assert score is not None and -1 < score < 0  # 원금 11M 기준(수수료만큼 소폭 음수)
+
+
+# ---------------------------------------------------------------- feature flags
+from apps.trading_game.services import feature_flag_service
+
+
+class _BrokenRedis:
+    async def get(self, *a, **k):
+        raise ConnectionError("redis down")
+
+    async def set(self, *a, **k):
+        raise ConnectionError("redis down")
+
+    async def delete(self, *a, **k):
+        raise ConnectionError("redis down")
+
+
+async def test_flag_default_on_cache_and_invalidate(session):
+    redis = fake_aioredis.FakeRedis(decode_responses=True)
+    assert await feature_flag_service.is_enabled(session, redis, "QUIZ") is True  # 행 없음 → ON
+    assert await redis.get("game:flag:QUIZ") == "1"
+    await feature_flag_service.set_flag(session, redis, "QUIZ", False)
+    assert await redis.get("game:flag:QUIZ") is None  # 변경 즉시 캐시 삭제
+    assert await feature_flag_service.is_enabled(session, redis, "QUIZ") is False
+    assert await redis.get("game:flag:QUIZ") == "0"
+
+
+async def test_flag_redis_error_falls_back_to_db(session):
+    session.add(GameFeatureFlag(key="STREAK", enabled=False))
+    await session.commit()
+    assert await feature_flag_service.is_enabled(session, _BrokenRedis(), "STREAK") is False
+    row = await feature_flag_service.set_flag(session, _BrokenRedis(), "STREAK", True)
+    assert row.enabled is True
+
+
+async def test_flag_unknown_key(session):
+    with pytest.raises(feature_flag_service.UnknownFlag):
+        await feature_flag_service.set_flag(session, fake_aioredis.FakeRedis(decode_responses=True), "NOPE", True)
+
+
+async def test_router_feature_flags_admin_only(api, maker, fake_redis):
+    client, set_user = api
+    async with maker() as db:
+        admin = await _seed_user(db, role=UserRole.ADMIN, nickname="관리자")
+        player = await _seed_user(db, nickname="플레이어")
+    set_user(player)
+    assert (await client.get("/api/game/admin/feature-flags")).status_code == 403
+    assert (await client.put("/api/game/admin/feature-flags/QUIZ", json={"enabled": False})).status_code == 403
+
+    set_user(admin)
+    r = await client.get("/api/game/admin/feature-flags")
+    assert r.status_code == 200
+    assert [(f["key"], f["enabled"]) for f in r.json()] == [("QUIZ", True), ("STREAK", True)]
+
+    r = await client.put("/api/game/admin/feature-flags/QUIZ", json={"enabled": False})
+    assert r.status_code == 200 and r.json()["enabled"] is False and r.json()["updated_at"]
+    r = await client.get("/api/game/admin/feature-flags")
+    assert [(f["key"], f["enabled"]) for f in r.json()] == [("QUIZ", False), ("STREAK", True)]
+
+    assert (await client.put("/api/game/admin/feature-flags/NOPE", json={"enabled": True})).status_code == 404

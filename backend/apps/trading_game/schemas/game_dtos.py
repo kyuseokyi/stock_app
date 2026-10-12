@@ -106,3 +106,14 @@ class SeasonOption(BaseModel):
     status: str
     start_at: datetime
     end_at: datetime | None
+
+
+# ---------------------------------------------------------------- Phase 5b
+class FeatureFlagResponse(BaseModel):
+    key: str
+    enabled: bool
+    updated_at: datetime | None
+
+
+class FeatureFlagUpdate(BaseModel):
+    enabled: bool
