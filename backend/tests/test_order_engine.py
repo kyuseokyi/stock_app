@@ -65,16 +65,60 @@ def test_liquidation_stop_loss_long():
     assert reason == "STOP_LOSS"
 
 
-def test_liquidation_margin_call_priority():
-    # 5x, -20% 하락 → ROI -100% ≤ -80% → SL 미설정이어도 마진콜
-    reason = pricing.liquidation_reason(
-        "LONG", Decimal("100"), Decimal("80"), 5, None, None
-    )
-    assert reason == "MARGIN_CALL"
-
-
 def test_liquidation_none_when_untriggered():
     reason = pricing.liquidation_reason(
         "LONG", Decimal("100"), Decimal("101"), 1, Decimal("95"), Decimal("110")
     )
     assert reason is None
+
+
+def test_roi_loss_side_with_fee():
+    # LONG -10% 하락, 1x → -10% - 0.03% = -10.03%
+    roi = pricing.compute_roi_pct("LONG", Decimal("100"), Decimal("90"), 1)
+    assert roi == Decimal("-10.03")
+
+
+def test_liquidation_short_stop_loss():
+    # SHORT: cur >= sl 면 손절
+    reason = pricing.liquidation_reason(
+        "SHORT", Decimal("100"), Decimal("105"), 1, Decimal("105"), Decimal("90")
+    )
+    assert reason == "STOP_LOSS"
+
+
+def test_liquidation_short_take_profit():
+    # SHORT: cur <= tp 면 익절
+    reason = pricing.liquidation_reason(
+        "SHORT", Decimal("100"), Decimal("90"), 1, Decimal("105"), Decimal("90")
+    )
+    assert reason == "TAKE_PROFIT"
+
+
+def test_liquidation_margin_call_boundary():
+    # roi == -80 경계: 16% 하락 × 5x = -80% → -80.03%(수수료 포함) ≤ -80 → 마진콜
+    reason = pricing.liquidation_reason(
+        "LONG", Decimal("100"), Decimal("84"), 5, None, None
+    )
+    assert reason == "MARGIN_CALL"
+
+
+def test_liquidation_margin_call_beats_stop_loss():
+    # SL(95) 도 맞았지만 ROI ≤ -80 이면 MARGIN_CALL 우선
+    reason = pricing.liquidation_reason(
+        "LONG", Decimal("100"), Decimal("80"), 5, Decimal("95"), Decimal("110")
+    )
+    assert reason == "MARGIN_CALL"
+
+
+def test_tp_sl_rejects_negative_fraction():
+    import pytest
+    with pytest.raises(ValueError):
+        pricing.tp_sl_prices("LONG", Decimal("100"), Decimal("-0.05"), None)
+
+
+def test_roi_rejects_bad_side_and_zero_entry():
+    import pytest
+    with pytest.raises(ValueError):
+        pricing.compute_roi_pct("long", Decimal("100"), Decimal("110"), 1)
+    with pytest.raises(ValueError):
+        pricing.compute_roi_pct("LONG", Decimal("0"), Decimal("110"), 1)
