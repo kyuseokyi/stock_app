@@ -36,3 +36,14 @@ export const exchangeSocialCode = async (code: string, codeVerifier: string): Pr
   })
   return data
 }
+
+/** 탈퇴 확인 문구 — 서버가 정확히 이 값을 요구한다 */
+export const DELETE_CONFIRM_TEXT = '탈퇴'
+
+/** 회원 탈퇴 — DELETE /auth/me (204). authClient 엔 Bearer 인터셉터가 없어 토큰을 직접 넘긴다 */
+export const deleteAccount = async (token: string): Promise<void> => {
+  await authClient.delete('/auth/me', {
+    data: { confirm: DELETE_CONFIRM_TEXT },
+    headers: { Authorization: `Bearer ${token}` },
+  })
+}

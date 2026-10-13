@@ -1,10 +1,14 @@
 import { useEffect, useState } from 'react'
-import { Link, NavLink, Outlet, useLocation } from 'react-router-dom'
+import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useBoardStore } from '../store/boards'
 import { useAuthStore } from '../store/auth'
 import { chipClass } from './ui/Chip'
 import LoginModal from './LoginModal'
 import NotificationToaster from './NotificationToaster'
+import UserMenu from './UserMenu'
+import DeleteAccountModal from './DeleteAccountModal'
+import AppToaster from './AppToaster'
+import { showToast } from '../store/toast'
 
 // 1차 섹션(커뮤니티·게임) 탭 스타일
 const sectionClass = (active: boolean) =>
@@ -16,13 +20,22 @@ export default function Layout() {
   const { boards, fetchBoards } = useBoardStore()
   const { user, logout } = useAuthStore()
   const [loginOpen, setLoginOpen] = useState(false)
+  const [deleteOpen, setDeleteOpen] = useState(false)
   const location = useLocation()
+  const navigate = useNavigate()
   // 섹션 판별: /game 경로면 게임, 그 외 전부 커뮤니티(별도 상태 불필요)
   const isGame = location.pathname.startsWith('/game')
 
   useEffect(() => {
     fetchBoards()
   }, [fetchBoards])
+
+  // 탈퇴 성공(스토어가 이미 로그아웃) → 모달 닫기·홈 이동·토스트
+  const handleDeleted = () => {
+    setDeleteOpen(false)
+    navigate('/')
+    showToast('탈퇴가 완료됐어요')
+  }
 
   return (
     <div className="min-h-screen">
@@ -33,17 +46,7 @@ export default function Layout() {
               📈 StockApp
             </Link>
             {user ? (
-              <div className="flex items-center gap-2 text-sm">
-                <span className="text-ink-muted">
-                  <span className="font-medium text-ink">{user.nickname}</span> 님
-                </span>
-                <button
-                  onClick={logout}
-                  className="rounded-field bg-surface px-2.5 py-1 text-ink-muted hover:bg-line"
-                >
-                  로그아웃
-                </button>
-              </div>
+              <UserMenu nickname={user.nickname} onLogout={logout} onDeleteAccount={() => setDeleteOpen(true)} />
             ) : (
               <button
                 onClick={() => setLoginOpen(true)}
@@ -87,6 +90,8 @@ export default function Layout() {
 
       <NotificationToaster />
       <LoginModal open={loginOpen} onClose={() => setLoginOpen(false)} />
+      {deleteOpen && <DeleteAccountModal onClose={() => setDeleteOpen(false)} onDeleted={handleDeleted} />}
+      <AppToaster />
     </div>
   )
 }

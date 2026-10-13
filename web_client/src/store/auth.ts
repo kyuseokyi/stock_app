@@ -1,5 +1,6 @@
+import axios from 'axios'
 import { create } from 'zustand'
-import { guestLogin } from '../api/auth'
+import { deleteAccount as deleteAccountApi, guestLogin } from '../api/auth'
 import type { TokenResponse, UserOut } from '../types/api'
 
 // localStorage 키 (client.ts 인터셉터와 공유)
@@ -22,6 +23,8 @@ interface AuthState {
   /** 이미 발급된 토큰(간편 로그인 교환 결과)을 저장 — login 과 같은 저장 경로 */
   loginWithToken: (res: TokenResponse) => UserOut
   logout: () => void
+  /** 회원 탈퇴(DELETE /auth/me) 성공 시 로그아웃. 실패는 그대로 throw(401 이면 로그아웃 후 throw) */
+  deleteAccount: () => Promise<void>
 }
 
 // 로그인 전역 상태. 게스트(닉네임)·간편 로그인(카카오·네이버) 모두 같은 키에 토큰+유저를 저장한다.
@@ -45,5 +48,17 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
     localStorage.removeItem(TOKEN_KEY)
     localStorage.removeItem(USER_KEY)
     set({ token: null, user: null })
+  },
+
+  deleteAccount: async () => {
+    const { token } = get()
+    if (!token) throw new Error('not logged in')
+    try {
+      await deleteAccountApi(token)
+    } catch (e) {
+      if (axios.isAxiosError(e) && e.response?.status === 401) get().logout()
+      throw e
+    }
+    get().logout()
   },
 }))
