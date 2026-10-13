@@ -126,7 +126,7 @@ services:
     restart: unless-stopped
 
   # 트레이딩 게임 실시간 시세 데몬(KIS H0STCNT0 → Redis stock:tick:{ticker}).
-  # 기동 시 ACTIVE 시즌 종목을 1회 조회 — 시즌이 없으면 종료 후 재시작을 반복하므로 시즌을 먼저 시드한다.
+  # ACTIVE 시즌 종목을 60초마다 확인해 구독을 자동 교체(시즌 없음 → 대기, 월말 롤오버 → 자동 전환). 재시작 불필요.
   # 장외 시간 테스트는 .env.production 에 MOCK_TICK_STREAM=true 로 Mock 틱 사용 가능.
   game_ws:
     build: ./backend

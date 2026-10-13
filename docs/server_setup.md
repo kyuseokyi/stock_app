@@ -186,7 +186,7 @@ docker compose -f docker-compose.prod.yml run --rm auth_api python -m apps.auth.
 - `apps.auth.seed_admin` — 관리자 계정(`ADMIN_EMAIL`/`ADMIN_PASSWORD`)
 
 ### 7-1. 트레이딩 게임 최초 설정 (개발 서버 테스트용)
-게임 탭은 **ACTIVE 시즌**이 있어야 열리고, `game_ws` 데몬은 기동 시 그 시즌 종목을 구독한다(시즌이 없으면 종료·재시작 반복). 배포 후 서버에서 1회:
+게임 탭은 **ACTIVE 시즌**이 있어야 열리고, `game_ws` 데몬은 60초마다 ACTIVE 시즌을 확인해 그 종목을 구독한다(시즌이 없으면 대기, 월말 시즌 교체 시 자동 전환 — 재시작 불필요). 배포 후 서버에서 1회:
 ```bash
 cd ~/actions-runner/_work/stock_app/stock_app
 # 1) 시즌 1기(005930, ACTIVE) + 모닝 코치 시드(멱등)
@@ -194,8 +194,8 @@ docker compose -f docker-compose.prod.yml run --rm trading_game python -m script
 # 2) 야간 차트 퀴즈 문제 생성(ClickHouse 일봉 기반, 개수 조절 가능)
 #    이후에는 celery beat 가 매일 21:00 미시도 재고(QUIZ_POOL_MIN_UNSEEN, 기본 100) 미만이면 QUIZ_POOL_BATCH(기본 50)개 자동 보충
 docker compose -f docker-compose.prod.yml run --rm trading_game python -m scripts.generate_chart_quiz --count 50
-# 3) 시즌 구독을 반영하도록 시세 데몬 재시작
-docker compose -f docker-compose.prod.yml restart game_ws
+# 3) (선택) 즉시 구독 확인 — 데몬이 최대 60초 안에 새 시즌을 자동으로 잡는다
+docker compose -f docker-compose.prod.yml logs --tail 20 game_ws
 ```
 - **Cloudflare 터널**에 `game.haezean.com → localhost:8004` 를 추가해야 web/admin 이 게임 서버에 닿는다(§5 표). WebSocket 은 Cloudflare 가 기본 지원.
 - web_client(`app.haezean.com/game`)·admin_web 은 빌드 인자 `VITE_GAME_API_URL=https://game.haezean.com` 으로 배포된다(`docker-compose.prod.yml`).
