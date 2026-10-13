@@ -8,11 +8,16 @@ from typing import Literal
 from pydantic import BaseModel, Field, model_validator
 
 
+# 주문 비중 선택지 — 칩(25/50/100%) + 드롭다운(10~90%). 그 외 값은 422.
+OrderRatio = Literal[0.1, 0.2, 0.25, 0.3, 0.4, 0.5, 0.6, 0.7, 0.75, 0.8, 0.9, 1.0]
+
+
 class OrderRequest(BaseModel):
     season_id: int
     side: Literal["LONG", "SHORT"]
-    ratio: Literal[0.25, 0.5, 1.0]
+    ratio: OrderRatio
     leverage: Literal[1, 2, 5]
+    # 진입가 대비 '주가' 변동 분수(0.05=5%) — 레버리지 반영 수익률 아님(pricing.tp_sl_prices)
     stop_loss_pct: float | None = Field(default=None, gt=0, le=1)
     take_profit_pct: float | None = Field(default=None, gt=0, le=1)
 

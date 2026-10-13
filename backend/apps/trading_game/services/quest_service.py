@@ -20,7 +20,7 @@ from apps.trading_game.services import account_service, indicators, reward_servi
 log = logging.getLogger("trading_game.quest")
 
 GOLDEN_CROSS_TIMEOUT_SECONDS = 2.0
-Q3_MAX_RATIO = Decimal("0.25")  # 주문 비중 선택지(25/50/100%) 중 최소
+Q3_MAX_RATIO = Decimal("0.25")  # 소분할 기준 — 비중 25% 이하(10·20·25%) 진입만 집계
 
 BADGE_NAMES = {"PRINCIPLED": "원칙주의자"}
 

@@ -1141,3 +1141,78 @@ async def test_generate_dedups_within_run(maker):
         2, rng=random.Random(0), fetch_tickers=lambda: ["005930"],
         fetch_candles=lambda t: candles, session_factory=maker)
     assert created == 2 and skipped == 0
+
+
+# ---------------------------------------------------------------- 주문 패널 개선(비중 세분화·손절/익절)
+from pydantic import ValidationError
+
+from apps.trading_game.schemas.game_dtos import OrderRequest
+
+NEW_RATIOS = [0.1, 0.2, 0.3, 0.4, 0.6, 0.7, 0.75, 0.8, 0.9]
+
+
+@pytest.mark.parametrize("ratio", [*NEW_RATIOS, 0.25, 0.5, 1.0])
+def test_order_request_accepts_extended_ratios(ratio):
+    assert OrderRequest(season_id=1, side="LONG", ratio=ratio, leverage=1).ratio == ratio
+
+
+@pytest.mark.parametrize("ratio", [0, 0.15, 0.35, 0.95, 1.5])
+def test_order_request_rejects_other_ratios(ratio):
+    with pytest.raises(ValidationError):
+        OrderRequest(season_id=1, side="LONG", ratio=ratio, leverage=1)
+
+
+async def test_router_order_new_ratios_and_invalid_422(api, maker, order_env):
+    client, set_user = api
+    async with maker() as db:
+        season = await _seed_season(db)
+        set_user(await _seed_user(db))
+    for ratio in NEW_RATIOS:
+        r = await client.post("/api/game/orders", json=_order(season.id, ratio=ratio))
+        assert r.status_code == 201, (ratio, r.text)
+        assert (await client.post(f"/api/game/positions/{r.json()['id']}/close")).status_code == 200
+    for bad in (0.15, 0.35, 0):
+        r = await client.post("/api/game/orders", json=_order(season.id, ratio=bad))
+        assert r.status_code == 422, (bad, r.text)
+
+
+async def test_router_order_ratio_with_sl_tp_sets_prices_and_q1(api, maker, order_env):
+    client, set_user = api
+    async with maker() as db:
+        season = await _seed_season(db)
+        user = await _seed_user(db)
+    set_user(user)
+    r = await client.post(
+        "/api/game/orders",
+        json=_order(season.id, ratio=0.3, stop_loss_pct=0.05, take_profit_pct=0.1),
+    )
+    assert r.status_code == 201, r.text
+    body = r.json()
+    assert Decimal(body["stop_loss_price"]) == Decimal("95.00")
+    assert Decimal(body["take_profit_price"]) == Decimal("110.00")
+    async with maker() as db:
+        q1 = await db.get(UserQuestProgress, (user.id, "Q1_STOP_LOSS"))
+        q3 = await db.get(UserQuestProgress, (user.id, "Q3_SMALL_SIZE"))
+    assert q1 is not None and q1.completed_at is not None
+    assert q3 is None  # 30% 는 소분할(≤25%) 아님
+
+
+async def test_router_order_without_sl_tp_unchanged(api, maker, order_env):
+    client, set_user = api
+    async with maker() as db:
+        season = await _seed_season(db)
+        set_user(await _seed_user(db))
+    r = await client.post("/api/game/orders", json=_order(season.id, ratio=0.25))
+    assert r.status_code == 201, r.text
+    assert r.json()["stop_loss_price"] is None and r.json()["take_profit_price"] is None
+
+
+async def test_q3_counts_small_new_ratios_not_030(session, closes_stub):
+    user = await _seed_user(session)
+    await _open(session, user, ratio=0.3)
+    assert (await _progress(session, user, "Q3_SMALL_SIZE")) is None
+    await _open(session, user, ratio=0.1)
+    await _open(session, user, ratio=0.2)
+    assert (await _progress(session, user, "Q3_SMALL_SIZE")).progress == 2
+    await _open(session, user, ratio=0.3)
+    assert (await _progress(session, user, "Q3_SMALL_SIZE")).progress == 2
