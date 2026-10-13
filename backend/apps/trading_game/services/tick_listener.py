@@ -35,7 +35,7 @@ async def _push_personal_pnl(ticker: str, price: Decimal) -> None:
     connected = set(manager.user_ids())
     async with AsyncSessionLocal() as db:
         rows = await db.execute(
-            select(GamePosition, GameAccount)
+            select(GamePosition, GameAccount, GameSeason)
             .join(GameAccount, GamePosition.account_id == GameAccount.id)
             .join(GameSeason, GameAccount.season_id == GameSeason.id)
             .where(
@@ -45,11 +45,13 @@ async def _push_personal_pnl(ticker: str, price: Decimal) -> None:
             )
         )
         redis = deps.get_redis()
-        for pos, acc in rows.all():
+        for pos, acc, season in rows.all():
             roi = pricing.compute_roi_pct(pos.side, pos.entry_price, price, pos.leverage)
             pnl = pricing.compute_pnl(pos.size_amount, roi)
             live = ranking_service.compute_live_roi(acc.cash_balance, pos, price, reward_service.principal(acc))
-            await ranking_service.update_rank(redis, acc.season_id, acc.user_id, live)
+            await ranking_service.update_rank(
+                redis, acc.season_id, acc.user_id, live, season_window=(season.start_at, season.end_at),
+            )
             if acc.user_id in connected:
                 await manager.send_to_user(acc.user_id, {
                     "type": "position_pnl", "position_id": str(pos.id),

@@ -5,14 +5,15 @@ order_engine 은 Redis 비의존 유지 — ZADD 는 호출부(tick_listener/ord
 """
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from decimal import ROUND_HALF_UP, Decimal
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from shared.models import User
-from shared.game_models import GameAccount
-from apps.trading_game.services import pricing
+from shared.game_models import GameAccount, GameSeason
+from apps.trading_game.services import pricing, weekly_ranking
 
 _PCT_Q = Decimal("0.0001")
 
@@ -34,15 +35,44 @@ def compute_live_roi(cash_balance: Decimal, open_pos, price: Decimal, initial_ca
     return roi_pct.quantize(_PCT_Q, rounding=ROUND_HALF_UP)
 
 
-async def update_rank(redis, season_id: int, user_id: int, roi: Decimal) -> None:
-    await redis.zadd(ranking_key(season_id), {str(user_id): float(roi)})
+async def update_rank(
+    redis, season_id: int, user_id: int, roi: Decimal, *,
+    season_window: tuple[datetime, datetime | None] | None = None,
+    now: datetime | None = None,
+) -> None:
+    """시즌 ZSET 갱신 + (season_window 가 있으면) 주간 ZSET 갱신.
+
+    주간 기준값은 그 주 첫 갱신 때 시즌 ZSET 의 '갱신 전' 점수(없으면 0)를 HSETNX 로 기록한다.
+    HSETNX 를 시즌 ZADD 보다 먼저 해야 동시 갱신이 바꾼 점수가 기준값이 되지 않는다.
+    틱마다 불리는 경로라, 이미 기준값이 있으면(HSETNX=0) HGET 1회로 끝내고 EXPIRE 는 생략한다.
+    """
+    key = ranking_key(season_id)
+    member = str(user_id)
+    if season_window is not None:
+        now = weekly_ranking.aware(now) if now is not None else datetime.now(timezone.utc)
+        week_id, ws, we = weekly_ranking.week_bounds(now, *season_window)
+        if ws <= now < we:
+            bkey = weekly_ranking.base_key(season_id, week_id)
+            wkey = weekly_ranking.week_key(season_id, week_id)
+            prev = await redis.zscore(key, member)
+            prev_s = str(float(prev) if prev is not None else 0.0)
+            is_new = bool(await redis.hsetnx(bkey, member, prev_s))
+            base = Decimal(prev_s) if is_new else Decimal(await redis.hget(bkey, member))
+            await redis.zadd(wkey, {member: float(weekly_ranking.weekly_roi(roi, base))})
+            if is_new:  # EXPIRE 는 키가 존재한 뒤(ZADD 후)여야 적용된다
+                await redis.expire(bkey, weekly_ranking.WEEK_TTL_SEC)
+                await redis.expire(wkey, weekly_ranking.WEEK_TTL_SEC)
+    await redis.zadd(key, {member: float(roi)})
 
 
 async def sync_account_rank(redis, db: AsyncSession, account_id) -> None:
-    """계좌의 현재 current_roi 를 랭킹에 반영(청산 후 호출)."""
+    """계좌의 현재 current_roi 를 랭킹(시즌+주간)에 반영(청산 후 호출)."""
     acc = await db.get(GameAccount, account_id)
-    if acc is not None:
-        await update_rank(redis, acc.season_id, acc.user_id, acc.current_roi)
+    if acc is None:
+        return
+    season = await db.get(GameSeason, acc.season_id)
+    window = (season.start_at, season.end_at) if season is not None else None
+    await update_rank(redis, acc.season_id, acc.user_id, acc.current_roi, season_window=window)
 
 
 async def my_rank(redis, season_id: int, user_id: int) -> dict:

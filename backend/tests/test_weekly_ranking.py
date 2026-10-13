@@ -50,3 +50,43 @@ def test_keys_and_constants():
     assert wr.REWARDS == {1: Decimal("500000"), 2: Decimal("300000"), 3: Decimal("200000")}
     assert wr.ARCHIVE_TOP == 10
     assert wr.WEEK_TTL_SEC == 21 * 24 * 3600
+
+
+# ---------------------------------------------------------------- update_rank 주간 갱신
+from fakeredis import aioredis as fake_aioredis  # noqa: E402
+
+from apps.trading_game.services import ranking_service as rs  # noqa: E402
+
+W = date(2026, 10, 12)
+WIN = (S_START, S_END)
+
+
+def _r():
+    return fake_aioredis.FakeRedis(decode_responses=True)
+
+
+async def test_update_rank_first_update_uses_previous_season_score_as_base():
+    r = _r()
+    await rs.update_rank(r, 1, 7, Decimal("10"), season_window=WIN, now=k(9, 10))   # 지난주
+    await rs.update_rank(r, 1, 7, Decimal("21"), season_window=WIN, now=k(14, 10))  # 이번 주 첫 갱신
+    assert await r.hget(wr.base_key(1, W), "7") == "10.0"
+    assert await r.zscore(wr.week_key(1, W), "7") == pytest.approx(10.0)
+    assert await r.zscore(rs.ranking_key(1), "7") == pytest.approx(21.0)          # 시즌 ZSET 불변 동작
+
+
+async def test_update_rank_base_kept_on_later_updates_and_new_joiner_is_zero():
+    r = _r()
+    await rs.update_rank(r, 1, 8, Decimal("5"), season_window=WIN, now=k(14, 10))   # 시즌 첫 등장 → base 0
+    await rs.update_rank(r, 1, 8, Decimal("-5"), season_window=WIN, now=k(15, 10))
+    assert await r.hget(wr.base_key(1, W), "8") == "0.0"
+    assert await r.zscore(wr.week_key(1, W), "8") == pytest.approx(-5.0)
+    assert 0 < await r.ttl(wr.week_key(1, W)) <= wr.WEEK_TTL_SEC
+    assert 0 < await r.ttl(wr.base_key(1, W)) <= wr.WEEK_TTL_SEC
+
+
+async def test_update_rank_without_window_or_outside_season_skips_weekly():
+    r = _r()
+    await rs.update_rank(r, 1, 9, Decimal("3"))                                     # 기존 호출 형태
+    await rs.update_rank(r, 1, 9, Decimal("4"), season_window=WIN, now=k(31, 21))   # 시즌 종료 후
+    assert await r.keys("game:season:1:week:*") == []
+    assert await r.zscore(rs.ranking_key(1), "9") == pytest.approx(4.0)
