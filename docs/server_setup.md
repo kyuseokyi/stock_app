@@ -91,10 +91,16 @@ KIS_MODE=prod
 KIS_APP_KEY=<실전 앱키>
 KIS_APP_SECRET=<실전 시크릿>
 KIS_ACCOUNT_NO=
+
+# 닉네임 게스트 로그인 — APP_ENV=production 에서는 미설정 시 꺼짐(404).
+# 개발 서버(develop)는 테스트용으로 켠다(웹 빌드 VITE_ENABLE_GUEST_LOGIN=true 와 짝). product 전환 시 둘 다 false.
+AUTH_GUEST_ENABLED=true
 ```
 ```bash
 sudo chmod 600 /opt/stock_app/env/.env.production
 ```
+> ⚠️ **게스트 로그인 게이트**: 백엔드가 `AUTH_GUEST_ENABLED` 게이트를 포함한 버전으로 배포되기 **전에** 기존 서버의 `.env.production` 에 `AUTH_GUEST_ENABLED=true` 를 추가해 둔다(안 하면 develop 의 게스트 로그인이 404). 이미 배포됐다면 추가 후 `docker compose -f docker-compose.prod.yml up -d --force-recreate auth_api`.
+
 > ⚠️ **DB 비번은 두 곳에서 일치해야 한다**: 위 `DATABASE_URL`/`CLICKHOUSE_PASSWORD` **와** §3-2의 `compose.env`. 한쪽만 강한 비번으로 두면 컨테이너 DB(기본값으로 초기화됨)에 앱이 **인증 실패**한다.
 
 ### 3-2. `/opt/stock_app/env/compose.env` (스토리지 분리 및 DB 설정)
@@ -186,6 +192,7 @@ cd ~/actions-runner/_work/stock_app/stock_app
 # 1) 시즌 1기(005930, ACTIVE) + 모닝 코치 시드(멱등)
 docker compose -f docker-compose.prod.yml run --rm trading_game python -m scripts.seed_trading_game
 # 2) 야간 차트 퀴즈 문제 생성(ClickHouse 일봉 기반, 개수 조절 가능)
+#    이후에는 celery beat 가 매일 21:00 미시도 재고(QUIZ_POOL_MIN_UNSEEN, 기본 100) 미만이면 QUIZ_POOL_BATCH(기본 50)개 자동 보충
 docker compose -f docker-compose.prod.yml run --rm trading_game python -m scripts.generate_chart_quiz --count 50
 # 3) 시즌 구독을 반영하도록 시세 데몬 재시작
 docker compose -f docker-compose.prod.yml restart game_ws

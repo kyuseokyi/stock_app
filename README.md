@@ -54,7 +54,7 @@ uv run uvicorn apps.trading_game.main:app --reload --port 8003 --workers 1  # �
 
 # 데이터 수집/알림 워커 (Celery)
 uv run celery -A apps.collector.celery_app worker --loglevel=info
-uv run celery -A apps.collector.celery_app beat   --loglevel=info   # 스케줄러(매일 20:30 전종목 수집)
+uv run celery -A apps.collector.celery_app beat   --loglevel=info   # 스케줄러(매일 20:30 전종목 수집 · 20:40 시즌 정산 · 21:00 퀴즈 풀 보충)
 
 # 국내 주식 데이터 수집 — 수동 트리거 (워커 실행 중일 때)
 # 전종목 일봉(겹침창) 수집:      collector.collect_all_daily
@@ -93,6 +93,7 @@ uv run uvicorn apps.trading_game.main:app --reload --port 8003 --workers 1
 - **RSI·골든크로스 조회**: ClickHouse 조회는 각 2초 타임아웃, 타임아웃 시 60초 음성 캐시로 재대기 방지(best-effort).
 - **기능 플래그**: QUIZ·STREAK, admin_web "트레이딩 게임 > ⚙️ 기능 설정", Redis 30초 캐시(변경 시 즉시 무효화).
 - **퀴즈 생성**: `cd backend && uv run python -m scripts.generate_chart_quiz --count 50 [--seed N]` — 로컬/개발 DB 전용, 재실행 멱등. 종가 ≤ 0 이거나 일간 등락 ±30% 초과(미반영 분할 등) 구간은 제외하고, 캔들 없는 종목 수를 출력.
+- **퀴즈 정기 생성(Celery beat)**: `collector.generate_chart_quiz` 매일 21:00 KST(일봉 수집 20:30·정산 20:40 이후) — 아직 아무도 시도하지 않은 문제 수가 `QUIZ_POOL_MIN_UNSEEN`(기본 100) 미만일 때만 `QUIZ_POOL_BATCH`(기본 50)개를 위 스크립트의 `generate()` 로 생성, 아니면 skip(결과 `{generated, skipped_reason}` 로그). worker+beat 가동 필요.
 - 에뮬레이터 검증 시: `adb reverse tcp:8003 tcp:8003` 추가.
 
 > ⚠️ 관리자 웹 로그인은 **auth(8001)**, 게시판/글/댓글은 **blog(8000)** 을 사용합니다. 어드민을 테스트하려면 **두 서비스를 모두** 띄워야 합니다.
@@ -113,7 +114,7 @@ npm run dev        # http://localhost:5173
 ### 4. 일반 유저 웹 (web_client)
 일반 사용자(B2C)용 반응형 웹. 블로그/커뮤니티 조회 + SSE 실시간 알림 + **임시 로그인(닉네임)으로 댓글 작성**. 디자인은 **토스(Toss) 라이트 스타일**(`docs/mobile_design_language.md`의 토큰을 Tailwind `theme.extend`로 이식 — brand `#3182f6` 등)로 모바일과 통일.
 > 헤더는 **2단 네비(커뮤니티·게임)**. 커뮤니티 섹션에서만 게시판 탭이 보이고, `/game`은 "시즌 준비 중" 스켈레톤(트레이딩 게임 백엔드 Phase 1~5 완성 후 실시간 화면으로 교체). 공통 UI는 `src/components/ui/`(Button·Card·Chip·EmptyState).
-> 로그인은 **카카오·네이버 간편 로그인**(auth 서비스, 아래 "간편 로그인" 참조). 닉네임 게스트 로그인(`POST /api/v1/auth/guest`)은 **개발용** — `VITE_ENABLE_GUEST_LOGIN`(미설정 시 dev serve 만 노출, 배포 빌드 숨김). 댓글 작성 테스트에는 auth(8001)도 함께 띄워야 합니다.
+> 로그인은 **카카오·네이버 간편 로그인**(auth 서비스, 아래 "간편 로그인" 참조). 닉네임 게스트 로그인(`POST /api/v1/auth/guest`)은 **개발용** — 프론트 노출은 `VITE_ENABLE_GUEST_LOGIN`(미설정 시 dev serve 만 노출, 배포 빌드 숨김), 백엔드 허용은 auth 의 `AUTH_GUEST_ENABLED`(미설정 시 `APP_ENV=development|test` 에서만, 꺼지면 404). 둘은 짝으로 켜고 끈다. 댓글 작성 테스트에는 auth(8001)도 함께 띄워야 합니다.
 ```bash
 cd web_client
 npm install
@@ -300,6 +301,8 @@ uv run pytest tests/test_universe_cooldown.py    # 특정 파일
 | `SOCIAL_WEB_RETURN_URL` | auth | `http://localhost:3000/auth/complete` | 웹 복귀 주소. 개발 서버: `https://app.haezean.com/auth/complete` (운영에서 기본값이면 기동 경고) |
 | `SOCIAL_APP_RETURN_URL_PROD` / `_DEV` | auth | `stockapp://auth` / `stockapp-dev://auth` | 앱 복귀 딥링크(앱 변형별) |
 | `SOCIAL_FAKE_PROVIDER` | auth | `false` | `true` 면 가짜 공급자(로컬 스모크). `APP_ENV` 가 명시적으로 `development`/`test` 일 때만 유효(미설정·그 외는 무시), 켜지면 기동 경고 |
+| `AUTH_GUEST_ENABLED` | auth | `APP_ENV` 가 `development`/`test` 일 때만 켬 | 닉네임 게스트 로그인(`POST /api/v1/auth/guest`) 허용(`true`/`false`). 꺼지면 404. 미설정+그 외 `APP_ENV`(미설정 포함)는 끔. 개발 서버(develop)는 `true`(웹 `VITE_ENABLE_GUEST_LOGIN=true` 와 짝), product 는 둘 다 `false` |
+| `QUIZ_POOL_MIN_UNSEEN` / `QUIZ_POOL_BATCH` | collector | `100` / `50` | 퀴즈 정기 생성(21:00) — 미시도 문제 수가 MIN 미만이면 BATCH 개 생성 |
 | `PUSH_BACKEND` | collector | `mock` | `mock` \| `fcm` (FCM은 자격증명 준비 후) |
 | `CORS_ORIGINS` | backend | (localhost + haezean 기본 허용) | 콤마 구분 **추가** 오리진(product 등). develop 배포 도메인(admin/app.haezean.com)은 `shared/cors.py`에 코드로 포함돼 env 없이도 허용 |
 | `VITE_API_BASE_URL` | admin_web | `http://localhost:8000/api/v1` | 블로그 API |
