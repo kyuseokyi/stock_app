@@ -139,6 +139,7 @@ sudo apt-get update && sudo apt-get install -y cloudflared
 | `blog.haezean.com` | HTTP | `localhost:8003` (blog API) |
 | `app.haezean.com` | HTTP | `localhost:3000` (web_client) |
 | `admin.haezean.com` | HTTP | `localhost:3001` (admin_web) |
+| `game.haezean.com` | HTTP | `localhost:8004` (trading_game — REST + WebSocket `/ws/game/stream`) |
 
 > Type은 **HTTP**(로컬 uvicorn/serve는 평문). 외부 HTTPS는 Cloudflare 엣지가 종단한다 — 로컬 인증서 불필요.
 > ⚠️ **DB 포트(5432·8123·9000·6379)에는 터널 호스트네임을 절대 붙이지 않는다.** 외부 노출 금지, LAN 전용. Cloudflare가 붙는 건 위 API·프론트 서브도메인뿐.
@@ -150,7 +151,7 @@ sudo apt-get update && sudo apt-get install -y cloudflared
 
 | 워크플로 | 자동 트리거 경로 | 배포 대상 |
 |---|---|---|
-| `.github/workflows/deploy-server.yml` (Deploy Server) | `backend/**`, `docker-compose.prod.yml` | auth/stock/blog API + celery worker/beat (DB는 depends_on) |
+| `.github/workflows/deploy-server.yml` (Deploy Server) | `backend/**`, `docker-compose.prod.yml` | auth/stock/blog API + trading_game(8004)·game_ws + celery worker/beat (DB는 depends_on). 기동 전 `alembic upgrade head` 자동 실행 |
 | `.github/workflows/deploy-web.yml` (Deploy Web) | `web_client/**`, `admin_web/**`, `docker-compose.prod.yml` | web_client(3000) + admin_web(3001) |
 
 - **자동**: `dev → main` 병합 후 push하면, 변경된 경로에 해당하는 워크플로만 실행된다(둘 다 바뀌면 둘 다). `docker-compose.prod.yml` 변경은 양쪽 모두 트리거.
@@ -163,7 +164,9 @@ sudo apt-get update && sudo apt-get install -y cloudflared
 ---
 
 ## 7. 스키마 부트스트랩 (최초 1회 — 생략하면 전 요청 500!)
-`docker-compose.prod.yml`/배포 워크플로에는 **마이그레이션이 없다**. 첫 배포 후 볼륨이 비어 있으므로, 서버에서 **한 번** 스키마를 만든다(이미지에 deps가 system 설치돼 있어 `uv run` 불필요):
+> 2026-10-13부터 `Deploy Server` 워크플로가 매 배포마다 `alembic upgrade head`를 **자동 실행**한다(멱등). 아래 `alembic` 줄은 워크플로 밖에서 수동 복구할 때만 필요하다. ClickHouse 스키마·관리자 시드는 여전히 최초 1회 수동.
+
+첫 배포 후 볼륨이 비어 있으므로, 서버에서 **한 번** 스키마를 만든다(이미지에 deps가 system 설치돼 있어 `uv run` 불필요):
 ```bash
 # 배포와 동일한 compose 프로젝트에서 실행해야 이미지/네트워크가 일치한다.
 # 러너 기본 체크아웃 경로:
@@ -175,6 +178,22 @@ docker compose -f docker-compose.prod.yml run --rm auth_api python -m apps.auth.
 - `alembic upgrade head` — PostgreSQL 스키마(4개 마이그레이션)
 - `shared.clickhouse_schema` — ClickHouse 테이블(멱등, 재실행 안전)
 - `apps.auth.seed_admin` — 관리자 계정(`ADMIN_EMAIL`/`ADMIN_PASSWORD`)
+
+### 7-1. 트레이딩 게임 최초 설정 (개발 서버 테스트용)
+게임 탭은 **ACTIVE 시즌**이 있어야 열리고, `game_ws` 데몬은 기동 시 그 시즌 종목을 구독한다(시즌이 없으면 종료·재시작 반복). 배포 후 서버에서 1회:
+```bash
+cd ~/actions-runner/_work/stock_app/stock_app
+# 1) 시즌 1기(005930, ACTIVE) + 모닝 코치 시드(멱등)
+docker compose -f docker-compose.prod.yml run --rm trading_game python -m scripts.seed_trading_game
+# 2) 야간 차트 퀴즈 문제 생성(ClickHouse 일봉 기반, 개수 조절 가능)
+docker compose -f docker-compose.prod.yml run --rm trading_game python -m scripts.generate_chart_quiz --count 50
+# 3) 시즌 구독을 반영하도록 시세 데몬 재시작
+docker compose -f docker-compose.prod.yml restart game_ws
+```
+- **Cloudflare 터널**에 `game.haezean.com → localhost:8004` 를 추가해야 web/admin 이 게임 서버에 닿는다(§5 표). WebSocket 은 Cloudflare 가 기본 지원.
+- web_client(`app.haezean.com/game`)·admin_web 은 빌드 인자 `VITE_GAME_API_URL=https://game.haezean.com` 으로 배포된다(`docker-compose.prod.yml`).
+- 실시세는 **장중(09:00–15:30, 16:00–20:00 KST)** 에만 들어온다. 장외 테스트가 필요하면 `/opt/stock_app/env/.env.production` 에 `MOCK_TICK_STREAM=true` 추가 후 `game_ws` 재생성(Mock 틱) — 테스트 후 반드시 제거.
+- KIS 실시간(WebSocket)은 앱키당 세션이 제한된다. 서버 `game_ws` 가 도는 동안 로컬에서 같은 키로 `run_game_ws` 를 띄우지 않는다.
 
 ---
 

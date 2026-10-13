@@ -118,7 +118,8 @@
 - [ ] 연속 출석 보상·퀴즈/아카데미 문항 어드민 편집
 - [ ] 실 FCM 전환(`PUSH_BACKEND=fcm` + 자격증명)
 - [x] web_client TypeScript 전환 (서브페이즈 6 직전, admin_web과 동일 방식) — 2026-10-13 strict 전환 완료
-- [ ] **trading_game 운영 배포** — prod compose 미포함. 운영 호스트 8003은 `blog_api`가 사용 중이므로 포트 재배정 필요. Cloudflare 서브도메인·KIS WS 데몬(`run_game_ws`) 포함, 이후 admin_web 빌드에 `VITE_GAME_API_URL` 주입
+- [x] **trading_game 개발 서버(develop) 배포 구성** — prod compose 에 `trading_game`(호스트 8004)·`game_ws` 추가, web/admin 빌드에 `VITE_GAME_API_URL=https://game.haezean.com` 주입, Deploy Server 에 `alembic upgrade head` 자동 단계 (2026-10-13). **남은 수동 작업**: Cloudflare `game.haezean.com → localhost:8004`, 서버에서 시즌 시드·퀴즈 생성(`docs/server_setup.md` §7-1)
+- [ ] trading_game product 배포(도메인 확정 시 — 빌드 인자·CORS_ORIGINS 추가)
 - [ ] admin_web `prose` 스타일 — `@tailwindcss/typography` 미설치로 에디터/코치 미리보기의 제목·목록 스타일이 약함(기존 RichTextEditor 포함, 도입 시 시각 회귀 확인)
 - [x] **버그: 차트 삽입 모달 버튼이 글 폼을 submit** — `ChartSnapshotModal` 버튼 7개에 `type="button"` 누락 + 모달이 `BlogEditorPage` `<form>` 내부 렌더 → 수정 화면에서 그리기 도구 클릭 시 글이 저장·이동됨(TS 전환 이전부터 존재, 2026-10-12 스모크에서 발견 → 같은 날 수정·브라우저 재검증)
 

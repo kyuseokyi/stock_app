@@ -105,6 +105,42 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  # 트레이딩 게임 REST·WS 게이트웨이. 호스트 8003 은 blog_api 가 쓰므로 8004.
+  # 틱 리스너·심리 브로드캐스트가 프로세스 내 상태라 반드시 단일 워커.
+  # Cloudflare 터널: game.haezean.com → http://localhost:8004 (WebSocket 포함)
+  trading_game:
+    build: ./backend
+    container_name: stock_trading_game
+    command: uvicorn apps.trading_game.main:app --host 0.0.0.0 --port 8004 --workers 1
+    ports:
+      - "8004:8004"
+    env_file:
+      - ./backend/.env.production
+    depends_on:
+      postgres:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # 트레이딩 게임 실시간 시세 데몬(KIS H0STCNT0 → Redis stock:tick:{ticker}).
+  # 기동 시 ACTIVE 시즌 종목을 1회 조회 — 시즌이 없으면 종료 후 재시작을 반복하므로 시즌을 먼저 시드한다.
+  # 장외 시간 테스트는 .env.production 에 MOCK_TICK_STREAM=true 로 Mock 틱 사용 가능.
+  game_ws:
+    build: ./backend
+    container_name: stock_game_ws
+    command: python -m apps.collector.run_game_ws
+    env_file:
+      - ./backend/.env.production
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
   # -------------------------
   # 3. Backend Worker (Celery)
   # -------------------------
@@ -148,6 +184,8 @@ services:
       args:
         VITE_API_BASE_URL: https://blog.haezean.com/api/v1
         VITE_AUTH_BASE_URL: https://auth.haezean.com/api/v1
+        VITE_GAME_API_URL: https://game.haezean.com
+        VITE_STOCK_API_URL: https://api.haezean.com/graphql
     container_name: stock_web_client
     ports:
       - "3000:3000"
@@ -160,6 +198,7 @@ services:
         VITE_API_BASE_URL: https://blog.haezean.com/api/v1
         VITE_AUTH_BASE_URL: https://auth.haezean.com/api/v1
         VITE_STOCK_API_URL: https://api.haezean.com/graphql
+        VITE_GAME_API_URL: https://game.haezean.com
     container_name: stock_admin_web
     ports:
       - "3001:3000"

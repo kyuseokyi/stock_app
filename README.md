@@ -383,7 +383,7 @@ uv run python -c "from apps.collector.tasks.universe import backfill_all_daily; 
 
 | 워크플로 | 자동 트리거(경로) | 배포 대상 |
 |---|---|---|
-| `deploy-server.yml` | `backend/**`, `docker-compose.prod.yml` | auth/stock/blog API + celery worker/beat |
+| `deploy-server.yml` | `backend/**`, `docker-compose.prod.yml` | auth/stock/blog API + trading_game(8004, `game.haezean.com`)·game_ws(KIS 실시간) + celery worker/beat. 기동 전 `alembic upgrade head` 자동 |
 | `deploy-web.yml` | `web_client/**`, `admin_web/**`, `docker-compose.prod.yml` | web_client(3000) + admin_web(3001) |
 
 - **자동**: `dev → main` 병합 후 push → **변경 경로에 해당하는 워크플로만** 실행(각자 지정 서비스만 `up -d --build`, 나머지 컨테이너·볼륨 보존).

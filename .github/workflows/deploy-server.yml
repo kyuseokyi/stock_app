@@ -1,7 +1,8 @@
 name: Deploy Server (Backend & Workers)
 
 # 트리거: main 에 backend 또는 compose 변경이 push 되면 자동, 또는 UI 에서 수동 실행.
-# 대상: API 3종 + Celery worker/beat 만 재빌드·재기동. 프론트(web_client/admin_web)는 건드리지 않음.
+# 대상: API 3종 + 트레이딩 게임(trading_game·game_ws) + Celery worker/beat 재빌드·재기동.
+#       기동 전 alembic upgrade head 로 스키마를 최신화. 프론트(web_client/admin_web)는 건드리지 않음.
 on:
   push:
     branches: [ "main" ]
@@ -38,13 +39,24 @@ jobs:
           cp "$HOST_ENV/compose.env" .env
         fi
 
-    - name: Build and Deploy backend services
+    - name: Build backend images
       run: |
-        echo "🚀 Deploying backend (APIs + Celery)…"
-        # 지정 서비스만 재빌드·재생성. DB(postgres/clickhouse/redis)는 depends_on 으로
+        docker compose -f docker-compose.prod.yml build \
+          auth_api stock_api blog_api trading_game game_ws celery_worker celery_beat
+
+    - name: Migrate PostgreSQL schema (alembic upgrade head)
+      run: |
+        # 새 이미지로 마이그레이션을 먼저 적용한다(멱등 — 이미 최신이면 no-op).
+        # 실패하면 이 스텝에서 배포가 중단되어 구 컨테이너가 그대로 유지된다.
+        docker compose -f docker-compose.prod.yml run --rm stock_api alembic upgrade head
+
+    - name: Deploy backend services
+      run: |
+        echo "🚀 Deploying backend (APIs + Game + Celery)…"
+        # 지정 서비스만 재생성. DB(postgres/clickhouse/redis)는 depends_on 으로
         # 필요 시 기동되며 이미 healthy 면 no-op(볼륨·데이터 보존). 프론트는 미포함 → 무영향.
-        docker compose -f docker-compose.prod.yml up -d --build \
-          auth_api stock_api blog_api celery_worker celery_beat
+        docker compose -f docker-compose.prod.yml up -d \
+          auth_api stock_api blog_api trading_game game_ws celery_worker celery_beat
         echo "✅ Backend deploy done"
 
     - name: Cleanup dangling images
