@@ -20,7 +20,7 @@ import { SentimentBar } from '@/features/game/components/sentiment-bar';
 import { StreakRewardSheet } from '@/features/game/components/streak-reward-sheet';
 import { isQuizPrimeTime } from '@/features/game/lib/quiz';
 import { useTradingGameStore } from '@/features/game/store';
-import type { Leverage, Ratio, Side } from '@/features/game/types';
+import type { Leverage, OrderOptions, Ratio, Side } from '@/features/game/types';
 import { useGameSocket } from '@/features/game/use-game-socket';
 import { ListState } from '@/ui';
 
@@ -186,12 +186,12 @@ export default function GameScreen() {
     ]);
   };
 
-  const handleOrder = (side: Side, ratio: Ratio, leverage: Leverage) => {
+  const handleOrder = (side: Side, ratio: Ratio, leverage: Leverage, opts?: OrderOptions) => {
     if (!loggedIn) {
       requireLogin();
       return;
     }
-    void placeOrder(side, ratio, leverage);
+    void placeOrder(side, ratio, leverage, opts);
   };
 
   const openPrivate = (m: PrivateModal) => {

@@ -9,13 +9,14 @@ import { formatPrice, kstDateString } from '../lib/format';
 import type { Coach, DailyCandle, Position } from '../types';
 
 // 순수 View 캔들 차트(네이티브 차트 의존성 0). 좌표는 lib/chart-layout 의 순수 함수가 계산한다.
-// 색: 상승=빨강(theme up)/하락=파랑(theme down). 지지선 보라·저항선 주황은 고정 상수.
+// 색: 상승=빨강(theme up)/하락=파랑(theme down). 지지선 보라·저항선 주황·익절 초록은 고정 상수, 손절은 회색.
 const SUPPORT = '#8b5cf6';
 const RESIST = '#f59e0b';
+const TAKE_PROFIT = '#16a34a'; // 익절 — 초록(손절은 theme textSecondary 회색)
 const VISIBLE = 60; // 일봉은 최근 60개만 표시
 const LABEL_H = 16;
 
-export type PriceLine = { price: number; color: string; label: string; thick?: boolean };
+export type PriceLine = { price: number; color: string; label: string; thick?: boolean; dashed?: boolean };
 
 type CandleChartProps = {
   candles: Ohlc[];
@@ -58,7 +59,11 @@ export function CandleChart({ candles, height, lines = [], showLabels = true }: 
             const thickness = l.thick ? 2 : 1;
             return (
               <View key={`${l.label}-${l.price}`} pointerEvents="none" style={styles.fill}>
-                <View style={[styles.line, { top: y - thickness / 2, height: thickness, backgroundColor: l.color }]} />
+                {l.dashed ? (
+                  <View style={[styles.line, styles.dashed, { top: y - 1, borderColor: l.color }]} />
+                ) : (
+                  <View style={[styles.line, { top: y - thickness / 2, height: thickness, backgroundColor: l.color }]} />
+                )}
                 {showLabels ? (
                   <Text
                     style={[styles.lineLabel, { top: y < LABEL_H + 2 ? y + 2 : y - LABEL_H - 2, color: l.color }]}
@@ -88,7 +93,7 @@ type DailyChartProps = {
   position: Position | null;
 };
 
-/** 일봉(stock_api) + 오늘 캔들 실시간 병합(WS tick) + 지지/저항/진입가 라인 */
+/** 일봉(stock_api) + 오늘 캔들 실시간 병합(WS tick) + 지지/저항/진입가/손절/익절 라인 */
 export function DailyChart({ ticker, lastPrice, coach, position }: DailyChartProps) {
   const { theme } = useUnistyles();
   const [candles, setCandles] = useState<DailyCandle[] | null>(null);
@@ -127,6 +132,12 @@ export function DailyChart({ ticker, lastPrice, coach, position }: DailyChartPro
       label: '진입',
       thick: true,
     });
+    if (position.stop_loss_price != null) {
+      lines.push({ price: position.stop_loss_price, color: theme.colors.textSecondary, label: '손절', dashed: true });
+    }
+    if (position.take_profit_price != null) {
+      lines.push({ price: position.take_profit_price, color: TAKE_PROFIT, label: '익절', dashed: true });
+    }
   }
 
   return (
@@ -161,6 +172,8 @@ const styles = StyleSheet.create((theme) => ({
   abs: { position: 'absolute' },
   fill: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0 },
   line: { position: 'absolute', left: 0, right: 0, opacity: 0.9 },
+  // 점선 — 높이 0 + 테두리 전체 dashed(iOS 는 변별 두께가 같아야 dashed 렌더) → 위아래 테두리가 겹친 한 줄
+  dashed: { height: 0, borderWidth: 1, borderStyle: 'dashed', backgroundColor: 'transparent' },
   lineLabel: {
     position: 'absolute',
     right: 4,

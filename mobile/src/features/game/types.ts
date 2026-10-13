@@ -4,7 +4,8 @@
 // pydantic v2 는 Decimal 을 JSON 문자열로 직렬화한다 → Raw* 는 문자열(Dec), 도메인 타입은 number.
 
 export type Side = 'LONG' | 'SHORT';
-export type Ratio = 0.25 | 0.5 | 1.0;
+/** 주문 비중 — 칩 25/50/100% + 기타 10~90% (backend OrderRequest.ratio) */
+export type Ratio = 0.1 | 0.2 | 0.25 | 0.3 | 0.4 | 0.5 | 0.6 | 0.7 | 0.75 | 0.8 | 0.9 | 1.0;
 export type Leverage = 1 | 2 | 5;
 
 /** Decimal 직렬화 값. 서버는 문자열을 보내지만 방어적으로 number 도 허용 */
@@ -86,7 +87,16 @@ export interface OrderRequest {
   side: Side;
   ratio: Ratio;
   leverage: Leverage;
+  /** 진입가 대비 주가 변동 분수(0.05=5%). null/생략이면 미설정 */
+  stop_loss_pct?: number | null;
+  take_profit_pct?: number | null;
 }
+
+/** placeOrder 선택 인자 — 손절/익절(주가 기준 분수) */
+export type OrderOptions = {
+  stopLossPct?: number | null;
+  takeProfitPct?: number | null;
+};
 
 /** GET /api/game/seasons/{id}/my-rank (ranking_service.my_rank — 이미 float) */
 export interface MyRank {

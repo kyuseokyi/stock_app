@@ -10,6 +10,7 @@ import type {
   MyRank,
   Nudge,
   Position,
+  OrderOptions,
   Ratio,
   Season,
   Sentiment,
@@ -55,7 +56,7 @@ interface TradingGameState extends PrivateState {
   refreshRank: () => Promise<void>;
   refreshStreak: () => Promise<void>;
   resetPrivate: () => void;
-  placeOrder: (side: Side, ratio: Ratio, leverage: Leverage) => Promise<void>;
+  placeOrder: (side: Side, ratio: Ratio, leverage: Leverage, opts?: OrderOptions) => Promise<void>;
   closePosition: () => Promise<void>;
   applyMessage: (msg: GameWsMessage) => void;
   /** gen = 요청 시작 시점의 currentPrivateGen() — 그 사이 로그아웃했으면 무시 */
@@ -190,13 +191,20 @@ export const useTradingGameStore = create<TradingGameState>()((set, get) => {
       set({ ...PRIVATE_EMPTY });
     },
 
-    placeOrder: async (side, ratio, leverage) => {
+    placeOrder: async (side, ratio, leverage, opts) => {
       const { season, submitting } = get();
       if (!season || submitting) return;
       const gen = privateGen;
       set({ submitting: true });
       try {
-        const result = await gameApi.placeOrder({ season_id: season.id, side, ratio, leverage });
+        const result = await gameApi.placeOrder({
+          season_id: season.id,
+          side,
+          ratio,
+          leverage,
+          stop_loss_pct: opts?.stopLossPct ?? null,
+          take_profit_pct: opts?.takeProfitPct ?? null,
+        });
         if (gen === privateGen) {
           set({ position: result.position });
           pushNudges(result.nudges);
