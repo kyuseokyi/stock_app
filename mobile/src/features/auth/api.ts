@@ -1,4 +1,5 @@
 import { authApi } from '@/lib/api';
+import { ENV } from '@/lib/env';
 
 import type { User } from './types';
 
@@ -30,8 +31,32 @@ export type GuestLoginResult = {
   user: User;
 };
 
+/** 게스트·간편 로그인 공통 결과(서비스 JWT + 사용자) */
+export type LoginResult = GuestLoginResult;
+
+export type SocialProvider = 'kakao' | 'naver';
+export type SocialProviders = Record<SocialProvider, boolean>;
+
 /** 게스트(닉네임) 로그인 — 비밀번호 없이 닉네임만으로 발급. POST /api/v1/auth/guest (auth 서비스, 포트 8001) */
 export async function guestLogin(nickname: string): Promise<GuestLoginResult> {
   const raw = await authApi.post<RawTokenResponse>('/api/v1/auth/guest', { nickname });
+  return { accessToken: raw.access_token, user: toUser(raw.user) };
+}
+
+/** 간편 로그인 공급자 활성 여부 — GET /api/v1/auth/social/providers (키 미설정 공급자는 false) */
+export async function getSocialProviders(): Promise<SocialProviders> {
+  const raw = await authApi.get<Partial<SocialProviders>>('/api/v1/auth/social/providers');
+  return { kakao: raw.kakao === true, naver: raw.naver === true };
+}
+
+/** 인앱 브라우저로 여는 시작 URL. app=dev|prod 로 서버가 복귀 스킴(stockapp-dev/stockapp)을 고른다. */
+export function socialStartUrl(provider: SocialProvider, appVariant: 'dev' | 'prod'): string {
+  const base = ENV.authApiUrl.replace(/\/$/, '');
+  return `${base}/api/v1/auth/social/${provider}/start?client=app&app=${appVariant}`;
+}
+
+/** 일회용 교환 코드 → 서비스 JWT. POST /api/v1/auth/social/exchange */
+export async function exchangeSocialCode(code: string): Promise<LoginResult> {
+  const raw = await authApi.post<RawTokenResponse>('/api/v1/auth/social/exchange', { code });
   return { accessToken: raw.access_token, user: toUser(raw.user) };
 }

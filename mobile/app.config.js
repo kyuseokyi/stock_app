@@ -10,7 +10,8 @@ export default {
     version: '1.0.0',
     orientation: 'portrait',
     icon: './assets/images/icon.png',
-    scheme: 'stockapp',
+    // 딥링크 스킴도 dev/prod 분리 — 간편 로그인 복귀(stockapp[-dev]://auth)가 같은 기기의 다른 앱으로 가지 않게
+    scheme: isDev ? 'stockapp-dev' : 'stockapp',
     userInterfaceStyle: 'automatic',
     ios: {
       icon: './assets/expo.icon',

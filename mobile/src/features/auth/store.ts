@@ -3,7 +3,7 @@ import { create } from 'zustand';
 
 import { registerUnauthorizedHandler, setAuthToken as setHttpAuthToken } from '@/lib/api/auth-token';
 
-import { guestLogin } from './api';
+import { guestLogin, type LoginResult } from './api';
 import type { User } from './types';
 
 const TOKEN_KEY = 'auth_token';
@@ -15,6 +15,8 @@ type AuthState = {
   /** SecureStore에서 최초 로드를 마쳤는지 여부. false인 동안은 로그아웃 상태로 취급한다. */
   hydrated: boolean;
   login: (nickname: string) => Promise<User>;
+  /** 이미 발급된 토큰(간편 로그인 교환 결과)을 저장 — login 과 같은 경로(메모리 홀더 + SecureStore) */
+  loginWithToken: (result: LoginResult) => User;
   logout: () => void;
   hydrate: () => Promise<void>;
 };
@@ -36,7 +38,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   hydrated: false,
 
   login: async (nickname: string) => {
-    const { accessToken, user } = await guestLogin(nickname);
+    const result = await guestLogin(nickname);
+    return get().loginWithToken(result);
+  },
+
+  loginWithToken: ({ accessToken, user }) => {
     setHttpAuthToken(accessToken);
     set({ token: accessToken, user });
     // 저장 실패는 무시(메모리 상태가 우선) — logout()과 동일하게 fire-and-forget.

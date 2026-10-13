@@ -1,21 +1,63 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ScrollView, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
+import { getSocialProviders, type SocialProvider, type SocialProviders } from '@/features/auth/api';
+import { socialErrorMessage } from '@/features/auth/return-url';
+import { startSocialLogin } from '@/features/auth/social';
+import { SocialButton } from '@/features/auth/social-button';
 import { useAuthStore } from '@/features/auth/store';
+import { ENV } from '@/lib/env';
 import { Button, Card, ListRow } from '@/ui';
+
+const SOCIAL_PROVIDERS: SocialProvider[] = ['kakao', 'naver'];
 
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
   const { theme } = useUnistyles();
   const user = useAuthStore((s) => s.user);
   const login = useAuthStore((s) => s.login);
+  const loginWithToken = useAuthStore((s) => s.loginWithToken);
   const logout = useAuthStore((s) => s.logout);
 
   const [nickname, setNickname] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const [providers, setProviders] = useState<SocialProviders | null>(null);
+  const [pendingProvider, setPendingProvider] = useState<SocialProvider | null>(null);
+  const [socialError, setSocialError] = useState('');
+
+  // 비로그인일 때 간편 로그인 공급자 활성 여부 조회(키 미설정 공급자는 버튼 숨김)
+  useEffect(() => {
+    if (user) return;
+    let alive = true;
+    getSocialProviders()
+      .then((p) => {
+        if (alive) setProviders(p);
+      })
+      .catch(() => {
+        if (alive) setProviders({ kakao: false, naver: false });
+      });
+    return () => {
+      alive = false;
+    };
+  }, [user]);
+
+  const handleSocialLogin = async (provider: SocialProvider) => {
+    setPendingProvider(provider);
+    setSocialError('');
+    try {
+      const outcome = await startSocialLogin(provider);
+      if (outcome.type === 'success') loginWithToken(outcome.result);
+      else if (outcome.type === 'error') setSocialError(socialErrorMessage(outcome.error));
+      // cancel(사용자가 닫음·취소)은 조용히 무시
+    } catch {
+      setSocialError('로그인에 실패했어요. 잠시 후 다시 시도해 주세요.');
+    } finally {
+      setPendingProvider(null);
+    }
+  };
 
   const handleLogin = async () => {
     const trimmed = nickname.trim();
@@ -34,6 +76,8 @@ export default function ProfileScreen() {
       setSubmitting(false);
     }
   };
+
+  const visibleProviders = SOCIAL_PROVIDERS.filter((p) => providers?.[p] === true);
 
   if (user) {
     return (
@@ -68,21 +112,40 @@ export default function ProfileScreen() {
       style={styles.flex}
       contentContainerStyle={[styles.content, { paddingTop: insets.top + 24 }]}>
       <Text style={styles.screenTitle}>내정보</Text>
-      <Text style={styles.subtitle}>닉네임만으로 시작할 수 있어요.</Text>
-      <TextInput
-        style={styles.input}
-        placeholder="닉네임"
-        placeholderTextColor={theme.colors.textSecondary}
-        value={nickname}
-        onChangeText={setNickname}
-        editable={!submitting}
-        maxLength={20}
-        autoCapitalize="none"
-        autoCorrect={false}
-        onSubmitEditing={handleLogin}
-      />
-      {error ? <Text style={styles.error}>{error}</Text> : null}
-      <Button label="시작하기" loading={submitting} onPress={handleLogin} />
+      <Text style={styles.subtitle}>간편 로그인으로 시작해 보세요.</Text>
+      {visibleProviders.map((p) => (
+        <SocialButton
+          key={p}
+          provider={p}
+          loading={pendingProvider === p}
+          disabled={pendingProvider !== null}
+          onPress={() => handleSocialLogin(p)}
+        />
+      ))}
+      {providers && visibleProviders.length === 0 && !ENV.enableGuestLogin ? (
+        <Text style={styles.subtitle}>로그인을 준비하고 있어요.</Text>
+      ) : null}
+      {socialError ? <Text style={styles.error}>{socialError}</Text> : null}
+
+      {ENV.enableGuestLogin ? (
+        <View style={styles.guest}>
+          <Text style={styles.guestLabel}>개발용 닉네임 로그인</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="닉네임"
+            placeholderTextColor={theme.colors.textSecondary}
+            value={nickname}
+            onChangeText={setNickname}
+            editable={!submitting}
+            maxLength={20}
+            autoCapitalize="none"
+            autoCorrect={false}
+            onSubmitEditing={handleLogin}
+          />
+          {error ? <Text style={styles.error}>{error}</Text> : null}
+          <Button label="시작하기" loading={submitting} onPress={handleLogin} />
+        </View>
+      ) : null}
     </ScrollView>
   );
 }
@@ -110,4 +173,12 @@ const styles = StyleSheet.create((theme) => ({
     backgroundColor: theme.colors.surface,
   },
   error: { fontSize: 13, color: theme.colors.up },
+  guest: {
+    gap: theme.gap(1.5),
+    marginTop: theme.gap(1.5),
+    paddingTop: theme.gap(2),
+    borderTopWidth: 1,
+    borderTopColor: theme.colors.border,
+  },
+  guestLabel: { fontSize: 13, color: theme.colors.textSecondary },
 }));
