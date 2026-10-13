@@ -36,8 +36,10 @@ import type {
   RawQuestList,
   RawQuizQuestion,
   RawQuizResult,
+  RawStreakClaimResult,
   Season,
   Streak,
+  StreakClaimResult,
 } from './types';
 
 /** 게임 서버 미설정(production 에 EXPO_PUBLIC_GAME_API_URL 없음)이면 null → 화면 "준비 중" */
@@ -184,6 +186,12 @@ export async function submitQuiz(quizId: number, choice: QuizChoice): Promise<Qu
 
 export function getMyStreak(): Promise<Streak> {
   return client().get<Streak>('/api/game/streak/my');
+}
+
+/** 연속 출석 마일스톤 보상 수령 — 갱신된 streak(rewards 포함)과 지급 후 현금 잔고 */
+export async function claimStreakReward(milestone: number): Promise<StreakClaimResult> {
+  const data = await client().post<RawStreakClaimResult>(`/api/game/streak/rewards/${milestone}/claim`);
+  return { streak: data.streak, cash_balance: toNum(data.cash_balance) };
 }
 
 // ---------------------------------------------------------------- 일봉(stock_api GraphQL)

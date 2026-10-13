@@ -17,6 +17,8 @@ type Props = {
   onOpenRanking: () => void;
   onOpenQuest: () => void;
   onOpenQuiz: () => void;
+  /** Streak 칩 탭 → 연속 출석 보상 시트 */
+  onOpenStreak: () => void;
 };
 
 function NavButton({ label, onPress }: { label: string; onPress: () => void }) {
@@ -38,6 +40,7 @@ export function GameHeader({
   onOpenRanking,
   onOpenQuest,
   onOpenQuiz,
+  onOpenStreak,
 }: Props) {
   const dday = daysUntil(season.end_at);
   const rank = myRank?.rank ?? null;
@@ -51,9 +54,15 @@ export function GameHeader({
           시즌 {season.season_number}기{dday !== null ? ` · 종료 D-${dday}` : ''}
         </Text>
         {showStreak && streak !== null ? (
-          <Text style={styles.streak} accessibilityLabel={`최고 기록 ${streak.highest_streak}일`}>
-            🔥 {streak.current_streak}일 연속
-          </Text>
+          <Pressable
+            onPress={onOpenStreak}
+            accessibilityRole="button"
+            accessibilityLabel={`${streak.current_streak}일 연속 · 최고 기록 ${streak.highest_streak}일 · 연속 출석 보상 보기`}
+            style={({ pressed }) => pressed && styles.pressed}>
+            <Text style={styles.streak}>
+              🔥 {streak.current_streak}일 연속{streak.rewards.some((r) => r.claimable) ? ' 🎁' : ''}
+            </Text>
+          </Pressable>
         ) : null}
       </View>
       <Text style={styles.stock}>

@@ -22,6 +22,14 @@ describe('gameErrorMessage', () => {
       '5배 레버리지는 아카데미 퀴즈를 통과해야 쓸 수 있어요',
     );
   });
+  test('연속 출석 보상 code 고정 문구 (web 동일)', () => {
+    expect(gameErrorMessage(api(409, { detail: { code: 'NOT_REACHED', message: 'm' } }))).toBe(
+      '아직 연속 출석 일수가 부족해요',
+    );
+    expect(gameErrorMessage(api(404, { detail: { code: 'UNKNOWN_MILESTONE', message: 'm' } }))).toBe(
+      '없는 보상이에요',
+    );
+  });
   test('모르는 code → message', () => {
     expect(gameErrorMessage(api(400, { detail: { code: 'NEW_CODE', message: '새 오류' } }))).toBe('새 오류');
   });

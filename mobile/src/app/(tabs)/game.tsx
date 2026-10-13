@@ -17,6 +17,7 @@ import { QuestSheet } from '@/features/game/components/quest-sheet';
 import { QuizBanner } from '@/features/game/components/quiz-banner';
 import { QuizSheet } from '@/features/game/components/quiz-sheet';
 import { SentimentBar } from '@/features/game/components/sentiment-bar';
+import { StreakRewardSheet } from '@/features/game/components/streak-reward-sheet';
 import { isQuizPrimeTime } from '@/features/game/lib/quiz';
 import { useTradingGameStore } from '@/features/game/store';
 import type { Leverage, Ratio, Side } from '@/features/game/types';
@@ -26,7 +27,7 @@ import { ListState } from '@/ui';
 const RANK_POLL_MS = 30_000;
 const PRIME_CHECK_MS = 60_000;
 
-type ActiveModal = 'ranking' | 'quest' | 'academy' | 'quiz' | null;
+type ActiveModal = 'ranking' | 'quest' | 'academy' | 'quiz' | 'streak' | null;
 type PrivateModal = Exclude<ActiveModal, 'ranking' | null>;
 
 // 실시간 트레이딩 게임 — 상태별 분기: 서버 미설정/시즌 없음 → 준비 중, 연결 실패 → 재시도, 정상 → 트레이딩 화면.
@@ -230,6 +231,7 @@ export default function GameScreen() {
           onOpenRanking={() => setActiveModal('ranking')}
           onOpenQuest={() => openPrivate('quest')}
           onOpenQuiz={() => openPrivate('quiz')}
+          onOpenStreak={() => openPrivate('streak')}
         />
         <CoachBanner coach={coach} />
         {loggedIn ? (
@@ -259,6 +261,7 @@ export default function GameScreen() {
       {activeModal === 'quest' ? <QuestSheet onClose={closeModal} /> : null}
       {activeModal === 'academy' ? <AcademySheet onClose={closeModal} /> : null}
       {activeModal === 'quiz' ? <QuizSheet onClose={closeModal} /> : null}
+      {activeModal === 'streak' ? <StreakRewardSheet onClose={closeModal} /> : null}
     </View>
   );
 }
