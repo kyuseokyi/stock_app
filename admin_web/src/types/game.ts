@@ -49,3 +49,72 @@ export interface FeatureFlag {
   enabled: boolean
   updated_at: string | null
 }
+
+// 아카데미 문항·퀴즈 관리(백로그 ⑤-2). 출처: game_dtos.AcademyQuestionAdminDTO / Quiz* (Decimal → 문자열)
+export interface AcademyQuestionAdmin {
+  id: number
+  question: string
+  choices: string[]
+  answer: number // 0-based
+  explanation: string
+  sort_order: number
+  is_active: boolean
+  created_at: string | null
+  updated_at: string | null
+}
+
+export interface AcademyQuestionBody {
+  question: string
+  choices: string[] // 2~6개, 각 1~200자
+  answer: number
+  explanation: string
+  sort_order: number
+  is_active: boolean
+}
+
+export type QuizAnswer = 'UP' | 'DOWN'
+
+export interface QuizSnapshotCandle {
+  date: string // YYYY-MM-DD
+  open: number
+  high: number
+  low: number
+  close: number
+  volume: number
+}
+
+export interface QuizAdminItem {
+  id: number
+  ticker: string
+  base_date: string
+  pattern_type: string
+  answer: QuizAnswer
+  actual_change: string // Decimal(%)
+  is_active: boolean
+  attempt_count: number
+  created_at: string | null
+}
+
+export interface QuizAdminList {
+  items: QuizAdminItem[]
+  total: number
+  page: number
+  size: number
+}
+
+export interface QuizAdminDetail extends QuizAdminItem {
+  explanation: string
+  reward_cash: number
+  chart_snapshot: QuizSnapshotCandle[] // 기준일까지 60봉
+}
+
+export interface QuizAdminUpdateBody {
+  pattern_type?: string
+  explanation?: string
+  is_active?: boolean
+}
+
+export interface QuizGenerateResult {
+  created: number
+  skipped: number
+}

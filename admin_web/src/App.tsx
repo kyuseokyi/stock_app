@@ -10,6 +10,8 @@ import MembersPage from './pages/MembersPage'
 import StatsPage from './pages/StatsPage'
 import TradingGameCoach from './pages/TradingGameCoach'
 import TradingGameSettings from './pages/TradingGameSettings'
+import TradingGameAcademy from './pages/TradingGameAcademy'
+import TradingGameQuizzes from './pages/TradingGameQuizzes'
 
 export default function App() {
   return (
@@ -33,6 +35,8 @@ export default function App() {
         <Route path="stats" element={<StatsPage />} />
         <Route path="game/coach" element={<TradingGameCoach />} />
         <Route path="game/settings" element={<TradingGameSettings />} />
+        <Route path="game/academy" element={<TradingGameAcademy />} />
+        <Route path="game/quizzes" element={<TradingGameQuizzes />} />
         <Route path="*" element={<Navigate to="/boards" replace />} />
       </Route>
     </Routes>
