@@ -113,7 +113,7 @@ npm run dev        # http://localhost:5173
 ### 4. 일반 유저 웹 (web_client)
 일반 사용자(B2C)용 반응형 웹. 블로그/커뮤니티 조회 + SSE 실시간 알림 + **임시 로그인(닉네임)으로 댓글 작성**. 디자인은 **토스(Toss) 라이트 스타일**(`docs/mobile_design_language.md`의 토큰을 Tailwind `theme.extend`로 이식 — brand `#3182f6` 등)로 모바일과 통일.
 > 헤더는 **2단 네비(커뮤니티·게임)**. 커뮤니티 섹션에서만 게시판 탭이 보이고, `/game`은 "시즌 준비 중" 스켈레톤(트레이딩 게임 백엔드 Phase 1~5 완성 후 실시간 화면으로 교체). 공통 UI는 `src/components/ui/`(Button·Card·Chip·EmptyState).
-> 임시 로그인은 auth 서비스의 `POST /api/v1/auth/guest`(닉네임→FREE 유저 발급)를 사용합니다. 카카오/구글 OAuth(간편로그인)는 추후 동일 토큰 경로로 교체 예정. 댓글 작성 테스트에는 auth(8001)도 함께 띄워야 합니다.
+> 로그인은 **카카오·네이버 간편 로그인**(auth 서비스, 아래 "간편 로그인" 참조). 닉네임 게스트 로그인(`POST /api/v1/auth/guest`)은 **개발용** — `VITE_ENABLE_GUEST_LOGIN`(미설정 시 dev serve 만 노출, 배포 빌드 숨김). 댓글 작성 테스트에는 auth(8001)도 함께 띄워야 합니다.
 ```bash
 cd web_client
 npm install
@@ -126,6 +126,7 @@ npm run build -- --mode development    # 빌드 검증(테스트 러너 없음 �
 - API 응답 타입은 `web_client/src/types/`(백엔드 pydantic 스키마 기준)에 있다. 백엔드 응답 스키마를 바꾸면 admin_web 타입과 함께 갱신한다.
 - **게임 탭(`/game`)** 은 trading_game(8003)·stock_api(8002, 일봉 차트)를 호출한다. 실시간 화면을 보려면 auth(8001)·blog(8000)와 함께 두 서비스도 띄운다. `VITE_GAME_API_URL`·`VITE_STOCK_API_URL`은 **선택** 변수 — dev 미설정 시 `http://localhost:8003`·`http://localhost:8002/graphql`, 배포 빌드 미설정이면 게임 탭은 "시즌을 준비하고 있어요"(빌드는 실패하지 않음). trading_game 운영 배포 전까지 필수 목록에 넣지 않는다.
 - **게임 모달(6b)**: 헤더 `🏆 랭킹`(시즌 Top 100·명예의 전당 MBTI 칩, 비로그인 열람) · `🎯 퀘스트`(Q1~Q3 진행률·보상 수령·뱃지) · `🧩 퀴즈`(야간 10초 차트 퀴즈 — KST 15:30 이후·주말엔 주문 패널 위 배너, 관리자 플래그 QUIZ 가 꺼지면 숨김), 5x 🔒 칩 → 아카데미(3문항 통과 시 5배 레버리지 해금), 헤더 `🔥 n일 연속` Streak 칩. 백엔드 변경 없음(Phase 5b API). 퀘스트·퀴즈·아카데미는 로그인 필요.
+- **간편 로그인(카카오·네이버)**: 로그인 모달 버튼 → auth `GET /api/v1/auth/social/{kakao|naver}/start?client=web` → 공급자 → auth 콜백 → `/auth/complete?code=…` → `POST /api/v1/auth/social/exchange` 로 JWT 저장 후 원래 페이지로 복귀. 키가 없는 공급자 버튼은 숨김(`GET /api/v1/auth/social/providers`). 키 없이 로컬에서 흐름을 보려면 auth 를 `SOCIAL_FAKE_PROVIDER=true` 로 띄운다(공급자 대신 "테스트유저" 로그인, `APP_ENV=production` 에선 무시). 콜백·교환 코드는 Redis 를 쓰므로 Redis(도커)도 필요.
 
 ### 5. 모바일 앱 (Expo / React Native)
 Expo SDK 57 · React Native 0.86 · expo-router(하단 4탭: 홈/블로그/게임/내정보 — 스크리너·관심종목 탭은 제거됨) · **Unistyles v3**(테마 스타일링) · zustand.
@@ -158,7 +159,9 @@ npm run build:android:prod # 상용(app-bundle) / build:ios:prod
 - **API 주소(MSA 서비스별)**: `EXPO_PUBLIC_STOCK_GRAPHQL_URL`(stock_api :8002/graphql) · `EXPO_PUBLIC_BLOG_API_URL`(blog :8000) · `EXPO_PUBLIC_AUTH_API_URL`(auth :8001). `src/lib/env.ts` 단일 접근점, 통신은 `src/lib/api`(GraphQL+REST). 운영은 Cloudflare Tunnel이 서브도메인별로 라우팅. 실기기 테스트 시 `localhost` → 개발 PC의 LAN IP로 교체.
 - **홈 추천 글(큐레이션)**: 관리자 게시글 목록에서 ⭐ 토글로 "홈 추천"을 켜면(`blog_posts.featured_at`), 모바일 홈 탭에 최근에 켠 순으로 노출된다. API: `GET /api/v1/blogs?featured=true`.
 - **블로그(웹 클라이언트 동일 기능)**: 블로그 탭은 게시판(보드) 선택 + 페이지네이션(`GET /boards`, `GET /blogs?board_id=&page=`), 카드 탭 시 **글 상세**(`app/blog/[id].tsx`)로 이동해 본문 HTML을 **WebView**로 렌더(차트 base64 이미지 포함). 상세에서 **댓글 읽기/쓰기**(`GET/POST /blogs/{id}/comments`, 게시판 `comments_enabled` 게이팅).
-- **게스트 로그인**: 내정보 탭에서 닉네임만으로 로그인(`POST /auth/guest`), 토큰은 `expo-secure-store`에 저장, `src/lib/api`가 Bearer 자동 부착 + 401 시 정리(`src/features/auth`, `src/lib/api/auth-token.ts`). (실시간 새글 알림은 웹 SSE와 달리 모바일은 FCM 경로라 후속 과제)
+- **로그인(카카오·네이버)**: 내정보 탭 버튼 → `expo-web-browser` `openAuthSessionAsync`(인앱 브라우저, 네이티브 SDK 미사용) → auth 콜백이 `stockapp://auth?code=…`(dev 빌드는 `stockapp-dev://auth`)로 복귀 → `POST /auth/social/exchange` → 토큰은 `expo-secure-store`, `src/lib/api`가 Bearer 자동 부착 + 401 시 정리(`src/features/auth`). 닉네임 게스트 로그인은 **개발용** — `EXPO_PUBLIC_ENABLE_GUEST_LOGIN`(미설정 시 production 이 아닐 때만 노출).
+  - ⚠️ **dev 앱 스킴이 `stockapp` → `stockapp-dev` 로 바뀌었다**(prod 와 같은 기기 공존 시 복귀 링크 충돌 방지). 기존 dev build 는 **1회 재생성** 필요: `npm run prebuild:dev` 후 `npm run android:dev`/`ios:dev`(또는 EAS dev 빌드). Expo Go 는 Unistyles 로 원래 미지원.
+  - 에뮬레이터는 auth 콜백이 브라우저에서 열리므로 `adb reverse tcp:8001 tcp:8001` 이 필요하다(기존 목록에 포함).
 - **게임 탭(트레이딩 게임 6c)**: web 6a+6b 와 동일 기능(헤더·Streak·코치 배너·심리 바·일봉+실시간 차트·포지션/주문·넛지 토스트 + 🏆 랭킹·🎯 퀘스트·🎓 아카데미(5x 해금)·🧩 야간 10초 차트 퀴즈 시트). trading_game(8003)·stock_api(8002, 일봉)·auth(8001) 필요. `EXPO_PUBLIC_GAME_API_URL`은 **선택** — 미설정 시 dev 는 `http://localhost:8003`, production 이면 "시즌을 준비하고 있어요". 차트는 신규 네이티브 의존성 없는 순수 View 렌더(`src/features/game/lib/chart-layout.ts`). 로그인은 내정보 탭(비로그인에서 주문·퀘스트·퀴즈·아카데미 → 내정보 탭 안내). 에뮬레이터는 `adb reverse tcp:8003 tcp:8003` 추가(8000/8001/8002/8082 와 함께).
 - **공통 UI**: 공유 컴포넌트는 `mobile/src/ui/`에 있으며 토스 디자인 언어(`docs/mobile_design_language.md`)를 따른다.
 - **테스트/검증**: 순수 로직 단위 테스트는 `cd mobile && npm test`(jest). 화면은 `npx tsc --noEmit`(+ 실기기 확인)로 검증한다. 이 프로젝트에는 eslint가 설정되어 있지 않아 모바일 lint 단계는 없다.
@@ -209,7 +212,7 @@ cd ../web_client && npm run dev   # 유저웹 3000  (blog 8000 + 댓글작성 �
 | 관리자 로그인 + 게시판/글/댓글 관리 | Docker(postgres) + auth(8001) + blog(8000) + admin_web(5173) |
 | 어드민 차트 삽입(종목검색/드로잉) | 위 + stock_api(8002) |
 | 유저 웹 블로그 조회 | Docker(postgres) + blog(8000) + web_client(3000) |
-| 유저 웹 임시 로그인 + 댓글 작성 | 위 + auth(8001) |
+| 유저 웹 로그인(카카오·네이버/개발용 게스트) + 댓글 작성 | 위 + auth(8001) + Redis(도커, 간편 로그인 state·교환 코드). 키 없이 보려면 auth 를 `SOCIAL_FAKE_PROVIDER=true` 로 |
 | 새 글 실시간 알림(SSE)·푸시(Mock) | 위 + Redis(도커) + celery worker |
 | 트레이딩 게임(가상 주문/체결·실시간 WS) | Docker(postgres+redis) + auth(8001) + trading_game(8003, `--workers 1`) + 수집 데몬(`run_game_ws`, Mock 가능) + ACTIVE 시즌 시드 |
 
@@ -290,13 +293,22 @@ uv run pytest tests/test_universe_cooldown.py    # 특정 파일
 | `CLICKHOUSE_USER` / `CLICKHOUSE_PASSWORD` | backend | `default` / `password` | ClickHouse 인증 |
 | `CLICKHOUSE_DB` | backend | `stock_data` | 주가 시계열 DB |
 | `JWT_SECRET_KEY` | auth·blog | `dev-insecure-secret-change-me` | JWT 서명 키 (**서비스 간 동일값 필수**, 운영 필수 설정) |
+| `KAKAO_REST_API_KEY` / `KAKAO_CLIENT_SECRET` | auth | (빈값) | 카카오 로그인 키(시크릿은 콘솔에서 사용 설정 시만). 비면 카카오 버튼 숨김 |
+| `NAVER_CLIENT_ID` / `NAVER_CLIENT_SECRET` | auth | (빈값) | 네이버 로그인 키. 비면 네이버 버튼 숨김 |
+| `SOCIAL_STATE_SECRET` | auth | (JWT_SECRET_KEY 폴백) | OAuth state 서명 키 — 운영은 별도 값(미설정 시 기동 경고) |
+| `SOCIAL_REDIRECT_BASE` | auth | `http://localhost:8001/api/v1/auth/social` | 공급자 Redirect URI 앞부분(`/{kakao\|naver}/callback`). 개발 서버: `https://auth.haezean.com/api/v1/auth/social` |
+| `SOCIAL_WEB_RETURN_URL` | auth | `http://localhost:3000/auth/complete` | 웹 복귀 주소. 개발 서버: `https://app.haezean.com/auth/complete` |
+| `SOCIAL_APP_RETURN_URL_PROD` / `_DEV` | auth | `stockapp://auth` / `stockapp-dev://auth` | 앱 복귀 딥링크(앱 변형별) |
+| `SOCIAL_FAKE_PROVIDER` | auth | `false` | `true` 면 가짜 공급자(로컬 스모크). `APP_ENV=production` 에서는 무시 + 기동 경고 |
 | `PUSH_BACKEND` | collector | `mock` | `mock` \| `fcm` (FCM은 자격증명 준비 후) |
 | `CORS_ORIGINS` | backend | (localhost + haezean 기본 허용) | 콤마 구분 **추가** 오리진(product 등). develop 배포 도메인(admin/app.haezean.com)은 `shared/cors.py`에 코드로 포함돼 env 없이도 허용 |
 | `VITE_API_BASE_URL` | admin_web | `http://localhost:8000/api/v1` | 블로그 API |
 | `VITE_AUTH_BASE_URL` | admin_web | `http://localhost:8001/api/v1` | 인증 API |
 | `VITE_STOCK_API_URL` | admin_web | `http://localhost:8002/graphql` | 주식 API(GraphQL) — 차트 삽입 종목검색/차트 |
 | `VITE_GAME_API_URL` | admin_web | (선택) dev 미설정 시 `http://localhost:8003` | 트레이딩 게임 API — 데일리 코치. 배포 미설정 시 "미연결" 안내 |
-| `VITE_AUTH_BASE_URL` | web_client | `http://localhost:8001/api/v1` | 인증 API — 임시 로그인(닉네임) |
+| `VITE_AUTH_BASE_URL` | web_client | `http://localhost:8001/api/v1` | 인증 API — 간편 로그인·개발용 게스트 로그인 |
+| `VITE_ENABLE_GUEST_LOGIN` | web_client (선택) | dev serve 만 노출 | 닉네임 게스트 로그인 노출(`true`/`false`). 개발 서버 빌드는 `"true"`(테스트용), product 는 `false` |
+| `EXPO_PUBLIC_ENABLE_GUEST_LOGIN` | mobile (선택) | production 이 아닐 때 노출 | 닉네임 게스트 로그인 노출(`true`/`false`) |
 | `VITE_GAME_API_URL` | web_client (선택) | `http://localhost:8003` | 트레이딩 게임 API·WS(미설정 배포 빌드 → 게임 탭 준비 중) |
 | `VITE_STOCK_API_URL` | web_client (선택) | `http://localhost:8002/graphql` | 게임 차트 일봉(GraphQL) |
 | `EXPO_PUBLIC_GAME_API_URL` | mobile (선택) | `http://localhost:8003` | 트레이딩 게임 API·WS(production 미설정 → 게임 탭 준비 중) |
@@ -389,6 +401,11 @@ uv run python -c "from apps.collector.tasks.universe import backfill_all_daily; 
 - **자동**: `dev → main` 병합 후 push → **변경 경로에 해당하는 워크플로만** 실행(각자 지정 서비스만 `up -d --build`, 나머지 컨테이너·볼륨 보존).
 - **수동**: GitHub **Actions** 탭 → `Deploy Server`/`Deploy Web` → **Run workflow**(Branch `main`), 또는 `gh workflow run deploy-server.yml --ref main`. 수집 시간(매일 20:30)을 피해 배포할 때 사용.
 - ⚠️ 최초 배포 후 **스키마 부트스트랩 1회** 필수(`server_setup.md §7`). **DB 포트(5432/8123/9000/6379)는 LAN 전용** — Cloudflare 터널에 노출 금지.
+- **간편 로그인 배포 체크**: 서버 `backend/.env.production` 에 `KAKAO_REST_API_KEY`(+`KAKAO_CLIENT_SECRET`)·`NAVER_CLIENT_ID`/`NAVER_CLIENT_SECRET`·`SOCIAL_STATE_SECRET`·`SOCIAL_REDIRECT_BASE=https://auth.haezean.com/api/v1/auth/social`·`SOCIAL_WEB_RETURN_URL=https://app.haezean.com/auth/complete` 설정(파일은 gitignore — 여기가 유일한 기록). 공급자 콘솔에 등록할 **Redirect URI**:
+  - 로컬: `http://localhost:8001/api/v1/auth/social/kakao/callback`, `http://localhost:8001/api/v1/auth/social/naver/callback`
+  - 개발 서버: `https://auth.haezean.com/api/v1/auth/social/kakao/callback`, `https://auth.haezean.com/api/v1/auth/social/naver/callback`
+  - 카카오는 플랫폼 > Web 사이트 도메인(`http://localhost:3000`, `https://app.haezean.com`)도 등록, 동의항목에서 **닉네임** 활성화. 네이버는 서비스 URL·Callback URL 등록, 제공 정보에 **별명** 선택 — **검수 전에는 등록한 테스트 계정만** 로그인 가능.
+  - 앱 복귀는 커스텀 스킴(`stockapp://auth`)이라 공급자 콘솔 등록 대상이 아니다(공급자는 항상 auth 콜백으로 돌아오고, auth 가 앱으로 302).
 
 ## 📚 문서
 - **일상 실행·배포 빠른 참조: `docs/run_and_deploy.md`**

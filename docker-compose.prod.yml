@@ -186,6 +186,8 @@ services:
         VITE_AUTH_BASE_URL: https://auth.haezean.com/api/v1
         VITE_GAME_API_URL: https://game.haezean.com
         VITE_STOCK_API_URL: https://api.haezean.com/graphql
+        # 개발 서버 테스트용 게스트 로그인 노출 — product 도입 시 "false"
+        VITE_ENABLE_GUEST_LOGIN: "true"
     container_name: stock_web_client
     ports:
       - "3000:3000"

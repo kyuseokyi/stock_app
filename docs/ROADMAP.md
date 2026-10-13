@@ -88,7 +88,8 @@
 ### Phase 3 — web_client 확장
 - [x] 토스 디자인 + 2단 네비 + 게임 스켈레톤 (위 완료 섹션 참조)
 - [ ] 종목 상세/차트 화면 (어드민 차트+드로잉 컴포넌트 재사용)
-- [ ] 소셜 로그인(카카오/구글) 실연동 → 임시 로그인 대체 *(User 모델 provider/provider_id/social_token 필드는 준비됨, 엔드포인트·프론트 미구현)*
+- [x] 간편 로그인(카카오·네이버) — auth 백엔드 콜백 + 일회용 교환 코드, web 버튼·`/auth/complete`, 모바일 인앱 브라우저 세션(dev 스킴 `stockapp-dev`), 게스트 로그인은 개발용 플래그(2026-10-13). 실 공급자 키 발급 후 수동 확인 필요(네이버 검수 전 테스트 계정)
+- [ ] 애플 로그인(iOS 출시 직전) · 게스트→소셜 계정 이관 · 회원 탈퇴
 
 ### Phase 4 — 모바일 앱 (Expo) *(토스 토대·네비 완료)*
 - [x] 앱 셋업 — Expo SDK 57/RN 0.86, **Unistyles v3** 테마(상승=빨강/하락=파랑, adaptiveThemes), zustand. `app.config.js` dev/prod 앱이름·bundleId 분리, `eas.json` 프로필, `EXPO_PUBLIC_*` env 분리
