@@ -84,6 +84,10 @@ export default function ChartQuizModal({ onClose }: { onClose: () => void }) {
       const quiz = await getRandomQuiz()
       if (!aliveRef.current) return
       const t = Date.now() // 응답 도착 시점부터 카운트(서버 served_at 보다 늦게 시작 — 유예 3초가 흡수)
+      if (quiz.chart_snapshot.length === 0) {
+        setPhase({ kind: 'error', message: '문제를 불러오지 못했어요. 다시 시도해 주세요', retryable: true })
+        return
+      }
       setNow(t)
       setPhase({ kind: 'playing', quiz, startedAt: t })
     } catch (err) {
@@ -105,6 +109,10 @@ export default function ChartQuizModal({ onClose }: { onClose: () => void }) {
       if (result.streak) setStreak(result.streak, gen)
       if (result.rewarded && gen === currentPrivateGen()) void refreshTrading() // 보상 → 헤더 자본금 반영
       if (aliveRef.current) setPhase({ kind: 'result', result, choice })
+      else if (result.rewarded && gen === currentPrivateGen()) {
+        // 제출 중 모달이 닫힌 경우 — 결과 화면이 없으므로 토스트로 보상 알림
+        pushToast({ kind: 'nudge', icon: '🎁', message: `퀴즈 정답! +${formatKrw(result.reward_cash)} 지급됐어요` })
+      }
     } catch (err) {
       handleError(err)
     } finally {

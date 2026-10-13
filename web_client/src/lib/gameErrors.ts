@@ -49,6 +49,8 @@ export function gameErrorMessage(err: unknown): string {
   if ((status === 403 || status === 404 || status === 409 || status === 422) && typeof detail === 'string') {
     return detail
   }
+  // 422 검증 오류(배열 등 비문자열 detail) — 모달 API 용 문구(주문은 orderErrorMessage 가 따로 처리)
+  if (status === 422) return '요청이 올바르지 않아요'
   return NETWORK
 }
 
