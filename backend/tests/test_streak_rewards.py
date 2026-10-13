@@ -253,3 +253,124 @@ async def test_claim_feature_disabled(session):
         await srs.claim(session, redis, user.id, 3, today=T)
     assert e.value.code == "FEATURE_DISABLED"
     assert await _claims(session, user.id) == []
+
+
+# ---------------------------------------------------------------- router
+from apps.trading_game.services import coach_service
+from tests.test_quest_quiz_streak import _seed_quizzes
+
+
+def _today() -> date:
+    return coach_service.kst_today()
+
+
+async def test_router_streak_my_includes_rewards(api, maker, fake_redis):
+    client, set_user = api
+    async with maker() as db:
+        user = await _seed_user(db)
+        await _seed_season(db)
+        await _seed_streak(db, user, 7, _today())
+    set_user(user)
+    r = await client.get("/api/game/streak/my")
+    assert r.status_code == 200
+    body = r.json()
+    # 기존 필드 불변 + rewards 추가
+    assert {k: body[k] for k in ("current_streak", "highest_streak", "last_activity_date", "enabled")} == {
+        "current_streak": 7, "highest_streak": 7, "last_activity_date": _today().isoformat(), "enabled": True,
+    }
+    assert body["rewards"] == [
+        {"milestone": 3, "amount": 100000, "claimed": False, "claimable": True},
+        {"milestone": 7, "amount": 300000, "claimed": False, "claimable": True},
+        {"milestone": 14, "amount": 700000, "claimed": False, "claimable": False},
+        {"milestone": 30, "amount": 2000000, "claimed": False, "claimable": False},
+    ]
+
+
+async def test_router_streak_my_rewards_empty_without_season(api, maker, fake_redis):
+    client, set_user = api
+    async with maker() as db:
+        user = await _seed_user(db)
+    set_user(user)
+    r = await client.get("/api/game/streak/my")
+    assert r.json() == {
+        "current_streak": 0, "highest_streak": 0, "last_activity_date": None, "enabled": True, "rewards": [],
+    }
+
+
+async def test_router_claim_flow(api, maker, fake_redis):
+    client, set_user = api
+    async with maker() as db:
+        user = await _seed_user(db)
+        await _seed_season(db)
+        await _seed_streak(db, user, 7, _today() - timedelta(days=1))
+    set_user(user)
+    r = await client.post("/api/game/streak/rewards/7/claim")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert Decimal(body["cash_balance"]) == Decimal("10300000")
+    assert body["streak"]["current_streak"] == 7 and body["streak"]["enabled"] is True
+    assert [(x["milestone"], x["claimed"], x["claimable"]) for x in body["streak"]["rewards"]] == [
+        (3, False, True), (7, True, False), (14, False, False), (30, False, False),
+    ]
+
+    r = await client.post("/api/game/streak/rewards/7/claim")
+    assert r.status_code == 409 and r.json()["detail"]["code"] == "ALREADY_CLAIMED"
+    r = await client.post("/api/game/streak/rewards/14/claim")
+    assert r.status_code == 409 and r.json()["detail"]["code"] == "NOT_REACHED"
+    r = await client.post("/api/game/streak/rewards/5/claim")
+    assert r.status_code == 404 and r.json()["detail"]["code"] == "UNKNOWN_MILESTONE"
+    assert (await client.post("/api/game/streak/rewards/abc/claim")).status_code == 422
+
+
+async def test_router_claim_no_season_and_disabled(api, maker, fake_redis):
+    client, set_user = api
+    async with maker() as db:
+        user = await _seed_user(db)
+        await _seed_streak(db, user, 3, _today())
+    set_user(user)
+    r = await client.post("/api/game/streak/rewards/3/claim")
+    assert r.status_code == 409 and r.json()["detail"]["code"] == "NO_ACTIVE_SEASON"
+
+    async with maker() as db:
+        await _seed_season(db)
+        await feature_flag_service.set_flag(db, fake_redis, "STREAK", False)
+    r = await client.post("/api/game/streak/rewards/3/claim")
+    assert r.status_code == 503 and r.json()["detail"]["code"] == "FEATURE_DISABLED"
+    r = await client.get("/api/game/streak/my")
+    assert r.json()["enabled"] is False and r.json()["rewards"] == []
+
+
+async def test_router_claim_price_unavailable(api, maker, fake_redis):
+    client, set_user = api
+    async with maker() as db:
+        user = await _seed_user(db)
+        season = await _seed_season(db)
+        acc = GameAccount(user_id=user.id, season_id=season.id)
+        db.add(acc)
+        await db.commit()
+        await order_engine.open_position(
+            db, account=acc, side="LONG", ratio=Decimal("0.5"), leverage=1,
+            entry_price=Decimal("100"), sl_pct=None, tp_pct=None,
+        )
+        await _seed_streak(db, user, 3, _today())
+    set_user(user)
+    r = await client.post("/api/game/streak/rewards/3/claim")  # fake_redis 에 최신가 없음
+    assert r.status_code == 409 and r.json()["detail"]["code"] == "PRICE_UNAVAILABLE"
+    async with maker() as db:
+        assert await _claims(db, user.id) == []
+
+
+async def test_router_quiz_submit_streak_includes_rewards(api, maker, fake_redis):
+    client, set_user = api
+    async with maker() as db:
+        user = await _seed_user(db)
+        await _seed_season(db)
+        await _seed_quizzes(db, 1)
+        await _seed_streak(db, user, 2, _today() - timedelta(days=1))
+    set_user(user)
+    quiz = (await client.get("/api/game/quiz/random")).json()
+    r = await client.post(f"/api/game/quiz/{quiz['id']}/submit", json={"choice": "UP"})
+    assert r.status_code == 200, r.text
+    streak = r.json()["streak"]
+    assert streak["current_streak"] == 3
+    assert streak["rewards"][0] == {"milestone": 3, "amount": 100000, "claimed": False, "claimable": True}

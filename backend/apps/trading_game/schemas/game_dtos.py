@@ -119,11 +119,27 @@ class FeatureFlagUpdate(BaseModel):
     enabled: bool
 
 
+class StreakRewardDTO(BaseModel):
+    """연속 출석 마일스톤 보상(백로그 ⑤-1). amount 는 코드 상수 정수(원)."""
+
+    milestone: int
+    amount: int
+    claimed: bool
+    claimable: bool
+
+
 class StreakResponse(BaseModel):
     current_streak: int
     highest_streak: int
     last_activity_date: date | None
     enabled: bool
+    # 플래그 꺼짐·활성 시즌 없음이면 빈 배열
+    rewards: list[StreakRewardDTO] = Field(default_factory=list)
+
+
+class StreakRewardClaimResponse(BaseModel):
+    streak: StreakResponse
+    cash_balance: Decimal  # 지급 후 잔고
 
 
 class QuestResponse(BaseModel):

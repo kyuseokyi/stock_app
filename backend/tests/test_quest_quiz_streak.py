@@ -450,13 +450,13 @@ async def test_router_streak_my(api, maker, fake_redis):
     set_user(user)
     r = await client.get("/api/game/streak/my")
     assert r.status_code == 200
-    assert r.json() == {"current_streak": 0, "highest_streak": 0, "last_activity_date": None, "enabled": True}
+    assert r.json() == {"current_streak": 0, "highest_streak": 0, "last_activity_date": None, "enabled": True, "rewards": []}
 
     async with maker() as db:
         await streak_service.touch(db, fake_redis, user.id, today=D)
         await feature_flag_service.set_flag(db, fake_redis, "STREAK", False)
     r = await client.get("/api/game/streak/my")
-    assert r.json() == {"current_streak": 1, "highest_streak": 1, "last_activity_date": "2026-10-13", "enabled": False}
+    assert r.json() == {"current_streak": 1, "highest_streak": 1, "last_activity_date": "2026-10-13", "enabled": False, "rewards": []}
 
 
 # ---------------------------------------------------------------- indicators / closes cache
