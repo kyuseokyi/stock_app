@@ -11,6 +11,7 @@
    - 넥스트레이드(2025-03 출범) 이후 **한투 MTS 차트는 UN 통합 시세**를 표시하므로 `J`로 수집하면 OHLC·거래량이 MTS와 달라진다(검증: 005930 2026-08-05 J C246000/V22.5M vs UN C242000/V43.3M=MTS 일치).
    - ⚠️ **단 NXT 미상장 종목은 UN 조회 시 빈 응답**(예: 293490 UN 0행 / J 13행). 따라서 **UN 먼저, 비면 J 폴백**해야 전종목이 빠짐없이 MTS와 일치한다. → `apps/collector/kis/fetcher.py`
    - 신규 시세 엔드포인트(현재가/스크리너/차트 등) 추가 시에도 이 UN→J 폴백 규칙 적용.
+   - 실시간(WS) 체결은 H0UNCNT0(통합), NXT 미상장 종목은 H0STCNT0 — `apps/collector/game_ws/tr_select.py`.
 2. **수정주가**: `FID_ORG_ADJ_PRC='0'`. 단 KIS 수정주가는 액면분할/병합만 반영, **배당 미반영**(수정=원주가 동일). 배당 수정주가는 별개 이슈.
 3. **전종목 마스터**: KIS 시세 API는 전종목 목록을 주지 않는다. KRX `.mst`(코드 마스터) 다운로드/파싱으로 확보하며, KIS가 매일 갱신하므로 **매 수집마다 재로드**해야 신규상장/상장폐지가 반영된다. `apps/collector/stock_master.py`(`STOCK_MASTER_SOURCE=mst|fallback|auto`).
 4. **멱등 적재**: ClickHouse `daily_prices`는 `ReplacingMergeTree(ingested_at)`. 조회는 항상 `FINAL`. 겹침 재수집해도 FINAL 기준 날짜당 1행.
