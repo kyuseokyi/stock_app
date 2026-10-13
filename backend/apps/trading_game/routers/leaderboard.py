@@ -10,9 +10,22 @@ from shared.database import get_db
 from shared.models import User
 from shared.game_models import HallOfFame
 from apps.trading_game import deps
-from apps.trading_game.services import ranking_service
+from apps.trading_game.schemas.game_dtos import SeasonOption
+from apps.trading_game.services import account_service, ranking_service
 
 router = APIRouter(prefix="/api/game", tags=["trading-game-ranking"])
+
+
+@router.get("/seasons/active", response_model=SeasonOption | None)
+async def active_season(db: AsyncSession = Depends(get_db)):
+    """현재 ACTIVE 시즌(공개). 없으면 null — 유저 웹/앱 게임 화면 헤더용."""
+    s = await account_service.get_active_season(db)
+    if s is None:
+        return None
+    return SeasonOption(
+        id=s.id, season_number=s.season_number, ticker=s.ticker, stock_name=s.stock_name,
+        status=s.status, start_at=s.start_at, end_at=s.end_at,
+    )
 
 
 @router.get("/seasons/{season_id}/leaderboard")
