@@ -308,3 +308,10 @@ class QuizGenerateRequest(BaseModel):
 class QuizGenerateResponse(BaseModel):
     created: int
     skipped: int  # (ticker, base_date) 중복으로 건너뜀
+
+
+class QuizCreateRequest(BaseModel):
+    """직접 출제 — 종목 일봉(ClickHouse)에서 기준일까지 60봉·이후 5거래일로 정답·등락률·해설 자동 계산."""
+
+    ticker: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=20)]
+    base_date: date

@@ -10,8 +10,8 @@ from shared.auth import require_admin
 from shared.database import get_db
 from shared.models import User
 from apps.trading_game.schemas.game_dtos import (
-    QuizAdminDetail, QuizAdminItem, QuizAdminListResponse, QuizAdminUpdate, QuizGenerateRequest,
-    QuizGenerateResponse,
+    QuizAdminDetail, QuizAdminItem, QuizAdminListResponse, QuizAdminUpdate, QuizCreateRequest,
+    QuizGenerateRequest, QuizGenerateResponse,
 )
 from apps.trading_game.services import quiz_admin_service
 from apps.trading_game.services.quiz_admin_service import QuizAdminError, QuizWithAttempts
@@ -61,6 +61,20 @@ async def list_quizzes(
     return QuizAdminListResponse(
         items=[QuizAdminItem(**_item_fields(r)) for r in rows], total=total, page=page, size=size,
     )
+
+
+@router.post("", response_model=QuizAdminDetail, status_code=status.HTTP_201_CREATED)
+async def create_quiz(
+    body: QuizCreateRequest,
+    admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    try:
+        row = await quiz_admin_service.create_quiz(db, body.ticker, body.base_date)
+    except QuizAdminError as e:
+        raise _http(e)
+    log.info("퀴즈 직접 출제 id=%s ticker=%s base=%s admin=%s", row.quiz.id, body.ticker, body.base_date, admin.id)
+    return _detail(row)
 
 
 @router.post("/generate", response_model=QuizGenerateResponse)

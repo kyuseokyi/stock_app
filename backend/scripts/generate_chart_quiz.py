@@ -77,19 +77,23 @@ def build_explanation(closes: list[float]) -> tuple[str, str]:
     return pattern, md
 
 
-def make_quiz(ticker: str, candles: list[dict], base_idx: int) -> dict | None:
-    """candles[base_idx] 를 기준일로 퀴즈 1개. 조건 미달이면 None."""
+def evaluate_quiz(ticker: str, candles: list[dict], base_idx: int) -> dict | str:
+    """candles[base_idx] 를 기준일로 퀴즈 1개(dict). 조건 미달이면 사유 코드(str):
+
+    INSUFFICIENT_DATA(기준일까지 WINDOW봉·이후 HORIZON봉 부족) | INVALID_SERIES(종가 0 이하·가격제한폭 초과)
+    | TOO_FLAT(|등락| < MIN_ABS_CHANGE%). 관리자 직접 출제가 사유를 그대로 응답한다.
+    """
     if base_idx < WINDOW - 1 or base_idx + HORIZON >= len(candles):
-        return None
+        return "INSUFFICIENT_DATA"
     window = candles[base_idx - WINDOW + 1:base_idx + 1]
     span = candles[base_idx - WINDOW + 1:base_idx + HORIZON + 1]
     if not _valid_series([float(c["close"]) for c in span]):
-        return None
+        return "INVALID_SERIES"
     base_close = float(candles[base_idx]["close"])
     future_close = float(candles[base_idx + HORIZON]["close"])
     change = round((future_close - base_close) / base_close * 100, 2)
     if abs(change) < MIN_ABS_CHANGE:
-        return None
+        return "TOO_FLAT"
     pattern, explanation = build_explanation([float(c["close"]) for c in window])
     return {
         "ticker": ticker,
@@ -100,6 +104,12 @@ def make_quiz(ticker: str, candles: list[dict], base_idx: int) -> dict | None:
         "actual_change": Decimal(f"{change:.2f}"),
         "explanation": explanation,
     }
+
+
+def make_quiz(ticker: str, candles: list[dict], base_idx: int) -> dict | None:
+    """candles[base_idx] 를 기준일로 퀴즈 1개. 조건 미달이면 None(사유는 evaluate_quiz)."""
+    result = evaluate_quiz(ticker, candles, base_idx)
+    return result if isinstance(result, dict) else None
 
 
 def _fetch_tickers() -> list[str]:

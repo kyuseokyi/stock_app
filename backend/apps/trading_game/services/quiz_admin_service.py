@@ -9,12 +9,25 @@ from __future__ import annotations
 import asyncio
 import random
 from dataclasses import dataclass
+from datetime import date, timedelta
 
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from shared.game_models import ChartQuiz, UserQuizAttempt
 from scripts import generate_chart_quiz as gen
+
+
+# 직접 출제 조회 범위 — 기준일 이전 60거래일(휴장 포함 ≈ 90일)·이후 5거래일(연휴 포함)을 넉넉히 덮는다
+DIRECT_LOOKBACK_DAYS = 150
+DIRECT_LOOKAHEAD_DAYS = 20
+
+_REASON_MESSAGES = {
+    "INSUFFICIENT_DATA": "기준일 일봉이 없거나 기준일까지 60거래일·이후 5거래일 데이터가 부족합니다.",
+    "INVALID_SERIES": "종가 0 이하 또는 하루 30% 초과 변동(미반영 분할 등)이 있어 출제할 수 없습니다.",
+    "TOO_FLAT": "이후 5거래일 등락률이 1% 미만이라 정답이 애매합니다.",
+}
 
 
 class QuizAdminError(Exception):
@@ -103,3 +116,35 @@ async def generate_quizzes(db: AsyncSession, count: int, *, rng: random.Random |
         fetch_tickers=gen._fetch_tickers, fetch_candles=gen._fetch_candles,
     )
     return await gen.insert_quizzes(db, quizzes)
+
+
+async def _exists(db: AsyncSession, ticker: str, base_date: date) -> bool:
+    found = await db.scalar(
+        select(ChartQuiz.id).where(ChartQuiz.ticker == ticker, ChartQuiz.base_date == base_date)
+    )
+    return found is not None
+
+
+async def create_quiz(db: AsyncSession, ticker: str, base_date: date) -> QuizWithAttempts:
+    """종목·기준일 직접 출제. 정답·등락률·해설은 생성기 규칙(evaluate_quiz)으로 자동 계산."""
+    duplicate = QuizAdminError("DUPLICATE", "같은 종목·기준일 퀴즈가 이미 있습니다.")
+    if await _exists(db, ticker, base_date):
+        raise duplicate
+    candles = await asyncio.to_thread(
+        gen._fetch_candles, ticker,
+        base_date - timedelta(days=DIRECT_LOOKBACK_DAYS), base_date + timedelta(days=DIRECT_LOOKAHEAD_DAYS),
+    )
+    base_iso = base_date.isoformat()
+    base_idx = next((i for i, c in enumerate(candles) if str(c["date"])[:10] == base_iso), None)
+    result = "INSUFFICIENT_DATA" if base_idx is None else gen.evaluate_quiz(ticker, candles, base_idx)
+    if isinstance(result, str):
+        raise QuizAdminError(result, _REASON_MESSAGES[result])
+    quiz = ChartQuiz(**result)
+    db.add(quiz)
+    try:
+        await db.commit()
+    except IntegrityError:  # 동시 생성(beat·다른 관리자)이 먼저 삽입
+        await db.rollback()
+        raise duplicate
+    await db.refresh(quiz)
+    return QuizWithAttempts(quiz, 0)

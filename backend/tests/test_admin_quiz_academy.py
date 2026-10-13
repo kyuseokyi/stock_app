@@ -400,3 +400,89 @@ async def test_router_admin_quiz_forbidden_for_player(api, maker):
     assert (await client.put("/api/game/admin/quizzes/1", json={"is_active": False})).status_code == 403
     assert (await client.delete("/api/game/admin/quizzes/1")).status_code == 403
     assert (await client.post("/api/game/admin/quizzes/generate", json={"count": 1})).status_code == 403
+
+
+# ---------------------------------------------------------------- 직접 출제
+@pytest.mark.parametrize("closes, idx, reason", [
+    ([100.0] * 64 + [103.0], 58, "INSUFFICIENT_DATA"),   # 60봉 미만
+    ([100.0] * 64 + [103.0], 60, "INSUFFICIENT_DATA"),   # 이후 5봉 부족
+    ([100.0] * 64 + [100.5], 59, "TOO_FLAT"),            # |+0.5%| < 1%
+    ([100.0] * 30 + [140.0] * 34 + [150.0], 59, "INVALID_SERIES"),  # 하루 +40%
+    ([100.0] * 30 + [0.0] + [100.0] * 33 + [103.0], 59, "INVALID_SERIES"),  # 종가 0
+])
+def test_evaluate_quiz_reason_codes(closes, idx, reason):
+    candles = _candles(closes)
+    assert gen.evaluate_quiz("005930", candles, idx) == reason
+    assert gen.make_quiz("005930", candles, idx) is None  # 기존 계약 유지
+
+
+def test_evaluate_quiz_success_same_as_make_quiz():
+    candles = _candles([100.0] * 64 + [103.0])
+    q = gen.evaluate_quiz("005930", candles, 59)
+    assert isinstance(q, dict) and q == gen.make_quiz("005930", candles, 59)
+    assert q["answer"] == "UP" and q["actual_change"] == Decimal("3.00")
+
+
+@pytest.fixture
+def ch_candles(monkeypatch):
+    """gen._fetch_candles 목 — state["candles"] 반환, 호출 인자 기록."""
+    state: dict = {"candles": [], "calls": []}
+
+    def fake(ticker, start=None, end=None):
+        state["calls"].append((ticker, start, end))
+        return state["candles"]
+
+    monkeypatch.setattr(gen, "_fetch_candles", fake)
+    return state
+
+
+async def test_router_admin_quiz_direct_create_success_then_edit(api, maker, ch_candles):
+    client = await _admin_client(api, maker)
+    ch_candles["candles"] = _candles([100.0] * 64 + [97.0] + [99.0] * 5)  # 기준 idx59 → 5봉 뒤 97 → -3%
+    base = ch_candles["candles"][59]["date"]
+    r = await client.post("/api/game/admin/quizzes", json={"ticker": " 005930 ", "base_date": base})
+    assert r.status_code == 201, r.text
+    d = r.json()
+    assert d["ticker"] == "005930" and d["base_date"] == base and d["answer"] == "DOWN"
+    assert Decimal(d["actual_change"]) == Decimal("-3.00") and len(d["chart_snapshot"]) == 60
+    assert d["chart_snapshot"][-1]["date"] == base and d["is_active"] is True and d["explanation"]
+    ticker, start, end = ch_candles["calls"][0]
+    assert ticker == "005930" and start < date.fromisoformat(base) < end
+
+    r = await client.put(f"/api/game/admin/quizzes/{d['id']}", json={"explanation": "직접 쓴 해설"})
+    assert r.status_code == 200 and r.json()["explanation"] == "직접 쓴 해설"
+
+    r = await client.post("/api/game/admin/quizzes", json={"ticker": "005930", "base_date": base})
+    assert r.status_code == 409 and r.json()["detail"]["code"] == "DUPLICATE"
+    assert len(ch_candles["calls"]) == 1  # 중복은 CH 조회 전에 차단
+
+
+@pytest.mark.parametrize("closes, base_offset, reason", [
+    ([], 0, "INSUFFICIENT_DATA"),                                     # CH 데이터 없음(장애·미수집)
+    ([100.0] * 64 + [103.0], 100, "INSUFFICIENT_DATA"),              # 기준일이 거래일 아님/범위 밖
+    ([100.0] * 63, 59, "INSUFFICIENT_DATA"),                          # 이후 5거래일 부족
+    ([100.0] * 64 + [100.5], 59, "TOO_FLAT"),
+    ([100.0] * 30 + [140.0] * 34 + [150.0], 59, "INVALID_SERIES"),
+])
+async def test_router_admin_quiz_direct_create_reasons(api, maker, ch_candles, closes, base_offset, reason):
+    client = await _admin_client(api, maker)
+    ch_candles["candles"] = _candles(closes)
+    base = (date(2026, 1, 1) + timedelta(days=base_offset)).isoformat()
+    r = await client.post("/api/game/admin/quizzes", json={"ticker": "005930", "base_date": base})
+    assert r.status_code == 422 and r.json()["detail"]["code"] == reason, r.text
+    assert (await client.get("/api/game/admin/quizzes")).json()["total"] == 0
+
+
+async def test_router_admin_quiz_direct_create_validation_and_forbidden(api, maker, ch_candles):
+    client, set_user = api
+    async with maker() as db:
+        admin = await _seed_user(db, UserRole.ADMIN, "관리자")
+        player = await _seed_user(db, nickname="p")
+    set_user(admin)
+    for bad in ({"ticker": "", "base_date": "2026-01-01"}, {"ticker": "x" * 21, "base_date": "2026-01-01"},
+                {"ticker": "005930", "base_date": "nope"}, {"ticker": "005930"}):
+        assert (await client.post("/api/game/admin/quizzes", json=bad)).status_code == 422, bad
+    set_user(player)
+    r = await client.post("/api/game/admin/quizzes", json={"ticker": "005930", "base_date": "2026-01-01"})
+    assert r.status_code == 403
+    assert ch_candles["calls"] == []
