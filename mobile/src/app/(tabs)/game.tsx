@@ -1,18 +1,108 @@
-import { ScrollView, Text, View } from 'react-native';
+import { useRouter } from 'expo-router';
+import { useEffect, useState } from 'react';
+import { RefreshControl, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StyleSheet } from 'react-native-unistyles';
 
-import { Button, Card, Chip, ListState } from '@/ui';
+import { useAuthStore } from '@/features/auth/store';
+import { AcademySheet } from '@/features/game/components/academy-sheet';
+import { DailyChart } from '@/features/game/components/candle-chart';
+import { CoachBanner } from '@/features/game/components/coach-banner';
+import { GameHeader } from '@/features/game/components/game-header';
+import { GameToaster } from '@/features/game/components/game-toaster';
+import { LeaderboardSheet } from '@/features/game/components/leaderboard-sheet';
+import { OrderPanel } from '@/features/game/components/order-panel';
+import { PositionCard } from '@/features/game/components/position-card';
+import { QuestSheet } from '@/features/game/components/quest-sheet';
+import { QuizBanner } from '@/features/game/components/quiz-banner';
+import { QuizSheet } from '@/features/game/components/quiz-sheet';
+import { SentimentBar } from '@/features/game/components/sentiment-bar';
+import { isQuizPrimeTime } from '@/features/game/lib/quiz';
+import { useTradingGameStore } from '@/features/game/store';
+import type { Leverage, Ratio, Side } from '@/features/game/types';
+import { useGameSocket } from '@/features/game/use-game-socket';
+import { ListState } from '@/ui';
 
+const RANK_POLL_MS = 30_000;
+const PRIME_CHECK_MS = 60_000;
+
+type ActiveModal = 'ranking' | 'quest' | 'academy' | 'quiz' | null;
+type PrivateModal = Exclude<ActiveModal, 'ranking' | null>;
+
+// 실시간 트레이딩 게임 — 상태별 분기: 서버 미설정/시즌 없음 → 준비 중, 연결 실패 → 재시도, 정상 → 트레이딩 화면.
+// 시트(RN Modal)는 한 번에 하나(activeModal). 랭킹은 공개, 퀘스트·아카데미·퀴즈·주문은 로그인 필요(내정보 탭으로 이동).
 export default function GameScreen() {
   const insets = useSafeAreaInsets();
-  // 백엔드 미연동 — 시즌 없음 상태로 고정(스켈레톤)
-  const seasonReady: boolean = false;
+  const router = useRouter();
+  const token = useAuthStore((s) => s.token);
+  const userId = useAuthStore((s) => s.user?.id ?? null);
+  const loggedIn = token !== null;
 
-  if (!seasonReady) {
+  const status = useTradingGameStore((s) => s.status);
+  const season = useTradingGameStore((s) => s.season);
+  const account = useTradingGameStore((s) => s.account);
+  const position = useTradingGameStore((s) => s.position);
+  const myRank = useTradingGameStore((s) => s.myRank);
+  const coach = useTradingGameStore((s) => s.coach);
+  const academyUnlocked = useTradingGameStore((s) => s.academyUnlocked);
+  const streak = useTradingGameStore((s) => s.streak);
+  const quizDisabled = useTradingGameStore((s) => s.quizDisabled);
+  const lastPrice = useTradingGameStore((s) => s.lastPrice);
+  const sentiment = useTradingGameStore((s) => s.sentiment);
+  const submitting = useTradingGameStore((s) => s.submitting);
+  const closing = useTradingGameStore((s) => s.closing);
+  const loadSeason = useTradingGameStore((s) => s.loadSeason);
+  const loadPrivate = useTradingGameStore((s) => s.loadPrivate);
+  const resetPrivate = useTradingGameStore((s) => s.resetPrivate);
+  const refreshRank = useTradingGameStore((s) => s.refreshRank);
+  const placeOrder = useTradingGameStore((s) => s.placeOrder);
+  const closePosition = useTradingGameStore((s) => s.closePosition);
+  const pushToast = useTradingGameStore((s) => s.pushToast);
+
+  const [activeModal, setActiveModal] = useState<ActiveModal>(null);
+  const [primeTime, setPrimeTime] = useState(() => isQuizPrimeTime(new Date()));
+  const [refreshing, setRefreshing] = useState(false);
+  const ready = status === 'ready';
+
+  useEffect(() => {
+    void loadSeason();
+  }, [loadSeason]);
+
+  // 로그인 상태가 바뀌면 개인 데이터 로드/초기화
+  useEffect(() => {
+    if (!ready) return;
+    if (loggedIn) void loadPrivate();
+    else resetPrivate();
+  }, [ready, loggedIn, loadPrivate, resetPrivate]);
+
+  // 로그아웃 시 로그인 전용 시트 닫기(랭킹은 공개라 유지)
+  useEffect(() => {
+    if (!loggedIn) setActiveModal((m) => (m === 'ranking' ? m : null));
+  }, [loggedIn]);
+
+  // 보유 중 실시간 ROI 로 순위가 움직이므로 주기적으로 갱신
+  useEffect(() => {
+    if (!ready || !loggedIn) return;
+    const t = setInterval(() => void refreshRank(), RANK_POLL_MS);
+    return () => clearInterval(t);
+  }, [ready, loggedIn, refreshRank]);
+
+  // 장 마감 후/주말 퀴즈 배너 — 1분마다 재판정(화면을 켜 둔 채 15:30 을 넘기는 경우)
+  useEffect(() => {
+    const t = setInterval(() => setPrimeTime(isQuizPrimeTime(new Date())), PRIME_CHECK_MS);
+    return () => clearInterval(t);
+  }, []);
+
+  useGameSocket(token, ready, () =>
+    pushToast({ kind: 'error', icon: '🔑', message: '로그인이 만료되었어요. 다시 로그인해 주세요' }),
+  );
+
+  const header = <Text style={styles.screenTitle}>트레이딩 게임</Text>;
+
+  if (status === 'unavailable' || status === 'no-season') {
     return (
       <View style={[styles.flex, { paddingTop: insets.top }]}>
-        <Text style={styles.header}>트레이딩 게임</Text>
+        {header}
         <ListState
           mode="empty"
           emoji="🎮"
@@ -22,39 +112,123 @@ export default function GameScreen() {
       </View>
     );
   }
+  if (status === 'error') {
+    return (
+      <View style={[styles.flex, { paddingTop: insets.top }]}>
+        {header}
+        <ListState
+          mode="error"
+          title="게임 서버에 연결할 수 없어요"
+          hint="잠시 후 다시 시도해 주세요."
+          onRetry={() => void loadSeason()}
+        />
+      </View>
+    );
+  }
+  if (!ready || !season) {
+    return (
+      <View style={[styles.flex, { paddingTop: insets.top }]}>
+        {header}
+        <ListState mode="loading" />
+      </View>
+    );
+  }
 
-  // 아래는 추후 실시간 데이터로 교체될 주문 패널 미리보기(현재 도달 불가)
+  /** 비로그인 — 토스트로 안내하고 내정보 탭(게스트 로그인)으로 보낸다 */
+  const requireLogin = () => {
+    pushToast({ kind: 'info', icon: '🔑', message: '내정보 탭에서 로그인하고 시즌에 참여하세요' });
+    router.push('/(tabs)/profile');
+  };
+
+  const handleOrder = (side: Side, ratio: Ratio, leverage: Leverage) => {
+    if (!loggedIn) {
+      requireLogin();
+      return;
+    }
+    void placeOrder(side, ratio, leverage);
+  };
+
+  const openPrivate = (m: PrivateModal) => {
+    if (!loggedIn) {
+      requireLogin();
+      return;
+    }
+    setActiveModal(m);
+  };
+  const closeModal = () => setActiveModal(null);
+
+  // 당겨서 새로고침 — 시즌 + (로그인 시) 개인 데이터 재조회
+  const onRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await loadSeason();
+      if (loggedIn) await loadPrivate();
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
   return (
-    <ScrollView style={styles.flex} contentContainerStyle={{ paddingTop: insets.top + 16, padding: 16, gap: 12 }}>
-      <Text style={styles.header}>트레이딩 게임</Text>
-      <Card>
-        <Text style={styles.cardTitle}>주문 패널 (미리보기)</Text>
-        <View style={styles.chips}>
-          <Chip label="25%" onPress={() => {}} />
-          <Chip label="50%" onPress={() => {}} />
-          <Chip label="100%" selected onPress={() => {}} />
-        </View>
-        <View style={styles.chips}>
-          <Chip label="1x" selected onPress={() => {}} />
-          <Chip label="2x" onPress={() => {}} />
-          <Chip label="5x 🔒" onPress={() => {}} />
-        </View>
-        <Button label="🔴 BUY (상승 베팅)" onPress={() => {}} />
-        <Button label="🔵 SELL (하락 베팅)" variant="secondary" onPress={() => {}} />
-      </Card>
-    </ScrollView>
+    <View style={styles.flex}>
+      <ScrollView
+        style={styles.flex}
+        contentContainerStyle={[styles.content, { paddingTop: insets.top + 8 }]}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void onRefresh()} />}>
+        <Text style={[styles.screenTitle, styles.titleInScroll]}>트레이딩 게임</Text>
+        <GameHeader
+          season={season}
+          account={account}
+          myRank={myRank}
+          loggedIn={loggedIn}
+          streak={streak}
+          showQuiz={!quizDisabled}
+          onOpenRanking={() => setActiveModal('ranking')}
+          onOpenQuest={() => openPrivate('quest')}
+          onOpenQuiz={() => openPrivate('quiz')}
+        />
+        <CoachBanner coach={coach} />
+        {loggedIn ? (
+          <SentimentBar sentiment={sentiment} />
+        ) : (
+          <View style={styles.notice}>
+            <Text style={styles.noticeText}>로그인하면 실시간 시세와 주문이 열려요</Text>
+          </View>
+        )}
+        <DailyChart ticker={season.ticker} lastPrice={lastPrice} coach={coach} position={position} />
+        {position ? (
+          <PositionCard position={position} lastPrice={lastPrice} closing={closing} onClose={() => void closePosition()} />
+        ) : null}
+        {primeTime && !quizDisabled ? <QuizBanner onOpen={() => openPrivate('quiz')} /> : null}
+        <OrderPanel
+          hasPosition={position !== null}
+          academyUnlocked={academyUnlocked}
+          submitting={submitting}
+          onOrder={handleOrder}
+          onLockedLeverage={() => openPrivate('academy')}
+        />
+      </ScrollView>
+
+      {/* 시트가 열려 있으면 토스트는 시트 안(Sheet → GameToaster)에서 보인다 — 화면 오버레이는 시트에 가려지므로 숨김 */}
+      {activeModal === null ? <GameToaster /> : null}
+      {activeModal === 'ranking' ? <LeaderboardSheet seasonId={season.id} myUserId={userId} onClose={closeModal} /> : null}
+      {activeModal === 'quest' ? <QuestSheet onClose={closeModal} /> : null}
+      {activeModal === 'academy' ? <AcademySheet onClose={closeModal} /> : null}
+      {activeModal === 'quiz' ? <QuizSheet onClose={closeModal} /> : null}
+    </View>
   );
 }
 
 const styles = StyleSheet.create((theme) => ({
   flex: { flex: 1, backgroundColor: theme.colors.background },
-  header: {
+  content: { paddingHorizontal: theme.gap(2), paddingBottom: theme.gap(4), gap: theme.gap(1.5) },
+  screenTitle: {
     fontSize: 24,
     fontWeight: '700',
     color: theme.colors.text,
     paddingHorizontal: theme.gap(2.5),
     paddingTop: theme.gap(2),
   },
-  cardTitle: { fontSize: 16, fontWeight: '700', color: theme.colors.text, marginBottom: theme.gap(1) },
-  chips: { flexDirection: 'row', gap: theme.gap(1), marginBottom: theme.gap(1) },
+  titleInScroll: { paddingHorizontal: theme.gap(0.5), paddingTop: theme.gap(1), paddingBottom: theme.gap(0.5) },
+  notice: { backgroundColor: theme.colors.surface, borderRadius: theme.radius.card, padding: theme.gap(2) },
+  noticeText: { fontSize: 14, color: theme.colors.textSecondary },
 }));
