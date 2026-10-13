@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { type FormEvent, useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { createComment, getBlog, listComments } from '../api/blog'
 import { useBoardStore } from '../store/boards'
@@ -6,13 +6,16 @@ import { useAuthStore } from '../store/auth'
 import LoginModal from '../components/LoginModal'
 import Card from '../components/ui/Card'
 import Button from '../components/ui/Button'
+import type { AxiosError } from 'axios'
+import type { BlogOut, CommentOut } from '../types/api'
 
 export default function PostDetailPage() {
-  const { id } = useParams()
+  // posts/:id 라우트 전용 → id 는 항상 존재(타입상 string | undefined). `!` 는 타입 표기용.
+  const id = useParams().id!
   const boards = useBoardStore((s) => s.boards)
   const user = useAuthStore((s) => s.user)
-  const [post, setPost] = useState(null)
-  const [comments, setComments] = useState([])
+  const [post, setPost] = useState<BlogOut | null>(null)
+  const [comments, setComments] = useState<CommentOut[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [content, setContent] = useState('')
@@ -31,7 +34,7 @@ export default function PostDetailPage() {
       .finally(() => setLoading(false))
   }, [id])
 
-  const submitComment = async (e) => {
+  const submitComment = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     const text = content.trim()
     if (!text) return
@@ -42,9 +45,10 @@ export default function PostDetailPage() {
       setComments((prev) => [...prev, created])
       setContent('')
     } catch (err) {
-      if (err.response?.status === 401) {
+      const status = (err as AxiosError).response?.status
+      if (status === 401) {
         setCommentError('로그인이 만료되었습니다. 다시 로그인해 주세요.')
-      } else if (err.response?.status === 403) {
+      } else if (status === 403) {
         setCommentError('이 게시판은 댓글이 비활성화되어 있습니다.')
       } else {
         setCommentError('댓글 등록에 실패했습니다.')

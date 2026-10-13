@@ -2,11 +2,12 @@ import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { listBlogs } from '../api/blog'
 import { useBoardStore } from '../store/boards'
+import type { BlogListOut } from '../types/api'
 
 const PAGE_SIZE = 10
 
 // HTML 본문에서 태그를 제거해 미리보기 텍스트 생성
-const toPreview = (html, n = 100) => {
+const toPreview = (html: string, n = 100) => {
   const text = html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
   return text.length > n ? text.slice(0, n) + '…' : text
 }
@@ -14,7 +15,7 @@ const toPreview = (html, n = 100) => {
 export default function PostListPage() {
   const { boardId } = useParams()
   const boardName = useBoardStore((s) => s.boardName)
-  const [data, setData] = useState({ total: 0, items: [] })
+  const [data, setData] = useState<Pick<BlogListOut, 'total' | 'items'>>({ total: 0, items: [] })
   const [page, setPage] = useState(1)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
