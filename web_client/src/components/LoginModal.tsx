@@ -1,5 +1,9 @@
-import { type FormEvent, useState } from 'react'
+import { type FormEvent, useEffect, useState } from 'react'
+import { getSocialProviders, socialStartUrl } from '../api/auth'
+import { ENABLE_GUEST_LOGIN } from '../config'
+import { rememberLoginReturn } from '../lib/socialLogin'
 import { useAuthStore } from '../store/auth'
+import type { SocialProvider, SocialProviders } from '../types/api'
 
 interface LoginModalProps {
   open: boolean
@@ -7,14 +11,50 @@ interface LoginModalProps {
   onSuccess?: () => void
 }
 
-// 임시 로그인 모달 — 닉네임만 입력(카카오/구글 도입 전)
+type ProvidersState = { status: 'loading' } | { status: 'ready'; providers: SocialProviders } | { status: 'error' }
+
+const SOCIAL_BUTTONS: { provider: SocialProvider; label: string; className: string }[] = [
+  { provider: 'kakao', label: '카카오로 시작하기', className: 'bg-kakao text-black' },
+  { provider: 'naver', label: '네이버로 시작하기', className: 'bg-naver text-white' },
+]
+
+// 로그인 모달 — 카카오·네이버 간편 로그인 + (개발용) 닉네임 로그인
 export default function LoginModal({ open, onClose, onSuccess }: LoginModalProps) {
   const login = useAuthStore((s) => s.login)
   const [nickname, setNickname] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [providersState, setProvidersState] = useState<ProvidersState>({ status: 'loading' })
+
+  // 열릴 때마다 공급자 활성 여부 조회(키 미설정 공급자는 버튼 숨김)
+  useEffect(() => {
+    if (!open) return
+    let alive = true
+    setProvidersState({ status: 'loading' })
+    getSocialProviders()
+      .then((providers) => {
+        if (alive) setProvidersState({ status: 'ready', providers })
+      })
+      .catch(() => {
+        if (alive) setProvidersState({ status: 'error' })
+      })
+    return () => {
+      alive = false
+    }
+  }, [open])
 
   if (!open) return null
+
+  const visibleSocial =
+    providersState.status === 'ready'
+      ? SOCIAL_BUTTONS.filter((b) => providersState.providers[b.provider])
+      : []
+  const noOptions = providersState.status !== 'loading' && visibleSocial.length === 0 && !ENABLE_GUEST_LOGIN
+
+  const startSocial = (provider: SocialProvider) => {
+    rememberLoginReturn()
+    window.location.assign(socialStartUrl(provider))
+  }
 
   const submit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault()
@@ -52,27 +92,51 @@ export default function LoginModal({ open, onClose, onSuccess }: LoginModalProps
             ✕
           </button>
         </div>
-        <p className="mb-4 text-xs text-ink-muted">
-          닉네임을 입력하면 바로 시작합니다. (소셜 로그인은 준비 중)
-        </p>
-        <form onSubmit={submit}>
-          <input
-            autoFocus
-            value={nickname}
-            onChange={(e) => setNickname(e.target.value)}
-            maxLength={20}
-            placeholder="닉네임 (예: 주린이)"
-            className="w-full rounded-field border border-line px-3 py-2 text-sm focus:border-brand focus:outline-none"
-          />
-          {error && <p className="mt-2 text-sm text-up">{error}</p>}
-          <button
-            type="submit"
-            disabled={loading}
-            className="mt-4 w-full rounded-btn bg-brand px-4 py-2.5 text-sm font-semibold text-white hover:brightness-95 disabled:opacity-50"
-          >
-            {loading ? '로그인 중…' : '닉네임으로 시작'}
-          </button>
-        </form>
+        <p className="mb-4 text-xs text-ink-muted">간편 로그인으로 댓글·게임에 참여하세요.</p>
+
+        <div className="space-y-2">
+          {providersState.status === 'loading' && (
+            <p className="py-2 text-center text-sm text-ink-muted">불러오는 중…</p>
+          )}
+          {visibleSocial.map((b) => (
+            <button
+              key={b.provider}
+              type="button"
+              onClick={() => startSocial(b.provider)}
+              className={`h-11 w-full rounded-btn text-sm font-semibold transition hover:brightness-95 ${b.className}`}
+            >
+              {b.label}
+            </button>
+          ))}
+          {noOptions && (
+            <p className="py-2 text-center text-sm text-ink-muted">
+              {providersState.status === 'error'
+                ? '로그인 서버에 연결할 수 없어요. 잠시 후 다시 시도해 주세요.'
+                : '로그인을 준비하고 있어요.'}
+            </p>
+          )}
+        </div>
+
+        {ENABLE_GUEST_LOGIN && (
+          <form onSubmit={submit} className="mt-5 border-t border-line pt-4">
+            <p className="mb-2 text-xs text-ink-muted">개발용 닉네임 로그인</p>
+            <input
+              value={nickname}
+              onChange={(e) => setNickname(e.target.value)}
+              maxLength={20}
+              placeholder="닉네임 (예: 주린이)"
+              className="w-full rounded-field border border-line px-3 py-2 text-sm focus:border-brand focus:outline-none"
+            />
+            {error && <p className="mt-2 text-sm text-up">{error}</p>}
+            <button
+              type="submit"
+              disabled={loading}
+              className="mt-3 w-full rounded-btn bg-brand px-4 py-2.5 text-sm font-semibold text-white hover:brightness-95 disabled:opacity-50"
+            >
+              {loading ? '로그인 중…' : '닉네임으로 시작'}
+            </button>
+          </form>
+        )}
       </div>
     </div>
   )

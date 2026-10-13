@@ -1,6 +1,7 @@
 import { lazy, Suspense } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import Layout from './components/Layout'
+import AuthCompletePage from './pages/AuthCompletePage'
 import HomePage from './pages/HomePage'
 import PostListPage from './pages/PostListPage'
 import PostDetailPage from './pages/PostDetailPage'
@@ -19,6 +20,7 @@ export default function App() {
             <GamePage />
           </Suspense>
         } />
+        <Route path="auth/complete" element={<AuthCompletePage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>
