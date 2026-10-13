@@ -1,5 +1,14 @@
+import type { ReactNode } from 'react'
+
+interface EmptyStateProps {
+  emoji?: string
+  title: ReactNode
+  description?: ReactNode
+  action?: ReactNode
+}
+
 // 큰 이모지 + 제목 + 안내문(+선택 액션). 게임 스켈레톤·빈 목록 공용.
-export default function EmptyState({ emoji = '📭', title, description, action = null }) {
+export default function EmptyState({ emoji = '📭', title, description, action = null }: EmptyStateProps) {
   return (
     <div className="flex flex-col items-center justify-center py-16 text-center">
       <div className="text-5xl">{emoji}</div>

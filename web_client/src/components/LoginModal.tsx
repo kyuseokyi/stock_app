@@ -1,8 +1,14 @@
-import { useState } from 'react'
+import { type FormEvent, useState } from 'react'
 import { useAuthStore } from '../store/auth'
 
+interface LoginModalProps {
+  open: boolean
+  onClose: () => void
+  onSuccess?: () => void
+}
+
 // 임시 로그인 모달 — 닉네임만 입력(카카오/구글 도입 전)
-export default function LoginModal({ open, onClose, onSuccess }) {
+export default function LoginModal({ open, onClose, onSuccess }: LoginModalProps) {
   const login = useAuthStore((s) => s.login)
   const [nickname, setNickname] = useState('')
   const [loading, setLoading] = useState(false)
@@ -10,7 +16,7 @@ export default function LoginModal({ open, onClose, onSuccess }) {
 
   if (!open) return null
 
-  const submit = async (e) => {
+  const submit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     const nick = nickname.trim()
     if (!nick) {

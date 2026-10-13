@@ -7,7 +7,7 @@ import LoginModal from './LoginModal'
 import NotificationToaster from './NotificationToaster'
 
 // 1차 섹션(커뮤니티·게임) 탭 스타일
-const sectionClass = (active) =>
+const sectionClass = (active: boolean) =>
   `pb-1.5 text-base font-bold transition ${
     active ? 'border-b-2 border-brand text-brand' : 'text-ink-muted hover:text-ink'
   }`

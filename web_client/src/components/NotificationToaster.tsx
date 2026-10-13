@@ -1,18 +1,24 @@
 import { useEffect, useState } from 'react'
 import { API_BASE_URL } from '../config'
+import type { NewPostEvent } from '../types/api'
 
 const STREAM_URL = API_BASE_URL + '/notifications/stream'
 
+interface Toast {
+  id: string
+  text: string
+}
+
 // SSE(EventSource) 실시간 알림 → 우측 하단 토스트
 export default function NotificationToaster() {
-  const [toasts, setToasts] = useState([])
+  const [toasts, setToasts] = useState<Toast[]>([])
 
   useEffect(() => {
     const es = new EventSource(STREAM_URL)
-    const onNotification = (e) => {
-      let payload = {}
+    const onNotification = (e: MessageEvent<string>) => {
+      let payload: Partial<NewPostEvent> = {}
       try {
-        payload = JSON.parse(e.data)
+        payload = JSON.parse(e.data) as Partial<NewPostEvent>
       } catch {
         return
       }
