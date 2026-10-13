@@ -31,3 +31,16 @@ class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
     user: UserOut
+
+
+class SocialProvidersOut(BaseModel):
+    """간편 로그인 공급자 활성 여부(버튼 노출용)."""
+
+    kakao: bool
+    naver: bool
+
+
+class SocialExchangeRequest(BaseModel):
+    """콜백이 복귀 주소에 실어 준 일회용 교환 코드."""
+
+    code: str = Field(..., min_length=1, max_length=200)
