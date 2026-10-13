@@ -12,7 +12,7 @@ import { Sheet } from './sheet';
 
 type Load<T> = { kind: 'loading' } | { kind: 'error'; message: string } | { kind: 'ok'; data: T };
 
-/** 아카데미 시트 — 리스크 관리 3문항. 모두 맞히면 5배 레버리지 해금(재응시 무제한). 로그인 전용 */
+/** 아카데미 시트 — 리스크 관리 문항(관리자 편집, 활성 문항 전부). 모두 맞히면 5배 레버리지 해금(재응시 무제한). 로그인 전용 */
 export function AcademySheet({ onClose }: { onClose: () => void }) {
   const setAcademyUnlocked = useTradingGameStore((s) => s.setAcademyUnlocked);
   const pushToast = useTradingGameStore((s) => s.pushToast);
@@ -81,7 +81,7 @@ export function AcademySheet({ onClose }: { onClose: () => void }) {
       ) : null}
       {state.kind === 'ok' && (!state.data.unlocked || result !== null) ? (
         <>
-          <Text style={styles.muted}>세 문제를 모두 맞히면 5배 레버리지가 열려요.</Text>
+          <Text style={styles.muted}>모든 문제를 맞히면 5배 레버리지가 열려요.</Text>
           {state.data.questions.map((q, qi) => {
             const r = result?.results.find((x) => x.id === q.id) ?? null;
             const locked = result !== null || submitting;
