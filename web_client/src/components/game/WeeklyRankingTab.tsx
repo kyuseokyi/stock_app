@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import Button from '../ui/Button'
 import { getWeeklyLeaderboard, getWeeklyMyRank, getWeeklyResults } from '../../api/game'
-import { formatKrw, formatPct, formatWeekRange, pnlClass } from '../../lib/format'
+import { formatPct, formatWeekRange, formatWon, pnlClass } from '../../lib/format'
 import { gameErrorMessage } from '../../lib/gameErrors'
 import type { WeeklyBoard, WeeklyMyRank, WeeklyResultWeek } from '../../types/game'
 
@@ -76,7 +76,7 @@ export default function WeeklyRankingTab({ seasonId, myUserId }: WeeklyRankingTa
                 <span className="w-6">{MEDAL[e.rank - 1] ?? e.rank}</span>
                 <span className="flex-1 truncate text-ink">{e.nickname ?? '익명'}</span>
                 <span className={`tabular-nums ${pnlClass(e.weekly_roi)}`}>{formatPct(e.weekly_roi)}</span>
-                {e.reward_amount > 0 && <span className="text-xs text-ink-muted">{formatKrw(e.reward_amount)}</span>}
+                {e.reward_amount > 0 && <span className="text-xs text-ink-muted">{formatWon(e.reward_amount)}</span>}
               </li>
             ))}
           </ol>

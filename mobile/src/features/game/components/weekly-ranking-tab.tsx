@@ -2,11 +2,11 @@ import { useEffect, useState } from 'react';
 import { ActivityIndicator, Text, View } from 'react-native';
 import { StyleSheet } from 'react-native-unistyles';
 
-import { AmountText, Button, formatWon } from '@/ui';
+import { AmountText, Button } from '@/ui';
 
 import { getWeeklyLeaderboard, getWeeklyMyRank, getWeeklyResults } from '../api';
 import { gameErrorMessage } from '../lib/errors';
-import { formatWeekRange, WEEKLY_RULE } from '../lib/weekly';
+import { formatRewardWon, formatWeekRange, WEEKLY_RULE } from '../lib/weekly';
 import type { WeeklyBoard, WeeklyMyRank, WeeklyResultWeek } from '../types';
 
 type Props = { seasonId: number; myUserId: number | null };
@@ -82,7 +82,7 @@ export function WeeklyRankingTab({ seasonId, myUserId }: Props) {
                 {e.nickname ?? '익명'}
               </Text>
               <AmountText value={e.weekly_roi} kind="pct" size={13} weight="500" />
-              {e.reward_amount > 0 ? <Text style={styles.reward}>{formatWon(e.reward_amount)}</Text> : null}
+              {e.reward_amount > 0 ? <Text style={styles.reward}>{formatRewardWon(e.reward_amount)}</Text> : null}
             </View>
           ))}
         </View>

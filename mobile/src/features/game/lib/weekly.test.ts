@@ -1,4 +1,4 @@
-import { formatKstShort, formatWeekRange, rewardToastMessage } from './weekly';
+import { formatKstShort, formatRewardWon, formatWeekRange, rewardToastMessage } from './weekly';
 
 describe('weekly', () => {
   it('KST 짧은 표기', () => {
@@ -9,6 +9,10 @@ describe('weekly', () => {
     expect(formatWeekRange('2026-10-12T09:00:00+09:00', '2026-10-19T09:00:00+09:00')).toBe(
       '10/12(월) 09:00 ~ 10/19(월) 09:00',
     );
+  });
+  it('보상 금액 원 단위 표기', () => {
+    expect(formatRewardWon(500000)).toBe('500,000원');
+    expect(formatRewardWon(300000.4)).toBe('300,000원');
   });
   it('보상 토스트 문구', () => {
     expect(rewardToastMessage({ id: 1, week_start: '2026-10-12', rank: 1, reward_amount: 500000 })).toBe(

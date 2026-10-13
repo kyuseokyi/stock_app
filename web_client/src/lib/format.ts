@@ -7,6 +7,9 @@ const KST_OFFSET_MS = 9 * 3_600_000
 /** 12450000.4 → '₩12,450,000' (원 단위 반올림) */
 export const formatKrw = (n: number): string => `₩${KRW.format(Math.round(n))}`
 
+/** 500000 → '500,000원' (주간 보상 표기 — 지난주 Top 3·토스트 공통) */
+export const formatWon = (n: number): string => `${KRW.format(Math.round(n))}원`
+
 /** 부호 포함 원화: +₩180,000 / -₩5,000 / ₩0 */
 export const formatSignedKrw = (n: number): string => {
   const r = Math.round(n)

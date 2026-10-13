@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import * as gameApi from '../api/game'
 import { gameClient } from '../api/gameClient'
+import { formatWon } from '../lib/format'
 import { orderErrorMessage } from '../lib/gameErrors'
 import type {
   Account, Coach, GameWsMessage, Leverage, MyRank, Nudge, OrderOptions, Position, Ratio, Season, Sentiment, Side,
@@ -195,7 +196,7 @@ export const useTradingGameStore = create<TradingGameState>()((set, get) => {
           get().pushToast({
             kind: 'info',
             icon: '🏅',
-            message: `지난주 주간 랭킹 ${r.rank}위! 보상 ${r.reward_amount.toLocaleString('ko-KR')}원이 지급됐어요`,
+            message: `지난주 주간 랭킹 ${r.rank}위! 보상 ${formatWon(r.reward_amount)}이 지급됐어요`,
           })
           gameApi.ackWeeklyReward(r.id).catch(() => undefined)
         }
