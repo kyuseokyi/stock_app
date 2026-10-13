@@ -114,3 +114,113 @@ async def test_weekly_result_roundtrip_and_unique(session):
                                     weekly_roi=Decimal("1"), reward_amount=Decimal("0")))
     with pytest.raises(IntegrityError):
         await session.commit()
+
+
+# ---------------------------------------------------------------- close_week
+from sqlalchemy import select  # noqa: E402
+
+from shared.game_models import GamePosition  # noqa: E402
+from apps.trading_game.services import weekly_service as ws_svc  # noqa: E402
+
+UTC = timezone.utc
+
+
+# SQLite 는 tzinfo 를 버리고 벽시계만 저장하고, 서비스는 naive 를 UTC 로 해석한다(wr.aware).
+# 그래서 테스트가 DB 에 넣는 시각은 반드시 UTC 로 바꿔 저장한다(KST 그대로면 재조회 시 9시간 밀림).
+async def _season_oct(db):
+    s = await _seed_season(db)
+    s.start_at, s.end_at = S_START.astimezone(UTC), S_END.astimezone(UTC)
+    await db.commit()
+    return s
+
+
+async def _open_pos(db, acc, created_at, status="CLOSED"):
+    p = GamePosition(account_id=acc.id, side="LONG", entry_price=Decimal("70000"),
+                     size_amount=Decimal("1000000"), leverage=1, status=status,
+                     created_at=created_at.astimezone(UTC))
+    db.add(p)
+    await db.commit()
+    return p
+
+
+async def _results(db):
+    rows = (await db.execute(select(WeeklyRankingResult).order_by(WeeklyRankingResult.rank))).scalars().all()
+    return [(r.rank, r.user_id, r.reward_amount) for r in rows]
+
+
+async def test_close_week_archives_top10_and_rewards_eligible(session):
+    r = _r()
+    s = await _season_oct(session)
+    users = [await _seed_user(session, nickname=f"u{i}") for i in range(12)]
+    accs = [await _seed_account(session, u, s) for u in users]
+    for i, u in enumerate(users):
+        await r.zadd(wr.week_key(s.id, W), {str(u.id): float(100 - i)})
+    await _open_pos(session, accs[0], k(13, 10))          # 1위: 이번 주 주문 → 보상
+    await _open_pos(session, accs[1], k(9, 10))           # 2위: 지난주 주문만 → 0
+    await _open_pos(session, accs[2], k(18, 10))          # 3위: 이번 주(마감 23시간 전) → 보상
+    out = await ws_svc.close_week(session, r, s, W, with_reward=True)
+    assert out == {"archived": 10, "rewarded": 2}
+    res = await _results(session)
+    assert len(res) == 10
+    assert res[0] == (1, users[0].id, Decimal("500000.00"))
+    assert res[1] == (2, users[1].id, Decimal("0.00"))
+    assert res[2] == (3, users[2].id, Decimal("200000.00"))
+    await session.refresh(accs[0])
+    assert accs[0].cash_balance == Decimal("10500000.00")
+
+
+async def test_close_week_reward_window_boundaries(session):
+    """주 창 [월 09:00, 다음 월 09:00) — 직전·끝 시각 주문은 대상 아님(UTC 왕복 후에도)."""
+    r = _r()
+    s = await _season_oct(session)
+    users = [await _seed_user(session, nickname=f"b{i}") for i in range(3)]
+    accs = [await _seed_account(session, u, s) for u in users]
+    for i, u in enumerate(users):
+        await r.zadd(wr.week_key(s.id, W), {str(u.id): float(10 - i)})
+    await _open_pos(session, accs[0], k(12, 9))           # 시작 정각 → 포함
+    await _open_pos(session, accs[1], k(12, 8, 59))       # 시작 1분 전 → 제외
+    await _open_pos(session, accs[2], k(19, 9))           # 끝 정각 → 제외
+    assert await ws_svc.close_week(session, r, s, W, with_reward=True) == {"archived": 3, "rewarded": 1}
+    assert [x[2] for x in await _results(session)] == [Decimal("500000.00"), Decimal("0.00"), Decimal("0.00")]
+
+
+async def test_close_week_idempotent_and_no_reward_mode(session):
+    r = _r()
+    s = await _season_oct(session)
+    u = await _seed_user(session)
+    acc = await _seed_account(session, u, s)
+    await _open_pos(session, acc, k(13, 10))
+    await r.zadd(wr.week_key(s.id, W), {str(u.id): 5.0})
+    assert await ws_svc.close_week(session, r, s, W, with_reward=False) == {"archived": 1, "rewarded": 0}
+    assert await ws_svc.close_week(session, r, s, W, with_reward=True) == {"archived": 0, "rewarded": 0}
+    assert await _results(session) == [(1, u.id, Decimal("0.00"))]
+
+
+async def test_close_week_empty_week(session):
+    s = await _season_oct(session)
+    assert await ws_svc.close_week(session, _r(), s, W, with_reward=True) == {"archived": 0, "rewarded": 0}
+
+
+async def test_close_previous_week_skips_week_before_season(session):
+    r = _r()
+    s = await _season_oct(session)
+    out = await ws_svc.close_previous_week(session, r, now=k(5, 8, 50))   # 지난주 = 9/28 주(시즌 10/1 시작 포함)
+    assert out == {"week_start": "2026-09-28", "archived": 0, "rewarded": 0}
+    s.start_at = k(6, 9).astimezone(UTC)                                   # 시즌이 그 주 이후 시작 → 건너뜀
+    await session.commit()
+    assert await ws_svc.close_previous_week(session, r, now=k(5, 8, 50)) is None
+
+
+async def test_settlement_archives_final_week_without_reward(session):
+    from apps.trading_game.services import settlement
+    r = _r()
+    s = await _seed_season(session)
+    s.start_at = datetime(2026, 9, 28, 9, 0, tzinfo=KST).astimezone(UTC)
+    s.end_at = datetime(2026, 10, 1, 9, 0, tzinfo=KST).astimezone(UTC)  # 이미 지난 종료(정산 대상)
+    await session.commit()
+    u = await _seed_user(session)
+    acc = await _seed_account(session, u, s)
+    await _open_pos(session, acc, datetime(2026, 9, 29, 10, 0, tzinfo=KST))
+    await r.zadd(wr.week_key(s.id, date(2026, 9, 28)), {str(u.id): 3.0})
+    await settlement.settle_due_season(session, r, lambda t: Decimal("70000"))
+    assert await _results(session) == [(1, u.id, Decimal("0.00"))]

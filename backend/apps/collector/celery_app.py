@@ -30,6 +30,7 @@ celery_app = Celery(
         "apps.collector.tasks.universe",
         "apps.collector.tasks.settle_season",
         "apps.collector.tasks.quiz",
+        "apps.collector.tasks.weekly_close",
     ],
 )
 
@@ -59,5 +60,10 @@ celery_app.conf.beat_schedule = {
     "generate-chart-quiz": {
         "task": "collector.generate_chart_quiz",
         "schedule": crontab(hour=21, minute=0),
+    },
+    # 주간 랭킹 마감 — 월요일 장 시작(09:00) 전. 지난주 Top 10 기록·1~3위 보상
+    "close-trading-week": {
+        "task": "close_trading_week",
+        "schedule": crontab(hour=8, minute=50, day_of_week=1),
     },
 }

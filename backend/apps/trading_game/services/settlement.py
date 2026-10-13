@@ -120,7 +120,13 @@ async def settle_due_season(db: AsyncSession, redis, close_price_provider) -> di
     await db.commit()
 
     if redis is not None:
+        from apps.trading_game.services import weekly_service
         from apps.trading_game.services.ranking_service import ranking_key
+        try:
+            await weekly_service.close_final_week(db, redis, season)  # 시즌 마지막 주 기록(보상 없음)
+        except Exception:  # noqa: BLE001 — 주간 기록 실패가 시즌 정산을 막지 않게
+            log.exception("시즌 마지막 주 주간 기록 실패 season=%s", season.id)
+            await db.rollback()
         await redis.delete(ranking_key(season.id))
 
     log.info(
