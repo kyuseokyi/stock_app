@@ -466,7 +466,8 @@ async def test_fake_mode_ignored_in_production(ctx):
 
 
 # ---------------------------------------------------------------- 회귀: 기존 엔드포인트
-async def test_guest_login_unchanged(ctx):
+async def test_guest_login_unchanged(ctx, monkeypatch):
+    monkeypatch.setenv("AUTH_GUEST_ENABLED", "true")  # 로컬 .env.development(APP_ENV)에 기대지 않게 명시
     r = await ctx.client.post("/api/v1/auth/guest", json={"nickname": "주린이"})
     assert r.status_code == 200
     assert r.json()["user"]["nickname"] == "주린이"

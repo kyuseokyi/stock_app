@@ -14,6 +14,7 @@ from shared.models import User, UserRole
 from shared.security import create_access_token, verify_password
 
 from .. import schemas
+from ..guest_gate import require_guest_enabled
 
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 
@@ -46,7 +47,11 @@ async def login(payload: schemas.LoginRequest, db: AsyncSession = Depends(get_db
     return schemas.TokenResponse(access_token=token, user=user)
 
 
-@router.post("/guest", response_model=schemas.TokenResponse)
+@router.post(
+    "/guest",
+    response_model=schemas.TokenResponse,
+    dependencies=[Depends(require_guest_enabled)],  # AUTH_GUEST_ENABLED 게이트(꺼짐 → 404)
+)
 async def guest_login(
     payload: schemas.GuestLoginRequest, db: AsyncSession = Depends(get_db)
 ):
