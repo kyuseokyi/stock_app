@@ -46,9 +46,9 @@ def pool_settings() -> tuple[int, int]:
 
 
 async def count_unseen(db: AsyncSession) -> int:
-    """chart_quiz_pool 중 user_quiz_attempts 에 한 번도 등장하지 않은 문제 수."""
+    """chart_quiz_pool 중 활성이고 user_quiz_attempts 에 한 번도 등장하지 않은 문제 수(비활성은 재고 아님)."""
     attempted = exists().where(UserQuizAttempt.quiz_id == ChartQuiz.id)
-    stmt = select(func.count(ChartQuiz.id)).where(~attempted)
+    stmt = select(func.count(ChartQuiz.id)).where(ChartQuiz.is_active.is_(True), ~attempted)
     return int((await db.execute(stmt)).scalar_one())
 
 

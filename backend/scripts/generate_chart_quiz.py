@@ -109,12 +109,13 @@ def _fetch_tickers() -> list[str]:
     return [r[0] for r in rows]
 
 
-def _fetch_candles(ticker: str) -> list[dict]:
+def _fetch_candles(ticker: str, start: date | None = None, end: date | None = None) -> list[dict]:
+    """일봉(오름차순). 기간 미지정이면 오늘 기준 최근 LOOKBACK_DAYS. CH 장애·미수집이면 []."""
     # 의도적 cross-app import(rsi_service 와 같은 선례), 지연 import
     from apps.stock_api.services import clickhouse_source
 
-    end = date.today()
-    start = end - timedelta(days=LOOKBACK_DAYS)
+    end = end or date.today()
+    start = start or end - timedelta(days=LOOKBACK_DAYS)
     candles = clickhouse_source.get_candles(ticker, start.isoformat(), end.isoformat()) or []
     return [
         {"date": str(c.date)[:10], "open": c.open, "high": c.high, "low": c.low, "close": c.close, "volume": c.volume}
@@ -139,14 +140,14 @@ async def insert_quizzes(db, quizzes: list[dict]) -> tuple[int, int]:
     return created, skipped
 
 
-async def generate(
+def collect_quizzes(
     count: int,
     *,
     rng: random.Random,
-    fetch_tickers: Callable[[], list[str]] = _fetch_tickers,
-    fetch_candles: Callable[[str], list[dict]] = _fetch_candles,
-    session_factory=AsyncSessionLocal,
-) -> tuple[int, int]:
+    fetch_tickers: Callable[[], list[str]],
+    fetch_candles: Callable[[str], list[dict]],
+) -> list[dict]:
+    """무작위 종목·기준일로 퀴즈 후보 최대 count 개(동기 — CH 조회 포함, 실행 내 중복 제거)."""
     tickers = fetch_tickers()
     cache: dict[str, list[dict]] = {}
     quizzes: list[dict] = []
@@ -170,6 +171,18 @@ async def generate(
         quizzes.append(q)
     if empty_tickers:
         print(f"[generate_chart_quiz] 캔들 없음(CH 장애/미수집 가능) 종목 수={len(empty_tickers)}")
+    return quizzes
+
+
+async def generate(
+    count: int,
+    *,
+    rng: random.Random,
+    fetch_tickers: Callable[[], list[str]] = _fetch_tickers,
+    fetch_candles: Callable[[str], list[dict]] = _fetch_candles,
+    session_factory=AsyncSessionLocal,
+) -> tuple[int, int]:
+    quizzes = collect_quizzes(count, rng=rng, fetch_tickers=fetch_tickers, fetch_candles=fetch_candles)
     async with session_factory() as db:
         return await insert_quizzes(db, quizzes)
 

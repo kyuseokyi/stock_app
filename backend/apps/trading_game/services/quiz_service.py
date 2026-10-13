@@ -72,7 +72,10 @@ async def serve_random(db: AsyncSession, user_id: int, *, now: datetime | None =
     for _ in range(_SERVE_RETRIES):
         quiz = (
             await db.execute(
-                select(ChartQuiz).where(ChartQuiz.id.not_in(attempted)).order_by(func.random()).limit(1)
+                select(ChartQuiz)
+                .where(ChartQuiz.is_active.is_(True), ChartQuiz.id.not_in(attempted))
+                .order_by(func.random())
+                .limit(1)
             )
         ).scalar_one_or_none()
         if quiz is None:

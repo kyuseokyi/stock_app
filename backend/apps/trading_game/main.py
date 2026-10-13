@@ -17,7 +17,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from shared.cors import build_allowed_origins
 from apps.trading_game import deps
 from apps.trading_game.routers import (
-    academy, academy_admin, coach, feature_flags, leaderboard, orders, quests, quiz, ws_gateway,
+    academy, academy_admin, coach, feature_flags, leaderboard, orders, quests, quiz, quiz_admin, ws_gateway,
 )
 from apps.trading_game.services.tick_listener import fanout_worker, run_listener
 
@@ -59,6 +59,7 @@ app.include_router(quiz.router)
 app.include_router(quests.router)
 app.include_router(academy.router)
 app.include_router(academy_admin.router)
+app.include_router(quiz_admin.router)
 
 
 @app.get("/health", tags=["health"])

@@ -262,3 +262,49 @@ class AcademyQuestionAdminDTO(BaseModel):
     is_active: bool
     created_at: datetime | None
     updated_at: datetime | None
+
+
+class QuizAdminItem(BaseModel):
+    id: int
+    ticker: str
+    base_date: date
+    pattern_type: str
+    answer: str
+    actual_change: Decimal
+    is_active: bool
+    attempt_count: int
+    created_at: datetime | None
+
+
+class QuizAdminListResponse(BaseModel):
+    items: list[QuizAdminItem]
+    total: int
+    page: int
+    size: int
+
+
+class QuizAdminDetail(QuizAdminItem):
+    """원본 chart_snapshot(날짜 포함, 기준일까지 60봉)·정답·해설."""
+
+    explanation: str
+    reward_cash: int
+    chart_snapshot: list[dict]
+
+
+class QuizAdminUpdate(BaseModel):
+    """수정 허용 필드만(차트·정답·등락률 불변). 그 외 필드는 422."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    pattern_type: PatternText | None = None
+    explanation: ExplanationText | None = None
+    is_active: bool | None = None
+
+
+class QuizGenerateRequest(BaseModel):
+    count: int = Field(ge=1, le=200)
+
+
+class QuizGenerateResponse(BaseModel):
+    created: int
+    skipped: int  # (ticker, base_date) 중복으로 건너뜀
