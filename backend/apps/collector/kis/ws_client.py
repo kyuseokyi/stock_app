@@ -1,7 +1,11 @@
 """KIS 실시간 WebSocket 클라이언트(async).
 
-approval_key 를 발급(캐싱)하고, H0STCNT0 를 구독해 수신 원문을 yield 한다.
+approval_key 를 발급(캐싱)하고, 체결 TR(기본 H0UNCNT0 통합 KRX+NXT)을 구독해 수신 원문을 yield 한다.
 끊기면 지수 백오프로 재연결·재구독한다. PINGPONG 프레임은 내부에서 pong 응답.
+
+구독 거부(rt_cd!=0) 처리:
+- 1회차는 approval_key 무효로 보고 캐시 무효화 후 재연결(기존 동작).
+- UN(H0UNCNT0) 구독이 새 키로도 연속 거부되면(NXT 미상장 등) KRX(H0STCNT0)로 전환한다.
 """
 from __future__ import annotations
 
@@ -20,6 +24,10 @@ log = logging.getLogger(__name__)
 
 _APPROVAL_TTL = 23 * 3600  # approval_key 보수적 TTL(초)
 _BACKOFF_MAX = 30.0
+
+TR_UNIFIED = "H0UNCNT0"  # 국내주식 실시간체결가(통합)
+TR_KRX = "H0STCNT0"      # 국내주식 실시간체결가(KRX)
+_UNIFIED_REJECT_LIMIT = 2  # UN 연속 거부 n회 → KRX 전환
 
 
 async def issue_approval_key(cfg: KISConfig, redis_url: str) -> str:
@@ -57,7 +65,7 @@ async def invalidate_approval_key(cfg: KISConfig, redis_url: str) -> None:
         await r.aclose()
 
 
-def _subscribe_frame(approval_key: str, ticker: str) -> str:
+def _subscribe_frame(approval_key: str, ticker: str, tr_id: str = TR_KRX) -> str:
     return json.dumps(
         {
             "header": {
@@ -66,15 +74,23 @@ def _subscribe_frame(approval_key: str, ticker: str) -> str:
                 "tr_type": "1",
                 "content-type": "utf-8",
             },
-            "body": {"input": {"tr_id": "H0STCNT0", "tr_key": ticker}},
+            "body": {"input": {"tr_id": tr_id, "tr_key": ticker}},
         }
     )
 
 
 class KISWebSocketClient:
-    def __init__(self, cfg: KISConfig, ticker: str, redis_url: str | None = None):
+    def __init__(
+        self,
+        cfg: KISConfig,
+        ticker: str,
+        redis_url: str | None = None,
+        tr_id: str = TR_UNIFIED,
+    ):
         self.cfg = cfg
         self.ticker = ticker
+        self.tr_id = tr_id
+        self._unified_rejects = 0
         self.redis_url = redis_url or os.getenv("REDIS_URL", "redis://localhost:6379/0")
 
     async def stream(self):
@@ -84,8 +100,8 @@ class KISWebSocketClient:
             try:
                 approval_key = await issue_approval_key(self.cfg, self.redis_url)
                 async with websockets.connect(self.cfg.ws_url, ping_interval=None) as ws:
-                    await ws.send(_subscribe_frame(approval_key, self.ticker))
-                    log.info("KIS WS 구독: %s", self.ticker)
+                    await ws.send(_subscribe_frame(approval_key, self.ticker, self.tr_id))
+                    log.info("KIS WS 구독: %s tr_id=%s", self.ticker, self.tr_id)
                     async for raw in ws:
                         if isinstance(raw, bytes):
                             raw = raw.decode("utf-8", "ignore")
@@ -99,16 +115,37 @@ class KISWebSocketClient:
                             except (ValueError, AttributeError):
                                 rt_cd = None
                             if rt_cd is not None and rt_cd != "0":
+                                if self._on_subscribe_rejected(raw):
+                                    # 방금 UN→KRX 전환: 키는 새 것이므로 무효화 없이 재구독
+                                    raise RuntimeError("KIS unified subscribe rejected; switching to KRX")
                                 # 구독 실패(예: approval_key 무효) → 캐시 무효화 후 재연결(신규 키)
                                 log.warning("KIS WS 구독 실패, approval_key 재발급: %s", raw[:200])
                                 await invalidate_approval_key(self.cfg, self.redis_url)
                                 raise RuntimeError("KIS subscribe failed; reissuing approval key")
                             if rt_cd == "0":
                                 backoff = 1.0  # 구독 성공 확인 → 백오프 리셋
+                                if self.tr_id == TR_UNIFIED:
+                                    self._unified_rejects = 0
                             continue
                         backoff = 1.0  # 첫 데이터 프레임(ack 미확인 대비)
+                        if self.tr_id == TR_UNIFIED:
+                            self._unified_rejects = 0
                         yield raw
             except Exception as e:  # noqa: BLE001 — 재연결 목적의 광범위 포획
                 log.warning("KIS WS 끊김/오류: %s (재연결 %.0fs)", e, backoff)
                 await asyncio.sleep(backoff)
                 backoff = min(backoff * 2, _BACKOFF_MAX)
+
+    def _on_subscribe_rejected(self, raw: str) -> bool:
+        """UN 구독 거부 횟수를 세고, 한도 도달 시 KRX(H0STCNT0)로 전환한다(전환 시 True)."""
+        if self.tr_id != TR_UNIFIED:
+            return False
+        self._unified_rejects += 1
+        if self._unified_rejects < _UNIFIED_REJECT_LIMIT:
+            return False
+        log.warning(
+            "KIS WS 통합(UN) 구독 %d회 연속 거부 → KRX(H0STCNT0) 폴백: ticker=%s %s",
+            self._unified_rejects, self.ticker, raw[:200],
+        )
+        self.tr_id = TR_KRX
+        return True

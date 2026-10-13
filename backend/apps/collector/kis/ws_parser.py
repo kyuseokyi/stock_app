@@ -1,12 +1,18 @@
-"""KIS 실시간 체결(H0STCNT0) 수신 문자열 파서.
+"""KIS 실시간 체결(H0UNCNT0 통합 · H0STCNT0 KRX · H0NXCNT0 NXT) 수신 문자열 파서.
+
+세 TR 은 공식 예제(koreainvestment/open-trading-api examples_llm/domestic_stock/
+ccnl_total·ccnl_krx·ccnl_nxt) 기준 필드 순서·개수(47)가 동일하다(21번 이름만 다름).
 
 데이터 프레임 형식: `{암호화flag}|{tr_id}|{건수}|{필드^필드^...}` (평문 flag='0').
-건수>1 이면 46필드 레코드가 연속되므로 레코드 단위로 분해한다.
+건수>1 이면 고정 길이(공식 47필드) 레코드가 연속되므로 레코드 단위로 분해한다.
 제어 프레임(PINGPONG·구독응답)은 JSON('{' 시작)이라 None 을 반환한다.
 """
 from __future__ import annotations
 
-# H0STCNT0 필드 인덱스(0-based). 공식 TR 출력 순서 기준.
+# 수용 TR: 통합(UN)·KRX·NXT 실시간 체결가 — 레이아웃 동일.
+TICK_TR_IDS = frozenset({"H0UNCNT0", "H0STCNT0", "H0NXCNT0"})
+
+# 체결 TR 공통 필드 인덱스(0-based). 공식 TR 출력 순서 기준.
 IDX_TICKER = 0
 IDX_TIME = 1
 IDX_PRICE = 2
@@ -36,7 +42,7 @@ def _record_to_tick(f: list[str]) -> dict:
 
 
 def parse_message(raw: str) -> list[dict] | None:
-    """H0STCNT0 데이터 프레임이면 tick dict 리스트, 그 외(제어/깨짐)는 None."""
+    """체결 TR(TICK_TR_IDS) 데이터 프레임이면 tick dict 리스트, 그 외(제어/깨짐)는 None."""
     if raw is None:
         return None
     raw = raw.strip()
@@ -46,7 +52,7 @@ def parse_message(raw: str) -> list[dict] | None:
     if len(parts) < 4:
         return None
     _flag, tr_id, count_str, payload = parts[0], parts[1], parts[2], parts[3]
-    if tr_id != "H0STCNT0":
+    if tr_id not in TICK_TR_IDS:
         return None
     try:
         count = int(count_str)

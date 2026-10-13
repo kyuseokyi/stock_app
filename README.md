@@ -68,7 +68,10 @@ uv run python -c "from apps.collector.tasks.universe import collect_all_daily; p
 # 트레이딩 게임 실시간 시세 수집 데몬 (Phase 2) — ACTIVE 시즌 종목 틱을 Redis stock:tick:{ticker} 로 발행
 # (Celery 아님. 단일 롱커넥션 상주 프로세스. ACTIVE 시즌이 있어야 함: python -m scripts.seed_trading_game)
 MOCK_TICK_STREAM=true uv run python -m apps.collector.run_game_ws   # Mock 모드(장외/키 없이 검증)
-# uv run python -m apps.collector.run_game_ws                       # 실 KIS WS(장중 09:00~15:30 + 키 필요)
+# uv run python -m apps.collector.run_game_ws                       # 실 KIS WS(09:00~15:30 + NXT 애프터마켓 16:00~20:00, 키 필요)
+# 체결 TR: 기본 H0UNCNT0(통합 KRX+NXT, 일봉 UN 종가와 일치). 구독 시 REST 일봉 UN 프로브가 빈 응답(NXT 미상장)이면
+#   H0STCNT0(KRX). 프로브 실패 시 UN 시도 → UN 구독 2회 연속 거부면 H0STCNT0 런타임 폴백.
+#   강제/롤백: GAME_WS_TR_ID=auto(기본)|H0UNCNT0|H0STCNT0|H0NXCNT0
 uv run python -m scripts.test_game_ws_sub                           # 다른 터미널: stock:tick:* 수신 확인
 ```
 

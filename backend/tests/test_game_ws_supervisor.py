@@ -76,3 +76,32 @@ async def test_restarts_consumer_that_crashed():
 
     await run_game_ws.supervise(get_ticker, start_consumer, stop, poll_sec=0.01)
     assert len(started) >= 2  # 죽은 구독을 다음 확인 때 다시 시작
+
+
+async def test_consume_real_uses_selected_tr(monkeypatch):
+    """실 KIS 경로: select_tr_id 결과 TR 로 WS 클라이언트를 만들고 파싱 틱을 발행한다."""
+    made = {}
+
+    async def fake_select(ticker):
+        return "H0STCNT0"
+
+    class FakeClient:
+        def __init__(self, cfg, ticker, redis_url, tr_id):
+            made.update(ticker=ticker, tr_id=tr_id)
+
+        async def stream(self):
+            rec = ["0"] * 47
+            rec[0], rec[1], rec[2], rec[3], rec[13] = "293490", "093000", "1000", "2", "5"
+            yield "0|H0STCNT0|001|" + "^".join(rec)
+
+    published = []
+
+    class Pub:
+        async def publish(self, tick):
+            published.append(tick)
+
+    monkeypatch.setattr(run_game_ws, "select_tr_id", fake_select)
+    monkeypatch.setattr(run_game_ws, "KISWebSocketClient", FakeClient)
+    await run_game_ws._consume(False, object(), "293490", 0, "redis://x", Pub())
+    assert made == {"ticker": "293490", "tr_id": "H0STCNT0"}
+    assert [(t["ticker"], t["price"]) for t in published] == [("293490", 1000)]

@@ -69,3 +69,44 @@ def test_garbage_returns_none():
     assert parse_message("abc") is None
     assert parse_message("0|H0STCNT0|bad|x^y") is None  # count 비정수
     assert parse_message("0|H0XXXXX0|001|" + "^".join(["0"] * 46)) is None  # 다른 TR
+
+
+# --- 통합(UN) H0UNCNT0 / NXT H0NXCNT0 ---------------------------------------
+# 공식 예제(koreainvestment/open-trading-api examples_llm/domestic_stock/ccnl_total·ccnl_nxt·ccnl_krx)
+# 기준 세 TR 모두 47필드·동일 순서(21번 이름만 CCLD_DVSN↔CNTG_CLS_CODE 차이). 파서 인덱스(0~5,13) 동일.
+OFFICIAL_FIELD_COUNT = 47
+
+
+def _record47(**over) -> list[str]:
+    f = _record(**over) + ["0"] * (OFFICIAL_FIELD_COUNT - FIELD_COUNT)
+    return f
+
+
+def _frame_tr(tr_id: str, records: list[list[str]]) -> str:
+    payload = "^".join(x for rec in records for x in rec)
+    return f"0|{tr_id}|{len(records):03d}|{payload}"
+
+
+def test_parse_unified_tr_h0uncnt0():
+    ticks = parse_message(_frame_tr("H0UNCNT0", [_record47(f2="242000", f13="43300000")]))
+    assert ticks == [
+        {
+            "ticker": "005930",
+            "time": "090005",
+            "price": 242000,
+            "change_price": 500,
+            "change_rate": 0.70,
+            "volume": 43300000,
+        }
+    ]
+
+
+def test_parse_unified_tr_multi_record_47_fields():
+    ticks = parse_message(_frame_tr("H0UNCNT0", [_record47(f2="1"), _record47(f2="2", f3="5")]))
+    assert [t["price"] for t in ticks] == [1, 2]
+    assert ticks[1]["change_price"] == -500
+
+
+def test_parse_nxt_tr_h0nxcnt0():
+    ticks = parse_message(_frame_tr("H0NXCNT0", [_record47(f1="173000")]))
+    assert ticks[0]["time"] == "173000"

@@ -6,6 +6,12 @@ ACTIVE 시즌 종목을 주기적으로(GAME_WS_SEASON_POLL_SEC, 기본 60초) �
 MOCK_TICK_STREAM=true 또는 KIS 키 미설정이면 Mock 생성기로, 아니면 실 KIS WS 로
 분기한다. 각 틱을 Redis stock:tick:{ticker} 로 발행한다.
 
+실 KIS WS 체결 TR(CLAUDE.md "KIS 데이터 수집 규칙" UN→J 폴백의 실시간판):
+- 기본 H0UNCNT0(통합 KRX+NXT) — NXT 애프터마켓(16:00~20:00)까지 틱 수신, 일봉 UN 종가와 일치.
+- 구독 시작 시 REST 일봉 UN 프로브가 빈 응답(NXT 미상장)이면 H0STCNT0(KRX).
+- 프로브 실패 시 UN 시도, UN 구독이 연속 거부되면 클라이언트가 H0STCNT0 로 런타임 폴백.
+- GAME_WS_TR_ID=auto(기본)|H0UNCNT0|H0STCNT0|H0NXCNT0 로 강제 지정 가능(롤백용).
+
 실행:
     uv run python -m apps.collector.run_game_ws
     MOCK_TICK_STREAM=true uv run python -m apps.collector.run_game_ws
@@ -26,6 +32,7 @@ from shared.game_models import GameSeason
 from shared.kis_config import get_kis_config
 from apps.collector.game_ws.mock_stream import mock_ticks
 from apps.collector.game_ws.publisher import TickPublisher
+from apps.collector.game_ws.tr_select import select_tr_id
 from apps.collector.kis.ws_client import KISWebSocketClient
 from apps.collector.kis.ws_parser import parse_message
 
@@ -72,7 +79,8 @@ async def _consume(use_mock, cfg, ticker, base_price, redis_url, publisher) -> N
         async for tick in mock_ticks(ticker, base_price):
             await publisher.publish(tick)
     else:
-        client = KISWebSocketClient(cfg, ticker, redis_url)
+        tr_id = await select_tr_id(ticker)
+        client = KISWebSocketClient(cfg, ticker, redis_url, tr_id=tr_id)
         async for raw in client.stream():
             parsed = parse_message(raw)
             if not parsed:
