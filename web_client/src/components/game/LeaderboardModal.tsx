@@ -21,12 +21,12 @@ interface LeaderboardModalProps {
 const winRate = (n: number): string => `${n.toFixed(1)}%`
 
 /** 명예의 전당 행(시즌 desc · 순위 asc 정렬 유지)을 시즌별로 묶는다 */
-function groupBySeason(rows: HallOfFameRow[]): { seasonId: number; rows: HallOfFameRow[] }[] {
-  const groups: { seasonId: number; rows: HallOfFameRow[] }[] = []
+function groupBySeason(rows: HallOfFameRow[]): { seasonId: number; seasonNumber: number; rows: HallOfFameRow[] }[] {
+  const groups: { seasonId: number; seasonNumber: number; rows: HallOfFameRow[] }[] = []
   for (const r of rows) {
     const last = groups[groups.length - 1]
     if (last && last.seasonId === r.season_id) last.rows.push(r)
-    else groups.push({ seasonId: r.season_id, rows: [r] })
+    else groups.push({ seasonId: r.season_id, seasonNumber: r.season_number, rows: [r] })
   }
   return groups
 }
@@ -122,8 +122,7 @@ export default function LeaderboardModal({ seasonId, myUserId, onClose }: Leader
           <div className="space-y-5">
             {groupBySeason(hof.data).map((g) => (
               <section key={g.seasonId}>
-                {/* API 가 시즌 번호 없이 season_id 만 준다 — id 를 시즌 표기로 사용 */}
-                <h3 className="mb-2 text-sm font-bold text-ink">시즌 {g.seasonId}</h3>
+                <h3 className="mb-2 text-sm font-bold text-ink">시즌 {g.seasonNumber}</h3>
                 <ol className="space-y-1">
                   {g.rows.map((r) => (
                     <li key={r.rank} className="flex items-center gap-3 rounded-field px-3 py-2 text-sm">

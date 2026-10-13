@@ -166,6 +166,7 @@ export interface LeaderboardRow {
 /** GET /api/game/hall-of-fame (이미 float, win_rate 0~100). 시즌 번호 없이 season_id 만 제공 */
 export interface HallOfFameRow {
   season_id: number;
+  season_number: number;
   rank: number;
   nickname: string;
   final_roi: number;

@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from shared.auth import get_current_user
 from shared.database import get_db
 from shared.models import User
-from shared.game_models import HallOfFame
+from shared.game_models import GameSeason, HallOfFame
 from apps.trading_game import deps
 from apps.trading_game.schemas.game_dtos import SeasonOption
 from apps.trading_game.services import account_service, ranking_service
@@ -44,14 +44,14 @@ async def my_rank(
 
 @router.get("/hall-of-fame")
 async def hall_of_fame(season_id: int | None = Query(default=None), db: AsyncSession = Depends(get_db)):
-    stmt = select(HallOfFame)
+    stmt = select(HallOfFame, GameSeason.season_number).join(GameSeason, GameSeason.id == HallOfFame.season_id)
     if season_id is not None:
         stmt = stmt.where(HallOfFame.season_id == season_id)
     stmt = stmt.order_by(HallOfFame.season_id.desc(), HallOfFame.rank.asc()).limit(300)
-    rows = (await db.execute(stmt)).scalars().all()
+    rows = (await db.execute(stmt)).all()
     return [
-        {"season_id": h.season_id, "rank": h.rank, "nickname": h.user_nickname,
+        {"season_id": h.season_id, "season_number": season_number, "rank": h.rank, "nickname": h.user_nickname,
          "final_roi": float(h.final_roi), "final_asset": float(h.final_asset),
          "win_rate": float(h.win_rate), "trading_mbti": h.trading_mbti}
-        for h in rows
+        for h, season_number in rows
     ]

@@ -83,3 +83,37 @@ async def test_active_season_returns_public_fields(client, session):
     assert body["status"] == "ACTIVE"
     assert body["start_at"].startswith("2026-10-01")
     assert body["end_at"].startswith("2026-11-01")
+
+
+async def _seed_hof(db, season, rank: int, nickname: str) -> None:
+    from decimal import Decimal
+
+    from shared.game_models import HallOfFame
+
+    db.add(HallOfFame(
+        season_id=season.id, rank=rank, user_nickname=nickname, final_roi=Decimal("12.5"),
+        final_asset=Decimal("11250000"), win_rate=Decimal("60"), trading_mbti="ENTJ",
+    ))
+    await db.commit()
+
+
+async def test_hall_of_fame_includes_season_number(client, session):
+    s1 = await _seed_season(session, status="CLOSED", number=7)
+    s2 = await _seed_season(session, status="CLOSED", number=8)
+    await _seed_hof(session, s1, 2, "b")
+    await _seed_hof(session, s1, 1, "a")
+    await _seed_hof(session, s2, 1, "c")
+
+    r = await client.get("/api/game/hall-of-fame")
+    assert r.status_code == 200
+    rows = r.json()
+    # 정렬 불변: season_id desc, rank asc
+    assert [(x["season_id"], x["rank"]) for x in rows] == [(s2.id, 1), (s1.id, 1), (s1.id, 2)]
+    # season_number 는 id 가 아니라 시즌 번호
+    assert [x["season_number"] for x in rows] == [8, 7, 7]
+    assert set(rows[0]) == {
+        "season_id", "season_number", "rank", "nickname", "final_roi", "final_asset", "win_rate", "trading_mbti",
+    }
+
+    r = await client.get("/api/game/hall-of-fame", params={"season_id": s1.id})
+    assert [(x["season_number"], x["nickname"]) for x in r.json()] == [(7, "a"), (7, "b")]

@@ -23,12 +23,12 @@ type Props = {
 const winRate = (n: number): string => `${n.toFixed(1)}%`;
 
 /** 명예의 전당 행(시즌 desc · 순위 asc 정렬 유지)을 시즌별로 묶는다 */
-function groupBySeason(rows: HallOfFameRow[]): { seasonId: number; rows: HallOfFameRow[] }[] {
-  const groups: { seasonId: number; rows: HallOfFameRow[] }[] = [];
+function groupBySeason(rows: HallOfFameRow[]): { seasonId: number; seasonNumber: number; rows: HallOfFameRow[] }[] {
+  const groups: { seasonId: number; seasonNumber: number; rows: HallOfFameRow[] }[] = [];
   for (const r of rows) {
     const last = groups[groups.length - 1];
     if (last && last.seasonId === r.season_id) last.rows.push(r);
-    else groups.push({ seasonId: r.season_id, rows: [r] });
+    else groups.push({ seasonId: r.season_id, seasonNumber: r.season_number, rows: [r] });
   }
   return groups;
 }
@@ -117,8 +117,7 @@ export function LeaderboardSheet({ seasonId, myUserId, onClose }: Props) {
           <View style={styles.groups}>
             {groupBySeason(hof.data).map((g) => (
               <View key={g.seasonId}>
-                {/* API 가 시즌 번호 없이 season_id 만 준다 — id 를 시즌 표기로 사용 */}
-                <Text style={styles.groupTitle}>시즌 {g.seasonId}</Text>
+                <Text style={styles.groupTitle}>시즌 {g.seasonNumber}</Text>
                 {g.rows.map((r) => (
                   <View key={r.rank} style={styles.row}>
                     <Text style={styles.rank}>{r.rank}</Text>
