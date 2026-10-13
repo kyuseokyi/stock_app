@@ -19,7 +19,7 @@ import { useGameWebSocket } from '../hooks/useGameWebSocket'
 import { isQuizPrimeTime } from '../lib/quiz'
 import { useAuthStore } from '../store/auth'
 import { useTradingGameStore } from '../store/tradingGame'
-import type { Leverage, Ratio, Side } from '../types/game'
+import type { Leverage, OrderOptions, Ratio, Side } from '../types/game'
 
 const RANK_POLL_MS = 30_000
 const PRIME_CHECK_MS = 60_000
@@ -96,12 +96,12 @@ export default function GamePage() {
   }
   if (!ready || !season) return <p className="py-16 text-center text-ink-muted">불러오는 중…</p>
 
-  const handleOrder = (side: Side, ratio: Ratio, leverage: Leverage) => {
+  const handleOrder = (side: Side, ratio: Ratio, leverage: Leverage, opts?: OrderOptions) => {
     if (!loggedIn) {
       setLoginOpen(true)
       return
     }
-    placeOrder(side, ratio, leverage)
+    placeOrder(side, ratio, leverage, opts)
   }
 
   const openPrivate = (m: PrivateModal) => {

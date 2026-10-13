@@ -103,7 +103,14 @@ export async function getAcademyUnlocked(): Promise<boolean> {
 }
 
 export async function placeOrder(body: OrderRequest): Promise<OrderResult> {
-  const { data } = await client().post<RawOrderResult>('/api/game/orders', body)
+  // 손절/익절은 값이 있을 때만 전송(null·생략 → 키 제외)
+  const { stop_loss_pct, take_profit_pct, ...base } = body
+  const payload = {
+    ...base,
+    ...(stop_loss_pct != null && { stop_loss_pct }),
+    ...(take_profit_pct != null && { take_profit_pct }),
+  }
+  const { data } = await client().post<RawOrderResult>('/api/game/orders', payload)
   return toOrderResult(data)
 }
 

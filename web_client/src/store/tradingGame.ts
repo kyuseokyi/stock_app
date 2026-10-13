@@ -3,7 +3,8 @@ import * as gameApi from '../api/game'
 import { gameClient } from '../api/gameClient'
 import { orderErrorMessage } from '../lib/gameErrors'
 import type {
-  Account, Coach, GameWsMessage, Leverage, MyRank, Nudge, Position, Ratio, Season, Sentiment, Side, Streak,
+  Account, Coach, GameWsMessage, Leverage, MyRank, Nudge, OrderOptions, Position, Ratio, Season, Sentiment, Side,
+  Streak,
 } from '../types/game'
 
 // 트레이딩 게임 전역 상태. 공개 데이터(시즌)와 로그인 데이터(계좌·포지션·순위·코치·해금·Streak·WS 실시간)를 분리한다.
@@ -43,7 +44,7 @@ interface TradingGameState extends PrivateState {
   refreshRank: () => Promise<void>
   refreshStreak: () => Promise<void>
   resetPrivate: () => void
-  placeOrder: (side: Side, ratio: Ratio, leverage: Leverage) => Promise<void>
+  placeOrder: (side: Side, ratio: Ratio, leverage: Leverage, opts?: OrderOptions) => Promise<void>
   closePosition: () => Promise<void>
   applyMessage: (msg: GameWsMessage) => void
   /** gen = 요청 시작 시점의 currentPrivateGen() — 그 사이 로그아웃했으면 무시 */
@@ -178,13 +179,17 @@ export const useTradingGameStore = create<TradingGameState>()((set, get) => {
       set({ ...PRIVATE_EMPTY })
     },
 
-    placeOrder: async (side, ratio, leverage) => {
+    placeOrder: async (side, ratio, leverage, opts) => {
       const { season, submitting } = get()
       if (!season || submitting) return
       const gen = privateGen
       set({ submitting: true })
       try {
-        const result = await gameApi.placeOrder({ season_id: season.id, side, ratio, leverage })
+        const result = await gameApi.placeOrder({
+          season_id: season.id, side, ratio, leverage,
+          stop_loss_pct: opts?.stopLossPct ?? null,
+          take_profit_pct: opts?.takeProfitPct ?? null,
+        })
         if (gen === privateGen) {
           set({ position: result.position })
           pushNudges(result.nudges)

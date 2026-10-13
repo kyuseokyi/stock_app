@@ -7,12 +7,14 @@ import { mergeTick } from '../../lib/candles'
 import { kstDateString } from '../../lib/format'
 import type { Coach, DailyCandle, Position } from '../../types/game'
 
-// 일봉(stock_api) + 오늘 캔들 실시간 병합(WS tick) + 지지/저항/진입가 라인.
+// 일봉(stock_api) + 오늘 캔들 실시간 병합(WS tick) + 지지/저항/진입가/손절/익절 라인.
 // 색: 상승=빨강/하락=파랑(국내 관례, Tailwind up/down 토큰과 동일).
 const UP = '#f04452'
 const DOWN = '#3182f6'
 const SUPPORT = '#8b5cf6'
 const RESIST = '#f59e0b'
+const STOP_LOSS = '#8b95a1' // 손절 — 회색(ink-muted)
+const TAKE_PROFIT = '#16a34a' // 익절 — 초록
 
 interface TradingChartProps {
   ticker: string
@@ -86,11 +88,13 @@ export default function TradingChart({ ticker, lastPrice, coach, position }: Tra
     }
   }, [lastPrice, loaded])
 
-  // 3) 가격선(지지/저항/진입가) — 값이 바뀔 때만 재생성(손익 틱마다 재생성하지 않도록 원시값 의존)
+  // 3) 가격선(지지/저항/진입가/손절/익절) — 값이 바뀔 때만 재생성(손익 틱마다 재생성하지 않도록 원시값 의존)
   const support = coach?.support_price ?? null
   const resistance = coach?.resistance_price ?? null
   const entry = position?.entry_price ?? null
   const side = position?.side ?? null
+  const stopLoss = position?.stop_loss_price ?? null
+  const takeProfit = position?.take_profit_price ?? null
   useEffect(() => {
     const series = seriesRef.current
     if (!series || !loaded) return
@@ -112,8 +116,18 @@ export default function TradingChart({ ticker, lastPrice, coach, position }: Tra
         axisLabelVisible: true, title: '진입',
       }))
     }
+    if (stopLoss !== null) {
+      lines.push(series.createPriceLine({
+        price: stopLoss, color: STOP_LOSS, lineWidth: 1, lineStyle: LineStyle.Dashed, axisLabelVisible: true, title: '손절',
+      }))
+    }
+    if (takeProfit !== null) {
+      lines.push(series.createPriceLine({
+        price: takeProfit, color: TAKE_PROFIT, lineWidth: 1, lineStyle: LineStyle.Dashed, axisLabelVisible: true, title: '익절',
+      }))
+    }
     linesRef.current = lines
-  }, [support, resistance, entry, side, loaded])
+  }, [support, resistance, entry, side, stopLoss, takeProfit, loaded])
 
   return (
     <div className="relative h-[260px] overflow-hidden rounded-card border border-line bg-white sm:h-[320px]">
