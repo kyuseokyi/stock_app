@@ -18,9 +18,9 @@ export const guestLogin = async (nickname: string): Promise<TokenResponse> => {
 // ---- 간편 로그인(카카오·네이버) ----
 // 흐름: 브라우저를 start URL 로 이동 → 공급자 → auth 콜백 → /auth/complete?code=… → exchange
 
-/** 브라우저 이동용 시작 URL(axios 아님 — 페이지 전체 이동) */
-export const socialStartUrl = (provider: SocialProvider): string =>
-  `${authURL.replace(/\/$/, '')}/auth/social/${provider}/start?client=web`
+/** 브라우저 이동용 시작 URL(axios 아님 — 페이지 전체 이동). cc = verifier 의 challenge */
+export const socialStartUrl = (provider: SocialProvider, cc: string): string =>
+  `${authURL.replace(/\/$/, '')}/auth/social/${provider}/start?client=web&cc=${encodeURIComponent(cc)}`
 
 /** 공급자별 활성 여부(키 미설정 공급자는 false → 버튼 숨김) */
 export const getSocialProviders = async (): Promise<SocialProviders> => {
@@ -28,8 +28,11 @@ export const getSocialProviders = async (): Promise<SocialProviders> => {
   return { kakao: data.kakao === true, naver: data.naver === true }
 }
 
-/** 일회용 교환 코드 → 서비스 JWT(게스트 로그인과 같은 TokenResponse) */
-export const exchangeSocialCode = async (code: string): Promise<TokenResponse> => {
-  const { data } = await authClient.post<TokenResponse>('/auth/social/exchange', { code })
+/** 일회용 교환 코드 + 시작 때 만든 verifier → 서비스 JWT(게스트 로그인과 같은 TokenResponse) */
+export const exchangeSocialCode = async (code: string, codeVerifier: string): Promise<TokenResponse> => {
+  const { data } = await authClient.post<TokenResponse>('/auth/social/exchange', {
+    code,
+    code_verifier: codeVerifier,
+  })
   return data
 }

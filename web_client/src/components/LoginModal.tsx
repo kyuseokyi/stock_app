@@ -1,7 +1,7 @@
 import { type FormEvent, useEffect, useState } from 'react'
 import { getSocialProviders, socialStartUrl } from '../api/auth'
 import { ENABLE_GUEST_LOGIN } from '../config'
-import { rememberLoginReturn } from '../lib/socialLogin'
+import { prepareSocialVerifier, rememberLoginReturn } from '../lib/socialLogin'
 import { useAuthStore } from '../store/auth'
 import type { SocialProvider, SocialProviders } from '../types/api'
 
@@ -24,6 +24,7 @@ export default function LoginModal({ open, onClose, onSuccess }: LoginModalProps
   const [nickname, setNickname] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [socialError, setSocialError] = useState('')
   const [providersState, setProvidersState] = useState<ProvidersState>({ status: 'loading' })
 
   // 열릴 때마다 공급자 활성 여부 조회(키 미설정 공급자는 버튼 숨김)
@@ -51,9 +52,18 @@ export default function LoginModal({ open, onClose, onSuccess }: LoginModalProps
       : []
   const noOptions = providersState.status !== 'loading' && visibleSocial.length === 0 && !ENABLE_GUEST_LOGIN
 
-  const startSocial = (provider: SocialProvider) => {
+  const startSocial = async (provider: SocialProvider) => {
+    setSocialError('')
+    let cc: string
+    try {
+      cc = await prepareSocialVerifier()
+    } catch {
+      // verifier 를 보관할 수 없으면(저장소 차단·비보안 컨텍스트) 완료 후 교환이 불가 — 이동하지 않는다
+      setSocialError('이 브라우저에서는 간편 로그인을 시작할 수 없어요. 설정을 확인해 주세요.')
+      return
+    }
     rememberLoginReturn()
-    window.location.assign(socialStartUrl(provider))
+    window.location.assign(socialStartUrl(provider, cc))
   }
 
   const submit = async (e: FormEvent<HTMLFormElement>) => {
@@ -102,12 +112,13 @@ export default function LoginModal({ open, onClose, onSuccess }: LoginModalProps
             <button
               key={b.provider}
               type="button"
-              onClick={() => startSocial(b.provider)}
+              onClick={() => void startSocial(b.provider)}
               className={`h-11 w-full rounded-btn text-sm font-semibold transition hover:brightness-95 ${b.className}`}
             >
               {b.label}
             </button>
           ))}
+          {socialError && <p className="text-center text-sm text-up">{socialError}</p>}
           {noOptions && (
             <p className="py-2 text-center text-sm text-ink-muted">
               {providersState.status === 'error'
