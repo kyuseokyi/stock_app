@@ -310,6 +310,28 @@ class ChartQuiz(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
+    # 비활성 문제는 출제·재고 계산에서 제외(백로그 ⑤-2). 이미 출제된 문제의 제출은 허용
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="true")
+
+
+class AcademyQuestion(Base):
+    """아카데미(5배 레버리지 해금) 문항 — 관리자 편집(백로그 ⑤-2). 활성 문항 전부 정답이면 해금."""
+
+    __tablename__ = "academy_questions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    question: Mapped[str] = mapped_column(Text, nullable=False)
+    choices: Mapped[list] = mapped_column(JSON, nullable=False)  # 문자열 배열(2~6개)
+    answer: Mapped[int] = mapped_column(Integer, nullable=False)  # 0-based
+    explanation: Mapped[str] = mapped_column(Text, nullable=False)
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="true")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
 
 
 class UserQuizAttempt(Base):
