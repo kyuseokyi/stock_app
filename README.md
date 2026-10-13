@@ -159,6 +159,7 @@ npm run build:android:prod # 상용(app-bundle) / build:ios:prod
 - **홈 추천 글(큐레이션)**: 관리자 게시글 목록에서 ⭐ 토글로 "홈 추천"을 켜면(`blog_posts.featured_at`), 모바일 홈 탭에 최근에 켠 순으로 노출된다. API: `GET /api/v1/blogs?featured=true`.
 - **블로그(웹 클라이언트 동일 기능)**: 블로그 탭은 게시판(보드) 선택 + 페이지네이션(`GET /boards`, `GET /blogs?board_id=&page=`), 카드 탭 시 **글 상세**(`app/blog/[id].tsx`)로 이동해 본문 HTML을 **WebView**로 렌더(차트 base64 이미지 포함). 상세에서 **댓글 읽기/쓰기**(`GET/POST /blogs/{id}/comments`, 게시판 `comments_enabled` 게이팅).
 - **게스트 로그인**: 내정보 탭에서 닉네임만으로 로그인(`POST /auth/guest`), 토큰은 `expo-secure-store`에 저장, `src/lib/api`가 Bearer 자동 부착 + 401 시 정리(`src/features/auth`, `src/lib/api/auth-token.ts`). (실시간 새글 알림은 웹 SSE와 달리 모바일은 FCM 경로라 후속 과제)
+- **게임 탭(트레이딩 게임 6c)**: web 6a+6b 와 동일 기능(헤더·Streak·코치 배너·심리 바·일봉+실시간 차트·포지션/주문·넛지 토스트 + 🏆 랭킹·🎯 퀘스트·🎓 아카데미(5x 해금)·🧩 야간 10초 차트 퀴즈 시트). trading_game(8003)·stock_api(8002, 일봉)·auth(8001) 필요. `EXPO_PUBLIC_GAME_API_URL`은 **선택** — 미설정 시 dev 는 `http://localhost:8003`, production 이면 "시즌을 준비하고 있어요". 차트는 신규 네이티브 의존성 없는 순수 View 렌더(`src/features/game/lib/chart-layout.ts`). 로그인은 내정보 탭(비로그인에서 주문·퀘스트·퀴즈·아카데미 → 내정보 탭 안내). 에뮬레이터는 `adb reverse tcp:8003 tcp:8003` 추가(8000/8001/8002/8082 와 함께).
 - **공통 UI**: 공유 컴포넌트는 `mobile/src/ui/`에 있으며 토스 디자인 언어(`docs/mobile_design_language.md`)를 따른다.
 - **테스트/검증**: 순수 로직 단위 테스트는 `cd mobile && npm test`(jest). 화면은 `npx tsc --noEmit`(+ 실기기 확인)로 검증한다. 이 프로젝트에는 eslint가 설정되어 있지 않아 모바일 lint 단계는 없다.
 - **검증(설정 레벨)**: `npx tsc --noEmit` · `npx expo-doctor` · `APP_ENV=production npx expo config --type public --json`
@@ -298,6 +299,7 @@ uv run pytest tests/test_universe_cooldown.py    # 특정 파일
 | `VITE_AUTH_BASE_URL` | web_client | `http://localhost:8001/api/v1` | 인증 API — 임시 로그인(닉네임) |
 | `VITE_GAME_API_URL` | web_client (선택) | `http://localhost:8003` | 트레이딩 게임 API·WS(미설정 배포 빌드 → 게임 탭 준비 중) |
 | `VITE_STOCK_API_URL` | web_client (선택) | `http://localhost:8002/graphql` | 게임 차트 일봉(GraphQL) |
+| `EXPO_PUBLIC_GAME_API_URL` | mobile (선택) | `http://localhost:8003` | 트레이딩 게임 API·WS(production 미설정 → 게임 탭 준비 중) |
 | `KIS_MODE` | collector | `vps` | KIS 접속 모드 — `vps`(모의투자) \| `prod`(실서버) |
 | `KIS_APP_KEY` / `KIS_APP_SECRET` | collector | (빈값) | KIS OpenAPI 앱키/시크릿 (비우면 Mock 수집 폴백) |
 | `STOCK_MASTER_SOURCE` | collector | `auto` | 전종목 마스터 소스 — `mst`(.mst 전종목) \| `fallback`(대형주 20) \| `auto`(mst→실패시 fallback) |
