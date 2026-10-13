@@ -28,3 +28,12 @@ function readEnv(name: EnvKey): string {
 export const API_BASE_URL = readEnv('VITE_API_BASE_URL')
 // auth 서비스(게스트 로그인/JWT)
 export const AUTH_BASE_URL = readEnv('VITE_AUTH_BASE_URL')
+
+// trading_game(게임 8003)·stock_api(일봉 차트 GraphQL 8002) — 선택 변수.
+//   dev(vite serve): 미설정 시 localhost
+//   배포 빌드: 미설정이면 undefined → 게임 화면이 "준비 중"/차트 미표시로 처리(빌드는 깨지 않음).
+//   운영에 trading_game 이 배포되기 전까지 vite.config.js REQUIRED 에 넣지 않는다(admin_web 과 동일 정책).
+export const GAME_API_URL: string | undefined =
+  import.meta.env.VITE_GAME_API_URL || (import.meta.env.DEV ? 'http://localhost:8003' : undefined)
+export const STOCK_API_URL: string | undefined =
+  import.meta.env.VITE_STOCK_API_URL || (import.meta.env.DEV ? 'http://localhost:8002/graphql' : undefined)
