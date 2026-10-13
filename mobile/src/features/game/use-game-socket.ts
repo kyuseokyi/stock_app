@@ -12,14 +12,14 @@ const PING_MS = 25_000;
 const AUTH_FAILED = 4401; // 서버 ws_gateway: 토큰 무효/비활성 유저
 
 /**
- * 게임 실시간 스트림(RN 내장 WebSocket). token 이 있고 enabled 이며 앱이 포그라운드(active)일 때만 연결한다.
+ * 게임 실시간 스트림(RN 내장 WebSocket). token 이 있고 enabled 이며 앱이 백그라운드가 아닐 때만(iOS inactive 는 연결 유지) 연결한다.
  * - 끊기면 지수 백오프(1s→30s)로 재연결, 4401 이면 재연결하지 않고 onAuthFailed 호출.
  * - 재연결 성공 시 놓친 자동청산 등을 반영하려고 계좌/포지션/순위를 다시 불러온다(web 과 동일).
- * - 앱이 백그라운드로 가면 연결을 닫고(effect 정리), 포그라운드 복귀 시 재연결 + 재조회.
+ * - 앱이 background 로 가면 연결을 닫고(effect 정리), 포그라운드 복귀 시 재연결 + 재조회.
  */
 export function useGameSocket(token: string | null, enabled: boolean, onAuthFailed: () => void): void {
   const onAuthFailedRef = useRef(onAuthFailed);
-  const [appActive, setAppActive] = useState(() => AppState.currentState === 'active');
+  const [appActive, setAppActive] = useState(() => AppState.currentState !== 'background');
 
   // 렌더 중 ref 대입은 React Compiler 규칙 위반 — effect 에서 최신 콜백으로 갱신
   useEffect(() => {
@@ -32,7 +32,7 @@ export function useGameSocket(token: string | null, enabled: boolean, onAuthFail
     const sub = AppState.addEventListener('change', (next) => {
       const resumed = prev !== 'active' && next === 'active';
       prev = next;
-      setAppActive(next === 'active');
+      setAppActive(next !== 'background');
       if (resumed && token && enabled) void useTradingGameStore.getState().refreshTrading();
     });
     return () => sub.remove();

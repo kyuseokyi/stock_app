@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { StyleSheet } from 'react-native-unistyles';
 
@@ -26,6 +26,11 @@ export function OrderPanel({ hasPosition, academyUnlocked, submitting, onOrder, 
   const [ratio, setRatio] = useState<Ratio>(0.25);
   const [leverage, setLeverage] = useState<Leverage>(1);
   const disabled = hasPosition || submitting;
+
+  // 해금이 풀리면(로그아웃·계정 전환) 선택돼 있던 5x 를 1x 로 되돌린다
+  useEffect(() => {
+    if (!academyUnlocked) setLeverage((l) => (l === 5 ? 1 : l));
+  }, [academyUnlocked]);
 
   return (
     <Card>

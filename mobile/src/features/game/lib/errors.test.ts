@@ -30,6 +30,9 @@ describe('gameErrorMessage', () => {
       '이미 보유 중인 포지션이 있습니다',
     );
   });
+  test('422 배열 detail(검증 오류) → 요청 문구 (web 동일)', () => {
+    expect(gameErrorMessage(api(422, { detail: [{ loc: ['body', 'x'], msg: 'bad' }] }))).toBe('요청이 올바르지 않아요');
+  });
   test('그 외 상태·본문 없음 → 네트워크 문구', () => {
     expect(gameErrorMessage(api(500, 'Internal Server Error'))).toBe('게임 서버에 연결할 수 없어요');
     expect(gameErrorMessage(api(400, { detail: '문자열' }))).toBe('게임 서버에 연결할 수 없어요');

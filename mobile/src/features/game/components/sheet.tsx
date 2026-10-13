@@ -39,7 +39,7 @@ export function Sheet({ title, onClose, children }: Props) {
         <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
           {children}
         </ScrollView>
-        <GameToaster insetTop={false} />
+        <GameToaster insetTop={Platform.OS !== 'ios'} />
       </View>
     </Modal>
   );

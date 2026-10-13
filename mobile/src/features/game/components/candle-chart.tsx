@@ -62,7 +62,8 @@ export function CandleChart({ candles, height, lines = [], showLabels = true }: 
                 {showLabels ? (
                   <Text
                     style={[styles.lineLabel, { top: y < LABEL_H + 2 ? y + 2 : y - LABEL_H - 2, color: l.color }]}
-                    numberOfLines={1}>
+                    numberOfLines={1}
+                    allowFontScaling={false}>
                     {l.label} {formatPrice(l.price)}
                   </Text>
                 ) : null}

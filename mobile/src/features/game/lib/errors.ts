@@ -49,6 +49,8 @@ export function gameErrorMessage(err: unknown): string {
   if ((status === 403 || status === 404 || status === 409 || status === 422) && typeof detail === 'string') {
     return detail;
   }
+  // web 동일 — 422 검증 오류(배열 등 비문자열 detail)
+  if (status === 422 && detail !== undefined) return '요청이 올바르지 않아요';
   return NETWORK;
 }
 
