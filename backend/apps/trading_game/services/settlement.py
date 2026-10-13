@@ -119,19 +119,28 @@ async def settle_due_season(db: AsyncSession, redis, close_price_provider) -> di
     season.status = "FINISHED"
     await db.commit()
 
+    # 아래 주간 기록이 실패·롤백되면 season 이 만료되므로 필요한 값은 미리 잡아 둔다.
+    season_id, season_number = season.id, season.season_number
     if redis is not None:
         from apps.trading_game.services import weekly_service
         from apps.trading_game.services.ranking_service import ranking_key
+        final_week = None
         try:
+            final_week = weekly_service.final_week_id(season)
             await weekly_service.close_final_week(db, redis, season)  # 시즌 마지막 주 기록(보상 없음)
         except Exception:  # noqa: BLE001 — 주간 기록 실패가 시즌 정산을 막지 않게
-            log.exception("시즌 마지막 주 주간 기록 실패 season=%s", season.id)
+            # 수동 복구: weekly_service.close_week(db, redis, season, week_start, with_reward=False)
+            # (주간 ZSET 은 TTL 21일 동안 남아 있다)
+            log.exception(
+                "시즌 마지막 주 주간 기록 실패 season=%s week_start=%s", season_id,
+                final_week.isoformat() if final_week else None,
+            )
             await db.rollback()
-        await redis.delete(ranking_key(season.id))
+        await redis.delete(ranking_key(season_id))
 
     log.info(
         "시즌 %s 정산 완료 — closed=%s archived=%s next=%s",
-        season.season_number, closed, archived, next_season_num,
+        season_number, closed, archived, next_season_num,
     )
-    return {"settled_season": season.season_number, "closed": closed,
+    return {"settled_season": season_number, "closed": closed,
             "archived": archived, "next_season": next_season_num}

@@ -6,6 +6,7 @@ from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from shared.models import User
@@ -13,6 +14,7 @@ from shared.game_models import GameAccount, GamePosition, GameSeason, WeeklyRank
 from apps.trading_game.services import account_service, reward_service, weekly_ranking as wr
 
 log = logging.getLogger("trading_game.weekly")
+_SKIP_MARGIN = 20  # 탈퇴 유저 건너뛰기 대비 추가로 읽는 수
 
 
 def _week_window(season: GameSeason, week_id: date) -> tuple[datetime, datetime]:
@@ -31,39 +33,54 @@ async def _opened_in_week(db: AsyncSession, account_id, start: datetime, end: da
 
 async def close_week(db: AsyncSession, redis, season: GameSeason, week_id: date, *, with_reward: bool) -> dict:
     """주간 ZSET Top 10 → weekly_ranking_results(멱등). with_reward 면 1~3위 중 그 주 주문 계좌에 지급."""
+    sid = season.id  # 롤백 시 ORM 객체가 만료되므로(async 지연 로드 불가) 미리 잡아 둔다
     exists = await db.scalar(
         select(func.count()).select_from(WeeklyRankingResult)
-        .where(WeeklyRankingResult.season_id == season.id, WeeklyRankingResult.week_start == week_id)
+        .where(WeeklyRankingResult.season_id == sid, WeeklyRankingResult.week_start == week_id)
     )
     if exists:
         return {"archived": 0, "rewarded": 0}
-    pairs = await redis.zrevrange(wr.week_key(season.id, week_id), 0, wr.ARCHIVE_TOP - 1, withscores=True)
+    # 탈퇴(users 에 없는) uid 는 건너뛰고 남은 유저로 순위를 이어 매긴다(FK 오류로 마감 전체 실패 방지).
+    # 건너뛴 만큼 Top 10 을 채우도록 여유분까지 읽는다.
+    raw = await redis.zrevrange(
+        wr.week_key(sid, week_id), 0, wr.ARCHIVE_TOP + _SKIP_MARGIN - 1, withscores=True
+    )
+    if not raw:
+        return {"archived": 0, "rewarded": 0}
+    uids = [int(u) for u, _ in raw]
+    nicks = dict((await db.execute(select(User.id, User.nickname).where(User.id.in_(uids)))).all())
+    pairs = [(int(u), score) for u, score in raw if int(u) in nicks][: wr.ARCHIVE_TOP]
+    if len(pairs) < min(len(raw), wr.ARCHIVE_TOP):
+        log.warning("주간 마감: 탈퇴 유저 제외 season=%s week=%s", sid, week_id)
     if not pairs:
         return {"archived": 0, "rewarded": 0}
-    uids = [int(u) for u, _ in pairs]
-    nicks = dict((await db.execute(select(User.id, User.nickname).where(User.id.in_(uids)))).all())
     start, end = _week_window(season, week_id)
     rewarded = 0
-    for rank, (uid_s, score) in enumerate(pairs, start=1):
-        uid = int(uid_s)
-        amount = Decimal("0")
-        if with_reward and rank in wr.REWARDS:
-            acc = await db.scalar(
-                select(GameAccount).where(GameAccount.season_id == season.id, GameAccount.user_id == uid)
-            )
-            if acc is not None and await _opened_in_week(db, acc.id, start, end):
-                try:
-                    await reward_service.grant_cash(db, acc, wr.REWARDS[rank], redis=redis)
-                    amount = wr.REWARDS[rank]
-                    rewarded += 1
-                except reward_service.RewardUnavailable:
-                    log.warning("주간 보상 보류(시세 없음) season=%s week=%s user=%s", season.id, week_id, uid)
-        db.add(WeeklyRankingResult(
-            season_id=season.id, week_start=week_id, rank=rank, user_id=uid, nickname=nicks.get(uid),
-            weekly_roi=Decimal(str(score)).quantize(Decimal("0.0001")), reward_amount=amount,
-        ))
-    await db.commit()
-    log.info("주간 마감 season=%s week=%s archived=%s rewarded=%s", season.id, week_id, len(pairs), rewarded)
+    try:
+        for rank, (uid, score) in enumerate(pairs, start=1):
+            amount = Decimal("0")
+            if with_reward and rank in wr.REWARDS:
+                acc = await db.scalar(
+                    select(GameAccount).where(GameAccount.season_id == sid, GameAccount.user_id == uid)
+                )
+                if acc is not None and await _opened_in_week(db, acc.id, start, end):
+                    try:
+                        await reward_service.grant_cash(db, acc, wr.REWARDS[rank], redis=redis)
+                        amount = wr.REWARDS[rank]
+                        rewarded += 1
+                    except reward_service.RewardUnavailable:
+                        log.warning("주간 보상 보류(시세 없음) season=%s week=%s user=%s", sid, week_id, uid)
+            db.add(WeeklyRankingResult(
+                season_id=sid, week_start=week_id, rank=rank, user_id=uid, nickname=nicks.get(uid),
+                weekly_roi=Decimal(str(score)).quantize(Decimal("0.0001")), reward_amount=amount,
+            ))
+        await db.commit()
+    except IntegrityError:
+        # 동시 마감(다른 워커가 먼저 기록) — 이번 트랜잭션(보상 포함)을 통째로 되돌린다.
+        await db.rollback()
+        log.warning("주간 마감 경합 — 이미 기록됨, 롤백 season=%s week=%s", sid, week_id)
+        return {"archived": 0, "rewarded": 0}
+    log.info("주간 마감 season=%s week=%s archived=%s rewarded=%s", sid, week_id, len(pairs), rewarded)
     return {"archived": len(pairs), "rewarded": rewarded}
 
 
@@ -84,11 +101,18 @@ async def close_previous_week(db: AsyncSession, redis, *, now: datetime | None =
 
 async def close_final_week(db: AsyncSession, redis, season: GameSeason) -> dict | None:
     """시즌 정산 직전: 시즌 마지막 주를 기록만(보상 없음)."""
+    week_id = final_week_id(season)
+    if week_id is None:
+        return None
+    return await close_week(db, redis, season, week_id, with_reward=False)
+
+
+def final_week_id(season: GameSeason) -> date | None:
+    """시즌 마지막 주의 week_id(종료 직전 시각이 속한 주). end_at 없으면 None."""
     if season.end_at is None:
         return None
     last_moment = wr.aware(season.end_at) - timedelta(seconds=1)
-    week_id, _, _ = wr.week_bounds(last_moment, season.start_at, season.end_at)
-    return await close_week(db, redis, season, week_id, with_reward=False)
+    return wr.week_bounds(last_moment, season.start_at, season.end_at)[0]
 
 
 # ---------------------------------------------------------------- 조회

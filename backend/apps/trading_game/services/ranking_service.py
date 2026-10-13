@@ -44,7 +44,8 @@ async def update_rank(
 
     주간 기준값은 그 주 첫 갱신 때 시즌 ZSET 의 '갱신 전' 점수(없으면 0)를 HSETNX 로 기록한다.
     HSETNX 를 시즌 ZADD 보다 먼저 해야 동시 갱신이 바꾼 점수가 기준값이 되지 않는다.
-    틱마다 불리는 경로라, 이미 기준값이 있으면(HSETNX=0) HGET 1회로 끝내고 EXPIRE 는 생략한다.
+    틱마다 불리는 경로라 pipeline 으로 왕복을 줄인다: 기준값이 이미 있으면(대부분) 왕복 2회,
+    이번 주 첫 갱신이면 HSETNX 1회가 더해진다. EXPIRE 는 첫 갱신 때만.
     """
     key = ranking_key(season_id)
     member = str(user_id)
@@ -54,14 +55,27 @@ async def update_rank(
         if ws <= now < we:
             bkey = weekly_ranking.base_key(season_id, week_id)
             wkey = weekly_ranking.week_key(season_id, week_id)
-            prev = await redis.zscore(key, member)
-            prev_s = str(float(prev) if prev is not None else 0.0)
-            is_new = bool(await redis.hsetnx(bkey, member, prev_s))
-            base = Decimal(prev_s) if is_new else Decimal(await redis.hget(bkey, member))
-            await redis.zadd(wkey, {member: float(weekly_ranking.weekly_roi(roi, base))})
-            if is_new:  # EXPIRE 는 키가 존재한 뒤(ZADD 후)여야 적용된다
-                await redis.expire(bkey, weekly_ranking.WEEK_TTL_SEC)
-                await redis.expire(wkey, weekly_ranking.WEEK_TTL_SEC)
+            # 왕복 1: 갱신 전 시즌 점수 + 이번 주 기준값(대부분 이미 있음 → HSETNX 불필요)
+            pipe = redis.pipeline(transaction=False)
+            pipe.zscore(key, member)
+            pipe.hget(bkey, member)
+            prev, base_s = await pipe.execute()
+            is_new = False
+            if base_s is None:
+                # 이번 주 첫 갱신: HSETNX 는 아래 시즌 ZADD 보다 먼저 실행된다(순서 보장).
+                prev_s = str(float(prev) if prev is not None else 0.0)
+                is_new = bool(await redis.hsetnx(bkey, member, prev_s))
+                base_s = prev_s if is_new else await redis.hget(bkey, member)  # 경합 시 승자 값
+            weekly = float(weekly_ranking.weekly_roi(roi, Decimal(base_s)))
+            # 왕복 2: 주간 ZADD + 시즌 ZADD (+ 첫 갱신이면 EXPIRE — 키가 생긴 뒤여야 적용)
+            pipe = redis.pipeline(transaction=False)
+            pipe.zadd(wkey, {member: weekly})
+            pipe.zadd(key, {member: float(roi)})
+            if is_new:
+                pipe.expire(bkey, weekly_ranking.WEEK_TTL_SEC)
+                pipe.expire(wkey, weekly_ranking.WEEK_TTL_SEC)
+            await pipe.execute()
+            return
     await redis.zadd(key, {member: float(roi)})
 
 

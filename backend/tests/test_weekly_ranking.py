@@ -299,3 +299,62 @@ async def test_close_previous_week_final_week_without_reward_when_settlement_del
     assert await _results(session) == [(1, u.id, Decimal("0.00"))]
     await session.refresh(acc)
     assert acc.cash_balance == Decimal("10000000.00")
+
+
+# ---------------------------------------------------------------- 리뷰 반영
+async def test_close_week_concurrent_close_integrity_error_rolls_back(session, monkeypatch):
+    """존재 확인 후 다른 워커가 먼저 기록(동시 마감) → IntegrityError → 롤백(보상 취소) 후 0건."""
+    r = _r()
+    s = await _season_oct(session)
+    u = await _seed_user(session)
+    acc = await _seed_account(session, u, s)
+    await _open_pos(session, acc, k(13, 10))
+    await r.zadd(wr.week_key(s.id, W), {str(u.id): 5.0})
+    session.add(WeeklyRankingResult(season_id=s.id, week_start=W, rank=1, user_id=u.id,
+                                    weekly_roi=Decimal("5"), reward_amount=Decimal("0")))
+    await session.commit()
+    uid = u.id  # 롤백이 ORM 객체를 만료시키므로 미리
+    real_scalar = session.scalar
+    calls = {"n": 0}
+
+    async def racy_scalar(*a, **kw):  # 첫 호출(존재 확인)만 '아직 없음'으로 — 경쟁 상황 재현
+        calls["n"] += 1
+        return 0 if calls["n"] == 1 else await real_scalar(*a, **kw)
+
+    monkeypatch.setattr(session, "scalar", racy_scalar)
+    assert await ws_svc.close_week(session, r, s, W, with_reward=True) == {"archived": 0, "rewarded": 0}
+    monkeypatch.undo()
+    await session.refresh(acc)
+    assert acc.cash_balance == Decimal("10000000.00")       # 보상 롤백
+    assert await _results(session) == [(1, uid, Decimal("0.00"))]
+
+
+async def test_close_week_skips_deleted_users_and_ranks_contiguously(session):
+    r = _r()
+    s = await _season_oct(session)
+    users = [await _seed_user(session, nickname=f"d{i}") for i in range(11)]
+    await r.zadd(wr.week_key(s.id, W), {"99999": 500.0})     # 탈퇴(users 에 없음) — 1위 점수
+    for i, u in enumerate(users):
+        await r.zadd(wr.week_key(s.id, W), {str(u.id): float(100 - i)})
+    assert await ws_svc.close_week(session, r, s, W, with_reward=False) == {"archived": 10, "rewarded": 0}
+    res = await _results(session)
+    assert [x[0] for x in res] == list(range(1, 11))
+    assert [x[1] for x in res] == [u.id for u in users[:10]]
+
+
+async def test_settlement_final_week_failure_logs_season_and_week(session, monkeypatch, caplog):
+    from apps.trading_game.services import settlement
+    r = _r()
+    s = await _seed_season(session)
+    s.start_at = datetime(2026, 9, 28, 9, 0, tzinfo=KST).astimezone(UTC)
+    s.end_at = datetime(2026, 10, 1, 9, 0, tzinfo=KST).astimezone(UTC)
+    await session.commit()
+
+    async def boom(*a, **kw):
+        raise RuntimeError("db down")
+
+    monkeypatch.setattr(ws_svc, "close_week", boom)
+    out = await settlement.settle_due_season(session, r, lambda t: Decimal("70000"))
+    assert out is not None and out["settled_season"] == 1   # 정산은 계속
+    msgs = [rec.getMessage() for rec in caplog.records if rec.name == "trading_game.settlement"]
+    assert any(f"season={s.id}" in m and "week_start=2026-09-28" in m for m in msgs)
