@@ -11,6 +11,8 @@ MOCK_TICK_STREAM=true 또는 KIS 키 미설정이면 Mock 생성기로, 아니�
 - 구독 시작 시 REST 일봉 UN 프로브가 빈 응답(NXT 미상장)이면 H0STCNT0(KRX).
 - 프로브 실패 시 UN 시도, UN 구독이 연속 거부되면 클라이언트가 H0STCNT0 로 런타임 폴백.
 - GAME_WS_TR_ID=auto(기본)|H0UNCNT0|H0STCNT0|H0NXCNT0 로 강제 지정 가능(롤백용).
+- UN 은 NXT 프리마켓·KRX 마감~애프터마켓 사이 체결도 보내므로, TRADING_WINDOWS(분 단위) 밖 틱은
+  발행하지 않는다(tick_listener 의 틱별 자동청산·랭킹이 거래창 밖에서 돌지 않게).
 
 실행:
     uv run python -m apps.collector.run_game_ws
@@ -23,7 +25,7 @@ import logging
 import os
 import signal
 from collections.abc import Awaitable, Callable
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, time, timedelta, timezone
 
 from sqlalchemy import select
 
@@ -35,6 +37,7 @@ from apps.collector.game_ws.publisher import TickPublisher
 from apps.collector.game_ws.tr_select import select_tr_id
 from apps.collector.kis.ws_client import KISWebSocketClient
 from apps.collector.kis.ws_parser import parse_message
+from apps.trading_game.services import market_clock
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("run_game_ws")
@@ -74,6 +77,11 @@ def _payload_from_parsed(tick: dict) -> dict:
     }
 
 
+def _in_window(now_kst: datetime, windows: list[tuple[time, time]]) -> bool:
+    """거래창 판정(분 단위 절삭 — 15:30:xx 종가 단일가·20:00:xx 체결 포함)."""
+    return market_clock.in_trading_window(now_kst.replace(second=0, microsecond=0), windows)
+
+
 async def _consume(use_mock, cfg, ticker, base_price, redis_url, publisher) -> None:
     if use_mock:
         async for tick in mock_ticks(ticker, base_price):
@@ -81,10 +89,13 @@ async def _consume(use_mock, cfg, ticker, base_price, redis_url, publisher) -> N
     else:
         tr_id = await select_tr_id(ticker)
         client = KISWebSocketClient(cfg, ticker, redis_url, tr_id=tr_id)
+        windows = market_clock.load_windows()
         async for raw in client.stream():
             parsed = parse_message(raw)
             if not parsed:
                 continue
+            if not _in_window(datetime.now(KST), windows):
+                continue  # 거래창 밖(NXT 프리마켓 등) 틱 미발행
             for t in parsed:
                 await publisher.publish(_payload_from_parsed(t))
 

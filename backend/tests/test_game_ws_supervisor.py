@@ -102,6 +102,50 @@ async def test_consume_real_uses_selected_tr(monkeypatch):
 
     monkeypatch.setattr(run_game_ws, "select_tr_id", fake_select)
     monkeypatch.setattr(run_game_ws, "KISWebSocketClient", FakeClient)
+    monkeypatch.setattr(run_game_ws, "_in_window", lambda now, w: True)
     await run_game_ws._consume(False, object(), "293490", 0, "redis://x", Pub())
     assert made == {"ticker": "293490", "tr_id": "H0STCNT0"}
     assert [(t["ticker"], t["price"]) for t in published] == [("293490", 1000)]
+
+
+def test_tick_window_gate_minute_granularity():
+    """UN 은 NXT 프리마켓·15:30~16:00 체결도 보내므로 TRADING_WINDOWS 밖 틱은 발행하지 않는다."""
+    from datetime import datetime
+
+    from apps.trading_game.services.market_clock import KST, parse_windows
+
+    w = parse_windows("09:00-15:30,16:00-20:00")
+    at = lambda h, m, s=0: datetime(2026, 10, 13, h, m, s, tzinfo=KST)  # noqa: E731
+    assert run_game_ws._in_window(at(8, 30), w) is False      # NXT 프리마켓
+    assert run_game_ws._in_window(at(12, 0), w) is True
+    assert run_game_ws._in_window(at(15, 30, 40), w) is True  # KRX 종가 단일가 체결(분 단위 포함)
+    assert run_game_ws._in_window(at(15, 45), w) is False
+    assert run_game_ws._in_window(at(17, 0), w) is True       # NXT 애프터마켓
+    assert run_game_ws._in_window(at(20, 0, 30), w) is True
+    assert run_game_ws._in_window(at(20, 1), w) is False
+
+
+async def test_consume_real_drops_out_of_window_ticks(monkeypatch):
+    async def fake_select(ticker):
+        return "H0UNCNT0"
+
+    class FakeClient:
+        def __init__(self, cfg, ticker, redis_url, tr_id):
+            pass
+
+        async def stream(self):
+            rec = ["0"] * 47
+            rec[0], rec[1], rec[2], rec[13] = "005930", "083000", "1000", "5"
+            yield "0|H0UNCNT0|001|" + "^".join(rec)
+
+    published = []
+
+    class Pub:
+        async def publish(self, tick):
+            published.append(tick)
+
+    monkeypatch.setattr(run_game_ws, "select_tr_id", fake_select)
+    monkeypatch.setattr(run_game_ws, "KISWebSocketClient", FakeClient)
+    monkeypatch.setattr(run_game_ws, "_in_window", lambda now, w: False)
+    await run_game_ws._consume(False, object(), "005930", 0, "redis://x", Pub())
+    assert published == []
