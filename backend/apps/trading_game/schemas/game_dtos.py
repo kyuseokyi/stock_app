@@ -3,9 +3,9 @@ from __future__ import annotations
 
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Literal
+from typing import Annotated, Literal
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
 
 
 # 주문 비중 선택지 — 칩(25/50/100%) + 드롭다운(10~90%). 그 외 값은 422.
@@ -226,3 +226,39 @@ class QuizSubmitResponse(BaseModel):
     ticker: str  # 제출 후 공개
     base_date: date
     streak: StreakResponse | None
+
+
+# ---------------------------------------------------------------- 관리자 퀴즈·아카데미 편집(백로그 ⑤-2)
+ChoiceText = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]
+QuestionText = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=500)]
+ExplanationText = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=1000)]
+PatternText = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=50)]
+
+
+class AcademyQuestionUpsert(BaseModel):
+    """관리자 아카데미 문항 생성·수정(PUT 전체 교체)."""
+
+    question: QuestionText
+    choices: list[ChoiceText] = Field(min_length=2, max_length=6)
+    answer: int = Field(ge=0)
+    explanation: ExplanationText
+    sort_order: int = Field(default=0, ge=0, le=10000)
+    is_active: bool = True
+
+    @model_validator(mode="after")
+    def _answer_in_range(self) -> "AcademyQuestionUpsert":
+        if self.answer >= len(self.choices):
+            raise ValueError("answer 는 선택지 범위(0-based) 안이어야 합니다.")
+        return self
+
+
+class AcademyQuestionAdminDTO(BaseModel):
+    id: int
+    question: str
+    choices: list[str]
+    answer: int
+    explanation: str
+    sort_order: int
+    is_active: bool
+    created_at: datetime | None
+    updated_at: datetime | None

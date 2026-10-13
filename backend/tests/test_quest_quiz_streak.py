@@ -708,8 +708,28 @@ async def test_router_quests(api, maker, fake_redis, closes_stub):
 # ---------------------------------------------------------------- academy + 5x lock
 from apps.trading_game.routers import orders as orders_router
 from apps.trading_game.services import academy_service
+from shared.game_models import AcademyQuestion
 
-ALL_CORRECT = {q.id: q.answer for q in academy_service.QUESTIONS}
+# 마이그레이션 b8c9d0e1f2a3 의 초기 3문항(정답 2·1·2) — sqlite create_all 에는 시드가 없으므로 테스트가 넣는다
+_ACADEMY_SEED = (
+    ("5배 레버리지 16% 하락?", ["16% 손실", "32% 손실", "강제 청산", "손실 없음"], 2),
+    ("손절선 이유?", ["수익", "손실 제한", "수수료", "거래 횟수"], 1),
+    ("자금 관리?", ["전 재산", "물타기", "일부만", "최대 레버리지"], 2),
+)
+
+
+async def _seed_academy(db) -> list[AcademyQuestion]:
+    rows = [
+        AcademyQuestion(question=q, choices=c, answer=a, explanation=f"해설{i}", sort_order=i + 1)
+        for i, (q, c, a) in enumerate(_ACADEMY_SEED)
+    ]
+    db.add_all(rows)
+    await db.commit()
+    return rows
+
+
+def _all_correct(rows: list[AcademyQuestion]) -> dict[int, int]:
+    return {q.id: q.answer for q in rows}
 
 
 @pytest.fixture
@@ -737,15 +757,17 @@ def _order(season_id, **over):
 
 async def test_academy_submit_unlock_and_retry(session):
     user = await _seed_user(session)
-    wrong = dict(ALL_CORRECT)
-    first = academy_service.QUESTIONS[0]
+    rows = await _seed_academy(session)
+    all_correct = _all_correct(rows)
+    wrong = dict(all_correct)
+    first = rows[0]
     wrong[first.id] = (first.answer + 1) % len(first.choices)
     results, unlocked = await academy_service.submit(session, user.id, wrong)
     assert unlocked is False
     assert [r["correct"] for r in results] == [False, True, True]
     assert await academy_service.is_unlocked(session, user.id) is False
 
-    results, unlocked = await academy_service.submit(session, user.id, ALL_CORRECT)
+    results, unlocked = await academy_service.submit(session, user.id, all_correct)
     assert unlocked is True and all(r["correct"] for r in results)
     row = await session.get(UserAcademy, user.id)
     assert row.unlocked_leverage_5x is True and row.passed_at is not None and row.attempts == 2
@@ -753,11 +775,13 @@ async def test_academy_submit_unlock_and_retry(session):
 
 async def test_academy_wrong_after_pass_keeps_unlock(session):
     user = await _seed_user(session)
-    _, unlocked = await academy_service.submit(session, user.id, ALL_CORRECT)
+    rows = await _seed_academy(session)
+    all_correct = _all_correct(rows)
+    _, unlocked = await academy_service.submit(session, user.id, all_correct)
     assert unlocked is True
     passed_at = (await session.get(UserAcademy, user.id)).passed_at
 
-    wrong = {q.id: (q.answer + 1) % len(q.choices) for q in academy_service.QUESTIONS}
+    wrong = {q.id: (q.answer + 1) % len(q.choices) for q in rows}
     _, unlocked = await academy_service.submit(session, user.id, wrong)
     assert unlocked is True
     await session.refresh(await session.get(UserAcademy, user.id))
@@ -767,7 +791,8 @@ async def test_academy_wrong_after_pass_keeps_unlock(session):
 
 async def test_academy_missing_answer_is_wrong(session):
     user = await _seed_user(session)
-    partial = {k: v for k, v in ALL_CORRECT.items() if k != academy_service.QUESTIONS[-1].id}
+    rows = await _seed_academy(session)
+    partial = {k: v for k, v in _all_correct(rows).items() if k != rows[-1].id}
     _, unlocked = await academy_service.submit(session, user.id, partial)
     assert unlocked is False
 
@@ -776,6 +801,7 @@ async def test_router_academy_quiz_hides_answers(api, maker):
     client, set_user = api
     async with maker() as db:
         set_user(await _seed_user(db))
+        all_correct = _all_correct(await _seed_academy(db))
     r = await client.get("/api/game/academy/quiz")
     assert r.status_code == 200
     data = r.json()
@@ -783,7 +809,7 @@ async def test_router_academy_quiz_hides_answers(api, maker):
     assert all(set(q) == {"id", "question", "choices"} for q in data["questions"])
 
     r = await client.post(
-        "/api/game/academy/submit", json={"answers": {str(k): v for k, v in ALL_CORRECT.items()}}
+        "/api/game/academy/submit", json={"answers": {str(k): v for k, v in all_correct.items()}}
     )
     assert r.status_code == 200 and r.json()["unlocked"] is True
     assert all("explanation" in x for x in r.json()["results"])
@@ -794,6 +820,7 @@ async def test_5x_locked_until_academy_passed(api, maker, order_env):
     async with maker() as db:
         season = await _seed_season(db)
         user = await _seed_user(db)
+        all_correct = _all_correct(await _seed_academy(db))
     set_user(user)
     r = await client.post("/api/game/orders", json=_order(season.id, leverage=5))
     assert r.status_code == 403 and r.json()["detail"]["code"] == "LEVERAGE_LOCKED"
@@ -803,7 +830,7 @@ async def test_5x_locked_until_academy_passed(api, maker, order_env):
     assert (await client.post(f"/api/game/positions/{r.json()['id']}/close")).status_code == 200
 
     async with maker() as db:
-        await academy_service.submit(db, user.id, ALL_CORRECT)
+        await academy_service.submit(db, user.id, all_correct)
     r = await client.post("/api/game/orders", json=_order(season.id, leverage=5))
     assert r.status_code == 201, r.text
 

@@ -1,7 +1,7 @@
 """아카데미(5배 레버리지 해금 퀴즈) REST (Phase 5b)."""
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from shared.auth import get_current_user
@@ -24,7 +24,7 @@ async def academy_quiz(
         unlocked=await academy_service.is_unlocked(db, user.id),
         questions=[
             AcademyQuestionDTO(id=q.id, question=q.question, choices=list(q.choices))
-            for q in academy_service.QUESTIONS
+            for q in await academy_service.list_active(db)
         ],
     )
 
@@ -35,5 +35,8 @@ async def academy_submit(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    results, unlocked = await academy_service.submit(db, user.id, body.answers)
+    try:
+        results, unlocked = await academy_service.submit(db, user.id, body.answers)
+    except academy_service.AcademyError as e:  # NO_QUESTIONS — 활성 문항 없음
+        raise HTTPException(status.HTTP_409_CONFLICT, detail={"code": e.code, "message": str(e)})
     return AcademySubmitResponse(unlocked=unlocked, results=[AcademyResultItem(**r) for r in results])
