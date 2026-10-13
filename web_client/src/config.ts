@@ -37,3 +37,9 @@ export const GAME_API_URL: string | undefined =
   import.meta.env.VITE_GAME_API_URL || (import.meta.env.DEV ? 'http://localhost:8003' : undefined)
 export const STOCK_API_URL: string | undefined =
   import.meta.env.VITE_STOCK_API_URL || (import.meta.env.DEV ? 'http://localhost:8002/graphql' : undefined)
+
+// 닉네임(게스트) 로그인 노출 — 개발·테스트용.
+//   'true' → 노출, 'false' → 숨김, 미설정 → dev(vite serve)만 노출(배포 빌드 기본 숨김).
+const GUEST_FLAG = import.meta.env.VITE_ENABLE_GUEST_LOGIN
+export const ENABLE_GUEST_LOGIN: boolean =
+  GUEST_FLAG === 'true' || (import.meta.env.DEV && GUEST_FLAG !== 'false')

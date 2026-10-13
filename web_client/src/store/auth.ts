@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { guestLogin } from '../api/auth'
-import type { UserOut } from '../types/api'
+import type { TokenResponse, UserOut } from '../types/api'
 
 // localStorage 키 (client.ts 인터셉터와 공유)
 export const TOKEN_KEY = 'wc_token'
@@ -19,16 +19,22 @@ interface AuthState {
   token: string | null
   user: UserOut | null
   login: (nickname: string) => Promise<UserOut>
+  /** 이미 발급된 토큰(간편 로그인 교환 결과)을 저장 — login 과 같은 저장 경로 */
+  loginWithToken: (res: TokenResponse) => UserOut
   logout: () => void
 }
 
-// 임시 로그인(닉네임) 전역 상태. 이후 카카오/구글도 동일 store에 토큰만 저장하면 됨.
-export const useAuthStore = create<AuthState>()((set) => ({
+// 로그인 전역 상태. 게스트(닉네임)·간편 로그인(카카오·네이버) 모두 같은 키에 토큰+유저를 저장한다.
+export const useAuthStore = create<AuthState>()((set, get) => ({
   token: localStorage.getItem(TOKEN_KEY) || null,
   user: readUser(),
 
   login: async (nickname) => {
-    const { access_token, user } = await guestLogin(nickname)
+    const res = await guestLogin(nickname)
+    return get().loginWithToken(res)
+  },
+
+  loginWithToken: ({ access_token, user }) => {
     localStorage.setItem(TOKEN_KEY, access_token)
     localStorage.setItem(USER_KEY, JSON.stringify(user))
     set({ token: access_token, user })

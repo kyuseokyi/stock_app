@@ -20,6 +20,12 @@ export interface TokenResponse {
   user: UserOut
 }
 
+/** 간편 로그인 공급자 — 출처: backend/apps/auth/routers/social.py */
+export type SocialProvider = 'kakao' | 'naver'
+
+/** GET /auth/social/providers — 공급자별 활성 여부(버튼 노출용) */
+export type SocialProviders = Record<SocialProvider, boolean>
+
 // ---- board ----
 export interface BoardOut {
   id: number

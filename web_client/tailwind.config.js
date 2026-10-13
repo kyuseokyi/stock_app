@@ -10,6 +10,8 @@ export default {
         ink: { DEFAULT: '#191f28', muted: '#8b95a1' }, // 본문 / 보조
         surface: '#f2f4f6',
         line: '#e5e8eb', // border
+        kakao: '#FEE500', // 카카오 로그인 버튼(공급자 가이드 색)
+        naver: '#03C75A', // 네이버 로그인 버튼(공급자 가이드 색)
       },
       borderRadius: { card: '20px', btn: '14px', field: '12px' },
     },
