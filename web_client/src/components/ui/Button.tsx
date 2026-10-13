@@ -25,7 +25,7 @@ export default function Button({
     'inline-flex h-11 items-center justify-center rounded-btn px-4 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-50'
   const variants: Record<ButtonVariant, string> = {
     primary: 'bg-brand text-white hover:brightness-95',
-    secondary: 'bg-surface text-ink hover:bg-line',
+    secondary: 'bg-surface text-ink ring-1 ring-inset ring-line hover:bg-line',
   }
   return (
     <button

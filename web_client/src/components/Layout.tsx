@@ -9,7 +9,7 @@ import NotificationToaster from './NotificationToaster'
 // 1차 섹션(커뮤니티·게임) 탭 스타일
 const sectionClass = (active: boolean) =>
   `pb-1.5 text-base font-bold transition ${
-    active ? 'border-b-2 border-brand text-brand' : 'text-ink-muted hover:text-ink'
+    active ? 'border-b-2 border-accent text-ink' : 'text-ink-muted hover:text-ink'
   }`
 
 export default function Layout() {
@@ -26,7 +26,7 @@ export default function Layout() {
 
   return (
     <div className="min-h-screen">
-      <header className="sticky top-0 z-30 border-b border-line bg-white/90 backdrop-blur">
+      <header className="sticky top-0 z-30 border-b border-line bg-canvas/90 backdrop-blur">
         <div className="mx-auto max-w-3xl px-4 py-3">
           <div className="flex items-center justify-between">
             <Link to="/" className="text-lg font-bold text-ink">

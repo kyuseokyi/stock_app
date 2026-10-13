@@ -77,7 +77,7 @@ export default function Modal({ title, onClose, children }: ModalProps) {
         aria-modal="true"
         aria-labelledby={titleId}
         tabIndex={-1}
-        className="flex max-h-[85vh] w-full flex-col rounded-t-card bg-white shadow-xl outline-none sm:max-w-lg sm:rounded-card"
+        className="flex max-h-[85vh] w-full flex-col rounded-t-card bg-canvas shadow-xl outline-none sm:max-w-lg sm:rounded-card"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between border-b border-line px-5 py-4">

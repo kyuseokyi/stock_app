@@ -3,7 +3,7 @@
 @tailwind utilities;
 
 body {
-  @apply bg-white text-ink antialiased;
+  @apply bg-canvas text-ink antialiased;
 }
 
 /* 게시글 본문(관리자 HTML) 기본 서식 */

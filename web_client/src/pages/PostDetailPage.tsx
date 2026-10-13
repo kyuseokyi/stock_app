@@ -96,7 +96,7 @@ export default function PostDetailPage() {
             <li className="py-4 text-center text-sm text-ink-muted">아직 댓글이 없습니다.</li>
           ) : (
             comments.map((c) => (
-              <li key={c.id} className="rounded-field bg-white px-4 py-3">
+              <li key={c.id} className="rounded-field bg-canvas px-4 py-3">
                 <p className="text-sm font-medium text-ink">
                   {c.author_name || '익명'}
                   <span className="ml-2 text-xs font-normal text-ink-muted">
@@ -111,7 +111,7 @@ export default function PostDetailPage() {
 
         {/* 댓글 작성 영역 */}
         {!commentsEnabled ? (
-          <p className="mt-5 rounded-field bg-white px-4 py-3 text-center text-sm text-ink-muted">
+          <p className="mt-5 rounded-field bg-canvas px-4 py-3 text-center text-sm text-ink-muted">
             이 게시판은 댓글이 비활성화되어 있습니다.
           </p>
         ) : user ? (
@@ -122,7 +122,7 @@ export default function PostDetailPage() {
               rows={3}
               maxLength={1000}
               placeholder={`${user.nickname} 님, 댓글을 입력하세요`}
-              className="w-full rounded-field border border-line bg-white px-3 py-2 text-sm focus:border-brand focus:outline-none"
+              className="w-full rounded-field border border-line bg-surface px-3 py-2 text-sm focus:border-brand focus:outline-none"
             />
             {commentError && <p className="mt-1 text-sm text-up">{commentError}</p>}
             <div className="mt-2 flex justify-end">
@@ -139,7 +139,7 @@ export default function PostDetailPage() {
         ) : (
           <button
             onClick={() => setLoginOpen(true)}
-            className="mt-5 w-full rounded-field bg-white px-4 py-3 text-center text-sm text-brand hover:brightness-95"
+            className="mt-5 w-full rounded-field bg-canvas px-4 py-3 text-center text-sm text-brand hover:brightness-95"
           >
             로그인하고 댓글 작성하기
           </button>

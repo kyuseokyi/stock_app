@@ -93,7 +93,7 @@ export default function LoginModal({ open, onClose, onSuccess }: LoginModalProps
       onClick={onClose}
     >
       <div
-        className="w-full max-w-sm rounded-card bg-white p-5 shadow-xl"
+        className="w-full max-w-sm rounded-card bg-canvas p-5 shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-1 flex items-center justify-between">
@@ -136,7 +136,7 @@ export default function LoginModal({ open, onClose, onSuccess }: LoginModalProps
               onChange={(e) => setNickname(e.target.value)}
               maxLength={20}
               placeholder="닉네임 (예: 주린이)"
-              className="w-full rounded-field border border-line px-3 py-2 text-sm focus:border-brand focus:outline-none"
+              className="w-full rounded-field border border-line bg-surface px-3 py-2 text-sm focus:border-brand focus:outline-none"
             />
             {error && <p className="mt-2 text-sm text-up">{error}</p>}
             <button

@@ -16,7 +16,7 @@ export default function ActivePositionCard({ position, lastPrice, closing, onClo
   const long = position.side === 'LONG'
   const slTp = slTpLine(position.stop_loss_price, position.take_profit_price)
   return (
-    <Card className="border border-line bg-white">
+    <Card className="bg-sky-soft">
       <div className="flex items-center justify-between gap-2">
         <p className="font-bold text-ink">
           <span className={long ? 'text-up' : 'text-down'}>{position.side}</span> x{position.leverage}배

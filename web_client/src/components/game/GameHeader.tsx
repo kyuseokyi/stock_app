@@ -17,7 +17,7 @@ interface GameHeaderProps {
   onOpenStreak: () => void
 }
 
-const NAV_BUTTON = 'rounded-field bg-white px-3 py-1.5 text-sm text-ink transition hover:bg-line'
+const NAV_BUTTON = 'rounded-field bg-surface px-3 py-1.5 text-sm text-ink transition hover:bg-line'
 
 // 시즌·종목·D-day + Streak + 내 순위/수익률 + 자본금 + 랭킹·퀘스트·퀴즈 진입 버튼.
 export default function GameHeader({
@@ -29,7 +29,7 @@ export default function GameHeader({
   const showStreak = loggedIn && streak !== null && streak.enabled && streak.current_streak >= 1
 
   return (
-    <Card className="sm:p-5">
+    <Card className="bg-pink-soft sm:p-5">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
           <p className="flex flex-wrap items-center gap-1.5 text-xs font-semibold text-brand">
@@ -40,7 +40,7 @@ export default function GameHeader({
               <button
                 type="button"
                 onClick={onOpenStreak}
-                className="rounded-full bg-white px-2 py-0.5 text-up transition hover:bg-line"
+                className="rounded-full bg-surface px-2 py-0.5 text-up transition hover:bg-line"
                 title={`최고 기록 ${streak.highest_streak}일 · 연속 출석 보상 보기`}
               >
                 🔥 {streak.current_streak}일 연속

@@ -21,7 +21,7 @@ interface OrderPanelProps {
 const selectClass = (active: boolean) =>
   `${chipClass(active)} cursor-pointer border-0 outline-none focus-visible:ring-2 focus-visible:ring-brand`
 
-// 원클릭 주문 — 비중(칩 + ▾기타)·배율 칩 + 손절/익절 드롭다운 + BUY(상승=빨강)/SELL(하락=파랑).
+// 원클릭 주문 — 비중(칩 + ▾기타)·배율 칩 + 손절/익절 드롭다운 + BUY(상승=핑크)/SELL(하락=블루).
 // 5x 는 아카데미 미해금 시 잠금. 비중 상태는 하나 — 칩 값이면 드롭다운은 '기타'로 표시(파생).
 export default function OrderPanel({ hasPosition, academyUnlocked, submitting, onOrder, onLockedLeverage }: OrderPanelProps) {
   const [ratio, setRatio] = useState<Ratio>(0.25)
@@ -33,7 +33,7 @@ export default function OrderPanel({ hasPosition, academyUnlocked, submitting, o
   const order = (side: Side) => onOrder(side, ratio, leverage, { stopLossPct: stopLoss, takeProfitPct: takeProfit })
 
   return (
-    <Card>
+    <Card className="bg-pink-soft">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-xs text-ink-muted">비중</span>
@@ -113,7 +113,7 @@ export default function OrderPanel({ hasPosition, academyUnlocked, submitting, o
           type="button"
           disabled={disabled}
           onClick={() => order('LONG')}
-          className="h-14 rounded-btn bg-up text-base font-bold text-white transition hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-40"
+          className="h-14 rounded-btn bg-up-soft text-base font-bold text-up transition hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-40"
         >
           🔴 BUY <span className="text-sm font-medium">(상승 베팅)</span>
         </button>
@@ -121,7 +121,7 @@ export default function OrderPanel({ hasPosition, academyUnlocked, submitting, o
           type="button"
           disabled={disabled}
           onClick={() => order('SHORT')}
-          className="h-14 rounded-btn bg-down text-base font-bold text-white transition hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-40"
+          className="h-14 rounded-btn bg-down-soft text-base font-bold text-down transition hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-40"
         >
           🔵 SELL <span className="text-sm font-medium">(하락 베팅)</span>
         </button>

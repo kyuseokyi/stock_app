@@ -4,7 +4,7 @@ export default function QuizBanner({ onOpen }: { onOpen: () => void }) {
     <button
       type="button"
       onClick={onOpen}
-      className="flex w-full items-center justify-between gap-3 rounded-card bg-brand-soft px-4 py-3 text-left transition hover:brightness-95"
+      className="flex w-full items-center justify-between gap-3 rounded-card bg-sky-soft px-4 py-3 text-left transition hover:brightness-95"
     >
       <span>
         <span className="block text-sm font-bold text-brand">🧩 야간 10초 차트 퀴즈 도전!</span>

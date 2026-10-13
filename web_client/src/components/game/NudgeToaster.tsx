@@ -14,7 +14,7 @@ function ToastItem({ toast }: { toast: GameToast }) {
   return (
     <div
       role="status"
-      className={`pointer-events-auto flex items-start gap-3 rounded-card border bg-white px-4 py-3 shadow-lg ${
+      className={`pointer-events-auto flex items-start gap-3 rounded-card border bg-surface px-4 py-3 shadow-lg ${
         toast.kind === 'error' ? 'border-up/40' : 'border-line'
       }`}
     >

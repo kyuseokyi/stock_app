@@ -167,7 +167,7 @@ export default function ChartQuizModal({ onClose }: { onClose: () => void }) {
               type="button"
               disabled={phase.kind !== 'playing'}
               onClick={() => void choose('UP')}
-              className="h-14 rounded-btn bg-up text-base font-bold text-white transition hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-40"
+              className="h-14 rounded-btn bg-up-soft text-base font-bold text-up transition hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-40"
             >
               오를까? 📈
             </button>
@@ -175,7 +175,7 @@ export default function ChartQuizModal({ onClose }: { onClose: () => void }) {
               type="button"
               disabled={phase.kind !== 'playing'}
               onClick={() => void choose('DOWN')}
-              className="h-14 rounded-btn bg-down text-base font-bold text-white transition hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-40"
+              className="h-14 rounded-btn bg-down-soft text-base font-bold text-down transition hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-40"
             >
               내릴까? 📉
             </button>

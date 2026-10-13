@@ -9,7 +9,7 @@ export default function CoachBanner({ coach }: { coach: Coach | null }) {
   const expandable = coach.content_md !== null && coach.content_md !== ''
 
   return (
-    <Card className="bg-brand-soft">
+    <Card className="bg-sky-soft">
       <button
         type="button"
         onClick={() => expandable && setOpen((o) => !o)}

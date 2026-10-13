@@ -6,7 +6,7 @@ export default function SentimentBar({ sentiment }: { sentiment: Sentiment | nul
   const empty = sentiment.long_pct === 0 && sentiment.short_pct === 0
 
   return (
-    <div className="rounded-card bg-surface p-4">
+    <div className="rounded-card bg-pink-soft p-4">
       <p className="mb-2 text-xs font-medium text-ink-muted">📊 유저 베팅 심리</p>
       {empty ? (
         <p className="text-sm text-ink-muted">아직 포지션이 없어요</p>

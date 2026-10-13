@@ -42,7 +42,7 @@ export default function NotificationToaster() {
       {toasts.map((t) => (
         <div
           key={t.id}
-          className="pointer-events-auto flex items-start gap-3 rounded-card border border-line bg-white px-4 py-3 shadow-lg"
+          className="pointer-events-auto flex items-start gap-3 rounded-card border border-line bg-surface px-4 py-3 shadow-lg"
         >
           <span className="mt-0.5 text-lg">🔔</span>
           <p className="flex-1 text-sm text-ink">{t.text}</p>

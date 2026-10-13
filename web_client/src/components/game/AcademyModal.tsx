@@ -102,7 +102,7 @@ export default function AcademyModal({ onClose }: { onClose: () => void }) {
                   ))}
                 </div>
                 {r && (
-                  <div className="mt-3 rounded-field bg-white p-3 text-sm">
+                  <div className="mt-3 rounded-field bg-canvas p-3 text-sm">
                     <p className="font-semibold text-ink">정답: {q.choices[r.answer] ?? '—'}</p>
                     <p className="mt-1 text-ink-muted">{r.explanation}</p>
                   </div>

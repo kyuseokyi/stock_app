@@ -5,15 +5,16 @@ import {
 import { getDailyCandles } from '../../api/stock'
 import { mergeTick } from '../../lib/candles'
 import { kstDateString } from '../../lib/format'
+import { THEME } from '../../lib/themeColors'
 import type { Coach, DailyCandle, Position } from '../../types/game'
 
 // 일봉(stock_api) + 오늘 캔들 실시간 병합(WS tick) + 지지/저항/진입가/손절/익절 라인.
-// 색: 상승=빨강/하락=파랑(국내 관례, Tailwind up/down 토큰과 동일).
-const UP = '#f04452'
-const DOWN = '#3182f6'
+// 색: 상승=핑크레드/하락=블루(국내 관례, Tailwind up/down 토큰과 동일 — lib/themeColors).
+const UP = THEME.up
+const DOWN = THEME.down
 const SUPPORT = '#8b5cf6'
 const RESIST = '#f59e0b'
-const STOP_LOSS = '#8b95a1' // 손절 — 회색(ink-muted)
+const STOP_LOSS = THEME.inkMuted // 손절 — 회색(ink-muted)
 const TAKE_PROFIT = '#16a34a' // 익절 — 초록
 
 interface TradingChartProps {
@@ -39,11 +40,11 @@ export default function TradingChart({ ticker, lastPrice, coach, position }: Tra
     if (!box) return
     const chart = createChart(box, {
       autoSize: true,
-      layout: { background: { color: 'transparent' }, textColor: '#8b95a1' },
-      grid: { vertLines: { color: '#f2f4f6' }, horzLines: { color: '#f2f4f6' } },
+      layout: { background: { color: 'transparent' }, textColor: THEME.inkMuted },
+      grid: { vertLines: { color: THEME.canvas }, horzLines: { color: THEME.canvas } },
       crosshair: { mode: CrosshairMode.Normal },
-      rightPriceScale: { borderColor: '#e5e8eb' },
-      timeScale: { borderColor: '#e5e8eb' },
+      rightPriceScale: { borderColor: THEME.line },
+      timeScale: { borderColor: THEME.line },
       localization: { priceFormatter: (p: number) => Math.round(p).toLocaleString('ko-KR') },
     })
     const series = chart.addCandlestickSeries({
@@ -130,10 +131,10 @@ export default function TradingChart({ ticker, lastPrice, coach, position }: Tra
   }, [support, resistance, entry, side, stopLoss, takeProfit, loaded])
 
   return (
-    <div className="relative h-[260px] overflow-hidden rounded-card border border-line bg-white sm:h-[320px]">
+    <div className="relative h-[260px] overflow-hidden rounded-card border border-line bg-surface sm:h-[320px]">
       <div ref={boxRef} className="h-full w-full" />
       {failed && (
-        <div className="absolute inset-0 flex items-center justify-center bg-white text-sm text-ink-muted">
+        <div className="absolute inset-0 flex items-center justify-center bg-surface text-sm text-ink-muted">
           차트 데이터를 불러오지 못했어요
         </div>
       )}
