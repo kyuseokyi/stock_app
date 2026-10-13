@@ -299,6 +299,7 @@ def test_redis_key_patterns_match_trading_game_helpers():
         {"json": {"confirm": "탈퇴할래"}},
         {"json": {"confirm": ""}},
         {"json": {"confirm": None}},
+        {"json": {"confirm": "탈퇴" * 50}},  # 길어도 422 가 아니라 400
     ],
 )
 async def test_confirm_required(ctx, kwargs):

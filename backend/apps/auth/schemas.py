@@ -21,7 +21,7 @@ class GuestLoginRequest(BaseModel):
 class DeleteAccountRequest(BaseModel):
     """회원 탈퇴 확인 — confirm 이 정확히 '탈퇴'여야 한다(아니면 400 CONFIRM_REQUIRED, 422 아님)."""
 
-    confirm: str | None = Field(None, max_length=20, description="확인 문구 '탈퇴'")
+    confirm: str | None = Field(None, description="확인 문구 '탈퇴'")
 
 
 class UserOut(BaseModel):
