@@ -346,6 +346,28 @@ class UserStreak(Base):
     last_activity_date: Mapped[date | None] = mapped_column(Date, nullable=True)
 
 
+class StreakRewardClaim(Base):
+    """연속 출석 마일스톤 보상 수령 기록(백로그 ⑤-1) — 시즌마다 마일스톤별 1회."""
+
+    __tablename__ = "streak_reward_claims"
+    __table_args__ = (
+        UniqueConstraint("user_id", "season_id", "milestone", name="uq_streak_reward_user_season_milestone"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    season_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("game_seasons.id", ondelete="CASCADE"), nullable=False
+    )
+    milestone: Mapped[int] = mapped_column(Integer, nullable=False)
+    amount: Mapped[Decimal] = mapped_column(Numeric(15, 2), nullable=False)
+    claimed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
 class GameFeatureFlag(Base):
     """기능 on/off(QUIZ, STREAK). 행이 없으면 서비스가 ON 으로 간주."""
 
