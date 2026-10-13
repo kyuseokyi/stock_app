@@ -342,3 +342,36 @@ export interface QuizResult {
   base_date: string;
   streak: Streak | null;
 }
+
+export interface WeeklyEntry {
+  rank: number;
+  user_id: number;
+  nickname: string | null;
+  weekly_roi: number;
+}
+
+export interface WeeklyBoard {
+  week_start: string;
+  start_at: string;
+  end_at: string;
+  entries: WeeklyEntry[];
+}
+
+export interface WeeklyMyRank {
+  rank: number | null;
+  weekly_roi: number | null;
+  total: number;
+}
+
+export interface WeeklyResultWeek {
+  season_id: number;
+  week_start: string;
+  entries: { rank: number; nickname: string | null; weekly_roi: number; reward_amount: number }[];
+}
+
+export interface WeeklyReward {
+  id: number;
+  week_start: string;
+  rank: number;
+  reward_amount: number;
+}

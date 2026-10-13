@@ -2,6 +2,7 @@ import { create } from 'zustand';
 
 import * as gameApi from './api';
 import { orderErrorMessage } from './lib/errors';
+import { rewardToastMessage } from './lib/weekly';
 import type {
   Account,
   Coach,
@@ -16,6 +17,7 @@ import type {
   Sentiment,
   Side,
   Streak,
+  WeeklyReward,
 } from './types';
 
 // 트레이딩 게임 전역 상태(web store/tradingGame.ts 와 같은 상태·액션·경쟁 가드).
@@ -55,6 +57,8 @@ interface TradingGameState extends PrivateState {
   refreshTrading: () => Promise<void>;
   refreshRank: () => Promise<void>;
   refreshStreak: () => Promise<void>;
+  /** 미확인 주간 랭킹 보상 → 토스트 + ack. 실패는 조용히(다음 진입 때 재시도) */
+  checkWeeklyRewards: () => Promise<void>;
   resetPrivate: () => void;
   placeOrder: (side: Side, ratio: Ratio, leverage: Leverage, opts?: OrderOptions) => Promise<void>;
   closePosition: () => Promise<void>;
@@ -85,6 +89,8 @@ let toastSeq = 0;
 // refreshSeq는 재조회 호출 순번 — 더 최신 호출이 있으면 순서가 뒤바뀌어 도착한 이전 응답을 버린다.
 let privateGen = 0;
 let refreshSeq = 0;
+// 주간 보상 확인 진행 중 플래그 — 재연결·포그라운드 복귀로 loadPrivate 가 겹쳐 불려도 토스트가 중복되지 않게 한다.
+let weeklyCheckInFlight = false;
 
 /** 시트 등 스토어 밖에서 비동기 요청을 시작할 때 캡처 → setAcademyUnlocked/setStreak 에 전달 */
 export const currentPrivateGen = (): number => privateGen;
@@ -166,6 +172,7 @@ export const useTradingGameStore = create<TradingGameState>()((set, get) => {
       if (streak.status === 'fulfilled') patch.streak = streak.value;
       if (gen !== privateGen) return; // 로그아웃 후 늦게 도착한 이전 사용자 데이터 폐기
       set(patch);
+      void get().checkWeeklyRewards();
     },
 
     refreshTrading,
@@ -185,6 +192,28 @@ export const useTradingGameStore = create<TradingGameState>()((set, get) => {
     },
 
     refreshStreak,
+
+    checkWeeklyRewards: async () => {
+      if (weeklyCheckInFlight) return;
+      weeklyCheckInFlight = true;
+      try {
+        const gen = privateGen;
+        let rewards: WeeklyReward[];
+        try {
+          rewards = await gameApi.getUnseenWeeklyRewards();
+        } catch {
+          return; // 알림 실패는 조용히(다음 진입 때 재시도)
+        }
+        if (gen !== privateGen || rewards.length === 0) return;
+        for (const r of rewards) {
+          get().pushToast({ kind: 'info', icon: '🏅', message: rewardToastMessage(r) });
+          gameApi.ackWeeklyReward(r.id).catch(() => undefined);
+        }
+        await refreshTrading();
+      } finally {
+        weeklyCheckInFlight = false;
+      }
+    },
 
     resetPrivate: () => {
       privateGen++;

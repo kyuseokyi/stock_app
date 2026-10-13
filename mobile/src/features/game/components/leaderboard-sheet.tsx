@@ -8,8 +8,9 @@ import { getHallOfFame, getLeaderboard } from '../api';
 import { gameErrorMessage } from '../lib/errors';
 import type { HallOfFameRow, LeaderboardRow } from '../types';
 import { Sheet } from './sheet';
+import { WeeklyRankingTab } from './weekly-ranking-tab';
 
-type Tab = 'season' | 'hof';
+type Tab = 'weekly' | 'season' | 'hof';
 type Load<T> = { kind: 'loading' } | { kind: 'error'; message: string } | { kind: 'ok'; data: T };
 
 type Props = {
@@ -33,14 +34,15 @@ function groupBySeason(rows: HallOfFameRow[]): { seasonId: number; seasonNumber:
   return groups;
 }
 
-/** 랭킹 시트 — 시즌 Top 100 / 명예의 전당(MBTI). 공개 API 라 비로그인도 열람. 열릴 때·탭 전환 시 활성 탭만 로드 */
+/** 랭킹 시트 — 주간 / 시즌 Top 100 / 명예의 전당(MBTI). 공개 API 라 비로그인도 열람. 열릴 때·탭 전환 시 활성 탭만 로드 */
 export function LeaderboardSheet({ seasonId, myUserId, onClose }: Props) {
-  const [tab, setTab] = useState<Tab>('season');
+  const [tab, setTab] = useState<Tab>('weekly');
   const [board, setBoard] = useState<Load<LeaderboardRow[]>>({ kind: 'loading' });
   const [hof, setHof] = useState<Load<HallOfFameRow[]>>({ kind: 'loading' });
   const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
+    if (tab === 'weekly') return; // 주간 탭은 자체 로드
     let cancelled = false;
     if (tab === 'season') {
       setBoard({ kind: 'loading' });
@@ -71,16 +73,19 @@ export function LeaderboardSheet({ seasonId, myUserId, onClose }: Props) {
   return (
     <Sheet title="🏆 랭킹" onClose={onClose}>
       <View style={styles.tabs}>
+        <Chip label="주간" selected={tab === 'weekly'} onPress={() => setTab('weekly')} />
         <Chip label="시즌 랭킹" selected={tab === 'season'} onPress={() => setTab('season')} />
         <Chip label="명예의 전당" selected={tab === 'hof'} onPress={() => setTab('hof')} />
       </View>
 
-      {current.kind === 'loading' ? (
+      {tab === 'weekly' ? <WeeklyRankingTab seasonId={seasonId} myUserId={myUserId} /> : null}
+
+      {tab !== 'weekly' && current.kind === 'loading' ? (
         <View style={styles.state}>
           <ActivityIndicator />
         </View>
       ) : null}
-      {current.kind === 'error' ? (
+      {tab !== 'weekly' && current.kind === 'error' ? (
         <View style={styles.state}>
           <Text style={styles.muted}>{current.message}</Text>
           <Button label="다시 시도" variant="secondary" fullWidth={false} onPress={() => setReloadKey((k) => k + 1)} />

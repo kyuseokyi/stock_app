@@ -40,6 +40,10 @@ import type {
   Season,
   Streak,
   StreakClaimResult,
+  WeeklyBoard,
+  WeeklyMyRank,
+  WeeklyResultWeek,
+  WeeklyReward,
 } from './types';
 
 /** 게임 서버 미설정(production 에 EXPO_PUBLIC_GAME_API_URL 없음)이면 null → 화면 "준비 중" */
@@ -161,6 +165,29 @@ export function getLeaderboard(seasonId: number): Promise<LeaderboardRow[]> {
 /** 공개 — 명예의 전당(시즌 desc · 순위 asc, 최대 300) */
 export function getHallOfFame(): Promise<HallOfFameRow[]> {
   return client().get<HallOfFameRow[]>('/api/game/hall-of-fame');
+}
+
+/** 공개 — 이번 주 Top 100(월 09:00 시작, 시즌 경계로 잘림) */
+export function getWeeklyLeaderboard(seasonId: number): Promise<WeeklyBoard> {
+  return client().get<WeeklyBoard>(`/api/game/seasons/${seasonId}/weekly-leaderboard`);
+}
+
+export function getWeeklyMyRank(seasonId: number): Promise<WeeklyMyRank> {
+  return client().get<WeeklyMyRank>(`/api/game/seasons/${seasonId}/weekly-my-rank`);
+}
+
+/** 공개 — 지난 주들의 Top 3(최신 주 먼저) */
+export function getWeeklyResults(seasonId: number, limit = 1): Promise<WeeklyResultWeek[]> {
+  return client().get<WeeklyResultWeek[]>('/api/game/weekly-results', { season_id: seasonId, limit });
+}
+
+export function getUnseenWeeklyRewards(): Promise<WeeklyReward[]> {
+  return client().get<WeeklyReward[]>('/api/game/weekly-rewards/unseen');
+}
+
+/** 204 빈 응답 — http client 가 undefined 로 처리 */
+export async function ackWeeklyReward(id: number): Promise<void> {
+  await client().post<void>(`/api/game/weekly-rewards/${id}/ack`);
 }
 
 export async function getQuests(): Promise<QuestList> {
