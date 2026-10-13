@@ -76,7 +76,9 @@ async def close_previous_week(db: AsyncSession, redis, *, now: datetime | None =
     week_id, s, e = wr.week_bounds(now - timedelta(days=1), season.start_at, season.end_at)
     if s >= e:  # 지난주 창이 시즌과 겹치지 않음(시즌이 그 주 이후 시작)
         return None
-    out = await close_week(db, redis, season, week_id, with_reward=True)
+    # 잘린 끝 = 시즌 종료 → 시즌 마지막 주(정산 지연으로 아직 ACTIVE). 스펙상 기록만, 보상 없음.
+    is_final = season.end_at is not None and e == wr.aware(season.end_at)
+    out = await close_week(db, redis, season, week_id, with_reward=not is_final)
     return {"week_start": week_id.isoformat(), **out}
 
 

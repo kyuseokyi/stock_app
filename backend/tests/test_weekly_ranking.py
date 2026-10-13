@@ -283,3 +283,19 @@ async def test_weekly_results_unseen_and_ack(api, fake_redis, maker):
     set_user(u1)
     assert (await client.post(f"/api/game/weekly-rewards/{unseen[0]['id']}/ack")).status_code == 204
     assert (await client.get("/api/game/weekly-rewards/unseen")).json() == []
+
+
+async def test_close_previous_week_final_week_without_reward_when_settlement_delayed(session):
+    """정산이 월 08:50 이후로 밀려 시즌이 아직 ACTIVE 여도, 시즌 마지막 주는 기록만(보상 0)."""
+    r = _r()
+    s = await _season_oct(session)                       # 종료 10/31(토) 20:00
+    u = await _seed_user(session)
+    acc = await _seed_account(session, u, s)
+    await _open_pos(session, acc, k(27, 10))
+    await r.zadd(wr.week_key(s.id, date(2026, 10, 26)), {str(u.id): 5.0})
+    now = datetime(2026, 11, 2, 8, 50, tzinfo=KST)        # 다음 월 08:50 — 지난주 = 10/26 주(마지막 주)
+    out = await ws_svc.close_previous_week(session, r, now=now)
+    assert out == {"week_start": "2026-10-26", "archived": 1, "rewarded": 0}
+    assert await _results(session) == [(1, u.id, Decimal("0.00"))]
+    await session.refresh(acc)
+    assert acc.cash_balance == Decimal("10000000.00")
