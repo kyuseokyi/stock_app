@@ -20,6 +20,7 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    UniqueConstraint,
     func,
 )
 from sqlalchemy.orm import (
@@ -62,6 +63,7 @@ class AuthProvider(str, enum.Enum):
     KAKAO = "KAKAO"
     GOOGLE = "GOOGLE"
     APPLE = "APPLE"
+    NAVER = "NAVER"
 
 
 class MarketType(str, enum.Enum):
@@ -80,6 +82,10 @@ class User(Base, TimestampMixin):
     """회원 정보. 소셜 로그인 토큰, FCM 디바이스 토큰, 권한(Role)을 보관한다."""
 
     __tablename__ = "users"
+    # 같은 공급자 계정(provider+provider_id)은 한 명. 둘 다 NULL 인 기존(관리자·게스트) 행끼리는 충돌하지 않는다.
+    __table_args__ = (
+        UniqueConstraint("provider", "provider_id", name="uq_users_provider_provider_id"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
 
