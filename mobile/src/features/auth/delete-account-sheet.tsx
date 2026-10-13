@@ -2,9 +2,8 @@ import { useState } from 'react';
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
-import { Sheet } from '@/features/game/components/sheet';
 import { ApiError } from '@/lib/api';
-import { Button } from '@/ui';
+import { BottomSheet, Button } from '@/ui';
 
 import { DELETE_ACCOUNT_NOTICES, deleteAccountErrorMessage } from './delete-account';
 import { useAuthStore } from './store';
@@ -15,7 +14,7 @@ type Props = {
   onDeleted: () => void;
 };
 
-/** 회원 탈퇴 확인 시트 — 열 때 마운트·닫을 때 언마운트(Sheet 패턴) */
+/** 회원 탈퇴 확인 시트(내용 높이 바텀시트) — 열 때 마운트·닫을 때 언마운트 */
 export function DeleteAccountSheet({ onClose, onDeleted }: Props) {
   const { theme } = useUnistyles();
   const deleteAccount = useAuthStore((s) => s.deleteAccount);
@@ -39,7 +38,7 @@ export function DeleteAccountSheet({ onClose, onDeleted }: Props) {
   };
 
   return (
-    <Sheet title="회원 탈퇴" onClose={submitting ? () => {} : onClose}>
+    <BottomSheet title="회원 탈퇴" onClose={submitting ? () => {} : onClose}>
       <View style={styles.notices}>
         {DELETE_ACCOUNT_NOTICES.map((text) => (
           <View key={text} style={styles.noticeRow}>
@@ -66,7 +65,7 @@ export function DeleteAccountSheet({ onClose, onDeleted }: Props) {
         )}
       </Pressable>
       <Button label="취소" variant="secondary" onPress={onClose} disabled={submitting} />
-    </Sheet>
+    </BottomSheet>
   );
 }
 
