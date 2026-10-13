@@ -30,7 +30,7 @@ export function SentimentBar({ sentiment }: { sentiment: Sentiment | null }) {
 }
 
 const styles = StyleSheet.create((theme) => ({
-  box: { backgroundColor: theme.colors.surfacePink, borderRadius: theme.radius.card, padding: theme.gap(2), gap: theme.gap(1) },
+  box: { backgroundColor: theme.colors.surface, borderRadius: theme.radius.card, padding: theme.gap(2), gap: theme.gap(1) },
   caption: { fontSize: 12, fontWeight: '500', color: theme.colors.textSecondary },
   muted: { fontSize: 14, color: theme.colors.textSecondary },
   track: {

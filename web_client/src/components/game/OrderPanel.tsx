@@ -33,7 +33,7 @@ export default function OrderPanel({ hasPosition, academyUnlocked, submitting, o
   const order = (side: Side) => onOrder(side, ratio, leverage, { stopLossPct: stopLoss, takeProfitPct: takeProfit })
 
   return (
-    <Card className="bg-pink-soft">
+    <Card>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-xs text-ink-muted">비중</span>

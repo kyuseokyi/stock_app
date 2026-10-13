@@ -122,7 +122,7 @@ export default function PostDetailPage() {
               rows={3}
               maxLength={1000}
               placeholder={`${user.nickname} 님, 댓글을 입력하세요`}
-              className="w-full rounded-field border border-line bg-surface px-3 py-2 text-sm focus:border-brand focus:outline-none"
+              className="w-full rounded-field border border-line bg-fill px-3 py-2 text-sm focus:border-brand focus:outline-none"
             />
             {commentError && <p className="mt-1 text-sm text-up">{commentError}</p>}
             <div className="mt-2 flex justify-end">

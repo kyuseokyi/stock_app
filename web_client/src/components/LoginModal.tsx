@@ -136,7 +136,7 @@ export default function LoginModal({ open, onClose, onSuccess }: LoginModalProps
               onChange={(e) => setNickname(e.target.value)}
               maxLength={20}
               placeholder="닉네임 (예: 주린이)"
-              className="w-full rounded-field border border-line bg-surface px-3 py-2 text-sm focus:border-brand focus:outline-none"
+              className="w-full rounded-field border border-line bg-fill px-3 py-2 text-sm focus:border-brand focus:outline-none"
             />
             {error && <p className="mt-2 text-sm text-up">{error}</p>}
             <button

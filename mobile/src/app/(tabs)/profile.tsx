@@ -170,7 +170,7 @@ const styles = StyleSheet.create((theme) => ({
     paddingHorizontal: theme.gap(2),
     fontSize: 16,
     color: theme.colors.text,
-    backgroundColor: theme.colors.surface,
+    backgroundColor: theme.colors.fill,
   },
   error: { fontSize: 13, color: theme.colors.up },
   guest: {

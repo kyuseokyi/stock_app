@@ -1,7 +1,7 @@
 /**
  * Unistyles v3 전역 설정 — 앱 진입 전에 1회 실행되어야 한다(index.ts에서 import).
  * 테마는 OS 라이트/다크에 자동 대응(adaptiveThemes)한다.
- * 팔레트: 파스텔 C안(라벤더 바탕 + 핑크·블루) — docs/superpowers/specs/2026-10-14-pastel-theme-design.md
+ * 팔레트: 파스텔 C안(라벤더 바탕 + 흰 카드, 핑크는 포인트·블루는 배너) — docs/superpowers/specs/2026-10-14-pastel-theme-design.md
  */
 import { StyleSheet } from 'react-native-unistyles';
 
@@ -14,9 +14,9 @@ const shared = {
 const lightTheme = {
   colors: {
     background: '#f7f5ff', // 아주 연한 라벤더 바탕
-    surface: '#ffffff', // 칩·입력·일반 카드(라벤더 위 흰색)
-    surfacePink: '#fde4ee', // 핑크 카드
-    surfaceBlue: '#e2ecff', // 블루 카드
+    surface: '#ffffff', // 모든 카드(라벤더 위 흰색)
+    fill: '#efebfb', // 칩·입력·드롭다운 트리거 배경(흰 카드 위에서 보이도록)
+    surfaceBlue: '#e2ecff', // 블루 배너(코치·퀴즈·안내)만
     border: '#ebe7f7',
     text: '#25223a',
     textSecondary: '#8e8aa6',
@@ -35,7 +35,7 @@ const darkTheme = {
   colors: {
     background: '#1a1826',
     surface: '#24212f',
-    surfacePink: '#3a2433',
+    fill: '#2c2839',
     surfaceBlue: '#222c45',
     border: '#322e40',
     text: '#f3f1fa',

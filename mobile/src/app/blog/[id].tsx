@@ -369,7 +369,7 @@ const styles = StyleSheet.create((theme) => ({
     paddingVertical: theme.gap(1),
     fontSize: 14,
     color: theme.colors.text,
-    backgroundColor: theme.colors.surface,
+    backgroundColor: theme.colors.fill,
     textAlignVertical: 'top',
   },
   submitError: {

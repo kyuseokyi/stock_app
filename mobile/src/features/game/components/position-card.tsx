@@ -48,7 +48,7 @@ export function PositionCard({ position, lastPrice, closing, onClose }: Props) {
 }
 
 const styles = StyleSheet.create((theme) => ({
-  card: { backgroundColor: theme.colors.surfaceBlue },
+  card: { backgroundColor: theme.colors.surface },
   row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: theme.gap(1) },
   side: { fontSize: 17, fontWeight: '700', color: theme.colors.text },
   long: { color: theme.colors.up },

@@ -97,14 +97,14 @@ export function GameHeader({
 }
 
 const styles = StyleSheet.create((theme) => ({
-  card: { backgroundColor: theme.colors.surfacePink },
+  card: { backgroundColor: theme.colors.surface },
   metaRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: theme.gap(0.75) },
   season: { fontSize: 13, fontWeight: '600', color: theme.colors.primary },
   streak: {
     fontSize: 12,
     fontWeight: '600',
     color: theme.colors.up,
-    backgroundColor: theme.colors.surface,
+    backgroundColor: theme.colors.fill,
     borderRadius: theme.radius.chip,
     paddingHorizontal: theme.gap(1),
     paddingVertical: 2,
@@ -120,7 +120,7 @@ const styles = StyleSheet.create((theme) => ({
   navRow: { flexDirection: 'row', flexWrap: 'wrap', gap: theme.gap(1), marginTop: theme.gap(1) },
   nav: {
     borderRadius: theme.radius.chip,
-    backgroundColor: theme.colors.surface,
+    backgroundColor: theme.colors.fill,
     paddingVertical: theme.gap(0.75),
     paddingHorizontal: theme.gap(1.5),
   },

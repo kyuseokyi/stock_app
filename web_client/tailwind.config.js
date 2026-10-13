@@ -4,15 +4,15 @@ export default {
   theme: {
     extend: {
       colors: {
-        // 파스텔 테마(C안: 라벤더 바탕 + 핑크·블루) — docs/superpowers/specs/2026-10-14-pastel-theme-design.md
+        // 파스텔 테마(C안: 라벤더 바탕 + 흰 카드, 핑크는 포인트·블루는 배너) — docs/superpowers/specs/2026-10-14-pastel-theme-design.md
         brand: { DEFAULT: '#6f8ef0', soft: '#e2ecff' }, // 파스텔 블루 CTA / 선택 칩·내 행
         up: { DEFAULT: '#c93a6c', soft: '#fbd6e4' }, // 상승·수익 = 핑크레드 / BUY·수익 배지 배경
         down: { DEFAULT: '#4f73d9', soft: '#d8e3fd' }, // 하락·손실 = 블루 / SELL·손실 배지 배경
         ink: { DEFAULT: '#25223a', muted: '#8e8aa6' }, // 본문 / 보조
         canvas: '#f7f5ff', // 화면 바탕(연 라벤더)
-        surface: '#ffffff', // 칩·입력·일반 카드(라벤더 위 흰색)
-        pink: { soft: '#fde4ee' }, // 핑크 카드
-        sky: { soft: '#e2ecff' }, // 블루 카드
+        surface: '#ffffff', // 모든 카드(라벤더 위 흰색)
+        fill: '#efebfb', // 칩·입력·드롭다운 트리거 배경(흰 카드 위에서 보이도록)
+        sky: { soft: '#e2ecff' }, // 블루 배너(코치·퀴즈)만
         accent: '#e88ab0', // 내비 선택·배지(핑크 포인트)
         line: '#ebe7f7', // border
         kakao: '#FEE500', // 카카오 로그인 버튼(공급자 가이드 색)

@@ -124,7 +124,7 @@ export function OrderPanel({ hasPosition, academyUnlocked, submitting, onOrder, 
 }
 
 const styles = StyleSheet.create((theme) => ({
-  card: { backgroundColor: theme.colors.surfacePink },
+  card: { backgroundColor: theme.colors.surface },
   chipRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: theme.gap(1), marginBottom: theme.gap(1) },
   caption: { fontSize: 12, color: theme.colors.textSecondary, width: 28 },
   captionGap: { marginLeft: theme.gap(1) },

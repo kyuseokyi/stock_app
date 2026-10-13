@@ -71,7 +71,7 @@ const styles = StyleSheet.create((theme) => ({
     borderRadius: theme.radius.chip,
     paddingVertical: theme.gap(0.75),
     paddingHorizontal: theme.gap(1.5),
-    backgroundColor: theme.colors.surface,
+    backgroundColor: theme.colors.fill,
   },
   triggerOn: { backgroundColor: theme.colors.primarySoft },
   triggerLabel: { fontSize: 14, fontWeight: '600', color: theme.colors.textSecondary },
