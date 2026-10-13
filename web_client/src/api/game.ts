@@ -2,8 +2,10 @@ import type { AxiosInstance } from 'axios'
 import { gameClient } from './gameClient'
 import { toNum, toNumOrNull } from '../lib/decimal'
 import type {
-  Account, Coach, MyRank, OrderRequest, OrderResult, Position, RawAccount, RawCoachMessage,
-  RawCoachToday, RawOrderResult, RawPosition, Season,
+  AcademyQuiz, AcademySubmitResult, Account, ClaimResult, Coach, HallOfFameRow, LeaderboardRow, MyRank,
+  OrderRequest, OrderResult, Position, Quest, QuestList, QuizCandle, QuizChoice, QuizQuestion, QuizResult,
+  RawAccount, RawClaimResult, RawCoachMessage, RawCoachToday, RawOrderResult, RawPosition, RawQuest,
+  RawQuestList, RawQuizQuestion, RawQuizResult, Season, Streak,
 } from '../types/game'
 
 // trading_game REST. Decimal 문자열은 여기서 number 로 변환해 UI 는 number 만 다룬다.
@@ -47,6 +49,25 @@ const toCoach = (m: RawCoachMessage): Coach => ({
 
 const toOrderResult = (r: RawOrderResult): OrderResult => ({ position: toPosition(r), nudges: r.nudges })
 
+const toQuest = (r: RawQuest): Quest => ({ ...r, reward_cash: toNumOrNull(r.reward_cash) })
+
+/** 스키마 없는 dict → 캔들. OHLC 중 하나라도 숫자가 아니면 그 캔들은 버린다(차트 예외 방지) */
+const toQuizCandles = (raw: Record<string, unknown>[]): QuizCandle[] => {
+  const out: QuizCandle[] = []
+  for (const c of raw) {
+    const open = toNumOrNull(c.open)
+    const high = toNumOrNull(c.high)
+    const low = toNumOrNull(c.low)
+    const close = toNumOrNull(c.close)
+    if (open === null || high === null || low === null || close === null) continue
+    const volume = toNumOrNull(c.volume)
+    out.push(volume === null ? { open, high, low, close } : { open, high, low, close, volume })
+  }
+  return out
+}
+
+const toQuizResult = (r: RawQuizResult): QuizResult => ({ ...r, actual_change: toNum(r.actual_change) })
+
 /** 공개 — 활성 시즌 없으면 null */
 export async function getActiveSeason(): Promise<Season | null> {
   const { data } = await client().get<Season | null>('/api/game/seasons/active')
@@ -75,7 +96,7 @@ export async function getTodayCoach(): Promise<Coach | null> {
   return data.active ? toCoach(data.active) : null
 }
 
-/** 5배 레버리지 해금 여부(문항은 6b에서 사용) */
+/** 5배 레버리지 해금 여부만(loadPrivate 용). 문항까지 필요하면 getAcademyQuiz */
 export async function getAcademyUnlocked(): Promise<boolean> {
   const { data } = await client().get<{ unlocked: boolean }>('/api/game/academy/quiz')
   return data.unlocked
@@ -89,4 +110,54 @@ export async function placeOrder(body: OrderRequest): Promise<OrderResult> {
 export async function closePosition(positionId: string): Promise<OrderResult> {
   const { data } = await client().post<RawOrderResult>(`/api/game/positions/${positionId}/close`)
   return toOrderResult(data)
+}
+
+// ---------------------------------------------------------------- 6b: 모달
+
+/** 공개 — 시즌 Top 100 */
+export async function getLeaderboard(seasonId: number): Promise<LeaderboardRow[]> {
+  const { data } = await client().get<LeaderboardRow[]>(`/api/game/seasons/${seasonId}/leaderboard`)
+  return data
+}
+
+/** 공개 — 명예의 전당(시즌 desc · 순위 asc, 최대 300) */
+export async function getHallOfFame(): Promise<HallOfFameRow[]> {
+  const { data } = await client().get<HallOfFameRow[]>('/api/game/hall-of-fame')
+  return data
+}
+
+export async function getQuests(): Promise<QuestList> {
+  const { data } = await client().get<RawQuestList>('/api/game/quests')
+  return { quests: data.quests.map(toQuest), badges: data.badges }
+}
+
+export async function claimQuest(code: string): Promise<ClaimResult> {
+  const { data } = await client().post<RawClaimResult>(`/api/game/quests/${encodeURIComponent(code)}/claim`)
+  return { quest: toQuest(data.quest), cash_balance: toNumOrNull(data.cash_balance), badge: data.badge }
+}
+
+export async function getAcademyQuiz(): Promise<AcademyQuiz> {
+  const { data } = await client().get<AcademyQuiz>('/api/game/academy/quiz')
+  return data
+}
+
+/** answers: 문항 id → 선택 인덱스(0-based) */
+export async function submitAcademy(answers: Record<number, number>): Promise<AcademySubmitResult> {
+  const { data } = await client().post<AcademySubmitResult>('/api/game/academy/submit', { answers })
+  return data
+}
+
+export async function getRandomQuiz(): Promise<QuizQuestion> {
+  const { data } = await client().get<RawQuizQuestion>('/api/game/quiz/random')
+  return { id: data.id, chart_snapshot: toQuizCandles(data.chart_snapshot), time_limit_sec: data.time_limit_sec }
+}
+
+export async function submitQuiz(quizId: number, choice: QuizChoice): Promise<QuizResult> {
+  const { data } = await client().post<RawQuizResult>(`/api/game/quiz/${quizId}/submit`, { choice })
+  return toQuizResult(data)
+}
+
+export async function getMyStreak(): Promise<Streak> {
+  const { data } = await client().get<Streak>('/api/game/streak/my')
+  return data
 }

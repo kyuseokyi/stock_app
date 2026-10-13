@@ -1,22 +1,62 @@
 import axios from 'axios'
 
-// 주문/청산 실패 → 사용자 문구. 서버 409/422 detail 은 이미 한국어 문장이므로 그대로 노출.
+// 게임 API 실패 → 사용자 문구.
+// detail 이 문자열(주문 409/422 등, 이미 한국어 문장)이면 그대로, 객체 {code, message}(퀘스트·퀴즈·레버리지 잠금)면
+// code 별 고정 문구 → 없으면 message.
 
 const NETWORK = '게임 서버에 연결할 수 없어요'
+const EXPIRED = '로그인이 만료되었어요. 다시 로그인해 주세요'
 
-export function orderErrorMessage(err: unknown): string {
+const CODE_MESSAGES = new Map<string, string>([
+  ['NO_QUIZ_AVAILABLE', '준비된 문제를 모두 풀었어요'],
+  ['FEATURE_DISABLED', '지금은 운영하지 않는 기능이에요'],
+  ['QUIZ_NOT_SERVED', '이미 제출했거나 만료된 문제예요'],
+  ['ALREADY_SUBMITTED', '이미 제출했거나 만료된 문제예요'],
+  ['QUEST_NOT_COMPLETED', '아직 완료하지 않은 퀘스트예요'],
+  ['ALREADY_CLAIMED', '이미 받은 보상이에요'],
+  ['NO_ACTIVE_SEASON', '진행 중인 시즌이 없어요'],
+  ['PRICE_UNAVAILABLE', '시세를 확인할 수 없어요. 잠시 후 다시 시도해 주세요'],
+  ['LEVERAGE_LOCKED', '5배 레버리지는 아카데미 퀴즈를 통과해야 쓸 수 있어요'],
+])
+
+/** 응답 본문의 detail(문자열·객체·배열) — 응답이 없으면 undefined */
+function errorDetail(err: unknown): unknown {
+  if (!axios.isAxiosError(err) || !err.response) return undefined
+  const data: unknown = err.response.data
+  return typeof data === 'object' && data !== null && 'detail' in data ? data.detail : undefined
+}
+
+/** 객체 detail 의 code(문자열일 때만), 없으면 null */
+export function apiErrorCode(err: unknown): string | null {
+  const detail = errorDetail(err)
+  if (typeof detail === 'object' && detail !== null && 'code' in detail && typeof detail.code === 'string') {
+    return detail.code
+  }
+  return null
+}
+
+export function gameErrorMessage(err: unknown): string {
   if (!axios.isAxiosError(err) || !err.response) return NETWORK
   const { status } = err.response
-  const data: unknown = err.response.data
-  const detail: unknown = typeof data === 'object' && data !== null && 'detail' in data ? data.detail : undefined
-
-  if (status === 401) return '로그인이 만료되었어요. 다시 로그인해 주세요'
-  if (status === 403 && typeof detail === 'object' && detail !== null && 'code' in detail && detail.code === 'LEVERAGE_LOCKED') {
-    return '5배 레버리지는 아카데미 퀴즈를 통과해야 쓸 수 있어요'
+  if (status === 401) return EXPIRED
+  const code = apiErrorCode(err)
+  const mapped = code === null ? undefined : CODE_MESSAGES.get(code)
+  if (mapped !== undefined) return mapped
+  const detail = errorDetail(err)
+  if (typeof detail === 'object' && detail !== null && 'message' in detail && typeof detail.message === 'string') {
+    return detail.message
   }
   if ((status === 403 || status === 404 || status === 409 || status === 422) && typeof detail === 'string') {
     return detail
   }
-  if (status === 422) return '주문 조건이 올바르지 않아요'
   return NETWORK
+}
+
+/** 주문/청산 실패 — 6a 동작 유지: 422 검증 오류(배열 detail)는 '주문 조건이 올바르지 않아요', 나머지는 gameErrorMessage */
+export function orderErrorMessage(err: unknown): string {
+  if (axios.isAxiosError(err) && err.response?.status === 422) {
+    const detail = errorDetail(err)
+    if (typeof detail !== 'string') return '주문 조건이 올바르지 않아요'
+  }
+  return gameErrorMessage(err)
 }

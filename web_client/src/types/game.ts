@@ -150,3 +150,164 @@ export type GameWsMessage =
   | ({ type: 'sentiment' } & Sentiment)
   | { type: 'nudge'; position_id: string; nudge: Nudge }
   | { type: 'coach'; coach: Coach }
+
+// ---------------------------------------------------------------- 6b: 모달(랭킹·퀘스트·아카데미·퀴즈·Streak)
+// 출처: routers/{leaderboard,quests,academy,quiz}.py, services/ranking_service.py, schemas/game_dtos.py
+
+/** GET /api/game/seasons/{id}/leaderboard (ranking_service.top_leaderboard — 이미 float, win_rate 0~100) */
+export interface LeaderboardRow {
+  rank: number
+  user_id: number
+  nickname: string | null
+  roi_pct: number
+  total_asset: number | null
+  win_rate: number
+}
+
+/** GET /api/game/hall-of-fame (이미 float, win_rate 0~100). 시즌 번호 없이 season_id 만 제공 */
+export interface HallOfFameRow {
+  season_id: number
+  rank: number
+  nickname: string
+  final_roi: number
+  final_asset: number
+  win_rate: number
+  trading_mbti: string | null
+}
+
+export interface RawQuest {
+  code: string
+  title: string
+  description: string
+  target: number
+  progress: number
+  reward_cash: Dec | null
+  reward_badge: string | null
+  completed: boolean
+  claimed: boolean
+}
+
+export interface Quest {
+  code: string
+  title: string
+  description: string
+  target: number
+  progress: number
+  reward_cash: number | null
+  reward_badge: string | null
+  completed: boolean
+  claimed: boolean
+}
+
+export interface Badge {
+  code: string
+  name: string
+  awarded_at: string | null
+}
+
+export interface RawQuestList {
+  quests: RawQuest[]
+  badges: Badge[]
+}
+
+export interface QuestList {
+  quests: Quest[]
+  badges: Badge[]
+}
+
+export interface RawClaimResult {
+  quest: RawQuest
+  cash_balance: Dec | null
+  badge: Badge | null
+}
+
+export interface ClaimResult {
+  quest: Quest
+  cash_balance: number | null
+  badge: Badge | null
+}
+
+export interface AcademyQuestion {
+  id: number
+  question: string
+  choices: string[]
+}
+
+export interface AcademyQuiz {
+  unlocked: boolean
+  questions: AcademyQuestion[]
+}
+
+export interface AcademyResultItem {
+  id: number
+  correct: boolean
+  /** 정답 선택지 인덱스(0-based) */
+  answer: number
+  explanation: string
+}
+
+export interface AcademySubmitResult {
+  unlocked: boolean
+  results: AcademyResultItem[]
+}
+
+/** 퀴즈 차트 캔들(첫 종가=100 정규화, 날짜 없음) */
+export interface QuizCandle {
+  open: number
+  high: number
+  low: number
+  close: number
+  volume?: number
+}
+
+/** GET /api/game/quiz/random — chart_snapshot 은 list[dict](스키마 없음) → api 계층에서 검증·변환 */
+export interface RawQuizQuestion {
+  id: number
+  chart_snapshot: Record<string, unknown>[]
+  time_limit_sec: number
+}
+
+export interface QuizQuestion {
+  id: number
+  chart_snapshot: QuizCandle[]
+  time_limit_sec: number
+}
+
+export type QuizChoice = 'UP' | 'DOWN'
+
+/** GET /api/game/streak/my (StreakResponse) */
+export interface Streak {
+  current_streak: number
+  highest_streak: number
+  last_activity_date: string | null
+  enabled: boolean
+}
+
+export interface RawQuizResult {
+  correct: boolean
+  answer: QuizChoice
+  actual_change: Dec
+  pattern_type: string
+  explanation: string
+  rewarded: boolean
+  reward_cash: number
+  timed_out: boolean
+  ticker: string
+  base_date: string
+  streak: Streak | null
+}
+
+export interface QuizResult {
+  correct: boolean
+  answer: QuizChoice
+  /** 기준일 대비 5거래일 후 등락률(%) */
+  actual_change: number
+  pattern_type: string
+  explanation: string
+  rewarded: boolean
+  reward_cash: number
+  timed_out: boolean
+  ticker: string
+  base_date: string
+  streak: Streak | null
+}
