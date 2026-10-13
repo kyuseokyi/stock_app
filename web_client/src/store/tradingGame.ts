@@ -3,10 +3,11 @@ import * as gameApi from '../api/game'
 import { gameClient } from '../api/gameClient'
 import { orderErrorMessage } from '../lib/gameErrors'
 import type {
-  Account, Coach, GameWsMessage, Leverage, MyRank, Nudge, Position, Ratio, Season, Sentiment, Side,
+  Account, Coach, GameWsMessage, Leverage, MyRank, Nudge, Position, Ratio, Season, Sentiment, Side, Streak,
 } from '../types/game'
 
-// 트레이딩 게임 전역 상태. 공개 데이터(시즌)와 로그인 데이터(계좌·포지션·순위·코치·해금·WS 실시간)를 분리한다.
+// 트레이딩 게임 전역 상태. 공개 데이터(시즌)와 로그인 데이터(계좌·포지션·순위·코치·해금·Streak·WS 실시간)를 분리한다.
+// 모달 내부 데이터(랭킹 목록·퀘스트·문항·퀴즈 진행)는 각 모달의 로컬 state — 여기엔 화면 간 공유값만 둔다.
 
 export type GameStatus = 'loading' | 'ready' | 'no-season' | 'unavailable' | 'error'
 
@@ -23,6 +24,7 @@ interface PrivateState {
   myRank: MyRank | null
   coach: Coach | null
   academyUnlocked: boolean
+  streak: Streak | null
   lastPrice: number | null
   sentiment: Sentiment | null
 }
@@ -33,14 +35,22 @@ interface TradingGameState extends PrivateState {
   submitting: boolean
   closing: boolean
   toasts: GameToast[]
+  /** 퀴즈 API 가 503 FEATURE_DISABLED 를 준 뒤 이 세션 동안 퀴즈 진입점 숨김(로그아웃해도 유지 — 서버 전역 플래그) */
+  quizDisabled: boolean
   loadSeason: () => Promise<void>
   loadPrivate: () => Promise<void>
   refreshTrading: () => Promise<void>
   refreshRank: () => Promise<void>
+  refreshStreak: () => Promise<void>
   resetPrivate: () => void
   placeOrder: (side: Side, ratio: Ratio, leverage: Leverage) => Promise<void>
   closePosition: () => Promise<void>
   applyMessage: (msg: GameWsMessage) => void
+  /** gen = 요청 시작 시점의 currentPrivateGen() — 그 사이 로그아웃했으면 무시 */
+  setAcademyUnlocked: (unlocked: boolean, gen: number) => void
+  /** 퀴즈 제출 응답의 streak 반영. gen 규칙은 setAcademyUnlocked 와 동일 */
+  setStreak: (streak: Streak, gen: number) => void
+  markQuizDisabled: () => void
   pushToast: (t: Omit<GameToast, 'id'>) => void
   dismissToast: (id: number) => void
 }
@@ -51,6 +61,7 @@ const PRIVATE_EMPTY: PrivateState = {
   myRank: null,
   coach: null,
   academyUnlocked: false,
+  streak: null,
   lastPrice: null,
   sentiment: null,
 }
@@ -61,6 +72,9 @@ let toastSeq = 0
 // refreshSeq는 재조회 호출 순번 — 더 최신 호출이 있으면 순서가 뒤바뀌어 도착한 이전 응답을 버린다.
 let privateGen = 0
 let refreshSeq = 0
+
+/** 모달 등 스토어 밖에서 비동기 요청을 시작할 때 캡처 → setAcademyUnlocked/setStreak 에 전달 */
+export const currentPrivateGen = (): number => privateGen
 
 export const useTradingGameStore = create<TradingGameState>()((set, get) => {
   const pushNudges = (nudges: Nudge[]) => {
@@ -86,6 +100,17 @@ export const useTradingGameStore = create<TradingGameState>()((set, get) => {
     set(patch)
   }
 
+  /** 연속 출석 재조회(주문 성공 시 서버가 touch). 실패는 무시 */
+  const refreshStreak = async () => {
+    const gen = privateGen
+    try {
+      const streak = await gameApi.getMyStreak()
+      if (gen === privateGen) set({ streak })
+    } catch {
+      // Streak 은 부가 정보 — 조회 실패 시 기존 값 유지
+    }
+  }
+
   return {
     ...PRIVATE_EMPTY,
     status: 'loading',
@@ -93,6 +118,7 @@ export const useTradingGameStore = create<TradingGameState>()((set, get) => {
     submitting: false,
     closing: false,
     toasts: [],
+    quizDisabled: false,
 
     loadSeason: async () => {
       if (!gameClient) {
@@ -113,16 +139,18 @@ export const useTradingGameStore = create<TradingGameState>()((set, get) => {
       const season = get().season
       if (!season) return
       const gen = privateGen
-      const [, coach, academy] = await Promise.allSettled([
+      const [, coach, academy, streak] = await Promise.allSettled([
         refreshTrading(),
         gameApi.getTodayCoach(),
         gameApi.getAcademyUnlocked(),
+        gameApi.getMyStreak(),
       ])
       const patch: Partial<PrivateState> = {}
       if (coach.status === 'fulfilled') {
         patch.coach = coach.value && coach.value.season_id === season.id ? coach.value : null
       }
       if (academy.status === 'fulfilled') patch.academyUnlocked = academy.value
+      if (streak.status === 'fulfilled') patch.streak = streak.value
       if (gen !== privateGen) return // 로그아웃 후 늦게 도착한 이전 사용자 데이터 폐기
       set(patch)
     },
@@ -143,6 +171,8 @@ export const useTradingGameStore = create<TradingGameState>()((set, get) => {
       }
     },
 
+    refreshStreak,
+
     resetPrivate: () => {
       privateGen++
       set({ ...PRIVATE_EMPTY })
@@ -158,6 +188,7 @@ export const useTradingGameStore = create<TradingGameState>()((set, get) => {
         if (gen === privateGen) {
           set({ position: result.position })
           pushNudges(result.nudges)
+          void refreshStreak() // 서버가 주문 시 연속 출석을 touch — 기다리지 않음
           await refreshTrading()
         }
       } catch (err) {
@@ -210,6 +241,16 @@ export const useTradingGameStore = create<TradingGameState>()((set, get) => {
           return
       }
     },
+
+    setAcademyUnlocked: (unlocked, gen) => {
+      if (gen === privateGen) set({ academyUnlocked: unlocked })
+    },
+
+    setStreak: (streak, gen) => {
+      if (gen === privateGen) set({ streak })
+    },
+
+    markQuizDisabled: () => set({ quizDisabled: true }),
 
     pushToast: (t) => set((s) => ({ toasts: [...s.toasts, { ...t, id: ++toastSeq }] })),
     dismissToast: (id) => set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })),
