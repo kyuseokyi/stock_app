@@ -19,14 +19,23 @@ log = logging.getLogger("trading_game.settlement")
 KST = timezone(timedelta(hours=9))
 
 
+def _bounds(y: int, m: int) -> tuple[datetime, datetime]:
+    start = datetime(y, m, 1, 9, 0, tzinfo=KST)
+    last_day = calendar.monthrange(y, m)[1]
+    return start, datetime(y, m, last_day, 20, 0, tzinfo=KST)
+
+
+def month_bounds(ref: datetime) -> tuple[datetime, datetime]:
+    """ref(KST 기준) 가 속한 달의 시즌 창: 1일 09:00 ~ 말일 20:00 KST."""
+    k = ref.astimezone(KST) if ref.tzinfo else ref.replace(tzinfo=KST)
+    return _bounds(k.year, k.month)
+
+
 def next_month_bounds(ref: datetime) -> tuple[datetime, datetime]:
     """ref 기준 '다음 달' 시작(1일 09:00 KST)·종료(말일 20:00 KST)."""
     y, m = ref.year, ref.month
     ny, nm = (y + 1, 1) if m == 12 else (y, m + 1)
-    start = datetime(ny, nm, 1, 9, 0, tzinfo=KST)
-    last_day = calendar.monthrange(ny, nm)[1]
-    end = datetime(ny, nm, last_day, 20, 0, tzinfo=KST)
-    return start, end
+    return _bounds(ny, nm)
 
 
 async def settle_due_season(db: AsyncSession, redis, close_price_provider) -> dict | None:
