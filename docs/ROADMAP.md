@@ -112,7 +112,8 @@
   - [x] **6c** 모바일(Expo) 동일 기능 — 순수 View 캔들 차트·RN Modal 시트·AppState WS (2026-10-13)
 
 ### 상시 백로그
-- [ ] 지인 리그(Private League) — 백엔드(리그 생성·초대코드·리그 랭킹) + UI. 서브페이즈 6 범위에서 제외
+- [x] **주간 랭킹** — 월 09:00 KST 시작·시즌 경계로 잘림, 주간 ROI=NAV 비율, 월 08:50 마감(Top 10 기록·1~3위 50/30/20만 보상), web·모바일 주간 탭+보상 토스트 (2026-10-13)
+- [ ] 지인 리그(Private League) — 백엔드(리그 생성·초대코드·리그 랭킹) + UI. 서브페이즈 6 범위에서 제외 · **보류**(사용자 결정 2026-10-13)
 - [ ] 이중추세선 조작 방식 재정의(대기 중)
 - [ ] 테스트(pytest / Vitest / Playwright)
 - [x] 퀴즈 생성 정기 스케줄(Celery beat) — `collector.generate_chart_quiz` 매일 21:00 KST, 미시도 재고 < `QUIZ_POOL_MIN_UNSEEN`(100)이면 `QUIZ_POOL_BATCH`(50)개 생성 (2026-10-13)

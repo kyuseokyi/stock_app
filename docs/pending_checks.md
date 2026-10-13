@@ -24,10 +24,14 @@
 - [ ] Android edge-to-edge 에서 시트 상단 여백·시트 안 토스트 위치
 - [ ] 주문 패널 ▾ 선택 목록(바깥 탭·뒤로가기로 닫힘), iOS 점선 표시, 좁은 화면 줄바꿈
 - [ ] 간편 로그인 인앱 브라우저 → `stockapp-dev://auth` 복귀("Unmatched route" 없음)
+- [x] 랭킹 시트 주간 탭·지난주 Top 3·주간 보상 토스트 — Android 에뮬레이터(로컬 일회용 DB) 확인 2026-10-13
+### web 주간 랭킹
+- [ ] 랭킹 모달 주간 탭·지난주 Top 3·보상 토스트(브라우저 미확인, tsc/build 만 통과)
 
 ## 3. 개발 서버에서 해야 할 작업
 - [ ] ⑤-2 까지 push 후 배포 확인(마이그레이션 2개 자동 적용: `streak_reward_claims`, `academy_questions`/`chart_quiz_pool.is_active`)
 - [ ] 배포 후 `docker compose -f docker-compose.prod.yml run --rm trading_game python -m scripts.seed_trading_game` → 출력 `end_at_backfilled=True`(시즌 1기 종료일 10/31 20:00)
+- [ ] 주간 랭킹 push 후: 마이그레이션 `c9d0e1f2a3b4` 자동 적용 확인, celery beat 재시작으로 `close-trading-week` 등록, 첫 월요일 08:50 이후 `weekly_ranking_results` 행·보상 지급·토스트 확인
 - [ ] admin → 데일리 코치에서 오늘 브리핑을 **실제 지지선·저항선**으로 수정·재발행(시드 값 71,000/73,500 은 예시라 차트 축척이 깨짐)
 
 ## 4. 외부 준비가 필요한 것
@@ -44,4 +48,5 @@
 - **손절·익절 % 는 주가 기준**(레버리지 미반영). 5x 에서 손절 -20% 는 강제청산(-80%)이 먼저라 발동하지 않음. SHORT 의 "손절 -5%" 는 주가 **상승** 5%.
 - **TradingView 로고**: lightweight-charts 출처 표시 의무 — 로고 유지(결정됨).
 - **시즌 운영**: 시즌은 매월 1일 09:00 ~ 말일 20:00. 20:40 정산이 다음 시즌을 자동 생성하고, `game_ws` 는 60초 안에 새 종목으로 자동 전환(재시작 불필요).
+- **주간 랭킹 기준값은 Redis 에만 있음**: 그 주 첫 랭킹 갱신 때 기록되므로 Redis 를 비우면 그 주 주간 순위가 초기화된다. 시즌 마지막 주 기록이 정산 중 실패하면 로그(`season=… week_start=…`)를 보고 `weekly_service.close_week(..., with_reward=False)` 로 수동 기록(주간 ZSET TTL 21일).
 - **DB 작업**: 마이그레이션 검증은 로컬 docker PG 일회용 DB 에서만. dev 터널(15432) DB 에 직접 실행 금지(배포 워크플로가 자동 적용).

@@ -54,7 +54,7 @@ uv run uvicorn apps.trading_game.main:app --reload --port 8003 --workers 1  # �
 
 # 데이터 수집/알림 워커 (Celery)
 uv run celery -A apps.collector.celery_app worker --loglevel=info
-uv run celery -A apps.collector.celery_app beat   --loglevel=info   # 스케줄러(매일 20:30 전종목 수집 · 20:40 시즌 정산 · 21:00 퀴즈 풀 보충)
+uv run celery -A apps.collector.celery_app beat   --loglevel=info   # 스케줄러(매일 20:30 전종목 수집 · 20:40 시즌 정산 · 21:00 퀴즈 풀 보충 · 월 08:50 주간 랭킹 마감)
 
 # 국내 주식 데이터 수집 — 수동 트리거 (워커 실행 중일 때)
 # 전종목 일봉(겹침창) 수집:      collector.collect_all_daily
@@ -99,6 +99,7 @@ uv run uvicorn apps.trading_game.main:app --reload --port 8003 --workers 1
 - **RSI·골든크로스 조회**: ClickHouse 조회는 각 2초 타임아웃, 타임아웃 시 60초 음성 캐시로 재대기 방지(best-effort).
 - **기능 플래그**: QUIZ·STREAK, admin_web "트레이딩 게임 > ⚙️ 기능 설정", Redis 30초 캐시(변경 시 즉시 무효화).
 - **퀴즈 생성**: `cd backend && uv run python -m scripts.generate_chart_quiz --count 50 [--seed N]` — 로컬/개발 DB 전용, 재실행 멱등. 종가 ≤ 0 이거나 일간 등락 ±30% 초과(미반영 분할 등) 구간은 제외하고, 캔들 없는 종목 수를 출력.
+- **주간 랭킹(마이그레이션 `c9d0e1f2a3b4`)**: 주 = 월 09:00 KST ~ 다음 월 09:00, 시즌 시작·종료 시각으로 잘림. 주간 ROI = `(1+누적ROI)/(1+주 시작 누적ROI)−1`(보상 지급은 ROI 불변이라 영향 없음). 기준값은 그 주 첫 랭킹 갱신 때 Redis `game:season:{id}:week:{월요일}:base` 에 기록, 순위는 `…:ranking` ZSET(TTL 21일). Celery beat `close_trading_week` 매주 월 08:50 KST → 지난주 Top 10 을 `weekly_ranking_results` 에 기록하고 1·2·3위에 500,000·300,000·200,000 지급(그 주 포지션을 연 계좌만, 시즌 마지막 주는 정산 시 기록만). API: `GET /api/game/seasons/{id}/weekly-leaderboard`·`/weekly-my-rank`, `GET /api/game/weekly-results?season_id&limit`, `GET /api/game/weekly-rewards/unseen`, `POST /api/game/weekly-rewards/{id}/ack`. web·모바일 랭킹 탭 `주간 | 시즌 랭킹 | 명예의 전당`, 게임 진입 시 미확인 보상 토스트.
 - **퀴즈 정기 생성(Celery beat)**: `collector.generate_chart_quiz` 매일 21:00 KST(일봉 수집 20:30·정산 20:40 이후) — 아직 아무도 시도하지 않은 문제 수가 `QUIZ_POOL_MIN_UNSEEN`(기본 100) 미만일 때만 `QUIZ_POOL_BATCH`(기본 50)개를 위 스크립트의 `generate()` 로 생성, 아니면 skip(결과 `{generated, skipped_reason}` 로그). worker+beat 가동 필요.
 - **퀴즈·아카데미 문항 관리자 편집(백로그 ⑤-2, 마이그레이션 `b8c9d0e1f2a3`)**: 아카데미 `GET·POST /api/game/admin/academy/questions`, `PUT·DELETE /api/game/admin/academy/questions/{id}`(choices 2~6·각 1~200자, answer 범위, 질문 1~500·해설 1~1000자). 유저 아카데미는 활성 문항만 `sort_order` 순 출제 — 0개면 제출 409 `NO_QUESTIONS`, 이미 해금한 유저는 유지. 퀴즈 `GET /api/game/admin/quizzes?page&size(≤100)&active`(최신순·시도 수), `GET·PUT·DELETE /api/game/admin/quizzes/{id}`(수정은 `pattern_type`·`explanation`·`is_active` 만, 시도 기록 있으면 삭제 409 `HAS_ATTEMPTS`), `POST /api/game/admin/quizzes/generate {count 1~200}` → `{created, skipped}`, 직접 출제 `POST /api/game/admin/quizzes {ticker, base_date}`(CH 일봉에서 정답·등락률·해설 자동 계산, 422 `INSUFFICIENT_DATA`/`TOO_FLAT`/`INVALID_SERIES`, 409 `DUPLICATE`). `chart_quiz_pool.is_active=false` 문제는 출제·beat 재고에서 제외(이미 출제된 문제의 제출은 허용).
 - 에뮬레이터 검증 시: `adb reverse tcp:8003 tcp:8003` 추가.
