@@ -1,4 +1,4 @@
-import axios from 'axios'
+import axios, { type AxiosError } from 'axios'
 import { TOKEN_KEY } from '../store/auth'
 import { API_BASE_URL as baseURL } from '../config'
 
@@ -19,7 +19,7 @@ client.interceptors.request.use((config) => {
 // 401(토큰 만료/무효) → 저장 토큰 정리(재로그인 유도)
 client.interceptors.response.use(
   (res) => res,
-  (err) => {
+  (err: AxiosError) => {
     if (err.response?.status === 401) {
       localStorage.removeItem(TOKEN_KEY)
       localStorage.removeItem('wc_user')

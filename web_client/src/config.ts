@@ -7,12 +7,14 @@
 //
 // ⚠️ 배포 빌드(vite build)에서 VITE_* 가 비면 localhost 로 폴백하지 않고 즉시 throw 한다
 //    (localhost 가 조용히 구워지는 'green-but-broken' 배포 차단). 빌드 타임 방어는 vite.config.js.
-const DEV_FALLBACK = {
+type EnvKey = 'VITE_API_BASE_URL' | 'VITE_AUTH_BASE_URL'
+
+const DEV_FALLBACK: Record<EnvKey, string> = {
   VITE_API_BASE_URL: 'http://localhost:8000/api/v1', // blog(8000)
   VITE_AUTH_BASE_URL: 'http://localhost:8001/api/v1', // auth(8001)
 }
 
-function readEnv(name) {
+function readEnv(name: EnvKey): string {
   const v = import.meta.env[name]
   if (v) return v
   if (import.meta.env.DEV) return DEV_FALLBACK[name] // vite dev(serve)에서만 폴백 허용

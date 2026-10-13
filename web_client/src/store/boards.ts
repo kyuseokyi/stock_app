@@ -1,8 +1,17 @@
 import { create } from 'zustand'
 import { listBoards } from '../api/blog'
+import type { BoardOut } from '../types/api'
+
+interface BoardState {
+  boards: BoardOut[]
+  loaded: boolean
+  error: string
+  fetchBoards: () => Promise<void>
+  boardName: (id: number) => string
+}
 
 // 활성 게시판 목록 전역 캐시 (헤더 탭 + 페이지 공유)
-export const useBoardStore = create((set, get) => ({
+export const useBoardStore = create<BoardState>()((set, get) => ({
   boards: [],
   loaded: false,
   error: '',
