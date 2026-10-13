@@ -116,7 +116,8 @@
 - [ ] 이중추세선 조작 방식 재정의(대기 중)
 - [ ] 테스트(pytest / Vitest / Playwright)
 - [x] 퀴즈 생성 정기 스케줄(Celery beat) — `collector.generate_chart_quiz` 매일 21:00 KST, 미시도 재고 < `QUIZ_POOL_MIN_UNSEEN`(100)이면 `QUIZ_POOL_BATCH`(50)개 생성 (2026-10-13)
-- [ ] 연속 출석 보상·퀴즈/아카데미 문항 어드민 편집
+- [x] **⑤-1** 연속 출석 마일스톤 보상 — 3·7·14·30일, 시즌마다 마일스톤별 1회 수동 수령(`streak_reward_claims`, web 모달·모바일 시트) (2026-10-13)
+- [ ] **⑤-2** 퀴즈/아카데미 문항 어드민 편집
 - [ ] 실 FCM 전환(`PUSH_BACKEND=fcm` + 자격증명)
 - [x] web_client TypeScript 전환 (서브페이즈 6 직전, admin_web과 동일 방식) — 2026-10-13 strict 전환 완료
 - [x] **trading_game 개발 서버(develop) 배포 구성** — prod compose 에 `trading_game`(호스트 8004)·`game_ws` 추가, web/admin 빌드에 `VITE_GAME_API_URL=https://game.haezean.com` 주입, Deploy Server 에 `alembic upgrade head` 자동 단계 (2026-10-13). **남은 수동 작업**: Cloudflare `game.haezean.com → localhost:8004`, 서버에서 시즌 시드·퀴즈 생성(`docs/server_setup.md` §7-1)
