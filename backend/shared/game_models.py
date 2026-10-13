@@ -390,6 +390,33 @@ class StreakRewardClaim(Base):
     )
 
 
+class WeeklyRankingResult(Base):
+    """주간 랭킹 마감 기록(Top 10) + 1~3위 보상액. notified_at = 보상 토스트 확인 시각."""
+
+    __tablename__ = "weekly_ranking_results"
+    __table_args__ = (
+        UniqueConstraint("season_id", "week_start", "rank", name="uq_weekly_result_rank"),
+        UniqueConstraint("season_id", "week_start", "user_id", name="uq_weekly_result_user"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    season_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("game_seasons.id", ondelete="CASCADE"), nullable=False
+    )
+    week_start: Mapped[date] = mapped_column(Date, nullable=False)
+    rank: Mapped[int] = mapped_column(Integer, nullable=False)
+    user_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    nickname: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    weekly_roi: Mapped[Decimal] = mapped_column(Numeric(10, 4), nullable=False)
+    reward_amount: Mapped[Decimal] = mapped_column(Numeric(15, 2), nullable=False, server_default="0")
+    notified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
 class GameFeatureFlag(Base):
     """기능 on/off(QUIZ, STREAK). 행이 없으면 서비스가 ON 으로 간주."""
 

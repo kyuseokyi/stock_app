@@ -90,3 +90,27 @@ async def test_update_rank_without_window_or_outside_season_skips_weekly():
     await rs.update_rank(r, 1, 9, Decimal("4"), season_window=WIN, now=k(31, 21))   # 시즌 종료 후
     assert await r.keys("game:season:1:week:*") == []
     assert await r.zscore(rs.ranking_key(1), "9") == pytest.approx(4.0)
+
+
+# ---------------------------------------------------------------- model
+from sqlalchemy.exc import IntegrityError  # noqa: E402
+
+from shared.game_models import WeeklyRankingResult  # noqa: E402
+from tests.test_quest_quiz_streak import (  # noqa: F401,E402 — 픽스처 재사용
+    _seed_account, _seed_season, _seed_user, api, fake_redis, maker, session,
+)
+
+
+async def test_weekly_result_roundtrip_and_unique(session):
+    u = await _seed_user(session)
+    s = await _seed_season(session)
+    row = WeeklyRankingResult(season_id=s.id, week_start=W, rank=1, user_id=u.id, nickname="n",
+                              weekly_roi=Decimal("12.3456"), reward_amount=Decimal("500000"))
+    session.add(row)
+    await session.commit()
+    await session.refresh(row)
+    assert row.id and row.created_at is not None and row.notified_at is None
+    session.add(WeeklyRankingResult(season_id=s.id, week_start=W, rank=2, user_id=u.id,
+                                    weekly_roi=Decimal("1"), reward_amount=Decimal("0")))
+    with pytest.raises(IntegrityError):
+        await session.commit()
