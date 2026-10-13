@@ -99,12 +99,13 @@ export const useTradingGameStore = create<TradingGameState>()((set, get) => {
         set({ status: 'unavailable' })
         return
       }
-      set({ status: 'loading' })
+      // 최초 로드만 loading 표시 — 시즌이 이미 있으면(탭 재진입) 화면 유지한 채 백그라운드 갱신
+      if (get().season === null) set({ status: 'loading' })
       try {
         const season = await gameApi.getActiveSeason()
         set(season ? { status: 'ready', season } : { status: 'no-season', season: null })
       } catch {
-        set({ status: 'error' })
+        if (get().status !== 'ready') set({ status: 'error' }) // 이미 ready 면 현재 상태 유지
       }
     },
 
@@ -131,8 +132,12 @@ export const useTradingGameStore = create<TradingGameState>()((set, get) => {
     refreshRank: async () => {
       const season = get().season
       if (!season) return
+      const gen = privateGen
+      const seq = refreshSeq
       try {
-        set({ myRank: await gameApi.getMyRank(season.id) })
+        const rank = await gameApi.getMyRank(season.id)
+        if (gen !== privateGen || seq !== refreshSeq) return // 로그아웃 또는 폴링 중 재조회 시작 — 덮어쓰기 금지
+        set({ myRank: rank })
       } catch {
         // 순위 갱신 실패는 조용히 무시(다음 주기에 재시도)
       }

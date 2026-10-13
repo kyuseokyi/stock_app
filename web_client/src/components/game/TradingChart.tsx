@@ -79,7 +79,11 @@ export default function TradingChart({ ticker, lastPrice, coach, position }: Tra
     if (!series || !loaded || lastPrice === null) return
     const next = mergeTick(lastCandleRef.current, kstDateString(), lastPrice)
     lastCandleRef.current = next
-    series.update(toBar(next))
+    try {
+      series.update(toBar(next))
+    } catch {
+      // lightweight-charts "Cannot update oldest data" 등 — 틱 반영 실패로 앱이 죽지 않게 무시
+    }
   }, [lastPrice, loaded])
 
   // 3) 가격선(지지/저항/진입가) — 값이 바뀔 때만 재생성(손익 틱마다 재생성하지 않도록 원시값 의존)

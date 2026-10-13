@@ -19,7 +19,7 @@ export function useGameWebSocket(token: string | null, enabled: boolean, onAuthF
 
   useEffect(() => {
     if (!token || !enabled || !GAME_API_URL) return
-    const url = `${GAME_API_URL.replace(/^http/, 'ws')}/ws/game/stream?token=${encodeURIComponent(token)}`
+    const url = `${GAME_API_URL.replace(/\/+$/, '').replace(/^http/, 'ws')}/ws/game/stream?token=${encodeURIComponent(token)}`
     const store = useTradingGameStore.getState
     let ws: WebSocket | null = null
     let stopped = false
