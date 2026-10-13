@@ -50,7 +50,7 @@ export function OrderPanel({ hasPosition, academyUnlocked, submitting, onOrder, 
   }, [academyUnlocked]);
 
   return (
-    <Card>
+    <Card style={styles.card}>
       <View style={styles.chipRow}>
         <Text style={styles.caption}>비중</Text>
         {RATIO_CHIPS.map((r) => (
@@ -107,15 +107,15 @@ export function OrderPanel({ hasPosition, academyUnlocked, submitting, onOrder, 
           disabled={disabled}
           onPress={() => order('LONG')}
           style={({ pressed }) => [styles.order, styles.buy, pressed && styles.pressed, disabled && styles.disabled]}>
-          <Text style={styles.orderLabel}>🔴 BUY</Text>
-          <Text style={styles.orderSub}>(상승 베팅)</Text>
+          <Text style={[styles.orderLabel, styles.buyText]}>🔴 BUY</Text>
+          <Text style={[styles.orderSub, styles.buyText]}>(상승 베팅)</Text>
         </Pressable>
         <Pressable
           disabled={disabled}
           onPress={() => order('SHORT')}
           style={({ pressed }) => [styles.order, styles.sell, pressed && styles.pressed, disabled && styles.disabled]}>
-          <Text style={styles.orderLabel}>🔵 SELL</Text>
-          <Text style={styles.orderSub}>(하락 베팅)</Text>
+          <Text style={[styles.orderLabel, styles.sellText]}>🔵 SELL</Text>
+          <Text style={[styles.orderSub, styles.sellText]}>(하락 베팅)</Text>
         </Pressable>
       </View>
       {hasPosition ? <Text style={styles.hint}>보유 포지션을 먼저 청산하세요</Text> : null}
@@ -124,6 +124,7 @@ export function OrderPanel({ hasPosition, academyUnlocked, submitting, onOrder, 
 }
 
 const styles = StyleSheet.create((theme) => ({
+  card: { backgroundColor: theme.colors.surfacePink },
   chipRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: theme.gap(1), marginBottom: theme.gap(1) },
   caption: { fontSize: 12, color: theme.colors.textSecondary, width: 28 },
   captionGap: { marginLeft: theme.gap(1) },
@@ -136,11 +137,13 @@ const styles = StyleSheet.create((theme) => ({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  buy: { backgroundColor: theme.colors.up },
-  sell: { backgroundColor: theme.colors.down },
+  buy: { backgroundColor: theme.colors.upSoft },
+  sell: { backgroundColor: theme.colors.downSoft },
+  buyText: { color: theme.colors.up },
+  sellText: { color: theme.colors.down },
   pressed: { opacity: 0.85 },
   disabled: { opacity: 0.4 },
-  orderLabel: { fontSize: 16, fontWeight: '700', color: '#ffffff' },
-  orderSub: { fontSize: 12, fontWeight: '500', color: '#ffffff' },
+  orderLabel: { fontSize: 16, fontWeight: '700' },
+  orderSub: { fontSize: 12, fontWeight: '500' },
   hint: { marginTop: theme.gap(1), fontSize: 12, textAlign: 'center', color: theme.colors.textSecondary },
 }));

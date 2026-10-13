@@ -48,7 +48,7 @@ export function GameHeader({
   const showStreak = loggedIn && streak !== null && streak.enabled && streak.current_streak >= 1;
 
   return (
-    <Card>
+    <Card style={styles.card}>
       <View style={styles.metaRow}>
         <Text style={styles.season}>
           시즌 {season.season_number}기{dday !== null ? ` · 종료 D-${dday}` : ''}
@@ -97,13 +97,14 @@ export function GameHeader({
 }
 
 const styles = StyleSheet.create((theme) => ({
+  card: { backgroundColor: theme.colors.surfacePink },
   metaRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: theme.gap(0.75) },
   season: { fontSize: 13, fontWeight: '600', color: theme.colors.primary },
   streak: {
     fontSize: 12,
     fontWeight: '600',
     color: theme.colors.up,
-    backgroundColor: theme.colors.background,
+    backgroundColor: theme.colors.surface,
     borderRadius: theme.radius.chip,
     paddingHorizontal: theme.gap(1),
     paddingVertical: 2,
@@ -119,7 +120,7 @@ const styles = StyleSheet.create((theme) => ({
   navRow: { flexDirection: 'row', flexWrap: 'wrap', gap: theme.gap(1), marginTop: theme.gap(1) },
   nav: {
     borderRadius: theme.radius.chip,
-    backgroundColor: theme.colors.background,
+    backgroundColor: theme.colors.surface,
     paddingVertical: theme.gap(0.75),
     paddingHorizontal: theme.gap(1.5),
   },

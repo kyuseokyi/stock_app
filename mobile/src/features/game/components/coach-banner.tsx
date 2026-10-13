@@ -36,7 +36,7 @@ export function CoachBanner({ coach }: { coach: Coach | null }) {
 }
 
 const styles = StyleSheet.create((theme) => ({
-  box: { backgroundColor: theme.colors.primarySoft, borderRadius: theme.radius.card, padding: theme.gap(2) },
+  box: { backgroundColor: theme.colors.surfaceBlue, borderRadius: theme.radius.card, padding: theme.gap(2) },
   row: { flexDirection: 'row', alignItems: 'flex-start', gap: theme.gap(1) },
   icon: { fontSize: 16 },
   summary: { flex: 1, fontSize: 14, lineHeight: 20, color: theme.colors.text },

@@ -19,7 +19,7 @@ const styles = StyleSheet.create((theme) => ({
     flexDirection: 'row',
     alignItems: 'center',
     gap: theme.gap(1.5),
-    backgroundColor: theme.colors.primarySoft,
+    backgroundColor: theme.colors.surfaceBlue,
     borderRadius: theme.radius.card,
     paddingVertical: theme.gap(1.5),
     paddingHorizontal: theme.gap(2),

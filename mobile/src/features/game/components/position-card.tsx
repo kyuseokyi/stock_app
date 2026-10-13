@@ -19,7 +19,7 @@ export function PositionCard({ position, lastPrice, closing, onClose }: Props) {
   const long = position.side === 'LONG';
   const slTp = slTpLine(position.stop_loss_price, position.take_profit_price);
   return (
-    <Card>
+    <Card style={styles.card}>
       <View style={styles.row}>
         <Text style={styles.side}>
           <Text style={long ? styles.long : styles.short}>{position.side}</Text> x{position.leverage}배
@@ -48,6 +48,7 @@ export function PositionCard({ position, lastPrice, closing, onClose }: Props) {
 }
 
 const styles = StyleSheet.create((theme) => ({
+  card: { backgroundColor: theme.colors.surfaceBlue },
   row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: theme.gap(1) },
   side: { fontSize: 17, fontWeight: '700', color: theme.colors.text },
   long: { color: theme.colors.up },

@@ -1,6 +1,7 @@
 /**
  * Unistyles v3 전역 설정 — 앱 진입 전에 1회 실행되어야 한다(index.ts에서 import).
  * 테마는 OS 라이트/다크에 자동 대응(adaptiveThemes)한다.
+ * 팔레트: 파스텔 C안(라벤더 바탕 + 핑크·블루) — docs/superpowers/specs/2026-10-14-pastel-theme-design.md
  */
 import { StyleSheet } from 'react-native-unistyles';
 
@@ -12,30 +13,40 @@ const shared = {
 
 const lightTheme = {
   colors: {
-    background: '#ffffff',
-    surface: '#f2f4f6',
-    border: '#e5e8eb',
-    text: '#191f28',
-    textSecondary: '#8b95a1',
-    primary: '#3182f6', // 토스 블루
-    primarySoft: '#e8f1fe', // 연한 포인트 배경
-    up: '#f04452', // 상승/수익 = 빨강 (국내 관례)
-    down: '#3182f6', // 하락/손실 = 파랑
+    background: '#f7f5ff', // 아주 연한 라벤더 바탕
+    surface: '#ffffff', // 칩·입력·일반 카드(라벤더 위 흰색)
+    surfacePink: '#fde4ee', // 핑크 카드
+    surfaceBlue: '#e2ecff', // 블루 카드
+    border: '#ebe7f7',
+    text: '#25223a',
+    textSecondary: '#8e8aa6',
+    primary: '#6f8ef0', // 파스텔 블루(CTA·선택·링크)
+    primarySoft: '#e2ecff', // 선택 칩·내 행 배경
+    accent: '#e88ab0', // 핑크 포인트(탭바 선택·배지)
+    up: '#c93a6c', // 상승/수익 글자 = 핑크레드 (국내 관례)
+    upSoft: '#fbd6e4', // BUY 버튼·수익 배지 배경
+    down: '#4f73d9', // 하락/손실 글자 = 블루
+    downSoft: '#d8e3fd', // SELL 버튼·손실 배지 배경
   },
   ...shared,
 };
 
 const darkTheme = {
   colors: {
-    background: '#17171c',
-    surface: '#202127',
-    border: '#2b2d33',
-    text: '#f4f6f8',
-    textSecondary: '#9aa0aa',
-    primary: '#4a94f8',
-    primarySoft: '#1e2a3d',
-    up: '#ff5b5b',
-    down: '#5b8cff',
+    background: '#1a1826',
+    surface: '#24212f',
+    surfacePink: '#3a2433',
+    surfaceBlue: '#222c45',
+    border: '#322e40',
+    text: '#f3f1fa',
+    textSecondary: '#a6a1bd',
+    primary: '#9fb4f7',
+    primarySoft: '#2a3150',
+    accent: '#f0a0c0',
+    up: '#ff7aa2',
+    upSoft: '#3d2230',
+    down: '#8aa4ff',
+    downSoft: '#23305a',
   },
   ...shared,
 };
