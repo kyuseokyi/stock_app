@@ -57,6 +57,10 @@ const PRIVATE_EMPTY: PrivateState = {
 
 const NUDGE_ICON: Record<string, string> = { WARNING: '⚠️', PRAISE: '👏', ADVICE: '💡' }
 let toastSeq = 0
+// 경쟁 상태 가드: privateGen은 resetPrivate(로그아웃)마다 증가 — 요청 시작 시점과 달라졌으면 늦게 도착한 응답을 버린다.
+// refreshSeq는 재조회 호출 순번 — 더 최신 호출이 있으면 순서가 뒤바뀌어 도착한 이전 응답을 버린다.
+let privateGen = 0
+let refreshSeq = 0
 
 export const useTradingGameStore = create<TradingGameState>()((set, get) => {
   const pushNudges = (nudges: Nudge[]) => {
@@ -67,11 +71,14 @@ export const useTradingGameStore = create<TradingGameState>()((set, get) => {
   const refreshTrading = async () => {
     const season = get().season
     if (!season) return
+    const gen = privateGen
+    const seq = ++refreshSeq
     const [acc, pos, rank] = await Promise.allSettled([
       gameApi.getMyAccount(season.id),
       gameApi.getActivePosition(season.id),
       gameApi.getMyRank(season.id),
     ])
+    if (gen !== privateGen || seq !== refreshSeq) return // 로그아웃 또는 더 최신 재조회 존재 — 덮어쓰기 금지
     const patch: Partial<PrivateState> = {}
     if (acc.status === 'fulfilled') patch.account = acc.value
     if (pos.status === 'fulfilled') patch.position = pos.value
@@ -104,6 +111,7 @@ export const useTradingGameStore = create<TradingGameState>()((set, get) => {
     loadPrivate: async () => {
       const season = get().season
       if (!season) return
+      const gen = privateGen
       const [, coach, academy] = await Promise.allSettled([
         refreshTrading(),
         gameApi.getTodayCoach(),
@@ -114,6 +122,7 @@ export const useTradingGameStore = create<TradingGameState>()((set, get) => {
         patch.coach = coach.value && coach.value.season_id === season.id ? coach.value : null
       }
       if (academy.status === 'fulfilled') patch.academyUnlocked = academy.value
+      if (gen !== privateGen) return // 로그아웃 후 늦게 도착한 이전 사용자 데이터 폐기
       set(patch)
     },
 
@@ -129,17 +138,23 @@ export const useTradingGameStore = create<TradingGameState>()((set, get) => {
       }
     },
 
-    resetPrivate: () => set({ ...PRIVATE_EMPTY }),
+    resetPrivate: () => {
+      privateGen++
+      set({ ...PRIVATE_EMPTY })
+    },
 
     placeOrder: async (side, ratio, leverage) => {
       const { season, submitting } = get()
       if (!season || submitting) return
+      const gen = privateGen
       set({ submitting: true })
       try {
         const result = await gameApi.placeOrder({ season_id: season.id, side, ratio, leverage })
-        set({ position: result.position })
-        pushNudges(result.nudges)
-        await refreshTrading()
+        if (gen === privateGen) {
+          set({ position: result.position })
+          pushNudges(result.nudges)
+          await refreshTrading()
+        }
       } catch (err) {
         get().pushToast({ kind: 'error', icon: '⚠️', message: orderErrorMessage(err) })
       } finally {
@@ -150,12 +165,15 @@ export const useTradingGameStore = create<TradingGameState>()((set, get) => {
     closePosition: async () => {
       const { position, closing } = get()
       if (!position || closing) return
+      const gen = privateGen
       set({ closing: true })
       try {
         const result = await gameApi.closePosition(position.id)
-        set({ position: null })
-        pushNudges(result.nudges)
-        await refreshTrading()
+        if (gen === privateGen) {
+          set({ position: null })
+          pushNudges(result.nudges)
+          await refreshTrading()
+        }
       } catch (err) {
         get().pushToast({ kind: 'error', icon: '⚠️', message: orderErrorMessage(err) })
         void refreshTrading() // 이미 자동청산된 경우 등 — 서버 상태로 동기화
