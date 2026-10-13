@@ -13,17 +13,29 @@
 ## 2. 흐름 (백엔드 콜백 + 일회용 교환 코드)
 
 ```
-클라이언트 → GET /api/v1/auth/social/{provider}/start?client=web|app[&app=dev|prod]
-  auth: state = 서명 JWT {provider, client, app_variant, nonce, exp=10분} (키: SOCIAL_STATE_SECRET)
+클라이언트: verifier = base64url(32바이트 CSPRNG), cc = base64url(SHA-256(verifier))  (PKCE S256 방식)
+클라이언트 → GET /api/v1/auth/social/{provider}/start?client=web|app[&app=dev|prod]&cc=<43자>
+  auth: cc 형식 검증(base64url 43자, 아니면 422)
+        state = 서명 JWT {provider, client, app_variant, nonce, cc, exp=10분} (키: SOCIAL_STATE_SECRET)
   → 302 공급자 인가 URL(redirect_uri = SOCIAL_REDIRECT_BASE/{provider}/callback)
 공급자 → GET /api/v1/auth/social/{provider}/callback?code&state[&error]
-  auth: state 서명·만료·provider 일치 검증 → nonce 1회 사용(Redis SET NX, TTL 10분)
+  auth: state 서명·만료·provider·cc 형식 검증 → nonce 1회 사용(Redis SET NX, TTL 10분)
         → 어댑터.exchange_code(code, state) → ProviderProfile(id, nickname)
-        → (provider, provider_id) 로 사용자 찾기/생성 → 교환 코드 발급(Redis, TTL 60초, 값=user_id)
-  → 302 복귀 주소?code=…   (실패 시 복귀 주소?error=<code>)
-클라이언트 → POST /api/v1/auth/social/exchange {code}
-  auth: Redis GETDEL(1회) → 사용자 활성 확인 → TokenResponse(기존 형식)
+        → (provider, provider_id) 로 사용자 찾기/생성
+        → 교환 코드 발급(Redis, TTL 60초, 값=JSON {"user_id", "cc"})
+  → 302 복귀 주소?code=…   (실패 시 복귀 주소?error=<code>; Redis·DB 장애도 ?error=provider_failed)
+클라이언트 → POST /api/v1/auth/social/exchange {code, code_verifier}
+  auth: Redis GETDEL(1회, 먼저 소모) → base64url(SHA-256(code_verifier)) 와 cc 를 hmac.compare_digest
+        → 불일치·누락은 '없는 코드'와 같은 401 → 사용자 활성 확인 → TokenResponse(기존 형식)
 ```
+
+- **verifier(PKCE 방식)** — 로그인 CSRF(공격자 교환 코드를 피해자 브라우저에 심기)와 Android 커스텀 스킴 가로채기를 막는다.
+  교환 코드만 가진 쪽은 verifier 를 모르므로 토큰을 받을 수 없다. 가짜 공급자 모드도 같은 경로를 탄다.
+  - web: verifier 를 `sessionStorage`(`wc_social_verifier`)에 두고 이동, `/auth/complete` 가 꺼내(삭제) 교환에 실음. 없으면 "잘못된 접근".
+    `crypto.subtle` 은 보안 컨텍스트(https·localhost)에서만 동작.
+  - 모바일: `startSocialLogin` 지역 변수로만 보관. Hermes 에 Web Crypto 가 없어 SHA-256 은 순수 TS(`features/auth/pkce.ts`),
+    난수는 `crypto.getRandomValues` 가 있으면 그것, 없으면 expo-modules-core 네이티브 `expo.uuidv4`(Android SecureRandom·iOS 시스템 CSPRNG)
+    3개를 SHA-256 으로 압축(`features/auth/verifier.ts`). 보안 난수원이 없으면 시작하지 않는다(Math.random 금지).
 
 - **복귀 주소는 state 의 client/app_variant 로 서버 설정에서만 선택**(오픈 리다이렉트 방지):
   - web → `SOCIAL_WEB_RETURN_URL`(예: `http://localhost:3000/auth/complete`)
@@ -43,7 +55,8 @@
 ```
 apps/auth/social/
   config.py      # SocialSettings(env 로드), 공급자별 활성 여부
-  state.py       # sign_state / verify_state (PyJWT HS256, SOCIAL_STATE_SECRET)
+  state.py       # sign_state / verify_state (PyJWT HS256, SOCIAL_STATE_SECRET, cc 포함)
+  pkce.py        # challenge_for / verifier_matches (base64url(SHA-256), hmac.compare_digest)
   store.py       # Redis: use_nonce, issue_exchange_code, consume_exchange_code (redis.asyncio, REDIS_URL)
   providers.py   # Provider 프로토콜 + KakaoProvider·NaverProvider·FakeProvider (httpx.AsyncClient)
   service.py     # find_or_create_user(db, provider, profile)
@@ -53,16 +66,16 @@ apps/auth/routers/social.py   # providers / start / callback / exchange
   - 카카오: 인가 `https://kauth.kakao.com/oauth/authorize`(response_type=code, client_id, redirect_uri, state), 토큰 `POST https://kauth.kakao.com/oauth/token`(form: grant_type=authorization_code, client_id, redirect_uri, code, client_secret?), 프로필 `GET https://kapi.kakao.com/v2/user/me` → `id`, `kakao_account.profile.nickname`(없으면 `properties.nickname`).
   - 네이버: 인가 `https://nid.naver.com/oauth2.0/authorize`(response_type=code, client_id, redirect_uri, state), 토큰 `POST https://nid.naver.com/oauth2.0/token`(form: grant_type=authorization_code, client_id, client_secret, code, state), 프로필 `GET https://openapi.naver.com/v1/nid/me` → `response.id`, `response.nickname`(없으면 `response.name`).
   - httpx 타임아웃 5초, 비-2xx·필수 필드 누락 → `ProviderError` → `?error=provider_failed`.
-- **가짜 공급자 모드**: `SOCIAL_FAKE_PROVIDER=true` 이고 `APP_ENV != production` 일 때만. `/start` 가 공급자 대신 자기 콜백으로 `code=fake` 를 붙여 302, 어댑터는 `id=fake-<provider>-tester`, 닉네임 `테스트유저` 프로필 반환. 운영에서 켜져 있으면 기동 시 경고 로그 + 무시.
+- **가짜 공급자 모드**: `SOCIAL_FAKE_PROVIDER=true` 이고 `APP_ENV` 가 **명시적으로** `development`/`test` 일 때만(미설정·기타 값은 꺼짐 — fail closed). 켜져 있으면 기동 시 경고 로그. `/start` 가 공급자 대신 자기 콜백으로 `code=fake` 를 붙여 302, 어댑터는 `id=fake-<provider>-tester`, 닉네임 `테스트유저` 프로필 반환. 운영에서 켜져 있으면 기동 시 경고 로그 + 무시.
 - 키 미설정 공급자(가짜 모드 아님) → `/start` 503 `{"detail":{"code":"PROVIDER_DISABLED","message":"…준비 중"}}`.
 - `GET /api/v1/auth/social/providers` → `{"kakao": bool, "naver": bool}` (버튼 노출용, 공개).
 
 ### 3.3 환경변수 (backend)
-`KAKAO_REST_API_KEY`, `KAKAO_CLIENT_SECRET`(선택), `NAVER_CLIENT_ID`, `NAVER_CLIENT_SECRET`, `SOCIAL_STATE_SECRET`(미설정 시 JWT 키로 폴백 + 운영이면 기동 경고), `SOCIAL_REDIRECT_BASE`(기본 `http://localhost:8001/api/v1/auth/social`), `SOCIAL_WEB_RETURN_URL`(기본 `http://localhost:3000/auth/complete`), `SOCIAL_APP_RETURN_URL_PROD`(기본 `stockapp://auth`), `SOCIAL_APP_RETURN_URL_DEV`(기본 `stockapp-dev://auth`), `SOCIAL_FAKE_PROVIDER`(기본 false), `REDIS_URL`(기존). `backend/.env.example` 에 키 이름만 추가.
+`KAKAO_REST_API_KEY`, `KAKAO_CLIENT_SECRET`(선택), `NAVER_CLIENT_ID`, `NAVER_CLIENT_SECRET`, `SOCIAL_STATE_SECRET`(미설정 시 JWT 키로 폴백 + 운영이면 기동 경고), `SOCIAL_REDIRECT_BASE`(기본 `http://localhost:8001/api/v1/auth/social`, 운영에서 기본값이면 기동 경고), `SOCIAL_WEB_RETURN_URL`(기본 `http://localhost:3000/auth/complete`, 운영에서 기본값이면 기동 경고), `SOCIAL_APP_RETURN_URL_PROD`(기본 `stockapp://auth`), `SOCIAL_APP_RETURN_URL_DEV`(기본 `stockapp-dev://auth`), `SOCIAL_FAKE_PROVIDER`(기본 false), `REDIS_URL`(기존). `backend/.env.example` 에 키 이름만 추가.
 
 ## 4. web_client
 
-- `api/auth.ts`: `socialStartUrl(provider)`(= `AUTH_BASE_URL + /auth/social/{p}/start?client=web`), `getSocialProviders()`, `exchangeSocialCode(code) → TokenResponse`.
+- `api/auth.ts`: `socialStartUrl(provider, cc)`(= `AUTH_BASE_URL + /auth/social/{p}/start?client=web&cc=…`), `getSocialProviders()`, `exchangeSocialCode(code, codeVerifier) → TokenResponse`. verifier 보관·cc 계산은 `lib/socialLogin.ts`(`prepareSocialVerifier`/`takeSocialVerifier`).
 - `store/auth.ts`: `loginWithToken(TokenResponse)` 추가(기존 login 과 같은 저장 경로 재사용, `login` 동작 불변).
 - `LoginModal`: 카카오(#FEE500/검정)·네이버(#03C75A/흰) 버튼(공급자 비활성이면 숨김) + 게스트 닉네임 폼은 `ENABLE_GUEST_LOGIN` 일 때만. 클릭 시 `sessionStorage['wc_login_return']=location.pathname+location.search` 저장 후 `location.assign(startUrl)`.
 - 라우트 `/auth/complete`(`pages/AuthCompletePage.tsx`): `?code` → 교환 → 저장 → 저장된 복귀 경로(없으면 `/`)로 `replace`; `?error` → 문구 + 홈 링크. 교환 중 "로그인 중…".
@@ -72,7 +85,7 @@ apps/auth/routers/social.py   # providers / start / callback / exchange
 ## 5. 모바일 (Expo)
 
 - `app.config.js`: `scheme: isDev ? 'stockapp-dev' : 'stockapp'` (dev build 1회 재생성 필요 — README 명시).
-- `features/auth/api.ts`: `getSocialProviders()`, `exchangeSocialCode(code)`; `features/auth/social.ts`: `startSocialLogin(provider)` = `WebBrowser.openAuthSessionAsync(startUrl, returnUrl)` — `startUrl = AUTH_API + /api/v1/auth/social/{p}/start?client=app&app=dev|prod`, `returnUrl = Linking.createURL('auth')`. 결과 `type==='success'` 면 URL 의 `code`/`error` 를 순수 함수 `parseAuthReturnUrl`(jest)로 파싱.
+- `features/auth/api.ts`: `getSocialProviders()`, `exchangeSocialCode(code, codeVerifier)`; `features/auth/social.ts`: `startSocialLogin(provider)` = `createVerifierPair()`(verifier.ts) → `WebBrowser.openAuthSessionAsync(startUrl, returnUrl)` — `startUrl = AUTH_API + /api/v1/auth/social/{p}/start?client=app&app=dev|prod&cc=…`, `returnUrl = Linking.createURL('auth')`. 결과 `type==='success'` 면 URL 의 `code`/`error` 를 순수 함수 `parseAuthReturnUrl`(jest)로 파싱.
 - `features/auth/store.ts`: `loginWithToken` 추가(SecureStore·메모리 토큰 홀더 동일 경로).
 - 내정보 탭: 카카오·네이버 버튼 + 게스트 폼은 `ENV.enableGuestLogin`(= `EXPO_PUBLIC_ENABLE_GUEST_LOGIN`, 미설정 시 `appEnv !== 'production'`).
 - 취소(`type` 이 `cancel`/`dismiss`)는 조용히 무시, `error` 는 문구 표시.
