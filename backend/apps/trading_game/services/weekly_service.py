@@ -87,3 +87,87 @@ async def close_final_week(db: AsyncSession, redis, season: GameSeason) -> dict 
     last_moment = wr.aware(season.end_at) - timedelta(seconds=1)
     week_id, _, _ = wr.week_bounds(last_moment, season.start_at, season.end_at)
     return await close_week(db, redis, season, week_id, with_reward=False)
+
+
+# ---------------------------------------------------------------- 조회
+def _now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def current_week(season: GameSeason) -> tuple[date, datetime, datetime]:
+    """현재 주. 시즌이 끝났으면 마지막 주."""
+    now = _now()
+    if season.end_at is not None and now >= wr.aware(season.end_at):
+        now = wr.aware(season.end_at) - timedelta(seconds=1)
+    return wr.week_bounds(now, season.start_at, season.end_at)
+
+
+async def weekly_leaderboard(db: AsyncSession, redis, season: GameSeason, limit: int = 100) -> dict:
+    week_id, s, e = current_week(season)
+    pairs = await redis.zrevrange(wr.week_key(season.id, week_id), 0, limit - 1, withscores=True)
+    uids = [int(u) for u, _ in pairs]
+    nicks = dict((await db.execute(select(User.id, User.nickname).where(User.id.in_(uids)))).all()) if uids else {}
+    return {
+        "week_start": week_id.isoformat(), "start_at": s.isoformat(), "end_at": e.isoformat(),
+        "entries": [
+            {"rank": i + 1, "user_id": int(u), "nickname": nicks.get(int(u)), "weekly_roi": float(score)}
+            for i, (u, score) in enumerate(pairs)
+        ],
+    }
+
+
+async def weekly_my_rank(redis, season: GameSeason, user_id: int) -> dict:
+    week_id, _, _ = current_week(season)
+    key = wr.week_key(season.id, week_id)
+    total = await redis.zcard(key)
+    rank = await redis.zrevrank(key, str(user_id))
+    if rank is None:
+        return {"rank": None, "weekly_roi": None, "total": total}
+    score = await redis.zscore(key, str(user_id))
+    return {"rank": rank + 1, "weekly_roi": float(score), "total": total}
+
+
+async def weekly_results(db: AsyncSession, season_id: int | None, limit: int) -> list[dict]:
+    """지난 주들의 Top 3(최신 주 먼저)."""
+    weeks_q = select(WeeklyRankingResult.season_id, WeeklyRankingResult.week_start).distinct()
+    if season_id is not None:
+        weeks_q = weeks_q.where(WeeklyRankingResult.season_id == season_id)
+    weeks = (await db.execute(
+        weeks_q.order_by(WeeklyRankingResult.week_start.desc(), WeeklyRankingResult.season_id.desc()).limit(limit)
+    )).all()
+    out = []
+    for sid, wk in weeks:
+        rows = (await db.execute(
+            select(WeeklyRankingResult)
+            .where(WeeklyRankingResult.season_id == sid, WeeklyRankingResult.week_start == wk,
+                   WeeklyRankingResult.rank <= 3)
+            .order_by(WeeklyRankingResult.rank)
+        )).scalars().all()
+        out.append({"season_id": sid, "week_start": wk.isoformat(), "entries": [
+            {"rank": r.rank, "nickname": r.nickname, "weekly_roi": float(r.weekly_roi),
+             "reward_amount": float(r.reward_amount)} for r in rows
+        ]})
+    return out
+
+
+async def unseen_rewards(db: AsyncSession, user_id: int) -> list[dict]:
+    """내 미확인 보상(reward_amount>0 AND notified_at IS NULL) — 토스트용."""
+    rows = (await db.execute(
+        select(WeeklyRankingResult)
+        .where(WeeklyRankingResult.user_id == user_id, WeeklyRankingResult.reward_amount > 0,
+               WeeklyRankingResult.notified_at.is_(None))
+        .order_by(WeeklyRankingResult.id)
+    )).scalars().all()
+    return [{"id": r.id, "week_start": r.week_start.isoformat(), "rank": r.rank,
+             "reward_amount": float(r.reward_amount)} for r in rows]
+
+
+async def ack_reward(db: AsyncSession, user_id: int, result_id: int) -> bool:
+    """보상 토스트 확인 처리. 본인 것이 아니거나 없으면 False."""
+    row = await db.get(WeeklyRankingResult, result_id)
+    if row is None or row.user_id != user_id:
+        return False
+    if row.notified_at is None:
+        row.notified_at = _now()
+        await db.commit()
+    return True

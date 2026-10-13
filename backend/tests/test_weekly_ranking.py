@@ -224,3 +224,62 @@ async def test_settlement_archives_final_week_without_reward(session):
     await r.zadd(wr.week_key(s.id, date(2026, 9, 28)), {str(u.id): 3.0})
     await settlement.settle_due_season(session, r, lambda t: Decimal("70000"))
     assert await _results(session) == [(1, u.id, Decimal("0.00"))]
+
+
+# ---------------------------------------------------------------- API
+async def test_weekly_leaderboard_and_my_rank(api, fake_redis, maker, monkeypatch):
+    client, set_user = api
+    async with maker() as db:
+        s = await _season_oct(db)
+        u1 = await _seed_user(db, nickname="가")
+        u2 = await _seed_user(db, nickname="나")
+    monkeypatch.setattr(ws_svc, "_now", lambda: k(14, 12))
+    await fake_redis.zadd(wr.week_key(s.id, W), {str(u1.id): 1.5, str(u2.id): 3.0})
+    res = await client.get(f"/api/game/seasons/{s.id}/weekly-leaderboard")
+    assert res.status_code == 200
+    body = res.json()
+    assert body["week_start"] == "2026-10-12"
+    assert body["start_at"] == k(12, 9).isoformat() and body["end_at"] == k(19, 9).isoformat()
+    assert [(e["rank"], e["nickname"], e["weekly_roi"]) for e in body["entries"]] == [(1, "나", 3.0), (2, "가", 1.5)]
+    set_user(u1)
+    me = (await client.get(f"/api/game/seasons/{s.id}/weekly-my-rank")).json()
+    assert me == {"rank": 2, "weekly_roi": 1.5, "total": 2}
+    assert (await client.get("/api/game/seasons/999/weekly-leaderboard")).status_code == 404
+
+
+async def test_weekly_leaderboard_after_season_end_shows_last_week(api, fake_redis, maker, monkeypatch):
+    client, _ = api
+    async with maker() as db:
+        s = await _season_oct(db)
+    monkeypatch.setattr(ws_svc, "_now", lambda: k(31, 21))   # 시즌 종료(10/31 20:00) 이후
+    body = (await client.get(f"/api/game/seasons/{s.id}/weekly-leaderboard")).json()
+    assert body["week_start"] == "2026-10-26"
+    assert body["end_at"] == S_END.isoformat()
+
+
+async def test_weekly_results_unseen_and_ack(api, fake_redis, maker):
+    client, set_user = api
+    async with maker() as db:
+        s = await _season_oct(db)
+        u1 = await _seed_user(db, nickname="가")
+        u2 = await _seed_user(db, nickname="나")
+        db.add_all([
+            WeeklyRankingResult(season_id=s.id, week_start=W, rank=1, user_id=u1.id, nickname="가",
+                                weekly_roi=Decimal("9"), reward_amount=Decimal("500000")),
+            WeeklyRankingResult(season_id=s.id, week_start=W, rank=2, user_id=u2.id, nickname="나",
+                                weekly_roi=Decimal("4"), reward_amount=Decimal("0")),
+        ])
+        await db.commit()
+    results = (await client.get(f"/api/game/weekly-results?season_id={s.id}")).json()
+    assert results == [{"season_id": s.id, "week_start": "2026-10-12", "entries": [
+        {"rank": 1, "nickname": "가", "weekly_roi": 9.0, "reward_amount": 500000.0},
+        {"rank": 2, "nickname": "나", "weekly_roi": 4.0, "reward_amount": 0.0},
+    ]}]
+    set_user(u1)
+    unseen = (await client.get("/api/game/weekly-rewards/unseen")).json()
+    assert [(x["rank"], x["reward_amount"], x["week_start"]) for x in unseen] == [(1, 500000.0, "2026-10-12")]
+    set_user(u2)
+    assert (await client.post(f"/api/game/weekly-rewards/{unseen[0]['id']}/ack")).status_code == 404  # 남의 것
+    set_user(u1)
+    assert (await client.post(f"/api/game/weekly-rewards/{unseen[0]['id']}/ack")).status_code == 204
+    assert (await client.get("/api/game/weekly-rewards/unseen")).json() == []

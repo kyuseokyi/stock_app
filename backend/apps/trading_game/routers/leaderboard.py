@@ -1,7 +1,7 @@
 """트레이딩 게임 랭킹/명예의전당 REST."""
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -11,7 +11,7 @@ from shared.models import User
 from shared.game_models import GameSeason, HallOfFame
 from apps.trading_game import deps
 from apps.trading_game.schemas.game_dtos import SeasonOption
-from apps.trading_game.services import account_service, ranking_service
+from apps.trading_game.services import account_service, ranking_service, weekly_service
 
 router = APIRouter(prefix="/api/game", tags=["trading-game-ranking"])
 
@@ -55,3 +55,50 @@ async def hall_of_fame(season_id: int | None = Query(default=None), db: AsyncSes
          "win_rate": float(h.win_rate), "trading_mbti": h.trading_mbti}
         for h, season_number in rows
     ]
+
+
+# ---------------------------------------------------------------- 주간 랭킹
+async def _season_or_404(db: AsyncSession, season_id: int) -> GameSeason:
+    s = await db.get(GameSeason, season_id)
+    if s is None:
+        raise HTTPException(status_code=404, detail="SEASON_NOT_FOUND")
+    return s
+
+
+@router.get("/seasons/{season_id}/weekly-leaderboard")
+async def weekly_leaderboard(season_id: int, db: AsyncSession = Depends(get_db)):
+    """공개 — 이번 주 Top 100(월 09:00 시작, 시즌 경계로 잘림)."""
+    season = await _season_or_404(db, season_id)
+    return await weekly_service.weekly_leaderboard(db, deps.get_redis(), season)
+
+
+@router.get("/seasons/{season_id}/weekly-my-rank")
+async def weekly_my_rank(
+    season_id: int, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db),
+):
+    season = await _season_or_404(db, season_id)
+    return await weekly_service.weekly_my_rank(deps.get_redis(), season, user.id)
+
+
+@router.get("/weekly-results")
+async def weekly_results(
+    season_id: int | None = Query(default=None),
+    limit: int = Query(default=4, ge=1, le=20),
+    db: AsyncSession = Depends(get_db),
+):
+    """공개 — 지난 주들의 Top 3(최신 주 먼저)."""
+    return await weekly_service.weekly_results(db, season_id, limit)
+
+
+@router.get("/weekly-rewards/unseen")
+async def weekly_rewards_unseen(user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    return await weekly_service.unseen_rewards(db, user.id)
+
+
+@router.post("/weekly-rewards/{result_id}/ack", status_code=204)
+async def weekly_reward_ack(
+    result_id: int, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db),
+):
+    if not await weekly_service.ack_reward(db, user.id, result_id):
+        raise HTTPException(status_code=404, detail="NOT_FOUND")
+    return Response(status_code=204)
