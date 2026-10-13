@@ -39,3 +39,17 @@ export function daysUntil(endIso: string | null, now: Date = new Date()): number
   const today = Date.parse(kstDateString(now))
   return Math.max(0, Math.round((end - today) / DAY_MS))
 }
+
+const DOW = ['일', '월', '화', '수', '목', '금', '토']
+
+/** ISO 시각 → KST "10/12(월) 09:00" (브라우저 시간대 무관) */
+export function formatKstShort(iso: string): string {
+  const d = new Date(new Date(iso).getTime() + KST_OFFSET_MS)
+  const hh = String(d.getUTCHours()).padStart(2, '0')
+  const mm = String(d.getUTCMinutes()).padStart(2, '0')
+  return `${d.getUTCMonth() + 1}/${d.getUTCDate()}(${DOW[d.getUTCDay()]}) ${hh}:${mm}`
+}
+
+/** 주간 기간 "10/12(월) 09:00 ~ 10/19(월) 09:00" */
+export const formatWeekRange = (startIso: string, endIso: string): string =>
+  `${formatKstShort(startIso)} ~ ${formatKstShort(endIso)}`

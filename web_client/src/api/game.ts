@@ -6,6 +6,7 @@ import type {
   OrderRequest, OrderResult, Position, Quest, QuestList, QuizCandle, QuizChoice, QuizQuestion, QuizResult,
   RawAccount, RawClaimResult, RawCoachMessage, RawCoachToday, RawOrderResult, RawPosition, RawQuest,
   RawQuestList, RawQuizQuestion, RawQuizResult, RawStreakClaimResult, Season, Streak, StreakClaimResult,
+  WeeklyBoard, WeeklyMyRank, WeeklyResultWeek, WeeklyReward,
 } from '../types/game'
 
 // trading_game REST. Decimal 문자열은 여기서 number 로 변환해 UI 는 number 만 다룬다.
@@ -131,6 +132,34 @@ export async function getLeaderboard(seasonId: number): Promise<LeaderboardRow[]
 export async function getHallOfFame(): Promise<HallOfFameRow[]> {
   const { data } = await client().get<HallOfFameRow[]>('/api/game/hall-of-fame')
   return data
+}
+
+/** 공개 — 이번 주 Top 100(월 09:00 시작, 시즌 경계로 잘림) */
+export async function getWeeklyLeaderboard(seasonId: number): Promise<WeeklyBoard> {
+  const { data } = await client().get<WeeklyBoard>(`/api/game/seasons/${seasonId}/weekly-leaderboard`)
+  return data
+}
+
+export async function getWeeklyMyRank(seasonId: number): Promise<WeeklyMyRank> {
+  const { data } = await client().get<WeeklyMyRank>(`/api/game/seasons/${seasonId}/weekly-my-rank`)
+  return data
+}
+
+/** 공개 — 지난 주들의 Top 3(최신 주 먼저) */
+export async function getWeeklyResults(seasonId: number, limit = 1): Promise<WeeklyResultWeek[]> {
+  const { data } = await client().get<WeeklyResultWeek[]>('/api/game/weekly-results', {
+    params: { season_id: seasonId, limit },
+  })
+  return data
+}
+
+export async function getUnseenWeeklyRewards(): Promise<WeeklyReward[]> {
+  const { data } = await client().get<WeeklyReward[]>('/api/game/weekly-rewards/unseen')
+  return data
+}
+
+export async function ackWeeklyReward(id: number): Promise<void> {
+  await client().post(`/api/game/weekly-rewards/${id}/ack`)
 }
 
 export async function getQuests(): Promise<QuestList> {

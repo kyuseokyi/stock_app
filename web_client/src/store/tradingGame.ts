@@ -4,7 +4,7 @@ import { gameClient } from '../api/gameClient'
 import { orderErrorMessage } from '../lib/gameErrors'
 import type {
   Account, Coach, GameWsMessage, Leverage, MyRank, Nudge, OrderOptions, Position, Ratio, Season, Sentiment, Side,
-  Streak,
+  Streak, WeeklyReward,
 } from '../types/game'
 
 // 트레이딩 게임 전역 상태. 공개 데이터(시즌)와 로그인 데이터(계좌·포지션·순위·코치·해금·Streak·WS 실시간)를 분리한다.
@@ -43,6 +43,8 @@ interface TradingGameState extends PrivateState {
   refreshTrading: () => Promise<void>
   refreshRank: () => Promise<void>
   refreshStreak: () => Promise<void>
+  /** 미확인 주간 랭킹 보상 → 토스트 + ack. 실패는 조용히(다음 진입 때 재시도) */
+  checkWeeklyRewards: () => Promise<void>
   resetPrivate: () => void
   placeOrder: (side: Side, ratio: Ratio, leverage: Leverage, opts?: OrderOptions) => Promise<void>
   closePosition: () => Promise<void>
@@ -73,6 +75,8 @@ let toastSeq = 0
 // refreshSeq는 재조회 호출 순번 — 더 최신 호출이 있으면 순서가 뒤바뀌어 도착한 이전 응답을 버린다.
 let privateGen = 0
 let refreshSeq = 0
+// 주간 보상 확인 진행 중 플래그 — 재연결·포커스 복귀로 loadPrivate 가 겹쳐 불려도 토스트가 중복되지 않게 한다.
+let weeklyCheckInFlight = false
 
 /** 모달 등 스토어 밖에서 비동기 요청을 시작할 때 캡처 → setAcademyUnlocked/setStreak 에 전달 */
 export const currentPrivateGen = (): number => privateGen
@@ -154,6 +158,7 @@ export const useTradingGameStore = create<TradingGameState>()((set, get) => {
       if (streak.status === 'fulfilled') patch.streak = streak.value
       if (gen !== privateGen) return // 로그아웃 후 늦게 도착한 이전 사용자 데이터 폐기
       set(patch)
+      void get().checkWeeklyRewards()
     },
 
     refreshTrading,
@@ -173,6 +178,32 @@ export const useTradingGameStore = create<TradingGameState>()((set, get) => {
     },
 
     refreshStreak,
+
+    checkWeeklyRewards: async () => {
+      if (weeklyCheckInFlight) return
+      weeklyCheckInFlight = true
+      try {
+        const gen = privateGen
+        let rewards: WeeklyReward[]
+        try {
+          rewards = await gameApi.getUnseenWeeklyRewards()
+        } catch {
+          return // 알림 실패는 조용히(다음 진입 때 재시도)
+        }
+        if (gen !== privateGen || rewards.length === 0) return
+        for (const r of rewards) {
+          get().pushToast({
+            kind: 'info',
+            icon: '🏅',
+            message: `지난주 주간 랭킹 ${r.rank}위! 보상 ${r.reward_amount.toLocaleString('ko-KR')}원이 지급됐어요`,
+          })
+          gameApi.ackWeeklyReward(r.id).catch(() => undefined)
+        }
+        await refreshTrading()
+      } finally {
+        weeklyCheckInFlight = false
+      }
+    },
 
     resetPrivate: () => {
       privateGen++
