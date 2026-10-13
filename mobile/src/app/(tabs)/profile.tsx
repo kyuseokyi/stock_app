@@ -1,15 +1,17 @@
+import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { ScrollView, Text, TextInput, View } from 'react-native';
+import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
 import { getSocialProviders, type SocialProvider, type SocialProviders } from '@/features/auth/api';
+import { DeleteAccountSheet } from '@/features/auth/delete-account-sheet';
 import { socialErrorMessage } from '@/features/auth/return-url';
 import { startSocialLogin } from '@/features/auth/social';
 import { SocialButton } from '@/features/auth/social-button';
 import { useAuthStore } from '@/features/auth/store';
 import { ENV } from '@/lib/env';
-import { Button, Card, ListRow } from '@/ui';
+import { Button, Card, ListRow, showToast } from '@/ui';
 
 const SOCIAL_PROVIDERS: SocialProvider[] = ['kakao', 'naver'];
 
@@ -27,6 +29,8 @@ export default function ProfileScreen() {
   const [providers, setProviders] = useState<SocialProviders | null>(null);
   const [pendingProvider, setPendingProvider] = useState<SocialProvider | null>(null);
   const [socialError, setSocialError] = useState('');
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const router = useRouter();
 
   // 비로그인일 때 간편 로그인 공급자 활성 여부 조회(키 미설정 공급자는 버튼 숨김)
   useEffect(() => {
@@ -77,6 +81,13 @@ export default function ProfileScreen() {
     }
   };
 
+  // 탈퇴 성공(스토어가 이미 로그아웃) → 시트 닫기·홈 탭 이동·토스트
+  const handleDeleted = () => {
+    setDeleteOpen(false);
+    router.navigate('/');
+    showToast('탈퇴가 완료됐어요');
+  };
+
   const visibleProviders = SOCIAL_PROVIDERS.filter((p) => providers?.[p] === true);
 
   if (user) {
@@ -103,6 +114,16 @@ export default function ProfileScreen() {
         </View>
 
         <Button label="로그아웃" variant="secondary" onPress={logout} />
+        <Pressable
+          onPress={() => setDeleteOpen(true)}
+          hitSlop={8}
+          accessibilityRole="button"
+          style={styles.withdraw}>
+          <Text style={styles.withdrawLabel}>회원 탈퇴</Text>
+        </Pressable>
+        {deleteOpen ? (
+          <DeleteAccountSheet onClose={() => setDeleteOpen(false)} onDeleted={handleDeleted} />
+        ) : null}
       </ScrollView>
     );
   }
@@ -181,4 +202,6 @@ const styles = StyleSheet.create((theme) => ({
     borderTopColor: theme.colors.border,
   },
   guestLabel: { fontSize: 13, color: theme.colors.textSecondary },
+  withdraw: { alignSelf: 'center', paddingVertical: theme.gap(1) },
+  withdrawLabel: { fontSize: 13, color: theme.colors.textSecondary, textDecorationLine: 'underline' },
 }));

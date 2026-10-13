@@ -66,3 +66,11 @@ export async function exchangeSocialCode(code: string, codeVerifier: string): Pr
   });
   return { accessToken: raw.access_token, user: toUser(raw.user) };
 }
+
+/** 탈퇴 확인 문구 — 서버(DELETE /api/v1/auth/me)가 정확히 이 값을 요구한다 */
+export const DELETE_CONFIRM_TEXT = '탈퇴';
+
+/** 회원 탈퇴 — DELETE /api/v1/auth/me (204). 실패는 ApiError(status, body.detail.code) */
+export async function deleteAccount(): Promise<void> {
+  await authApi.del<void>('/api/v1/auth/me', { confirm: DELETE_CONFIRM_TEXT });
+}

@@ -3,7 +3,7 @@ import { create } from 'zustand';
 
 import { registerUnauthorizedHandler, setAuthToken as setHttpAuthToken } from '@/lib/api/auth-token';
 
-import { guestLogin, type LoginResult } from './api';
+import { deleteAccount as deleteAccountApi, guestLogin, type LoginResult } from './api';
 import type { User } from './types';
 
 const TOKEN_KEY = 'auth_token';
@@ -18,6 +18,8 @@ type AuthState = {
   /** 이미 발급된 토큰(간편 로그인 교환 결과)을 저장 — login 과 같은 경로(메모리 홀더 + SecureStore) */
   loginWithToken: (result: LoginResult) => User;
   logout: () => void;
+  /** 회원 탈퇴(DELETE /auth/me) 성공 시 로그아웃. 실패는 그대로 throw(ApiError) — 로그인 상태 유지 */
+  deleteAccount: () => Promise<void>;
   hydrate: () => Promise<void>;
 };
 
@@ -54,6 +56,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     setHttpAuthToken(null);
     set({ token: null, user: null });
     persist(null, null).catch(() => {});
+  },
+
+  deleteAccount: async () => {
+    await deleteAccountApi();
+    get().logout();
   },
 
   hydrate: async () => {
