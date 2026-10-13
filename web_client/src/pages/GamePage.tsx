@@ -13,6 +13,7 @@ import OrderPanel from '../components/game/OrderPanel'
 import QuestModal from '../components/game/QuestModal'
 import QuizBanner from '../components/game/QuizBanner'
 import SentimentBar from '../components/game/SentimentBar'
+import StreakRewardModal from '../components/game/StreakRewardModal'
 import TradingChart from '../components/game/TradingChart'
 import { useGameWebSocket } from '../hooks/useGameWebSocket'
 import { isQuizPrimeTime } from '../lib/quiz'
@@ -23,7 +24,7 @@ import type { Leverage, Ratio, Side } from '../types/game'
 const RANK_POLL_MS = 30_000
 const PRIME_CHECK_MS = 60_000
 
-type ActiveModal = 'ranking' | 'quest' | 'academy' | 'quiz' | null
+type ActiveModal = 'ranking' | 'quest' | 'academy' | 'quiz' | 'streak' | null
 type PrivateModal = Exclude<ActiveModal, 'ranking' | null>
 
 // 실시간 트레이딩 게임 — 상태별 분기: 서버 미설정/시즌 없음 → 준비 중, 연결 실패 → 재시도, 정상 → 트레이딩 화면
@@ -124,6 +125,7 @@ export default function GamePage() {
         onOpenRanking={() => setActiveModal('ranking')}
         onOpenQuest={() => openPrivate('quest')}
         onOpenQuiz={() => openPrivate('quiz')}
+        onOpenStreak={() => openPrivate('streak')}
       />
       <CoachBanner coach={coach} />
       {loggedIn ? (
@@ -148,6 +150,7 @@ export default function GamePage() {
       {activeModal === 'quest' && <QuestModal onClose={closeModal} />}
       {activeModal === 'academy' && <AcademyModal onClose={closeModal} />}
       {activeModal === 'quiz' && <ChartQuizModal onClose={closeModal} />}
+      {activeModal === 'streak' && <StreakRewardModal onClose={closeModal} />}
       <NudgeToaster />
       <LoginModal open={loginOpen} onClose={() => setLoginOpen(false)} />
     </div>

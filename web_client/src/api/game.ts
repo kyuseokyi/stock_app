@@ -5,7 +5,7 @@ import type {
   AcademyQuiz, AcademySubmitResult, Account, ClaimResult, Coach, HallOfFameRow, LeaderboardRow, MyRank,
   OrderRequest, OrderResult, Position, Quest, QuestList, QuizCandle, QuizChoice, QuizQuestion, QuizResult,
   RawAccount, RawClaimResult, RawCoachMessage, RawCoachToday, RawOrderResult, RawPosition, RawQuest,
-  RawQuestList, RawQuizQuestion, RawQuizResult, Season, Streak,
+  RawQuestList, RawQuizQuestion, RawQuizResult, RawStreakClaimResult, Season, Streak, StreakClaimResult,
 } from '../types/game'
 
 // trading_game REST. Decimal 문자열은 여기서 number 로 변환해 UI 는 number 만 다룬다.
@@ -160,4 +160,10 @@ export async function submitQuiz(quizId: number, choice: QuizChoice): Promise<Qu
 export async function getMyStreak(): Promise<Streak> {
   const { data } = await client().get<Streak>('/api/game/streak/my')
   return data
+}
+
+/** 연속 출석 마일스톤 보상 수령 — 갱신된 streak(rewards 포함)과 지급 후 현금 잔고 */
+export async function claimStreakReward(milestone: number): Promise<StreakClaimResult> {
+  const { data } = await client().post<RawStreakClaimResult>(`/api/game/streak/rewards/${milestone}/claim`)
+  return { streak: data.streak, cash_balance: toNum(data.cash_balance) }
 }

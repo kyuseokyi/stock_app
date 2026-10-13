@@ -13,13 +13,15 @@ interface GameHeaderProps {
   onOpenRanking: () => void
   onOpenQuest: () => void
   onOpenQuiz: () => void
+  /** Streak 칩 클릭 → 연속 출석 보상 모달 */
+  onOpenStreak: () => void
 }
 
 const NAV_BUTTON = 'rounded-field bg-white px-3 py-1.5 text-sm text-ink transition hover:bg-line'
 
 // 시즌·종목·D-day + Streak + 내 순위/수익률 + 자본금 + 랭킹·퀘스트·퀴즈 진입 버튼.
 export default function GameHeader({
-  season, account, myRank, loggedIn, streak, showQuiz, onOpenRanking, onOpenQuest, onOpenQuiz,
+  season, account, myRank, loggedIn, streak, showQuiz, onOpenRanking, onOpenQuest, onOpenQuiz, onOpenStreak,
 }: GameHeaderProps) {
   const dday = daysUntil(season.end_at)
   const rank = myRank?.rank ?? null
@@ -35,12 +37,15 @@ export default function GameHeader({
               시즌 {season.season_number}기{dday !== null && ` · 종료 D-${dday}`}
             </span>
             {showStreak && (
-              <span
-                className="rounded-full bg-white px-2 py-0.5 text-up"
-                title={`최고 기록 ${streak.highest_streak}일`}
+              <button
+                type="button"
+                onClick={onOpenStreak}
+                className="rounded-full bg-white px-2 py-0.5 text-up transition hover:bg-line"
+                title={`최고 기록 ${streak.highest_streak}일 · 연속 출석 보상 보기`}
               >
                 🔥 {streak.current_streak}일 연속
-              </span>
+                {streak.rewards.some((r) => r.claimable) && <span className="ml-1">🎁</span>}
+              </button>
             )}
           </p>
           <h1 className="mt-0.5 text-lg font-bold text-ink">

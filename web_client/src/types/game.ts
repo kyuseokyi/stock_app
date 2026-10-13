@@ -276,12 +276,33 @@ export interface QuizQuestion {
 
 export type QuizChoice = 'UP' | 'DOWN'
 
+/** 연속 출석 마일스톤 보상(StreakRewardDTO — amount 는 정수 원) */
+export interface StreakReward {
+  milestone: number
+  amount: number
+  claimed: boolean
+  claimable: boolean
+}
+
 /** GET /api/game/streak/my (StreakResponse) */
 export interface Streak {
   current_streak: number
   highest_streak: number
   last_activity_date: string | null
   enabled: boolean
+  /** 플래그 꺼짐·활성 시즌 없음이면 빈 배열 */
+  rewards: StreakReward[]
+}
+
+/** POST /api/game/streak/rewards/{milestone}/claim (StreakRewardClaimResponse) */
+export interface RawStreakClaimResult {
+  streak: Streak
+  cash_balance: Dec
+}
+
+export interface StreakClaimResult {
+  streak: Streak
+  cash_balance: number
 }
 
 export interface RawQuizResult {

@@ -17,6 +17,8 @@ const CODE_MESSAGES = new Map<string, string>([
   ['NO_ACTIVE_SEASON', '진행 중인 시즌이 없어요'],
   ['PRICE_UNAVAILABLE', '시세를 확인할 수 없어요. 잠시 후 다시 시도해 주세요'],
   ['LEVERAGE_LOCKED', '5배 레버리지는 아카데미 퀴즈를 통과해야 쓸 수 있어요'],
+  ['NOT_REACHED', '아직 연속 출석 일수가 부족해요'],
+  ['UNKNOWN_MILESTONE', '없는 보상이에요'],
 ])
 
 /** 응답 본문의 detail(문자열·객체·배열) — 응답이 없으면 undefined */
