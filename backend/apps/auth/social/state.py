@@ -1,7 +1,8 @@
-"""OAuth state — 서명 JWT(HS256) {provider, client, app_variant, nonce, exp=10분}.
+"""OAuth state — 서명 JWT(HS256) {provider, client, app_variant, nonce, cc, exp=10분}.
 
 서버에 세션을 두지 않고도 콜백에서 '누가 시작한 요청인지·어디로 돌려보낼지'를 검증한다.
 nonce 1회 사용은 store.use_nonce 가 담당한다(재사용 공격 차단).
+cc 는 클라이언트 verifier 의 challenge — 교환 코드에 묶여 /exchange 에서 검증된다(pkce.py).
 """
 
 from __future__ import annotations
@@ -11,6 +12,8 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
 import jwt
+
+from .pkce import is_valid_challenge
 
 STATE_TTL_SECONDS = 600
 _ALGORITHM = "HS256"
@@ -29,6 +32,7 @@ class StatePayload:
     client: str
     app_variant: str | None
     nonce: str
+    cc: str
 
 
 def sign_state(
@@ -37,6 +41,7 @@ def sign_state(
     provider: str,
     client: str,
     app_variant: str | None,
+    cc: str,
     ttl_seconds: int = STATE_TTL_SECONDS,
     now: datetime | None = None,
 ) -> str:
@@ -47,6 +52,7 @@ def sign_state(
         "client": client,
         "app": app_variant,
         "nonce": secrets.token_urlsafe(16),
+        "cc": cc,
         "iat": issued,
         "exp": issued + timedelta(seconds=ttl_seconds),
     }
@@ -72,9 +78,13 @@ def verify_state(secret: str, token: str, *, provider: str) -> StatePayload:
     nonce = data.get("nonce")
     if not isinstance(nonce, str) or not nonce:
         raise StateError("nonce 없음")
+    cc = data.get("cc")
+    if not is_valid_challenge(cc):
+        raise StateError("cc 값 오류")
     return StatePayload(
         provider=provider,
         client=client,
         app_variant=app_variant if client == "app" else None,
         nonce=nonce,
+        cc=cc,
     )

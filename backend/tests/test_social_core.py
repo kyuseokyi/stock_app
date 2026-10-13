@@ -1,12 +1,18 @@
 """간편 로그인 — 설정(SocialSettings)·state 서명·Redis 저장소 테스트."""
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 
+import base64
+import hashlib
+
+import jwt
 import pytest
 from fakeredis import aioredis as fake_aioredis
 
 from apps.auth.social.config import SocialSettings, load_social_settings, startup_warnings
+from apps.auth.social.pkce import challenge_for, is_valid_challenge, verifier_matches
 from apps.auth.social.state import StateError, sign_state, verify_state
 from apps.auth.social.store import SocialStore
 from shared import security
@@ -17,6 +23,8 @@ SOCIAL_ENV_KEYS = (
     "SOCIAL_APP_RETURN_URL_PROD", "SOCIAL_APP_RETURN_URL_DEV", "SOCIAL_FAKE_PROVIDER",
 )
 SECRET = "test-state-secret-0123456789abcdef"
+VERIFIER = "dBjftJeZ4CVP-mJ0z9-iFGc8Ld2ZRY0kbtiYn3sV1mA"
+CC = base64.urlsafe_b64encode(hashlib.sha256(VERIFIER.encode()).digest()).rstrip(b"=").decode()
 
 
 @pytest.fixture
@@ -52,6 +60,7 @@ def test_settings_read_at_call_time(clean_env):
 
 def test_fake_mode_enables_all_but_is_ignored_in_production(clean_env):
     clean_env.setenv("SOCIAL_FAKE_PROVIDER", "true")
+    clean_env.setenv("APP_ENV", "development")
     dev = load_social_settings()
     assert dev.fake_mode is True
     assert dev.is_enabled("kakao") and dev.is_enabled("naver")
@@ -62,49 +71,138 @@ def test_fake_mode_enables_all_but_is_ignored_in_production(clean_env):
     assert prod.is_enabled("kakao") is False
 
 
+@pytest.mark.parametrize("app_env, expected", [
+    (None, False),  # APP_ENV 미설정 — 기본값으로 켜지지 않는다(fail closed)
+    ("", False),
+    ("prod", False),
+    ("production", False),
+    ("staging", False),
+    ("development", True),
+    ("test", True),
+])
+def test_fake_mode_requires_explicit_dev_or_test_env(clean_env, app_env, expected):
+    clean_env.setenv("SOCIAL_FAKE_PROVIDER", "true")
+    if app_env is not None:
+        clean_env.setenv("APP_ENV", app_env)
+    s = load_social_settings()
+    assert s.fake_mode is expected
+    assert s.is_enabled("kakao") is expected
+
+
+def test_fake_mode_off_without_flag(clean_env):
+    clean_env.setenv("APP_ENV", "development")
+    assert load_social_settings().fake_mode is False
+
+
+def test_settings_dataclass_default_is_not_fake():
+    assert SocialSettings(fake_provider_requested=True).fake_mode is False
+    assert SocialSettings(app_env="test", fake_provider_requested=True).fake_mode is True
+
+
 def test_state_secret_falls_back_to_jwt_key():
     assert SocialSettings().effective_state_secret == security.SECRET_KEY
     assert SocialSettings(state_secret="own").effective_state_secret == "own"
 
 
-def test_startup_warnings():
-    assert startup_warnings(SocialSettings(fake_provider_requested=True)) == []
-    warns = startup_warnings(SocialSettings(app_env="production", fake_provider_requested=True))
+PROD_OK = SocialSettings(
+    app_env="production",
+    state_secret="x",
+    redirect_base="https://auth.example.com/api/v1/auth/social",
+    web_return_url="https://app.example.com/auth/complete",
+)
+
+
+def test_startup_warnings_clean_configs():
+    assert startup_warnings(SocialSettings()) == []
+    assert startup_warnings(SocialSettings(app_env="development")) == []
+    assert startup_warnings(PROD_OK) == []
+
+
+def test_startup_warnings_fake_mode_active():
+    warns = startup_warnings(SocialSettings(app_env="development", fake_provider_requested=True))
+    assert len(warns) == 1 and "SOCIAL_FAKE_PROVIDER" in warns[0]
+
+
+def test_startup_warnings_production_fake_and_secret():
+    warns = startup_warnings(replace(PROD_OK, state_secret="", fake_provider_requested=True))
     assert len(warns) == 2  # 가짜 모드 무시 + state 키 폴백
-    assert startup_warnings(SocialSettings(app_env="production", state_secret="x")) == []
+    assert any("SOCIAL_FAKE_PROVIDER" in w for w in warns)
+    assert any("SOCIAL_STATE_SECRET" in w for w in warns)
+
+
+def test_startup_warnings_production_localhost_defaults():
+    warns = startup_warnings(SocialSettings(app_env="production", state_secret="x"))
+    assert len(warns) == 2
+    assert any("SOCIAL_REDIRECT_BASE" in w for w in warns)
+    assert any("SOCIAL_WEB_RETURN_URL" in w for w in warns)
+    only_web = startup_warnings(replace(PROD_OK, web_return_url="http://localhost:3000/auth/complete"))
+    assert len(only_web) == 1 and "SOCIAL_WEB_RETURN_URL" in only_web[0]
+
+
+# ---------------------------------------------------------------- pkce
+def test_pkce_rfc7636_style_vector():
+    assert challenge_for(VERIFIER) == CC
+    assert len(CC) == 43 and is_valid_challenge(CC)
+    assert verifier_matches(VERIFIER, CC) is True
+
+
+@pytest.mark.parametrize("verifier", ["", "wrong", VERIFIER + "x", "가나다", None])
+def test_pkce_mismatch(verifier):
+    assert verifier_matches(verifier, CC) is False
+
+
+@pytest.mark.parametrize("cc", ["", "short", CC + "A", CC[:-1] + "=", CC[:-1] + "+", None])
+def test_pkce_invalid_challenge(cc):
+    assert is_valid_challenge(cc) is False
 
 
 # ---------------------------------------------------------------- state
 def test_state_roundtrip_web_and_app():
-    web = verify_state(SECRET, sign_state(SECRET, provider="kakao", client="web", app_variant=None), provider="kakao")
+    web = verify_state(SECRET, sign_state(SECRET, provider="kakao", client="web", app_variant=None, cc=CC), provider="kakao")
     assert (web.provider, web.client, web.app_variant) == ("kakao", "web", None)
     assert web.nonce
 
-    app = verify_state(SECRET, sign_state(SECRET, provider="naver", client="app", app_variant="dev"), provider="naver")
+    app = verify_state(SECRET, sign_state(SECRET, provider="naver", client="app", app_variant="dev", cc=CC), provider="naver")
     assert (app.client, app.app_variant) == ("app", "dev")
 
 
+def test_state_carries_cc():
+    token = sign_state(SECRET, provider="kakao", client="web", app_variant=None, cc=CC)
+    assert verify_state(SECRET, token, provider="kakao").cc == CC
+
+
+@pytest.mark.parametrize("cc", [None, "", "short", "!" * 43])
+def test_state_without_valid_cc_rejected(cc):
+    now = datetime.now(timezone.utc)
+    claims = {"typ": "social_state", "provider": "kakao", "client": "web", "app": None,
+              "nonce": "n", "iat": now, "exp": now + timedelta(minutes=5)}
+    if cc is not None:
+        claims["cc"] = cc
+    with pytest.raises(StateError):
+        verify_state(SECRET, jwt.encode(claims, SECRET, algorithm="HS256"), provider="kakao")
+
+
 def test_state_nonce_differs_per_sign():
-    a = verify_state(SECRET, sign_state(SECRET, provider="kakao", client="web", app_variant=None), provider="kakao")
-    b = verify_state(SECRET, sign_state(SECRET, provider="kakao", client="web", app_variant=None), provider="kakao")
+    a = verify_state(SECRET, sign_state(SECRET, provider="kakao", client="web", app_variant=None, cc=CC), provider="kakao")
+    b = verify_state(SECRET, sign_state(SECRET, provider="kakao", client="web", app_variant=None, cc=CC), provider="kakao")
     assert a.nonce != b.nonce
 
 
 def test_state_expired():
     past = datetime.now(timezone.utc) - timedelta(minutes=11)
-    token = sign_state(SECRET, provider="kakao", client="web", app_variant=None, now=past)
+    token = sign_state(SECRET, provider="kakao", client="web", app_variant=None, cc=CC, now=past)
     with pytest.raises(StateError):
         verify_state(SECRET, token, provider="kakao")
 
 
 def test_state_forged_with_other_secret():
-    token = sign_state("attacker-secret-0123456789abcdef", provider="kakao", client="web", app_variant=None)
+    token = sign_state("attacker-secret-0123456789abcdef", provider="kakao", client="web", app_variant=None, cc=CC)
     with pytest.raises(StateError):
         verify_state(SECRET, token, provider="kakao")
 
 
 def test_state_provider_mismatch():
-    token = sign_state(SECRET, provider="kakao", client="web", app_variant=None)
+    token = sign_state(SECRET, provider="kakao", client="web", app_variant=None, cc=CC)
     with pytest.raises(StateError):
         verify_state(SECRET, token, provider="naver")
 
@@ -130,10 +228,24 @@ async def test_nonce_single_use(store):
 
 
 async def test_exchange_code_single_use_with_ttl(store):
-    code = await store.issue_exchange_code(42)
+    code = await store.issue_exchange_code(42, CC)
     assert 0 < await store._redis.ttl(f"auth:social:code:{code}") <= 60
-    assert await store.consume_exchange_code(code) == 42
+    grant = await store.consume_exchange_code(code)
+    assert (grant.user_id, grant.cc) == (42, CC)
     assert await store.consume_exchange_code(code) is None
+
+
+async def test_exchange_code_value_is_json_with_cc(store):
+    import json
+
+    code = await store.issue_exchange_code(7, CC)
+    assert json.loads(await store._redis.get(f"auth:social:code:{code}")) == {"user_id": 7, "cc": CC}
+
+
+@pytest.mark.parametrize("raw", ["42", "not-json", '{"user_id": 1}', '{"cc": "x"}', '{"user_id": "a", "cc": "x"}'])
+async def test_malformed_exchange_value_is_none(store, raw):
+    await store._redis.set("auth:social:code:bad", raw)
+    assert await store.consume_exchange_code("bad") is None
 
 
 async def test_unknown_exchange_code(store):

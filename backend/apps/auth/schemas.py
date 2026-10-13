@@ -41,6 +41,10 @@ class SocialProvidersOut(BaseModel):
 
 
 class SocialExchangeRequest(BaseModel):
-    """콜백이 복귀 주소에 실어 준 일회용 교환 코드."""
+    """콜백이 복귀 주소에 실어 준 일회용 교환 코드 + 시작 때 만든 verifier(PKCE).
+
+    code_verifier 누락·불일치는 422 가 아니라 401(같은 문구)로 처리하려고 기본값을 둔다.
+    """
 
     code: str = Field(..., min_length=1, max_length=200)
+    code_verifier: str = Field("", max_length=128)

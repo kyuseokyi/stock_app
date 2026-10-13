@@ -1,17 +1,22 @@
 """간편 로그인 라우터 — providers / start / callback / exchange.
 
-흐름: start(302 공급자) → callback(302 복귀 주소?code=교환코드) → exchange(TokenResponse).
+흐름: start(?cc=challenge, 302 공급자) → callback(302 복귀 주소?code=교환코드)
+     → exchange(code + code_verifier → TokenResponse).
+cc/verifier 는 PKCE 방식으로 교환 코드를 시작한 클라이언트에 묶는다(social/pkce.py).
 복귀 주소는 state 의 client/app_variant 로 서버 설정에서만 고른다(오픈 리다이렉트 방지).
 """
 
 from __future__ import annotations
 
+import logging
 from typing import Literal
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import HTMLResponse, RedirectResponse
+from redis.exceptions import RedisError
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from shared.database import get_db
@@ -19,6 +24,7 @@ from shared.security import create_access_token
 
 from .. import schemas
 from ..social.config import SocialSettings, get_social_settings
+from ..social.pkce import CHALLENGE_PATTERN
 from ..social.providers import build_provider, get_http_transport
 from ..social.service import (
     ExchangeError,
@@ -30,6 +36,7 @@ from ..social.state import StateError, sign_state, verify_state
 from ..social.store import SocialStore, get_social_store
 
 router = APIRouter(prefix="/api/v1/auth/social", tags=["auth-social"])
+logger = logging.getLogger("auth.social")
 
 ProviderName = Literal["kakao", "naver"]
 _LABELS = {"kakao": "카카오", "naver": "네이버"}
@@ -71,6 +78,9 @@ async def start(
     provider: ProviderName,
     client: Literal["web", "app"] = Query(..., description="web | app"),
     app: Literal["dev", "prod"] = Query("prod", description="client=app 일 때 앱 변형(스킴 선택)"),
+    cc: str = Query(
+        ..., pattern=CHALLENGE_PATTERN, description="base64url(sha256(code_verifier)) — 43자, 패딩 없음"
+    ),
     settings: SocialSettings = Depends(get_social_settings),
     transport: httpx.AsyncBaseTransport | None = Depends(get_http_transport),
 ):
@@ -85,6 +95,7 @@ async def start(
         provider=provider,
         client=client,
         app_variant=app if client == "app" else None,
+        cc=cc,
     )
     return _redirect(impl.authorize_url(redirect_uri=settings.redirect_uri(provider), state=state))
 
@@ -109,21 +120,22 @@ async def callback(
         return _state_error_page()
     return_url = settings.return_url(payload.client, payload.app_variant)
 
-    # 2) nonce 1회 사용
-    if not await store.use_nonce(payload.nonce):
-        return _redirect(_with_query(return_url, error="state_invalid"))
-
-    # 3) 공급자 오류(사용자 취소 등)
-    if error:
-        reason = "cancelled" if error in _CANCEL_ERRORS else "provider_failed"
-        return _redirect(_with_query(return_url, error=reason))
-
-    impl = build_provider(provider, settings, transport)
-    if impl is None or not code:
-        return _redirect(_with_query(return_url, error="provider_failed"))
-
-    # 4) code → 프로필 → 사용자 → 교환 코드
+    # 복귀 주소를 아는 시점부터 Redis·DB 장애는 raw 500 대신 ?error=provider_failed 로 돌려보낸다
     try:
+        # 2) nonce 1회 사용
+        if not await store.use_nonce(payload.nonce):
+            return _redirect(_with_query(return_url, error="state_invalid"))
+
+        # 3) 공급자 오류(사용자 취소 등)
+        if error:
+            reason = "cancelled" if error in _CANCEL_ERRORS else "provider_failed"
+            return _redirect(_with_query(return_url, error=reason))
+
+        impl = build_provider(provider, settings, transport)
+        if impl is None or not code:
+            return _redirect(_with_query(return_url, error="provider_failed"))
+
+        # 4) code → 프로필 → 사용자 → 교환 코드(cc 묶음)
         exchange_code = await complete_social_login(
             db=db,
             store=store,
@@ -131,9 +143,14 @@ async def callback(
             code=code,
             state=state,
             redirect_uri=settings.redirect_uri(provider),
+            cc=payload.cc,
         )
     except SocialLoginError as exc:
         return _redirect(_with_query(return_url, error=exc.code))
+    except (RedisError, SQLAlchemyError) as exc:
+        # 예외 메시지에는 SQL 파라미터·접속 정보가 섞일 수 있어 타입명만 남긴다
+        logger.error("social login callback storage failure (%s): %s", provider, type(exc).__name__)
+        return _redirect(_with_query(return_url, error="provider_failed"))
     return _redirect(_with_query(return_url, code=exchange_code))
 
 
@@ -143,9 +160,9 @@ async def exchange(
     db: AsyncSession = Depends(get_db),
     store: SocialStore = Depends(get_social_store),
 ):
-    """일회용 교환 코드 → 서비스 JWT(기존 TokenResponse 형식)."""
+    """일회용 교환 코드 + code_verifier → 서비스 JWT(기존 TokenResponse 형식)."""
     try:
-        user = await redeem_exchange_code(db, store, payload.code)
+        user = await redeem_exchange_code(db, store, payload.code, payload.code_verifier)
     except ExchangeError as exc:
         raise HTTPException(exc.status_code, exc.message) from exc
     token = create_access_token(subject=user.id, role=user.role.value)

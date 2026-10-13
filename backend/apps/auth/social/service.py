@@ -14,12 +14,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from shared.models import AuthProvider, User, UserRole
 
+from .pkce import verifier_matches
 from .providers import Provider, ProviderError, ProviderProfile
 from .store import SocialStore
 
 logger = logging.getLogger("auth.social")
 
 NICKNAME_MAX = 100
+INVALID_CODE_MESSAGE = "로그인 코드가 만료되었거나 이미 사용되었어요. 다시 로그인해 주세요."
 
 
 class SocialLoginError(Exception):
@@ -72,7 +74,11 @@ async def find_or_create_user(
     except IntegrityError:
         # 같은 계정의 동시 첫 로그인 — 유니크 제약에 걸리면 먼저 만들어진 행을 쓴다
         await db.rollback()
-        return (await db.execute(stmt)).scalar_one()
+        existing = (await db.execute(stmt)).scalar_one_or_none()
+        if existing is None:  # 위반했는데 행도 없음(동시 삭제 등) — 500 대신 로그인 실패로
+            logger.warning("social login: integrity fallback found no row (%s)", provider.value)
+            raise SocialLoginError("provider_failed")
+        return existing
     await db.refresh(user)
     return user
 
@@ -85,8 +91,9 @@ async def complete_social_login(
     code: str,
     state: str,
     redirect_uri: str,
+    cc: str,
 ) -> str:
-    """공급자 code → 프로필 → 사용자 → 일회용 교환 코드. 실패는 SocialLoginError."""
+    """공급자 code → 프로필 → 사용자 → 일회용 교환 코드(cc 묶음). 실패는 SocialLoginError."""
     try:
         profile = await provider.exchange_code(code=code, state=state, redirect_uri=redirect_uri)
     except ProviderError as exc:
@@ -96,15 +103,21 @@ async def complete_social_login(
     user = await find_or_create_user(db, AuthProvider(provider.name.upper()), profile)
     if not user.is_active:
         raise SocialLoginError("inactive")
-    return await store.issue_exchange_code(user.id)
+    return await store.issue_exchange_code(user.id, cc)
 
 
-async def redeem_exchange_code(db: AsyncSession, store: SocialStore, code: str) -> User:
-    """교환 코드(1회) → 활성 사용자. 실패는 ExchangeError."""
-    user_id = await store.consume_exchange_code(code)
-    if user_id is None:
-        raise ExchangeError(401, "로그인 코드가 만료되었거나 이미 사용되었어요. 다시 로그인해 주세요.")
-    user = await db.get(User, user_id)
+async def redeem_exchange_code(
+    db: AsyncSession, store: SocialStore, code: str, code_verifier: str | None
+) -> User:
+    """교환 코드(1회) + verifier → 활성 사용자. 실패는 ExchangeError.
+
+    코드는 GETDEL 로 먼저 소모하므로 verifier 가 틀려도 재시도할 수 없다.
+    verifier 불일치는 '없는 코드'와 같은 401 문구(코드 존재 여부를 드러내지 않음).
+    """
+    grant = await store.consume_exchange_code(code)
+    if grant is None or not verifier_matches(code_verifier, grant.cc):
+        raise ExchangeError(401, INVALID_CODE_MESSAGE)
+    user = await db.get(User, grant.user_id)
     if user is None:
         raise ExchangeError(401, "사용자를 찾을 수 없습니다.")
     if not user.is_active:

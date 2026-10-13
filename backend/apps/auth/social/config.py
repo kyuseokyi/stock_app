@@ -17,6 +17,8 @@ DEFAULT_REDIRECT_BASE = "http://localhost:8001/api/v1/auth/social"
 DEFAULT_WEB_RETURN_URL = "http://localhost:3000/auth/complete"
 DEFAULT_APP_RETURN_URL_PROD = "stockapp://auth"
 DEFAULT_APP_RETURN_URL_DEV = "stockapp-dev://auth"
+# 가짜 공급자 모드를 허용하는 APP_ENV — 명시적으로 이 값일 때만(미설정·기타 값은 꺼짐, fail closed)
+FAKE_MODE_ENVS = frozenset({"development", "test"})
 
 
 def _truthy(value: str | None) -> bool:
@@ -25,7 +27,7 @@ def _truthy(value: str | None) -> bool:
 
 @dataclass(frozen=True)
 class SocialSettings:
-    app_env: str = "development"
+    app_env: str = ""  # APP_ENV 원값(미설정이면 빈 문자열 — 가짜 모드 판단에서 기본값을 인정하지 않음)
     kakao_rest_api_key: str = ""
     kakao_client_secret: str = ""  # 카카오 콘솔에서 Client Secret 을 '사용함'으로 켠 경우만
     naver_client_id: str = ""
@@ -35,7 +37,7 @@ class SocialSettings:
     web_return_url: str = DEFAULT_WEB_RETURN_URL
     app_return_url_prod: str = DEFAULT_APP_RETURN_URL_PROD
     app_return_url_dev: str = DEFAULT_APP_RETURN_URL_DEV
-    fake_provider_requested: bool = False  # SOCIAL_FAKE_PROVIDER 원값(운영에선 무시)
+    fake_provider_requested: bool = False  # SOCIAL_FAKE_PROVIDER 원값(development/test 에서만 유효)
 
     @property
     def is_production(self) -> bool:
@@ -43,8 +45,8 @@ class SocialSettings:
 
     @property
     def fake_mode(self) -> bool:
-        """가짜 공급자 모드 — 운영(APP_ENV=production)에서는 켜져 있어도 무시."""
-        return self.fake_provider_requested and not self.is_production
+        """가짜 공급자 모드 — APP_ENV 가 명시적으로 development/test 이고 플래그가 켜졌을 때만."""
+        return self.fake_provider_requested and self.app_env in FAKE_MODE_ENVS
 
     @property
     def effective_state_secret(self) -> str:
@@ -74,7 +76,7 @@ class SocialSettings:
 def load_social_settings() -> SocialSettings:
     env = os.getenv
     return SocialSettings(
-        app_env=env("APP_ENV", "development"),
+        app_env=(env("APP_ENV") or "").strip(),
         kakao_rest_api_key=env("KAKAO_REST_API_KEY", ""),
         kakao_client_secret=env("KAKAO_CLIENT_SECRET", ""),
         naver_client_id=env("NAVER_CLIENT_ID", ""),
@@ -96,8 +98,16 @@ def get_social_settings() -> SocialSettings:
 def startup_warnings(settings: SocialSettings) -> list[str]:
     """기동 시 로그로 남길 설정 경고(운영에서 위험한 조합)."""
     warnings: list[str] = []
+    if settings.fake_mode:
+        warnings.append(
+            f"SOCIAL_FAKE_PROVIDER 활성(APP_ENV={settings.app_env}) — 실제 공급자 없이 누구나 테스트 계정으로 로그인됩니다."
+        )
     if settings.is_production and settings.fake_provider_requested:
         warnings.append("SOCIAL_FAKE_PROVIDER=true 는 운영(APP_ENV=production)에서 무시됩니다.")
     if settings.is_production and not settings.state_secret:
         warnings.append("SOCIAL_STATE_SECRET 미설정 — JWT_SECRET_KEY 로 폴백합니다. 운영에서는 별도 값을 설정하세요.")
+    if settings.is_production and settings.redirect_base == DEFAULT_REDIRECT_BASE:
+        warnings.append("SOCIAL_REDIRECT_BASE 미설정 — localhost 기본값이라 운영 콜백이 동작하지 않습니다.")
+    if settings.is_production and settings.web_return_url == DEFAULT_WEB_RETURN_URL:
+        warnings.append("SOCIAL_WEB_RETURN_URL 미설정 — localhost 기본값이라 웹 로그인 복귀가 실패합니다.")
     return warnings

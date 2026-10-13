@@ -178,7 +178,7 @@ def test_build_provider():
     assert build_provider("kakao", SocialSettings()) is None
     assert isinstance(build_provider("kakao", SocialSettings(kakao_rest_api_key="k")), KakaoProvider)
     assert isinstance(build_provider("naver", SocialSettings(naver_client_id="i", naver_client_secret="s")), NaverProvider)
-    fake = SocialSettings(kakao_rest_api_key="k", fake_provider_requested=True)
+    fake = SocialSettings(app_env="development", kakao_rest_api_key="k", fake_provider_requested=True)
     assert isinstance(build_provider("kakao", fake), FakeProvider)  # 가짜 모드가 실키보다 우선
     prod = SocialSettings(app_env="production", fake_provider_requested=True)
     assert build_provider("kakao", prod) is None

@@ -5,8 +5,10 @@
 
 from __future__ import annotations
 
+import json
 import os
 import secrets
+from dataclasses import dataclass
 
 import redis.asyncio as aioredis
 
@@ -15,6 +17,14 @@ EXCHANGE_CODE_TTL_SECONDS = 60
 
 _NONCE_KEY = "auth:social:nonce:{}"
 _CODE_KEY = "auth:social:code:{}"
+
+
+@dataclass(frozen=True)
+class ExchangeGrant:
+    """교환 코드에 묶인 사용자와 verifier challenge."""
+
+    user_id: int
+    cc: str
 
 
 class SocialStore:
@@ -26,20 +36,27 @@ class SocialStore:
         ok = await self._redis.set(_NONCE_KEY.format(nonce), "1", nx=True, ex=NONCE_TTL_SECONDS)
         return bool(ok)
 
-    async def issue_exchange_code(self, user_id: int) -> str:
+    async def issue_exchange_code(self, user_id: int, cc: str) -> str:
         code = secrets.token_urlsafe(32)
-        await self._redis.set(_CODE_KEY.format(code), str(user_id), ex=EXCHANGE_CODE_TTL_SECONDS)
+        value = json.dumps({"user_id": user_id, "cc": cc})
+        await self._redis.set(_CODE_KEY.format(code), value, ex=EXCHANGE_CODE_TTL_SECONDS)
         return code
 
-    async def consume_exchange_code(self, code: str) -> int | None:
-        """교환 코드 → user_id. GETDEL 이라 두 번째 호출부터는 None."""
+    async def consume_exchange_code(self, code: str) -> ExchangeGrant | None:
+        """교환 코드 → (user_id, cc). GETDEL 이라 두 번째 호출부터는 None. 형식이 깨졌으면 None."""
         raw = await self._redis.getdel(_CODE_KEY.format(code))
         if raw is None:
             return None
         try:
-            return int(raw)
+            data = json.loads(raw)
         except (TypeError, ValueError):
             return None
+        if not isinstance(data, dict):
+            return None
+        user_id, cc = data.get("user_id"), data.get("cc")
+        if not isinstance(user_id, int) or isinstance(user_id, bool) or not isinstance(cc, str):
+            return None
+        return ExchangeGrant(user_id=user_id, cc=cc)
 
 
 _store: SocialStore | None = None

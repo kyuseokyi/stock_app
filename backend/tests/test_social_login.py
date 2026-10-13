@@ -5,6 +5,8 @@ DB 는 sqlite in-memory, Redis 는 fakeredis, 공급자 HTTP 는 httpx.MockTrans
 """
 from __future__ import annotations
 
+import base64
+import hashlib
 import re
 from dataclasses import replace
 from types import SimpleNamespace
@@ -13,14 +15,18 @@ from urllib.parse import parse_qs, urlsplit
 import httpx
 import pytest
 from fakeredis import aioredis as fake_aioredis
+from redis.exceptions import ConnectionError as RedisConnectionError
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from apps.auth.main import app
 from apps.auth.social.config import SocialSettings, get_social_settings
 from apps.auth.social.providers import get_http_transport
-from apps.auth.social.service import normalize_nickname
-from apps.auth.social.state import sign_state
+from apps.auth.social import service as social_service
+from apps.auth.social.providers import ProviderProfile
+from apps.auth.social.service import SocialLoginError, find_or_create_user, normalize_nickname
+from apps.auth.social.state import sign_state, verify_state
 from apps.auth.social.store import SocialStore, get_social_store
 from shared.database import get_db
 from shared.models import AuthProvider, Base, User
@@ -29,6 +35,8 @@ from shared.security import decode_token
 SECRET = "test-state-secret-0123456789abcdef"
 BASE = "/api/v1/auth/social"
 WEB_RETURN = "http://localhost:3000/auth/complete"
+VERIFIER = "dBjftJeZ4CVP-mJ0z9-iFGc8Ld2ZRY0kbtiYn3sV1mA"
+CC = base64.urlsafe_b64encode(hashlib.sha256(VERIFIER.encode()).digest()).rstrip(b"=").decode()
 KEYED = SocialSettings(
     kakao_rest_api_key="kakao-key",
     naver_client_id="nid",
@@ -90,9 +98,14 @@ def _kakao(user_id: int = 4242, nickname: str | None = "카카오친구", token_
 
 async def _start(ctx, provider: str = "kakao", **params: str) -> str:
     """/start → 302 → 공급자 인가 URL 의 state 반환."""
-    r = await ctx.client.get(f"{BASE}/{provider}/start", params={"client": "web", **params})
+    r = await ctx.client.get(f"{BASE}/{provider}/start", params={"client": "web", "cc": CC, **params})
     assert r.status_code == 302, r.text
     return _query(r.headers["location"])["state"]
+
+
+async def _exchange(ctx, code: str, verifier: str | None = VERIFIER) -> httpx.Response:
+    body = {"code": code} | ({"code_verifier": verifier} if verifier is not None else {})
+    return await ctx.client.post(f"{BASE}/exchange", json=body)
 
 
 async def _callback(ctx, provider: str = "kakao", **params: str) -> httpx.Response:
@@ -123,7 +136,7 @@ async def test_providers_endpoint(ctx):
 
 
 async def test_start_redirects_to_kakao_authorize(ctx):
-    r = await ctx.client.get(f"{BASE}/kakao/start", params={"client": "web"})
+    r = await ctx.client.get(f"{BASE}/kakao/start", params={"client": "web", "cc": CC})
     assert r.status_code == 302
     loc = r.headers["location"]
     assert loc.startswith("https://kauth.kakao.com/oauth/authorize?")
@@ -134,22 +147,26 @@ async def test_start_redirects_to_kakao_authorize(ctx):
 
 
 async def test_start_redirects_to_naver_authorize(ctx):
-    r = await ctx.client.get(f"{BASE}/naver/start", params={"client": "app", "app": "dev"})
+    r = await ctx.client.get(f"{BASE}/naver/start", params={"client": "app", "app": "dev", "cc": CC})
     assert r.status_code == 302
     assert r.headers["location"].startswith("https://nid.naver.com/oauth2.0/authorize?")
 
 
 async def test_start_disabled_provider_503(ctx):
     ctx.settings = SocialSettings(state_secret=SECRET)
-    r = await ctx.client.get(f"{BASE}/kakao/start", params={"client": "web"})
+    r = await ctx.client.get(f"{BASE}/kakao/start", params={"client": "web", "cc": CC})
     assert r.status_code == 503
     assert r.json()["detail"]["code"] == "PROVIDER_DISABLED"
 
 
 async def test_start_validation(ctx):
-    assert (await ctx.client.get(f"{BASE}/apple/start", params={"client": "web"})).status_code == 422
-    assert (await ctx.client.get(f"{BASE}/kakao/start", params={"client": "desktop"})).status_code == 422
-    assert (await ctx.client.get(f"{BASE}/kakao/start")).status_code == 422  # client 필수
+    assert (await ctx.client.get(f"{BASE}/apple/start", params={"client": "web", "cc": CC})).status_code == 422
+    assert (await ctx.client.get(f"{BASE}/kakao/start", params={"client": "desktop", "cc": CC})).status_code == 422
+    assert (await ctx.client.get(f"{BASE}/kakao/start", params={"cc": CC})).status_code == 422  # client 필수
+    assert (await ctx.client.get(f"{BASE}/kakao/start", params={"client": "web"})).status_code == 422  # cc 필수
+    for bad in ("short", CC + "A", CC[:-1] + "+", CC[:-1] + "="):
+        r = await ctx.client.get(f"{BASE}/kakao/start", params={"client": "web", "cc": bad})
+        assert r.status_code == 422, bad
 
 
 # ---------------------------------------------------------------- callback 성공 + exchange
@@ -166,7 +183,7 @@ async def test_callback_creates_user_and_exchange_issues_token(ctx):
     assert u.email is None and u.password_hash is None and u.social_token is None
     assert u.role.value == "FREE" and u.is_active is True
 
-    r = await ctx.client.post(f"{BASE}/exchange", json={"code": q["code"]})
+    r = await _exchange(ctx, q["code"])
     assert r.status_code == 200
     body = r.json()
     assert body["token_type"] == "bearer"
@@ -183,7 +200,7 @@ async def test_relogin_returns_same_user_without_overwriting_nickname(ctx):
     users = await _users(ctx)
     assert len(users) == 1
     assert users[0].nickname == "처음닉"
-    r = await ctx.client.post(f"{BASE}/exchange", json={"code": q["code"]})
+    r = await _exchange(ctx, q["code"])
     assert r.json()["user"]["id"] == users[0].id
 
 
@@ -255,9 +272,9 @@ async def test_nonce_reuse_redirects_state_invalid(ctx):
 @pytest.mark.parametrize("make_state", [
     lambda: None,  # state 없음
     lambda: "garbage",
-    lambda: sign_state("attacker-secret-0123456789abcdef", provider="kakao", client="web", app_variant=None),
-    lambda: sign_state(SECRET, provider="naver", client="web", app_variant=None),  # provider 불일치
-    lambda: sign_state(SECRET, provider="kakao", client="web", app_variant=None, ttl_seconds=-1),  # 만료
+    lambda: sign_state("attacker-secret-0123456789abcdef", provider="kakao", client="web", app_variant=None, cc=CC),
+    lambda: sign_state(SECRET, provider="naver", client="web", app_variant=None, cc=CC),  # provider 불일치
+    lambda: sign_state(SECRET, provider="kakao", client="web", app_variant=None, cc=CC, ttl_seconds=-1),  # 만료
 ])
 async def test_invalid_state_returns_400_html_without_redirect(ctx, make_state):
     state = make_state()
@@ -302,13 +319,13 @@ async def test_return_url_comes_from_settings(ctx):
 async def test_exchange_code_is_single_use(ctx):
     ctx.transport = _kakao()
     _, q = await _login(ctx)
-    assert (await ctx.client.post(f"{BASE}/exchange", json={"code": q["code"]})).status_code == 200
-    again = await ctx.client.post(f"{BASE}/exchange", json={"code": q["code"]})
+    assert (await _exchange(ctx, q["code"])).status_code == 200
+    again = await _exchange(ctx, q["code"])
     assert again.status_code == 401
 
 
 async def test_exchange_unknown_code_401(ctx):
-    r = await ctx.client.post(f"{BASE}/exchange", json={"code": "nope"})
+    r = await _exchange(ctx, "nope")
     assert r.status_code == 401
     assert (await ctx.client.post(f"{BASE}/exchange", json={"code": ""})).status_code == 422
 
@@ -319,17 +336,105 @@ async def test_exchange_inactive_user_403(ctx):
         s.add(user)
         await s.commit()
         user_id = user.id
-    code = await ctx.store.issue_exchange_code(user_id)
-    r = await ctx.client.post(f"{BASE}/exchange", json={"code": code})
+    code = await ctx.store.issue_exchange_code(user_id, CC)
+    r = await _exchange(ctx, code)
     assert r.status_code == 403
+
+
+async def test_start_state_carries_cc(ctx):
+    state = await _start(ctx)
+    assert verify_state(SECRET, state, provider="kakao").cc == CC
+
+
+@pytest.mark.parametrize("verifier", [None, "", "wrong-verifier", VERIFIER + "x", "가나다라"])
+async def test_exchange_wrong_or_missing_verifier_401_and_code_consumed(ctx, verifier):
+    ctx.transport = _kakao()
+    _, q = await _login(ctx)
+    bad = await _exchange(ctx, q["code"], verifier=verifier)
+    assert bad.status_code == 401
+    unknown = await _exchange(ctx, "nope")
+    assert bad.json()["detail"] == unknown.json()["detail"]  # 같은 문구(코드 존재 여부 노출 금지)
+    # 실패해도 코드는 소모 — 이어서 올바른 verifier 로도 교환 불가
+    assert (await _exchange(ctx, q["code"])).status_code == 401
+
+
+async def test_exchange_correct_verifier_200(ctx):
+    ctx.transport = _kakao()
+    _, q = await _login(ctx)
+    assert (await _exchange(ctx, q["code"])).status_code == 200
+
+
+async def test_exchange_verifier_too_long_422(ctx):
+    assert (await _exchange(ctx, "c", verifier="a" * 129)).status_code == 422
+
+
+# ---------------------------------------------------------------- 저장소·DB 장애 → provider_failed
+class _BrokenStore(SocialStore):
+    def __init__(self, fail: str):
+        super().__init__(fake_aioredis.FakeRedis(decode_responses=True))
+        self._fail = fail
+
+    async def use_nonce(self, nonce: str) -> bool:
+        if self._fail == "nonce":
+            raise RedisConnectionError("redis down")
+        return await super().use_nonce(nonce)
+
+    async def issue_exchange_code(self, user_id: int, cc: str) -> str:
+        raise RedisConnectionError("redis down")
+
+
+@pytest.mark.parametrize("fail", ["nonce", "issue"])
+async def test_callback_redis_failure_redirects_provider_failed(ctx, fail):
+    ctx.transport = _kakao()
+    ctx.store = _BrokenStore(fail)
+    loc, q = await _login(ctx)
+    assert loc.startswith(WEB_RETURN + "?")
+    assert q == {"error": "provider_failed"}
+
+
+async def test_callback_db_failure_redirects_provider_failed(ctx, monkeypatch):
+    async def boom(*args, **kwargs):
+        raise OperationalError("SELECT secret", {"p": "secret"}, Exception("db down"))
+
+    monkeypatch.setattr(social_service, "find_or_create_user", boom)
+    ctx.transport = _kakao()
+    _, q = await _login(ctx)
+    assert q == {"error": "provider_failed"}
+
+
+class _RaceSession:
+    """첫 커밋은 유니크 위반, 재조회도 행 없음(드문 경합·삭제) — scalar_one 대신 None 처리 확인."""
+
+    def __init__(self):
+        self.rolled_back = False
+
+    async def execute(self, stmt):
+        return SimpleNamespace(scalar_one_or_none=lambda: None)
+
+    def add(self, obj):
+        pass
+
+    async def commit(self):
+        raise IntegrityError("INSERT", {}, Exception("unique"))
+
+    async def rollback(self):
+        self.rolled_back = True
+
+
+async def test_find_or_create_integrity_fallback_missing_row_raises_provider_failed():
+    db = _RaceSession()
+    with pytest.raises(SocialLoginError) as exc:
+        await find_or_create_user(db, AuthProvider.KAKAO, ProviderProfile(id="1", nickname="n"))
+    assert exc.value.code == "provider_failed"
+    assert db.rolled_back
 
 
 # ---------------------------------------------------------------- 가짜 공급자 모드
 async def test_fake_mode_full_flow(ctx):
-    ctx.settings = SocialSettings(state_secret=SECRET, fake_provider_requested=True)
+    ctx.settings = SocialSettings(app_env="test", state_secret=SECRET, fake_provider_requested=True)
     assert (await ctx.client.get(f"{BASE}/providers")).json() == {"kakao": True, "naver": True}
 
-    r = await ctx.client.get(f"{BASE}/naver/start", params={"client": "web"})
+    r = await ctx.client.get(f"{BASE}/naver/start", params={"client": "web", "cc": CC})
     assert r.status_code == 302
     loc = urlsplit(r.headers["location"])
     assert loc.path == f"{BASE}/naver/callback"  # 공급자 대신 자기 콜백
@@ -337,16 +442,26 @@ async def test_fake_mode_full_flow(ctx):
 
     cb = await ctx.client.get(f"{loc.path}?{loc.query}")
     code = _query(cb.headers["location"])["code"]
-    body = (await ctx.client.post(f"{BASE}/exchange", json={"code": code})).json()
+    assert (await _exchange(ctx, code, verifier="wrong-verifier")).status_code == 401  # 가짜 모드도 검증
+    r = await ctx.client.get(f"{BASE}/naver/start", params={"client": "web", "cc": CC})
+    loc = urlsplit(r.headers["location"])
+    cb = await ctx.client.get(f"{loc.path}?{loc.query}")
+    code = _query(cb.headers["location"])["code"]
+    body = (await _exchange(ctx, code)).json()
     assert body["user"]["nickname"] == "테스트유저"
     u = (await _users(ctx))[0]
     assert (u.provider, u.provider_id) == (AuthProvider.NAVER, "fake-naver-tester")
 
 
+async def test_fake_mode_ignored_without_explicit_env(ctx):
+    ctx.settings = SocialSettings(state_secret=SECRET, fake_provider_requested=True)  # app_env 미지정
+    assert (await ctx.client.get(f"{BASE}/providers")).json() == {"kakao": False, "naver": False}
+
+
 async def test_fake_mode_ignored_in_production(ctx):
     ctx.settings = SocialSettings(app_env="production", state_secret=SECRET, fake_provider_requested=True)
     assert (await ctx.client.get(f"{BASE}/providers")).json() == {"kakao": False, "naver": False}
-    r = await ctx.client.get(f"{BASE}/kakao/start", params={"client": "web"})
+    r = await ctx.client.get(f"{BASE}/kakao/start", params={"client": "web", "cc": CC})
     assert r.status_code == 503
 
 
