@@ -170,13 +170,13 @@ export function QuizSheet({ onClose }: { onClose: () => void }) {
               disabled={phase.kind !== 'playing'}
               onPress={() => void choose('UP')}
               style={[styles.pick, styles.up, phase.kind !== 'playing' && styles.disabled]}>
-              <Text style={styles.pickLabel}>오를까? 📈</Text>
+              <Text style={[styles.pickLabel, styles.upText]}>오를까? 📈</Text>
             </Pressable>
             <Pressable
               disabled={phase.kind !== 'playing'}
               onPress={() => void choose('DOWN')}
               style={[styles.pick, styles.down, phase.kind !== 'playing' && styles.disabled]}>
-              <Text style={styles.pickLabel}>내릴까? 📉</Text>
+              <Text style={[styles.pickLabel, styles.downText]}>내릴까? 📉</Text>
             </Pressable>
           </View>
         </>
@@ -256,10 +256,12 @@ const styles = StyleSheet.create((theme) => ({
   },
   footer: { flexDirection: 'row', gap: theme.gap(1.5), alignSelf: 'stretch' },
   pick: { flex: 1, height: 56, borderRadius: theme.radius.button, alignItems: 'center', justifyContent: 'center' },
-  up: { backgroundColor: theme.colors.up },
-  down: { backgroundColor: theme.colors.down },
+  up: { backgroundColor: theme.colors.upSoft },
+  down: { backgroundColor: theme.colors.downSoft },
+  upText: { color: theme.colors.up },
+  downText: { color: theme.colors.down },
   disabled: { opacity: 0.4 },
-  pickLabel: { fontSize: 16, fontWeight: '700', color: '#ffffff' },
+  pickLabel: { fontSize: 16, fontWeight: '700' },
   headline: {
     paddingVertical: theme.gap(1.5),
     textAlign: 'center',

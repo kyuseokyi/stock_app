@@ -278,6 +278,6 @@ const styles = StyleSheet.create((theme) => ({
     paddingTop: theme.gap(2),
   },
   titleInScroll: { paddingHorizontal: theme.gap(0.5), paddingTop: theme.gap(1), paddingBottom: theme.gap(0.5) },
-  notice: { backgroundColor: theme.colors.surface, borderRadius: theme.radius.card, padding: theme.gap(2) },
+  notice: { backgroundColor: theme.colors.surfaceBlue, borderRadius: theme.radius.card, padding: theme.gap(2) },
   noticeText: { fontSize: 14, color: theme.colors.textSecondary },
 }));
