@@ -30,6 +30,7 @@ class SocialSettings:
     app_env: str = ""  # APP_ENV 원값(미설정이면 빈 문자열 — 가짜 모드 판단에서 기본값을 인정하지 않음)
     kakao_rest_api_key: str = ""
     kakao_client_secret: str = ""  # 카카오 콘솔에서 Client Secret 을 '사용함'으로 켠 경우만
+    kakao_admin_key: str = ""  # 회원 탈퇴 시 카카오 연결 끊기(선택). 비면 생략
     naver_client_id: str = ""
     naver_client_secret: str = ""
     state_secret: str = ""  # 비면 JWT_SECRET_KEY 로 폴백
@@ -79,6 +80,7 @@ def load_social_settings() -> SocialSettings:
         app_env=(env("APP_ENV") or "").strip(),
         kakao_rest_api_key=env("KAKAO_REST_API_KEY", ""),
         kakao_client_secret=env("KAKAO_CLIENT_SECRET", ""),
+        kakao_admin_key=env("KAKAO_ADMIN_KEY", ""),
         naver_client_id=env("NAVER_CLIENT_ID", ""),
         naver_client_secret=env("NAVER_CLIENT_SECRET", ""),
         state_secret=env("SOCIAL_STATE_SECRET", ""),

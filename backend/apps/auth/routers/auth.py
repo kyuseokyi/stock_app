@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Response, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -14,7 +14,11 @@ from shared.models import User, UserRole
 from shared.security import create_access_token, verify_password
 
 from .. import schemas
+from ..deps import get_redis
 from ..guest_gate import require_guest_enabled
+from ..services import account_deletion
+from ..social.config import SocialSettings, get_social_settings
+from ..social.providers import get_http_transport
 
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 
@@ -84,3 +88,27 @@ async def guest_login(
 @router.get("/me", response_model=schemas.UserOut)
 async def me(user: User = Depends(get_current_user)):
     return user
+
+
+@router.delete("/me", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_me(
+    payload: schemas.DeleteAccountRequest | None = Body(None),
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    redis=Depends(get_redis),
+    settings: SocialSettings = Depends(get_social_settings),
+    transport=Depends(get_http_transport),
+) -> Response:
+    """회원 탈퇴 — 본문 {"confirm": "탈퇴"}. 공개 기록은 '탈퇴한 회원'으로 익명화, 나머지는 삭제."""
+    try:
+        await account_deletion.delete_account(
+            db, user,
+            confirm=payload.confirm if payload else None,
+            redis=redis,
+            kakao_admin_key=settings.kakao_admin_key,
+            transport=transport,
+        )
+    except account_deletion.AccountDeletionError as e:
+        code = status.HTTP_403_FORBIDDEN if e.code == "ADMIN_CANNOT_DELETE" else status.HTTP_400_BAD_REQUEST
+        raise HTTPException(code, detail={"code": e.code, "message": str(e)})
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

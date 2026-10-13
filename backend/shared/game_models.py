@@ -405,8 +405,9 @@ class WeeklyRankingResult(Base):
     )
     week_start: Mapped[date] = mapped_column(Date, nullable=False)
     rank: Mapped[int] = mapped_column(Integer, nullable=False)
-    user_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    # 회원 탈퇴 시 행은 남기고(공개 기록) user_id 만 NULL + nickname '탈퇴한 회원'으로 익명화
+    user_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
     nickname: Mapped[str | None] = mapped_column(String(50), nullable=True)
     weekly_roi: Mapped[Decimal] = mapped_column(Numeric(10, 4), nullable=False)
