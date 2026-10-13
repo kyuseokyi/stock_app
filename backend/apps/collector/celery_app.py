@@ -29,6 +29,7 @@ celery_app = Celery(
         "apps.collector.tasks.backfill",
         "apps.collector.tasks.universe",
         "apps.collector.tasks.settle_season",
+        "apps.collector.tasks.quiz",
     ],
 )
 
@@ -53,5 +54,10 @@ celery_app.conf.beat_schedule = {
     "settle-trading-season": {
         "task": "settle_trading_season",
         "schedule": crontab(hour=20, minute=40),
+    },
+    # 차트 퀴즈 풀 보충 — 일봉 수집·정산 이후. 미시도 재고 < QUIZ_POOL_MIN_UNSEEN 일 때만 생성
+    "generate-chart-quiz": {
+        "task": "collector.generate_chart_quiz",
+        "schedule": crontab(hour=21, minute=0),
     },
 }
