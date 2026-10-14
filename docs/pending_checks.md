@@ -9,6 +9,10 @@
 - [ ] 20:00 이후 게임 마지막 가격이 DB 통합(UN) 일봉 종가와 같은지
 - [ ] 틱 묶기·공개 채널: 비로그인 web/모바일에서 차트가 실시간 갱신되는지(DevTools WS `tick` ~4회/초), 손절가 통과 틱에서 자동청산·넛지가 즉시 오는지, trading_game 로그에 `포지션 캐시 적재 실패` 없는지
 - 문제 시 즉시 되돌리기: `.env.production` 에 `GAME_WS_TR_ID=H0STCNT0` → `game_ws` 재생성
+- [ ] **게임 분봉 적재**: 장중 `game_ws` 로그에 `분봉 저장 실패` 없고, CH `SELECT source, count() FROM stock_data.game_minute_bars FINAL WHERE ticker=<시즌 종목> AND toDate(ts)=today() GROUP BY source` 에 `tick` 행이 분마다 늘어나는지(진행 중 분은 15초마다 갱신)
+- [ ] **KIS 당일분봉 보충**: 장중 `game_ws` 재시작 → 로그 `KIS 당일분봉 수집: market=UN`(NXT 미상장 종목은 `market=J`)·`KIS 당일분봉 보충: inserted=N`, 09:00~재시작 직전 분이 `source='kis'` 로 채워지고 첫 틱 분부터는 `tick` 인지. 실제 응답 필드(`stck_cntg_hour`·`cntg_vol`)·페이지네이션(30건 역순)·모의(vps) 지원 여부 확인
+- [ ] **분봉 시각 라벨**: KIS `stck_cntg_hour`(예: `093000`)를 **분 시작**(09:30:00~09:30:59)으로 저장함 — MTS 1분봉과 같은 분의 OHLC 가 맞는지 비교(한 분 밀리면 kis_backfill.parse_rows 에서 -1분 보정)
+- [ ] `GET /api/game/candles?interval=5m` 응답 캔들 수·시각(KST 09:00 = `t` 가 UTC 00:00)이 맞는지
 
 ## 2. 브라우저·기기로 아직 확인하지 않은 화면
 ### web_client (`app.haezean.com/game`)
@@ -37,6 +41,7 @@
 
 - [ ] 시즌 기간·월간 랭킹 push 후: 마이그레이션 `e1f2a3b4c5d6` 자동 적용, celery beat 재시작으로 `close-trading-month` 등록, admin 게임 설정 화면 로드·저장 확인
 - [ ] 10/31(토) 시즌 1기 정산이 10/30(금) 종가로 20:40 에 실행되는지(로그 `시즌 1 정산 완료`), 11월 시즌이 admin 설정 기간으로 생성됐는지
+- [ ] 게임 분봉 push 후: `game_ws` 시작 시 `stock_data.game_minute_bars` 자동 생성(`CREATE TABLE IF NOT EXISTS`) 확인 — 실패 로그가 있으면 `docker exec stock_game_ws python -m shared.clickhouse_schema` 로 수동 생성. `game_ws` 컨테이너가 ClickHouse 에 닿는지(`.env.production` 의 `CLICKHOUSE_*` 공유)
 - [ ] 분기 선택은 **web·모바일 새 버전 배포 후**(구 버전은 월간 보상 토스트를 주간 문구로 표시)
 
 ## 4. 외부 준비가 필요한 것
@@ -54,4 +59,5 @@
 - **TradingView 로고**: lightweight-charts 출처 표시 의무 — 로고 유지(결정됨).
 - **시즌 운영**: 시즌은 월간(1일 09:00 ~ 말일 20:00) 또는 분기(~ 분기 마지막 달 말일 20:00). admin 게임 설정의 '다음 시즌 기간'은 **다음 시즌부터** 적용. 20:40 정산이 다음 시즌을 자동 생성하고(종료일이 주말·휴장이면 직전 거래일 종가), `game_ws` 는 60초 안에 새 종목으로 자동 전환(재시작 불필요).
 - **주간 랭킹 기준값은 Redis 에만 있음**: 그 주 첫 랭킹 갱신 때 기록되므로 Redis 를 비우면 그 주 주간 순위가 초기화된다. 시즌 마지막 주 기록이 정산 중 실패하면 로그(`season=… week_start=…`)를 보고 `weekly_service.close_week(..., with_reward=False)` 로 수동 기록(주간 ZSET TTL 21일).
+- **게임 분봉 저장은 실패해도 게임에 영향 없음**(틱 발행·주문과 분리된 큐/태스크, 큐 가득 차면 버림). KIS 보충은 `game_ws` 시작·종목 전환 때 (종목, 날짜)당 1회만 — 장중 재시작이 잦으면 KIS 호출도 그만큼 늘어난다. Mock 모드는 보충하지 않음.
 - **DB 작업**: 마이그레이션 검증은 로컬 docker PG 일회용 DB 에서만. dev 터널(15432) DB 에 직접 실행 금지(배포 워크플로가 자동 적용).
