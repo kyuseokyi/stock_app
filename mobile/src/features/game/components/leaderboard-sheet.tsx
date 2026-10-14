@@ -1,20 +1,23 @@
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Text, View } from 'react-native';
+import { ActivityIndicator, ScrollView, Text, View } from 'react-native';
 import { StyleSheet } from 'react-native-unistyles';
 
 import { AmountText, Button, Chip } from '@/ui';
 
 import { getHallOfFame, getLeaderboard } from '../api';
 import { gameErrorMessage } from '../lib/errors';
-import type { HallOfFameRow, LeaderboardRow } from '../types';
+import { rankingTabs, type RankingTab } from '../lib/ranking-period';
+import type { HallOfFameRow, LeaderboardRow, SeasonPeriod } from '../types';
+import { PeriodRankingTab } from './period-ranking-tab';
 import { Sheet } from './sheet';
-import { WeeklyRankingTab } from './weekly-ranking-tab';
 
-type Tab = 'weekly' | 'season' | 'hof';
+type Tab = RankingTab;
 type Load<T> = { kind: 'loading' } | { kind: 'error'; message: string } | { kind: 'ok'; data: T };
 
 type Props = {
   seasonId: number;
+  /** 시즌 기간 — quarter 면 월간 탭 노출 */
+  seasonPeriod?: SeasonPeriod;
   /** 로그인 유저 id(비로그인 null) — 내 행 강조용 */
   myUserId: number | null;
   onClose: () => void;
@@ -34,15 +37,15 @@ function groupBySeason(rows: HallOfFameRow[]): { seasonId: number; seasonNumber:
   return groups;
 }
 
-/** 랭킹 시트 — 주간 / 시즌 Top 100 / 명예의 전당(MBTI). 공개 API 라 비로그인도 열람. 열릴 때·탭 전환 시 활성 탭만 로드 */
-export function LeaderboardSheet({ seasonId, myUserId, onClose }: Props) {
+/** 랭킹 시트 — 주간 / (분기 시즌) 월간 / 시즌 Top 100 / 명예의 전당(MBTI). 공개 API 라 비로그인도 열람. 열릴 때·탭 전환 시 활성 탭만 로드 */
+export function LeaderboardSheet({ seasonId, seasonPeriod, myUserId, onClose }: Props) {
   const [tab, setTab] = useState<Tab>('weekly');
   const [board, setBoard] = useState<Load<LeaderboardRow[]>>({ kind: 'loading' });
   const [hof, setHof] = useState<Load<HallOfFameRow[]>>({ kind: 'loading' });
   const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
-    if (tab === 'weekly') return; // 주간 탭은 자체 로드
+    if (tab === 'weekly' || tab === 'monthly') return; // 주간·월간 탭은 자체 로드(PeriodRankingTab)
     let cancelled = false;
     if (tab === 'season') {
       setBoard({ kind: 'loading' });
@@ -69,23 +72,26 @@ export function LeaderboardSheet({ seasonId, myUserId, onClose }: Props) {
   }, [tab, seasonId, reloadKey]);
 
   const current = tab === 'season' ? board : hof;
+  const selfLoading = tab === 'weekly' || tab === 'monthly'; // 자체 로드 탭은 아래 공통 로딩/오류 표시 제외
 
   return (
     <Sheet title="🏆 랭킹" onClose={onClose}>
-      <View style={styles.tabs}>
-        <Chip label="주간" selected={tab === 'weekly'} onPress={() => setTab('weekly')} />
-        <Chip label="시즌 랭킹" selected={tab === 'season'} onPress={() => setTab('season')} />
-        <Chip label="명예의 전당" selected={tab === 'hof'} onPress={() => setTab('hof')} />
-      </View>
+      {/* 탭 4개(분기 시즌)도 좁은 화면에서 잘리지 않게 가로 스크롤 */}
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabs}>
+        {rankingTabs(seasonPeriod).map((t) => (
+          <Chip key={t.key} label={t.label} selected={tab === t.key} onPress={() => setTab(t.key)} />
+        ))}
+      </ScrollView>
 
-      {tab === 'weekly' ? <WeeklyRankingTab seasonId={seasonId} myUserId={myUserId} /> : null}
+      {tab === 'weekly' ? <PeriodRankingTab key="week" period="week" seasonId={seasonId} myUserId={myUserId} /> : null}
+      {tab === 'monthly' ? <PeriodRankingTab key="month" period="month" seasonId={seasonId} myUserId={myUserId} /> : null}
 
-      {tab !== 'weekly' && current.kind === 'loading' ? (
+      {!selfLoading && current.kind === 'loading' ? (
         <View style={styles.state}>
           <ActivityIndicator />
         </View>
       ) : null}
-      {tab !== 'weekly' && current.kind === 'error' ? (
+      {!selfLoading && current.kind === 'error' ? (
         <View style={styles.state}>
           <Text style={styles.muted}>{current.message}</Text>
           <Button label="다시 시도" variant="secondary" fullWidth={false} onPress={() => setReloadKey((k) => k + 1)} />

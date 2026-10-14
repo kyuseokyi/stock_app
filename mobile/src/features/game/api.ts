@@ -7,6 +7,7 @@ import { ENV } from '@/lib/env';
 
 import { toNum, toNumOrNull } from './lib/decimal';
 import { kstDateString } from './lib/format';
+import { normalizeRewardConfig } from './lib/ranking-period';
 import type {
   AcademyQuiz,
   AcademySubmitResult,
@@ -16,6 +17,9 @@ import type {
   DailyCandle,
   HallOfFameRow,
   LeaderboardRow,
+  MonthlyBoard,
+  MonthlyMyRank,
+  MonthlyResultMonth,
   MyRank,
   OrderRequest,
   OrderResult,
@@ -37,6 +41,7 @@ import type {
   RawQuizQuestion,
   RawQuizResult,
   RawStreakClaimResult,
+  RewardConfig,
   Season,
   Streak,
   StreakClaimResult,
@@ -183,6 +188,25 @@ export function getWeeklyResults(seasonId: number, limit = 1): Promise<WeeklyRes
 
 export function getUnseenWeeklyRewards(): Promise<WeeklyReward[]> {
   return client().get<WeeklyReward[]>('/api/game/weekly-rewards/unseen');
+}
+
+/** 공개 — 이번 달 Top 100(분기 시즌 전용, 매월 1일 09:00 시작). 월간 시즌이면 기간 null + 빈 목록 */
+export function getMonthlyLeaderboard(seasonId: number): Promise<MonthlyBoard> {
+  return client().get<MonthlyBoard>(`/api/game/seasons/${seasonId}/monthly-leaderboard`);
+}
+
+export function getMonthlyMyRank(seasonId: number): Promise<MonthlyMyRank> {
+  return client().get<MonthlyMyRank>(`/api/game/seasons/${seasonId}/monthly-my-rank`);
+}
+
+/** 공개 — 지난 달들의 Top 3(최신 달 먼저) */
+export function getMonthlyResults(seasonId: number, limit = 1): Promise<MonthlyResultMonth[]> {
+  return client().get<MonthlyResultMonth[]>('/api/game/monthly-results', { season_id: seasonId, limit });
+}
+
+/** 공개 — 랭킹·연속 출석 보상 금액(안내 문구용). 잘못된 필드는 기본값으로 정규화 */
+export async function getRewardConfig(): Promise<RewardConfig> {
+  return normalizeRewardConfig(await client().get<unknown>('/api/game/reward-config'));
 }
 
 /** 204 빈 응답 — http client 가 undefined 로 처리 */

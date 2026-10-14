@@ -20,7 +20,11 @@ export interface Season {
   status: string;
   start_at: string;
   end_at: string | null;
+  /** 시즌 기간 — quarter 일 때만 월간 랭킹 탭. 구 서버 응답엔 없을 수 있어 optional(없으면 month 취급) */
+  period?: SeasonPeriod;
 }
+
+export type SeasonPeriod = 'month' | 'quarter';
 
 export interface RawAccount {
   season_id: number;
@@ -371,7 +375,46 @@ export interface WeeklyResultWeek {
 
 export interface WeeklyReward {
   id: number;
+  /** 주간=그 주 월요일, 월간=그 달 1일 */
   week_start: string;
   rank: number;
   reward_amount: number;
+  /** 구 서버 응답엔 없을 수 있음(없으면 week) */
+  period_type?: 'week' | 'month';
+}
+
+// ---------------------------------------------------------------- 월간 랭킹(분기 시즌 전용)
+
+export interface MonthlyEntry {
+  rank: number;
+  user_id: number;
+  nickname: string | null;
+  monthly_roi: number;
+}
+
+/** 월간 시즌이면 month_start/start_at/end_at 이 null, entries 빈 배열 */
+export interface MonthlyBoard {
+  month_start: string | null;
+  start_at: string | null;
+  end_at: string | null;
+  entries: MonthlyEntry[];
+}
+
+export interface MonthlyMyRank {
+  rank: number | null;
+  monthly_roi: number | null;
+  total: number;
+}
+
+export interface MonthlyResultMonth {
+  season_id: number;
+  month_start: string;
+  entries: { rank: number; nickname: string | null; monthly_roi: number; reward_amount: number }[];
+}
+
+/** GET /api/game/reward-config — 안내 문구용 보상 금액(정수 원). streak 키는 마일스톤 일수 문자열 */
+export interface RewardConfig {
+  weekly: number[];
+  monthly: number[];
+  streak: Record<string, number>;
 }

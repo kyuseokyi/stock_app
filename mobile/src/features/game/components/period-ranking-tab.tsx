@@ -4,32 +4,30 @@ import { StyleSheet } from 'react-native-unistyles';
 
 import { AmountText, Button } from '@/ui';
 
-import { getWeeklyLeaderboard, getWeeklyMyRank, getWeeklyResults } from '../api';
 import { gameErrorMessage } from '../lib/errors';
-import { formatRewardWon, formatWeekRange, WEEKLY_RULE } from '../lib/weekly';
-import type { WeeklyBoard, WeeklyMyRank, WeeklyResultWeek } from '../types';
+import { PERIOD_TEXT, rankingRuleText, type RankingPeriod } from '../lib/ranking-period';
+import { formatRewardWon, formatWeekRange } from '../lib/weekly';
+import { loadPeriodRanking, type PeriodRankingData } from '../ranking-data';
+import { useRewardConfig } from '../use-reward-config';
 
-type Props = { seasonId: number; myUserId: number | null };
-type Data = { board: WeeklyBoard; me: WeeklyMyRank | null; last: WeeklyResultWeek | null };
-type Load = { kind: 'loading' } | { kind: 'error'; message: string } | { kind: 'ok'; data: Data };
+type Props = { period: RankingPeriod; seasonId: number; myUserId: number | null };
+type Load = { kind: 'loading' } | { kind: 'error'; message: string } | { kind: 'ok'; data: PeriodRankingData };
 
 const MEDAL = ['🥇', '🥈', '🥉'];
 
-/** 주간 탭 — 이번 주 기간·내 순위·지난주 Top 3·Top 100. 내 순위·지난주는 실패해도 목록은 표시 */
-export function WeeklyRankingTab({ seasonId, myUserId }: Props) {
+/** 주간·월간 탭 — 이번 기간·보상 안내·내 순위·직전 기간 Top 3·Top 100. 내 순위·직전 기간은 실패해도 목록은 표시 */
+export function PeriodRankingTab({ period, seasonId, myUserId }: Props) {
   const [state, setState] = useState<Load>({ kind: 'loading' });
   const [reloadKey, setReloadKey] = useState(0);
+  const rewardConfig = useRewardConfig();
+  const text = PERIOD_TEXT[period];
 
   useEffect(() => {
     let cancelled = false;
     setState({ kind: 'loading' });
-    Promise.all([
-      getWeeklyLeaderboard(seasonId),
-      myUserId !== null ? getWeeklyMyRank(seasonId).catch(() => null) : Promise.resolve(null),
-      getWeeklyResults(seasonId, 1).catch((): WeeklyResultWeek[] => []),
-    ])
-      .then(([board, me, results]) => {
-        if (!cancelled) setState({ kind: 'ok', data: { board, me, last: results[0] ?? null } });
+    loadPeriodRanking(period, seasonId, myUserId !== null)
+      .then((data) => {
+        if (!cancelled) setState({ kind: 'ok', data });
       })
       .catch((err: unknown) => {
         if (!cancelled) setState({ kind: 'error', message: gameErrorMessage(err) });
@@ -37,7 +35,7 @@ export function WeeklyRankingTab({ seasonId, myUserId }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [seasonId, myUserId, reloadKey]);
+  }, [period, seasonId, myUserId, reloadKey]);
 
   if (state.kind === 'loading') {
     return (
@@ -59,29 +57,33 @@ export function WeeklyRankingTab({ seasonId, myUserId }: Props) {
   return (
     <View style={styles.wrap}>
       <View>
-        <Text style={styles.period}>{formatWeekRange(board.start_at, board.end_at)}</Text>
-        <Text style={styles.rule}>{WEEKLY_RULE}</Text>
+        {board.start_at && board.end_at ? (
+          <Text style={styles.period}>{formatWeekRange(board.start_at, board.end_at)}</Text>
+        ) : null}
+        <Text style={styles.rule}>
+          {rankingRuleText(period, period === 'month' ? rewardConfig.monthly : rewardConfig.weekly)}
+        </Text>
       </View>
 
-      {me && me.rank !== null && me.weekly_roi !== null ? (
+      {me && me.rank !== null && me.roi !== null ? (
         <View style={[styles.row, styles.mine]}>
           <Text style={styles.name}>
-            내 주간 순위 <Text style={styles.bold}>{me.rank}위</Text> / {me.total}명
+            {text.myRank} <Text style={styles.bold}>{me.rank}위</Text> / {me.total}명
           </Text>
-          <AmountText value={me.weekly_roi} kind="pct" size={14} weight="600" />
+          <AmountText value={me.roi} kind="pct" size={14} weight="600" />
         </View>
       ) : null}
 
       {last && last.entries.length > 0 ? (
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>지난주 Top 3</Text>
+          <Text style={styles.cardTitle}>{text.lastTop}</Text>
           {last.entries.map((e) => (
             <View key={e.rank} style={styles.lastRow}>
               <Text style={styles.medal}>{MEDAL[e.rank - 1] ?? e.rank}</Text>
               <Text style={styles.name} numberOfLines={1}>
                 {e.nickname ?? '익명'}
               </Text>
-              <AmountText value={e.weekly_roi} kind="pct" size={13} weight="500" />
+              <AmountText value={e.roi} kind="pct" size={13} weight="500" />
               {e.reward_amount > 0 ? <Text style={styles.reward}>{formatRewardWon(e.reward_amount)}</Text> : null}
             </View>
           ))}
@@ -89,7 +91,7 @@ export function WeeklyRankingTab({ seasonId, myUserId }: Props) {
       ) : null}
 
       {board.entries.length === 0 ? (
-        <Text style={[styles.muted, styles.empty]}>이번 주 순위가 아직 없어요</Text>
+        <Text style={[styles.muted, styles.empty]}>{text.empty}</Text>
       ) : (
         <View>
           {board.entries.map((r) => {
@@ -101,7 +103,7 @@ export function WeeklyRankingTab({ seasonId, myUserId }: Props) {
                   {r.nickname ?? '익명'}
                   {mine ? <Text style={styles.me}> 나</Text> : null}
                 </Text>
-                <AmountText value={r.weekly_roi} kind="pct" size={14} weight="600" />
+                <AmountText value={r.roi} kind="pct" size={14} weight="600" />
               </View>
             );
           })}

@@ -256,7 +256,9 @@ export default function GameScreen() {
 
       {/* 시트가 열려 있으면 토스트는 시트 안(Sheet → GameToaster)에서 보인다 — 화면 오버레이는 시트에 가려지므로 숨김 */}
       {activeModal === null ? <GameToaster /> : null}
-      {activeModal === 'ranking' ? <LeaderboardSheet seasonId={season.id} myUserId={userId} onClose={closeModal} /> : null}
+      {activeModal === 'ranking' ? (
+        <LeaderboardSheet seasonId={season.id} seasonPeriod={season.period} myUserId={userId} onClose={closeModal} />
+      ) : null}
       {activeModal === 'quest' ? <QuestSheet onClose={closeModal} /> : null}
       {activeModal === 'academy' ? <AcademySheet onClose={closeModal} /> : null}
       {activeModal === 'quiz' ? <QuizSheet onClose={closeModal} /> : null}

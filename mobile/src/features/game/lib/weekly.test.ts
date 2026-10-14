@@ -21,5 +21,13 @@ describe('weekly', () => {
     expect(rewardToastMessage({ id: 2, week_start: '2026-10-12', rank: 3, reward_amount: 200000 })).toBe(
       '지난주 주간 랭킹 3위! 보상 200,000원이 지급됐어요',
     );
+    expect(
+      rewardToastMessage({ id: 3, week_start: '2026-10-12', rank: 2, reward_amount: 300000, period_type: 'week' }),
+    ).toBe('지난주 주간 랭킹 2위! 보상 300,000원이 지급됐어요');
+  });
+  it('월간 보상 토스트 문구', () => {
+    expect(
+      rewardToastMessage({ id: 4, week_start: '2026-11-01', rank: 1, reward_amount: 1500000, period_type: 'month' }),
+    ).toBe('지난달 월간 랭킹 1위! 보상 1,500,000원이 지급됐어요');
   });
 });

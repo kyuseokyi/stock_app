@@ -1,4 +1,4 @@
-// 주간 랭킹 표시 함수(KST 기간 표기·보상 금액·토스트 문구). 보상 금액은 "N원" 표기로 통일.
+// 주간·월간 랭킹 표시 함수(KST 기간 표기·보상 금액·토스트 문구). 보상 금액은 "N원" 표기로 통일.
 import type { WeeklyReward } from '../types';
 
 const DOW = ['일', '월', '화', '수', '목', '금', '토'];
@@ -21,7 +21,6 @@ export const formatWeekRange = (startIso: string, endIso: string): string =>
 export const formatRewardWon = (n: number): string =>
   `${Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',')}원`;
 
+/** 미확인 랭킹 보상 토스트 — period_type 'month' 면 월간, 그 외(없음 포함) 주간 */
 export const rewardToastMessage = (r: WeeklyReward): string =>
-  `지난주 주간 랭킹 ${r.rank}위! 보상 ${formatRewardWon(r.reward_amount)}이 지급됐어요`;
-
-export const WEEKLY_RULE = '1~3위 50만·30만·20만 원 · 그 주 신규 주문 1회 이상 · 시즌 마지막 주는 기록만';
+  `${r.period_type === 'month' ? '지난달 월간' : '지난주 주간'} 랭킹 ${r.rank}위! 보상 ${formatRewardWon(r.reward_amount)}이 지급됐어요`;
