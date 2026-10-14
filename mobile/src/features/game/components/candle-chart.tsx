@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Text, View, type LayoutChangeEvent } from 'react-native';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
@@ -8,6 +8,7 @@ import { getDailyCandles, getGameCandles } from '../api';
 import { applyTick } from '../lib/candles';
 import { layoutCandles, priceToY, type Ohlc } from '../lib/chart-layout';
 import { formatPrice, kstDateString } from '../lib/format';
+import { bollinger, lineSegments, MA_PERIODS, sma } from '../lib/indicators';
 import { applyTickIntraday, axisLabelIndexes, bucketStartSec, CHART_INTERVALS, dayLabel, kstHm } from '../lib/intraday';
 import type { ChartInterval, Coach, DailyCandle, IntradayCandle, Position } from '../types';
 import { useGameRules } from '../use-game-rules';
@@ -22,13 +23,19 @@ const LABEL_H = 16;
 const PLOT_H = 240;
 const AXIS_H = 16; // 아래 시간축 라벨 줄
 const AXIS_LABEL_W = 48;
+// 보조지표 색(web TradingChart 와 같은 값) — 이동평균 5·20·60, 볼린저밴드
+const MA_COLORS: Record<(typeof MA_PERIODS)[number], string> = { 5: '#14b8a6', 20: '#f97316', 60: '#a16207' };
+const BB_COLOR = '#6366f1';
 
 export type PriceLine = { price: number; color: string; label: string; thick?: boolean; dashed?: boolean };
+/** 캔들 위 꺾은선(보조지표). values 는 candles 와 같은 길이, null 구간은 끊김 */
+export type Overlay = { key: string; color: string; values: (number | null)[]; faint?: boolean };
 
 type CandleChartProps = {
   candles: Ohlc[];
   height: number;
   lines?: PriceLine[];
+  overlays?: Overlay[];
   /** 가격 라벨(범위 최고/최저·가격선 값) 표시. 퀴즈 차트는 false */
   showLabels?: boolean;
   /** 캔들별 시간축 라벨(candles 와 같은 길이). 주면 처음·가운데·끝만 아래 줄에 표시 */
@@ -38,7 +45,9 @@ type CandleChartProps = {
 /** 캔들 + 가격선 렌더러. 폭은 onLayout 으로 측정(측정 전에는 빈 영역). xLabels 를 주면 아래에 시간축 라벨 */
 export function CandleChart({ xLabels, ...plot }: CandleChartProps) {
   const [width, setWidth] = useState(0);
-  const layout = layoutCandles(plot.candles, width, plot.height, (plot.lines ?? []).map((l) => l.price));
+  // 가격 범위에 가격선 + 지표 값도 포함(선이 차트 밖으로 나가지 않게)
+  const extra = [...(plot.lines ?? []).map((l) => l.price), ...(plot.overlays ?? []).flatMap((o) => o.values)];
+  const layout = layoutCandles(plot.candles, width, plot.height, extra);
   if (!xLabels) return <CandlePlot {...plot} layout={layout} onWidth={setWidth} />;
   const last = layout !== null ? Math.min(xLabels.length, layout.bars.length) - 1 : -1;
   return (
@@ -66,7 +75,7 @@ type CandlePlotProps = Omit<CandleChartProps, 'xLabels'> & {
   onWidth: (w: number) => void;
 };
 
-function CandlePlot({ height, lines = [], showLabels = true, layout, onWidth }: CandlePlotProps) {
+function CandlePlot({ height, lines = [], overlays = [], showLabels = true, layout, onWidth }: CandlePlotProps) {
   const { theme } = useUnistyles();
   const onLayout = (e: LayoutChangeEvent) => onWidth(e.nativeEvent.layout.width);
 
@@ -89,6 +98,27 @@ function CandlePlot({ height, lines = [], showLabels = true, layout, onWidth }: 
               </View>
             );
           })
+        : null}
+      {layout !== null
+        ? overlays.map((o) => (
+            <View key={o.key} pointerEvents="none" style={[styles.fill, o.faint ? styles.faint : null]}>
+              {lineSegments(
+                layout.bars.map((b, i) => {
+                  const v = o.values[i];
+                  return v == null ? null : { x: b.wickLeft + 0.5, y: priceToY(v, layout.range, height) };
+                }),
+              ).map((s, i) => (
+                <View
+                  key={i}
+                  style={[
+                    styles.abs,
+                    styles.segment,
+                    { left: s.left, top: s.top, width: s.width, backgroundColor: o.color, transform: [{ rotate: `${s.angleDeg}deg` }] },
+                  ]}
+                />
+              ))}
+            </View>
+          ))
         : null}
       {layout !== null
         ? lines.map((l) => {
@@ -153,16 +183,17 @@ export function DailyChart({ ticker, lastPrice, coach, position }: DailyChartPro
     const onFail = () => {
       if (!cancelled) setFailed(true);
     };
+    // 받은 전체를 보관(지표 계산용) — 화면에는 아래에서 최근 VISIBLE 개만 그린다
     if (interval === 'day') {
       getDailyCandles(ticker)
         .then((rows) => {
-          if (!cancelled) setDaily(rows.slice(-VISIBLE));
+          if (!cancelled) setDaily(rows);
         })
         .catch(onFail);
     } else {
       getGameCandles(interval)
         .then((rows) => {
-          if (!cancelled) setIntraday(rows.slice(-VISIBLE));
+          if (!cancelled) setIntraday(rows);
         })
         .catch(onFail);
     }
@@ -175,10 +206,10 @@ export function DailyChart({ ticker, lastPrice, coach, position }: DailyChartPro
   useEffect(() => {
     if (lastPrice === null) return;
     if (interval === 'day') {
-      setDaily((prev) => (prev === null ? prev : applyTick(prev, kstDateString(), lastPrice).slice(-VISIBLE)));
+      setDaily((prev) => (prev === null ? prev : applyTick(prev, kstDateString(), lastPrice)));
     } else {
       const bucket = bucketStartSec(Date.now(), interval);
-      setIntraday((prev) => (prev === null ? prev : applyTickIntraday(prev, bucket, lastPrice).slice(-VISIBLE)));
+      setIntraday((prev) => (prev === null ? prev : applyTickIntraday(prev, bucket, lastPrice)));
     }
   }, [lastPrice, interval]);
 
@@ -200,9 +231,35 @@ export function DailyChart({ ticker, lastPrice, coach, position }: DailyChartPro
     }
   }
 
-  const candles: Ohlc[] | null = interval === 'day' ? daily : intraday;
-  const xLabels = interval === 'day' ? daily?.map((c) => dayLabel(c.date)) : intraday?.map((c) => kstHm(c.t));
+  const all: Ohlc[] | null = interval === 'day' ? daily : intraday;
+  const candles = all?.slice(-VISIBLE) ?? null;
+  const xLabels =
+    interval === 'day'
+      ? daily?.slice(-VISIBLE).map((c) => dayLabel(c.date))
+      : intraday?.slice(-VISIBLE).map((c) => kstHm(c.t));
   const empty = candles !== null && candles.length === 0;
+
+  // 보조지표 — 받은 전체 종가로 계산한 뒤 화면 구간(최근 VISIBLE)만 잘라 첫 캔들부터 선이 이어지게
+  const [showMa, setShowMa] = useState(true);
+  const [showBb, setShowBb] = useState(false);
+  const overlays = useMemo<Overlay[]>(() => {
+    if (all === null) return [];
+    const closes = all.map((c) => c.close);
+    const tail = <T,>(xs: T[]) => xs.slice(-VISIBLE);
+    const out: Overlay[] = [];
+    if (showBb) {
+      const bands = tail(bollinger(closes));
+      out.push(
+        { key: 'bb-upper', color: BB_COLOR, values: bands.map((b) => b?.upper ?? null), faint: true },
+        { key: 'bb-middle', color: BB_COLOR, values: bands.map((b) => b?.middle ?? null), faint: true },
+        { key: 'bb-lower', color: BB_COLOR, values: bands.map((b) => b?.lower ?? null), faint: true },
+      );
+    }
+    if (showMa) {
+      for (const p of MA_PERIODS) out.push({ key: `ma${p}`, color: MA_COLORS[p], values: tail(sma(closes, p)) });
+    }
+    return out;
+  }, [all, showMa, showBb]);
 
   return (
     <View style={styles.frame}>
@@ -210,10 +267,23 @@ export function DailyChart({ ticker, lastPrice, coach, position }: DailyChartPro
         {CHART_INTERVALS.map((it) => (
           <Chip key={it.value} label={it.label} selected={it.value === interval} onPress={() => setPicked(it.value)} />
         ))}
+        <View style={styles.indicatorChips}>
+          <Chip label="이동평균" selected={showMa} onPress={() => setShowMa((v) => !v)} />
+          <Chip label="볼린저" selected={showBb} onPress={() => setShowBb((v) => !v)} />
+        </View>
       </View>
       <View style={styles.plotArea}>
         {candles !== null && !empty ? (
-          <CandleChart candles={candles} height={PLOT_H} lines={lines} xLabels={xLabels} />
+          <CandleChart candles={candles} height={PLOT_H} lines={lines} overlays={overlays} xLabels={xLabels} />
+        ) : null}
+        {candles !== null && !empty && showMa ? (
+          <View style={styles.legend} pointerEvents="none">
+            {MA_PERIODS.map((p) => (
+              <Text key={p} style={[styles.legendText, { color: MA_COLORS[p] }]} allowFontScaling={false}>
+                {p}
+              </Text>
+            ))}
+          </View>
         ) : null}
         {candles === null && !failed ? (
           <View style={styles.center}>
@@ -259,6 +329,19 @@ const styles = StyleSheet.create((theme) => ({
     color: theme.colors.textSecondary,
   },
   abs: { position: 'absolute' },
+  segment: { height: 1 },
+  faint: { opacity: 0.55 },
+  indicatorChips: { flexDirection: 'row', gap: theme.gap(0.75), marginLeft: 'auto' },
+  legend: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: theme.gap(0.75),
+  },
+  legendText: { fontSize: 10, fontWeight: '700' },
   fill: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0 },
   line: { position: 'absolute', left: 0, right: 0, opacity: 0.9 },
   // 점선 — 높이 0 + 테두리 전체 dashed(iOS 는 변별 두께가 같아야 dashed 렌더) → 위아래 테두리가 겹친 한 줄
