@@ -345,7 +345,7 @@ uv run pytest tests/test_universe_cooldown.py    # 특정 파일
 | `GAME_WS_PUBLIC_MAX` | trading_game | `2000` | 비로그인 공개 WS 전체 최대 연결(초과 시 4429) |
 | `GAME_LEADER_TTL_MS` | trading_game | `10000` | 싱글톤 작업 리더 락 TTL(ms). 리더 장애 시 승계까지 최대 약 ttl + ttl/3, 갱신·재시도 주기 ttl/3 |
 | `READY_CHECK_TIMEOUT_SEC` | backend(FastAPI 전체) | `2` | `/ready` 의존성 검사(DB·Redis)당 타임아웃(초) |
-| `*_FILE` | backend 전체 | — | Swarm/K8s secrets 용 — `FOO_FILE=/run/secrets/foo` 가 있고 `FOO` 가 비어 있으면 파일 내용(앞뒤 공백 제거)을 `FOO` 로 사용(예: `JWT_SECRET_KEY_FILE`). `FOO` 가 있으면 그대로, 파일을 못 읽으면 기동 실패 |
+| `*_FILE` | backend 전체 | — | Swarm/K8s secrets 용 — `FOO_FILE=/run/secrets/foo` 가 있고 `FOO` 가 비어 있으면 파일 내용(앞뒤 공백 제거)을 `FOO` 로 사용(예: `JWT_SECRET_KEY_FILE`). 허용 키만(`shared/env.py` `FILE_ENV_KEYS`: DATABASE_URL·SYNC_DATABASE_URL·REDIS_URL·CLICKHOUSE_PASSWORD·JWT_SECRET_KEY·KIS_APP_KEY/SECRET·KAKAO_*·NAVER_CLIENT_SECRET·SOCIAL_STATE_SECRET) + `APP_FILE_ENV_EXTRA`(콤마 구분) 추가 허용, 목록 밖 `*_FILE`(SSL_CERT_FILE 등)은 무시. `FOO` 가 있으면 그대로, 허용 키 파일을 못 읽으면 기동 실패 |
 
 ## 🌍 환경 3단계 (local / develop / product)
 

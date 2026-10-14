@@ -6,7 +6,8 @@
 
 `*_FILE` 지원(Docker Swarm/K8s secrets): `FOO_FILE=/run/secrets/foo` 가 있고 `FOO` 가 비어 있으면
 파일 내용(앞뒤 공백 제거)을 `FOO` 로 넣는다. `FOO` 가 이미 있으면 그대로(기존 env 우선).
-파일을 읽을 수 없으면 기동 실패(조용히 빈 값으로 뜨는 것보다 안전).
+허용 목록(FILE_ENV_KEYS + `APP_FILE_ENV_EXTRA` 콤마 구분)에 있는 키만 처리 — 목록 밖 `X_FILE`
+(SSL_CERT_FILE 등 무관한 변수)은 무시. 허용 키의 파일을 읽을 수 없으면 기동 실패.
 """
 
 from __future__ import annotations
@@ -20,16 +21,29 @@ from dotenv import load_dotenv
 _loaded = False
 _FILE_SUFFIX = "_FILE"
 
+# deploy/(swarm·k8s)가 *_FILE 로 넘기는 앱 비밀값 — POSTGRES_PASSWORD 는 postgres 이미지 전용이라 제외
+FILE_ENV_KEYS = frozenset({
+    "DATABASE_URL", "SYNC_DATABASE_URL", "REDIS_URL", "CLICKHOUSE_PASSWORD", "JWT_SECRET_KEY",
+    "KIS_APP_KEY", "KIS_APP_SECRET", "KAKAO_REST_API_KEY", "KAKAO_CLIENT_SECRET", "KAKAO_ADMIN_KEY",
+    "NAVER_CLIENT_SECRET", "SOCIAL_STATE_SECRET",
+})
+
+
+def _allowed_keys(env) -> frozenset[str]:
+    extra = {k.strip() for k in (env.get("APP_FILE_ENV_EXTRA") or "").split(",") if k.strip()}
+    return FILE_ENV_KEYS | extra
+
 
 def apply_file_env(environ: MutableMapping[str, str] | None = None) -> list[str]:
-    """`FOO_FILE` → `FOO`(FOO 미설정/빈 값일 때만). 채운 변수 이름 목록을 반환."""
+    """허용 키의 `FOO_FILE` → `FOO`(FOO 미설정/빈 값일 때만). 채운 변수 이름 목록을 반환."""
     env = os.environ if environ is None else environ
+    allowed = _allowed_keys(env)
     filled: list[str] = []
     for key, path in list(env.items()):
         if not key.endswith(_FILE_SUFFIX) or len(key) == len(_FILE_SUFFIX) or not path:
             continue
         target = key[: -len(_FILE_SUFFIX)]
-        if env.get(target):
+        if target not in allowed or env.get(target):
             continue
         try:
             value = Path(path).read_text(encoding="utf-8").strip()

@@ -104,17 +104,17 @@ async def test_ready_check_times_out(monkeypatch):
 def test_file_env_fills_missing_value(tmp_path):
     secret = tmp_path / "jwt"
     secret.write_text("  s3cr3t\n", encoding="utf-8")
-    env = {"JWT_SECRET_FILE": str(secret)}
-    assert apply_file_env(env) == ["JWT_SECRET"]
-    assert env["JWT_SECRET"] == "s3cr3t"  # 앞뒤 공백·개행 제거
+    env = {"JWT_SECRET_KEY_FILE": str(secret)}
+    assert apply_file_env(env) == ["JWT_SECRET_KEY"]
+    assert env["JWT_SECRET_KEY"] == "s3cr3t"  # 앞뒤 공백·개행 제거
 
 
 def test_file_env_does_not_override_existing(tmp_path):
     secret = tmp_path / "pw"
     secret.write_text("from-file", encoding="utf-8")
-    env = {"DB_PASSWORD": "from-env", "DB_PASSWORD_FILE": str(secret)}
+    env = {"DATABASE_URL": "from-env", "DATABASE_URL_FILE": str(secret)}
     assert apply_file_env(env) == []
-    assert env["DB_PASSWORD"] == "from-env"
+    assert env["DATABASE_URL"] == "from-env"
 
 
 def test_file_env_empty_value_is_treated_as_unset(tmp_path):
@@ -126,14 +126,31 @@ def test_file_env_empty_value_is_treated_as_unset(tmp_path):
 
 
 def test_file_env_unreadable_fails_loudly(tmp_path):
-    with pytest.raises(RuntimeError, match="MISSING_FILE"):
-        apply_file_env({"MISSING_FILE": str(tmp_path / "nope")})
+    with pytest.raises(RuntimeError, match="REDIS_URL_FILE"):
+        apply_file_env({"REDIS_URL_FILE": str(tmp_path / "nope")})
+
+
+def test_file_env_ignores_keys_outside_allowlist(tmp_path):
+    cert = tmp_path / "cert.pem"
+    cert.write_text("PEM", encoding="utf-8")
+    env = {"SSL_CERT_FILE": str(cert), "AWS_CONFIG_FILE": str(tmp_path / "missing"),
+           "COMPOSE_FILE": "a.yml:b.yml"}
+    assert apply_file_env(env) == []  # 목록 밖 — 읽지도, 실패하지도 않음
+    assert "SSL_CERT" not in env and "AWS_CONFIG" not in env and "COMPOSE" not in env
+
+
+def test_file_env_extra_allowlist(tmp_path):
+    secret = tmp_path / "x"
+    secret.write_text("extra-val", encoding="utf-8")
+    env = {"APP_FILE_ENV_EXTRA": " MY_TOKEN , OTHER ", "MY_TOKEN_FILE": str(secret)}
+    assert apply_file_env(env) == ["MY_TOKEN"]
+    assert env["MY_TOKEN"] == "extra-val"
 
 
 def test_file_env_ignores_bare_suffix_and_empty_path():
-    env = {"_FILE": "/x", "EMPTY_FILE": ""}
+    env = {"_FILE": "/x", "KIS_APP_KEY_FILE": ""}
     assert apply_file_env(env) == []
-    assert "EMPTY" not in env
+    assert "KIS_APP_KEY" not in env
 
 
 def test_file_env_applies_to_process_environ(tmp_path, monkeypatch):
@@ -141,6 +158,7 @@ def test_file_env_applies_to_process_environ(tmp_path, monkeypatch):
     secret.write_text("abc", encoding="utf-8")
     monkeypatch.delenv("SCALE_TEST_SECRET", raising=False)
     monkeypatch.setenv("SCALE_TEST_SECRET_FILE", str(secret))
+    monkeypatch.setenv("APP_FILE_ENV_EXTRA", "SCALE_TEST_SECRET")
     apply_file_env()
     import os
 
