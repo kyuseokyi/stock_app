@@ -8,6 +8,7 @@ import { getDailyCandles } from '../../api/stock'
 import { useGameRules } from '../../hooks/useGameRules'
 import { BandFill } from '../../lib/bandFill'
 import { bucketStartSec, mergeTick, mergeTickIntraday } from '../../lib/candles'
+import { loadChartPrefs, saveChartPrefs } from '../../lib/chartPrefs'
 import { MA_PERIODS, bollinger, sma, type MaPeriod } from '../../lib/indicators'
 import { kstDateString } from '../../lib/format'
 import { THEME } from '../../lib/themeColors'
@@ -145,17 +146,25 @@ export default function TradingChart({ ticker, lastPrice, coach, position }: Tra
   const indRef = useRef<IndicatorSeries | null>(null)
   const reloadRef = useRef<(() => void) | null>(null) // 현재 차트의 캔들 재로드(스트림 재개 시)
   const barsRef = useRef<{ time: Time; close: number }[]>([]) // 지표 계산용 시각·종가
-  const [showMa, setShowMa] = useState(true)
-  const [showBb, setShowBb] = useState(false)
+  // 마지막 설정(단위·지표)은 이 브라우저에 저장 — 다시 열면 그대로(lib/chartPrefs)
+  const [initialPrefs] = useState(loadChartPrefs)
+  const [showMa, setShowMa] = useState(initialPrefs.ma)
+  const [showBb, setShowBb] = useState(initialPrefs.bb)
   const [loaded, setLoaded] = useState(false)
   const [failed, setFailed] = useState(false)
   const [empty, setEmpty] = useState(false)
 
   // 단위: 사용자 선택(화면 상태만) > 관리자 기본값 > 일봉(규칙 로드 전·실패)
   const { rules } = useGameRules()
-  const [picked, setPicked] = useState<ChartInterval | null>(null)
+  const [picked, setPicked] = useState<ChartInterval | null>(initialPrefs.interval)
   const intervals = rules?.chart_intervals ?? CHART_INTERVALS
-  const interval: ChartInterval = picked ?? rules?.chart_interval_default ?? 'day'
+  // 저장값이 관리자가 끈 단위면(목록에 없음) 관리자 기본값으로
+  const usable = picked !== null && intervals.includes(picked) ? picked : null
+  const interval: ChartInterval = usable ?? rules?.chart_interval_default ?? 'day'
+
+  useEffect(() => {
+    saveChartPrefs({ interval: picked, ma: showMa, bb: showBb })
+  }, [picked, showMa, showBb])
 
   // 1) 차트 생성 + 캔들 로드(종목·단위 바뀌면 재생성 — 일봉/분봉 time 형식이 달라 시리즈를 새로 만든다)
   useEffect(() => {
@@ -166,6 +175,8 @@ export default function TradingChart({ ticker, lastPrice, coach, position }: Tra
       layout: { background: { color: 'transparent' }, textColor: THEME.inkMuted },
       grid: { vertLines: { color: THEME.canvas }, horzLines: { color: THEME.canvas } },
       crosshair: { mode: CrosshairMode.Normal },
+      // 모바일: 가로 드래그·핀치는 차트, 세로 스와이프는 페이지 스크롤(컨테이너 touch-action: pan-y 와 짝)
+      handleScroll: { mouseWheel: true, pressedMouseMove: true, horzTouchDrag: true, vertTouchDrag: false },
       rightPriceScale: { borderColor: THEME.line },
       timeScale: interval === 'day'
         ? { borderColor: THEME.line }
@@ -367,7 +378,8 @@ export default function TradingChart({ ticker, lastPrice, coach, position }: Tra
         </div>
       </div>
       <div className="relative h-[260px] overflow-hidden rounded-card border border-line bg-surface sm:h-[320px]">
-        <div ref={boxRef} className="h-full w-full" />
+        {/* pan-y: 세로 스크롤만 브라우저가 맡고 가로 제스처는 차트가 받음(첫 touchmove 를 브라우저가 가로채 차트가 안 움직이던 문제) */}
+        <div ref={boxRef} className="h-full w-full touch-pan-y" />
         {showMa && loaded && !failed && !empty && (
           <div className="pointer-events-none absolute left-2 top-1.5 z-10 flex gap-1.5 text-[11px] font-bold">
             {MA_PERIODS.map((p) => (
