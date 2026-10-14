@@ -44,7 +44,7 @@
 - Redis: `game:season:{sid}:month:{YYYY-MM-01}:ranking`(ZSET), `…:base`(HSETNX 기준값, 주간과 같은 NAV 비율 ROI). TTL 100일.
 - `ranking_service.update_rank`: 시즌 `period == 'quarter'` 일 때만 월간 ZSET 도 갱신(주간과 같은 경로). 포지션 캐시의 시즌 창 정보에 `period` 포함.
 - 마감 `close_month(db, redis, season, month_id, with_reward)`: 주간 `close_week` 와 같은 규칙 — Top 10 기록, 1~3위 중 **그 달 구간에 포지션을 연 계좌**에만 `monthly_rewards` 지급, 탈퇴 유저 건너뛰기, 멱등, IntegrityError 시 롤백.
-- Celery beat `close-trading-month`: **매월 1일 08:50 KST**. 활성 시즌이 quarter 이고 지난달 구간이 시즌과 겹치면 마감. 잘린 끝 = 시즌 종료(정산 지연)면 기록만.
+- Celery beat `close-trading-month`: **매월 1일 08:55 KST**(주간 08:50 과 분리). 활성 시즌이 quarter 이고 지난달 구간이 시즌과 겹치면 마감. 잘린 끝 = 시즌 종료(정산 지연)면 기록만.
 - 정산(`settle_due_season`)에서 quarter 시즌이면 **시즌 마지막 달을 기록만**(보상 없음), 실패해도 정산은 계속(주간과 동일 패턴).
 - 결과 저장: 기존 `weekly_ranking_results` 테이블에 **`period_type VARCHAR(10) NOT NULL server_default 'week'`** 컬럼 추가, 월간은 `week_start` 에 그 달 1일 저장. 유니크 제약을 `(season_id, period_type, week_start, rank)`·`(…, user_id)` 로 교체. (설계안의 `ranking_results` 일반화와 같은 효과를 테이블 이름 변경 없이 — 기존 API·탈퇴 익명화 코드 회귀 방지.) 기존 주간 조회·마감 쿼리는 `period_type='week'` 조건 추가.
 - API(주간과 대칭, 기존 주간 API 불변):
@@ -56,7 +56,7 @@
 - 월간 시즌이면 월간 API 는 빈 결과(에러 아님).
 
 ## 5. admin
-- API: `GET/PUT /api/v1/game/admin/settings`(기존 admin 권한 의존성 재사용).
+- API: `GET/PUT /api/game/admin/settings`(기존 admin 권한 의존성 재사용).
 - admin_web "게임 설정"(기존 기능 플래그 화면 옆 섹션 또는 새 페이지): 다음 시즌 기간 라디오(월간/분기 + 설명 "분기 중간에 시작하면 그 분기 말까지"), 보상 금액 표(주간 1~3위, 월간 1~3위, 연속 출석 3·7·14·30일), 저장 버튼, 안내 "다음 마감·다음 수령부터 적용, 진행 중 시즌 기간은 바뀌지 않음". 현재 시즌 번호·기간·종료일 표시.
 
 ## 6. 클라이언트(web_client·mobile)
