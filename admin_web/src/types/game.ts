@@ -51,7 +51,11 @@ export interface GameSettings {
   weekly_rewards: [number, number, number]
   monthly_rewards: [number, number, number]
   streak_rewards: Record<StreakRewardKey, number>
+  /** 게임 차트 기본 단위(spec 2026-10-14 chart-intervals §5). 구버전 서버 응답엔 없을 수 있음 → 'day' */
+  chart_interval_default?: ChartInterval
 }
+
+export type ChartInterval = 'day' | '1m' | '5m' | '15m' | '60m'
 
 // 기능 on/off (Phase 5b). 출처: game_dtos.FeatureFlagResponse
 export type FeatureFlagKey = 'QUIZ' | 'STREAK'

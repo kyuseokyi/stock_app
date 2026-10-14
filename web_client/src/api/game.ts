@@ -8,6 +8,7 @@ import type {
   RawQuestList, RawQuizQuestion, RawQuizResult, RawStreakClaimResult, Season, Streak, StreakClaimResult,
   WeeklyBoard, WeeklyMyRank, WeeklyResultWeek, WeeklyReward,
   MonthlyBoard, MonthlyMyRank, MonthlyResultMonth, RewardConfig, GameRules,
+  IntradayCandle, IntradayCandles, IntradayInterval,
 } from '../types/game'
 
 // trading_game REST. Decimal 문자열은 여기서 number 로 변환해 UI 는 number 만 다룬다.
@@ -183,6 +184,19 @@ export async function getRewardConfig(): Promise<RewardConfig> {
 export async function getGameRules(): Promise<GameRules> {
   const { data } = await client().get<GameRules>('/api/game/rules')
   return data
+}
+
+/** 공개 — 활성 시즌 종목 분봉(t = 버킷 시작 UTC epoch seconds). 데이터 없으면 candles: [] */
+export async function getGameCandles(interval: IntradayInterval): Promise<IntradayCandles> {
+  const { data } = await client().get<IntradayCandles>('/api/game/candles', { params: { interval } })
+  // 숫자가 문자열(Decimal)로 와도 number 로 정규화, t 가 비정상인 행은 버림
+  const rows: IntradayCandle[] = (Array.isArray(data?.candles) ? data.candles : [])
+    .map((c) => ({
+      t: Number(c.t), open: toNum(c.open), high: toNum(c.high), low: toNum(c.low), close: toNum(c.close),
+      volume: toNum(c.volume ?? 0),
+    }))
+    .filter((c) => Number.isFinite(c.t))
+  return { interval: data?.interval ?? interval, ticker: data?.ticker ?? '', candles: rows }
 }
 
 /** 미확인 주간·월간 보상(period_type 으로 구분) */

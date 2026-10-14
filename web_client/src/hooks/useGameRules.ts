@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { getGameRules } from '../api/game'
 import { normalizeRewardConfig } from './useRewardConfig'
-import type { GameRules } from '../types/game'
+import { CHART_INTERVALS, type ChartInterval, type GameRules } from '../types/game'
 
 export type GameRulesStatus = 'loading' | 'ready' | 'error'
 
@@ -12,6 +12,7 @@ export interface GameRulesState {
 }
 
 const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v)
+const isInterval = (v: unknown): v is ChartInterval => CHART_INTERVALS.includes(v as ChartInterval)
 
 /** 핵심 숫자가 비정상이면 null(오류 상태로 표시 — 틀린 숫자를 안내하지 않는다) */
 export function normalizeGameRules(raw: unknown): GameRules | null {
@@ -36,6 +37,11 @@ export function normalizeGameRules(raw: unknown): GameRules | null {
     margin_call_roi_pct: r.margin_call_roi_pct as number,
     sentiment_interval_sec: isNum(r.sentiment_interval_sec) ? r.sentiment_interval_sec : 5,
     rewards: normalizeRewardConfig(r.rewards),
+    chart_interval_default: isInterval(r.chart_interval_default) ? r.chart_interval_default : 'day',
+    chart_intervals: (() => {
+      const list = Array.isArray(r.chart_intervals) ? r.chart_intervals.filter(isInterval) : []
+      return list.length > 0 ? list : CHART_INTERVALS
+    })(),
   }
 }
 

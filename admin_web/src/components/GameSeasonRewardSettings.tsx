@@ -3,20 +3,29 @@ import { listSeasons } from '../api/coach'
 import { getGameSettings, updateGameSettings } from '../api/gameSettings'
 import { gameErrorMessage } from '../lib/gameApiError'
 import { showToast } from '../lib/toast'
-import type { GameSettings, SeasonOption, SeasonPeriod, StreakRewardKey } from '../types/game'
+import type { ChartInterval, GameSettings, SeasonOption, SeasonPeriod, StreakRewardKey } from '../types/game'
 
-// 시즌 기간·보상 금액 설정 섹션 (spec 2026-10-14 §5). 바뀐 최상위 키만 PUT 한다.
+// 시즌 기간·보상 금액·차트 기본 단위 설정 섹션 (spec 2026-10-14 §5, chart-intervals §5). 바뀐 최상위 키만 PUT 한다.
 
 const MAX_AMOUNT = 100_000_000
 const STREAK_KEYS: StreakRewardKey[] = ['3', '7', '14', '30']
 const RANKS = [0, 1, 2] as const
 const PERIOD_LABEL: Record<SeasonPeriod, string> = { month: '월간', quarter: '분기' }
+const CHART_INTERVALS: ChartInterval[] = ['day', '1m', '5m', '15m', '60m']
+const CHART_INTERVAL_LABEL: Record<ChartInterval, string> = {
+  day: '일봉',
+  '1m': '1분',
+  '5m': '5분',
+  '15m': '15분',
+  '60m': '60분',
+}
 
 interface FormState {
   next_season_period: SeasonPeriod
   weekly_rewards: string[]
   monthly_rewards: string[]
   streak_rewards: Record<StreakRewardKey, string>
+  chart_interval_default: ChartInterval
 }
 
 const toForm = (s: GameSettings): FormState => ({
@@ -27,6 +36,7 @@ const toForm = (s: GameSettings): FormState => ({
     StreakRewardKey,
     string
   >,
+  chart_interval_default: s.chart_interval_default ?? 'day',
 })
 
 /** 정수 0~1억이면 숫자, 아니면 null */
@@ -146,6 +156,9 @@ export default function GameSeasonRewardSettings() {
     if (monthly.some((v, i) => v !== saved.monthly_rewards[i])) out.monthly_rewards = monthly
     const streak = Object.fromEntries(STREAK_KEYS.map((k) => [k, Number(form.streak_rewards[k])])) as GameSettings['streak_rewards']
     if (STREAK_KEYS.some((k) => streak[k] !== saved.streak_rewards[k])) out.streak_rewards = streak
+    if (form.chart_interval_default !== (saved.chart_interval_default ?? 'day')) {
+      out.chart_interval_default = form.chart_interval_default
+    }
     return out
   }, [form, saved, allValid])
 
@@ -242,6 +255,31 @@ export default function GameSeasonRewardSettings() {
               분기 중간에 시작하면 그 분기 말(3·6·9·12월 말일)까지 진행돼요
             </p>
           </fieldset>
+
+          {/* 차트 기본 단위 */}
+          <div className="rounded-xl border border-slate-200 bg-white px-5 py-4">
+            <label htmlFor="chart_interval_default" className="font-medium text-slate-900">
+              차트 기본 단위
+            </label>
+            <div className="mt-2">
+              <select
+                id="chart_interval_default"
+                value={form.chart_interval_default}
+                disabled={saving}
+                onChange={(e) =>
+                  setForm((f) => (f ? { ...f, chart_interval_default: e.target.value as ChartInterval } : f))
+                }
+                className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-indigo-200 disabled:opacity-50"
+              >
+                {CHART_INTERVALS.map((v) => (
+                  <option key={v} value={v}>
+                    {CHART_INTERVAL_LABEL[v]}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <p className="mt-2 text-sm text-slate-500">사용자는 차트 위에서 잠시 바꿔 볼 수 있어요</p>
+          </div>
 
           {/* 보상 금액 */}
           <div className="rounded-xl border border-slate-200 bg-white px-5 py-4">

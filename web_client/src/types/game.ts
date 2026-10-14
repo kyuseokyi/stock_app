@@ -159,6 +159,27 @@ export interface DailyCandle {
   close: number
 }
 
+/** 차트 단위(spec 2026-10-14 chart-intervals). 'day' = 일봉 */
+export type ChartInterval = 'day' | '1m' | '5m' | '15m' | '60m'
+export type IntradayInterval = Exclude<ChartInterval, 'day'>
+export const CHART_INTERVALS: ChartInterval[] = ['day', '1m', '5m', '15m', '60m']
+
+/** GET /api/game/candles 의 분봉 1개. t = 버킷 시작(UTC epoch seconds) */
+export interface IntradayCandle {
+  t: number
+  open: number
+  high: number
+  low: number
+  close: number
+  volume: number
+}
+
+export interface IntradayCandles {
+  interval: IntradayInterval
+  ticker: string
+  candles: IntradayCandle[]
+}
+
 /** WS /ws/game/stream 서버→클라 메시지(파싱·정규화 후) */
 export type GameWsMessage =
   | { type: 'tick'; ticker: string; price: number }
@@ -436,4 +457,7 @@ export interface GameRules {
   margin_call_roi_pct: number
   sentiment_interval_sec: number
   rewards: RewardConfig
+  /** 관리자 설정 차트 기본 단위(구버전 서버엔 없음 → 정규화에서 'day') */
+  chart_interval_default: ChartInterval
+  chart_intervals: ChartInterval[]
 }
