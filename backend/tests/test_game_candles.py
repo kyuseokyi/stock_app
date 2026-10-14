@@ -103,6 +103,20 @@ async def test_candles_clickhouse_failure_503(anon, maker, monkeypatch):
     assert res.status_code == 503
 
 
+async def test_candles_table_missing_returns_empty(anon, maker, monkeypatch):
+    """game_ws 가 테이블을 만들기 전(UNKNOWN_TABLE)은 503 이 아니라 빈 목록."""
+    async with maker() as db:
+        await _seed_season(db)
+
+    def missing(t, i):
+        raise RuntimeError("Code: 60. DB::Exception: Table stock_data.game_minute_bars does not exist. (UNKNOWN_TABLE)")
+
+    monkeypatch.setattr(q, "fetch_candles", missing)
+    res = await anon.get("/api/game/candles", params={"interval": "1m"})
+    assert res.status_code == 200
+    assert res.json()["candles"] == []
+
+
 async def test_candles_clickhouse_timeout_503(anon, maker, monkeypatch):
     import time
 

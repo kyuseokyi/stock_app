@@ -23,6 +23,12 @@ class CandlesUnavailable(RuntimeError):
     """ClickHouse 조회 실패 — 라우터는 503."""
 
 
+def _is_missing_table(e: Exception) -> bool:
+    """ClickHouse UNKNOWN_TABLE(Code: 60)."""
+    msg = str(e)
+    return "UNKNOWN_TABLE" in msg or "Code: 60." in msg
+
+
 async def get_candles(db: AsyncSession, interval: str, fetch: Fetch | None = None) -> dict:
     """{"interval","ticker","candles"} — 활성 시즌 없으면 ticker=None·candles=[]."""
     season = await account_service.get_active_season(db)
@@ -35,6 +41,8 @@ async def get_candles(db: AsyncSession, interval: str, fetch: Fetch | None = Non
             loop.run_in_executor(_CH_EXECUTOR, fetch, season.ticker, interval), timeout=QUERY_TIMEOUT_SEC,
         )
     except Exception as e:  # noqa: BLE001
+        if _is_missing_table(e):  # game_ws 가 아직 테이블을 만들기 전 = 분봉 없음
+            return {"interval": interval, "ticker": season.ticker, "candles": []}
         log.warning("분봉 조회 실패: ticker=%s interval=%s err=%s", season.ticker, interval, e)
         raise CandlesUnavailable(str(e)) from e
     return {"interval": interval, "ticker": season.ticker, "candles": candles}

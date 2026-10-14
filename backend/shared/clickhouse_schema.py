@@ -6,7 +6,7 @@
 스토리지 전략:
   - 파티셔닝: toYYYYMM(date) 월 단위 → 오래된 파티션 통째 삭제 용이
   - 정렬키: (ticker, date) → 종목/기간 조회 최적화
-  - TTL: 일봉은 장기 보관(10년). 향후 분봉 추가 시 3개월 TTL 별도 적용.
+  - TTL: 일봉은 장기 보관(10년). 게임 분봉(game_minute_bars)은 3개월.
 
 ORM(SQLAlchemy) 대상이 아니므로 Postgres 모델(shared/models.py)과 분리한다.
 
@@ -91,6 +91,7 @@ CREATE TABLE IF NOT EXISTS {db}.game_minute_bars
 ENGINE = ReplacingMergeTree(ingested_at)
 PARTITION BY toYYYYMM(ts)
 ORDER BY (ticker, ts)
+TTL toDateTime(ts) + INTERVAL 3 MONTH
 """
 
 
