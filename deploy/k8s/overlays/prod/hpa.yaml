@@ -1,0 +1,48 @@
+# HPA(Horizontal Pod Autoscaler) — CPU 사용률 평균 70% 를 넘으면 Pod 를 늘리고, 내려가면 줄인다.
+# 전제: 클러스터에 metrics-server 설치(k3s 는 기본 포함, EKS 는 별도 설치).
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: stock-api
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: stock-api
+  minReplicas: 2
+  maxReplicas: 6
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+---
+# trading-game: Pod 가 줄어들면 그 Pod 의 WebSocket 은 끊기고 클라이언트가 재접속한다 →
+# 축소는 천천히(10분 안정화).
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: trading-game
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: trading-game
+  minReplicas: 2
+  maxReplicas: 6
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 600
+      policies:
+        - type: Pods
+          value: 1
+          periodSeconds: 120

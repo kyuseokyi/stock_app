@@ -1,0 +1,39 @@
+# Celery beat — 정기 작업 스케줄러. ⚠️ 반드시 1개(2개면 모든 정기 작업이 중복 실행).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: celery-beat
+spec:
+  replicas: 1   # ⚠️ 절대 늘리지 말 것
+  revisionHistoryLimit: 5
+  selector:
+    matchLabels:
+      app: celery-beat
+  strategy:
+    # 옛 Pod 를 완전히 내린 뒤 새 Pod 를 띄움 → 업데이트 중에도 동시에 2개가 뜨지 않는다
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: celery-beat
+    spec:
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: celery-beat
+          image: REGISTRY/stock-app-backend:TAG
+          command: ["celery", "-A", "apps.collector.celery_app", "beat", "--loglevel=info"]
+          envFrom:
+            - configMapRef:
+                name: stock-app-config
+          volumeMounts:
+            - name: app-secrets
+              mountPath: /etc/stock-app/secrets
+              readOnly: true
+          resources:
+            requests: {cpu: 50m, memory: 96Mi}
+            limits: {cpu: 250m, memory: 256Mi}
+      volumes:
+        - name: app-secrets
+          secret:
+            secretName: stock-app-secrets

@@ -1,0 +1,48 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# (선택) Ingress 대신 Cloudflare Tunnel 로 외부 노출 — 지금 미니PC 와 같은 방식.
+# kustomization.yaml 에 포함돼 있지 않다. 쓰려면 따로 apply:
+#   1) Cloudflare Zero Trust > Networks > Tunnels > Create (cloudflared) → 토큰 복사
+#   2) kubectl -n stock-app create secret generic cloudflared-token --from-literal=token=<토큰>
+#   3) kubectl apply -f deploy/k8s/base/cloudflared.yaml
+#   4) 터널 Public Hostname 을 클러스터 내부 Service 주소로:
+#        auth.example.com → http://auth.stock-app.svc.cluster.local:8001
+#        api.example.com  → http://stock-api.stock-app.svc.cluster.local:8002
+#        blog.example.com → http://blog.stock-app.svc.cluster.local:8003
+#        game.example.com → http://trading-game.stock-app.svc.cluster.local:8004  (WebSocket 기본 지원)
+# cloudflared 는 무상태라 2개 이상 띄워도 된다(터널 커넥터 이중화).
+# ─────────────────────────────────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cloudflared
+  namespace: stock-app
+  labels:
+    app.kubernetes.io/part-of: stock-app
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: cloudflared
+  template:
+    metadata:
+      labels:
+        app: cloudflared
+    spec:
+      automountServiceAccountToken: false
+      containers:
+        - name: cloudflared
+          image: cloudflare/cloudflared:2024.12.2
+          args: ["tunnel", "--no-autoupdate", "--metrics", "0.0.0.0:2000", "run"]
+          env:
+            - name: TUNNEL_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: cloudflared-token
+                  key: token
+          livenessProbe:
+            httpGet: {path: /ready, port: 2000}
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+            requests: {cpu: 50m, memory: 64Mi}
+            limits: {cpu: 250m, memory: 256Mi}

@@ -1,0 +1,39 @@
+# KIS 실시간 시세 데몬(→ Redis stock:tick:*). ⚠️ 반드시 1개(KIS 실시간 세션은 앱키당 제한).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: game-ws
+spec:
+  replicas: 1   # ⚠️ 절대 늘리지 말 것
+  revisionHistoryLimit: 5
+  selector:
+    matchLabels:
+      app: game-ws
+  strategy:
+    # 옛 Pod 를 완전히 내린 뒤 새 Pod 를 띄움 → 업데이트 중에도 동시에 2개가 뜨지 않는다
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: game-ws
+    spec:
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 20
+      containers:
+        - name: game-ws
+          image: REGISTRY/stock-app-backend:TAG
+          command: ["python", "-m", "apps.collector.run_game_ws"]
+          envFrom:
+            - configMapRef:
+                name: stock-app-config
+          volumeMounts:
+            - name: app-secrets
+              mountPath: /etc/stock-app/secrets
+              readOnly: true
+          resources:
+            requests: {cpu: 100m, memory: 128Mi}
+            limits: {cpu: 500m, memory: 384Mi}
+      volumes:
+        - name: app-secrets
+          secret:
+            secretName: stock-app-secrets

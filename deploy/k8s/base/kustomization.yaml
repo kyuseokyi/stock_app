@@ -1,0 +1,66 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Kustomize base — 모든 환경 공통 정의. 직접 apply 하지 말고 overlays/dev 또는 overlays/prod 를 쓰세요.
+# 가이드: docs/deploy/README.md §C
+#
+# ⚠️ Secret 은 여기 포함하지 않는다(placeholder 로 실값을 덮어쓰는 사고 방지).
+#    secret.example.yaml 을 복사해 secret.yaml(.gitignore) 을 만들고 `kubectl apply -f` 로 따로 적용.
+# ⚠️ cloudflared.yaml(Cloudflare Tunnel)은 선택 — Ingress 대신 쓸 때만 따로 apply.
+# ─────────────────────────────────────────────────────────────────────────────
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: stock-app
+
+labels:
+  - pairs:
+      app.kubernetes.io/part-of: stock-app
+
+resources:
+  - namespace.yaml
+  - auth.yaml
+  - blog.yaml
+  - stock-api.yaml
+  - trading-game.yaml
+  - celery-worker.yaml
+  - celery-beat.yaml
+  - game-ws.yaml
+  - migrate-job.yaml
+  - ingress.yaml
+
+# 비밀 아닌 설정. 내용이 바뀌면 이름 뒤 해시가 바뀌어 Pod 가 자동으로 새로 뜬다.
+configMapGenerator:
+  - name: stock-app-config
+    literals:
+      - APP_ENV=production
+      # 외부 인프라(클러스터 밖 DB 서버·관리형) — 실제 주소로 바꾸세요
+      - REDIS_URL=redis://redis.example.internal:6379/0
+      - CLICKHOUSE_HOST=clickhouse.example.internal
+      - CLICKHOUSE_PORT=8123
+      - CLICKHOUSE_USER=default
+      - CLICKHOUSE_DB=stock_data
+      - JWT_ALGORITHM=HS256
+      - JWT_EXPIRE_HOURS=12
+      - KIS_MODE=prod
+      - KIS_RATE_PER_SEC=8
+      - STOCK_MASTER_SOURCE=auto
+      - CORS_ORIGINS=https://app.example.com,https://admin.example.com
+      - AUTH_GUEST_ENABLED=false
+      - SOCIAL_REDIRECT_BASE=https://auth.example.com/api/v1/auth/social
+      - SOCIAL_WEB_RETURN_URL=https://app.example.com/auth/complete
+      - SOCIAL_APP_RETURN_URL_PROD=stockapp://auth
+      - SOCIAL_APP_RETURN_URL_DEV=stockapp-dev://auth
+      - PUSH_BACKEND=mock
+      - MOCK_TICK_STREAM=false
+      - GAME_LEADER_TTL_MS=10000
+      # 비밀값은 Secret(stock-app-secrets)을 파일로 마운트 → 앱이 X_FILE 을 읽어 X 로 사용
+      - DATABASE_URL_FILE=/etc/stock-app/secrets/database_url
+      - SYNC_DATABASE_URL_FILE=/etc/stock-app/secrets/sync_database_url
+      - CLICKHOUSE_PASSWORD_FILE=/etc/stock-app/secrets/clickhouse_password
+      - JWT_SECRET_KEY_FILE=/etc/stock-app/secrets/jwt_secret_key
+      - KIS_APP_KEY_FILE=/etc/stock-app/secrets/kis_app_key
+      - KIS_APP_SECRET_FILE=/etc/stock-app/secrets/kis_app_secret
+      - KAKAO_REST_API_KEY_FILE=/etc/stock-app/secrets/kakao_rest_api_key
+      - KAKAO_CLIENT_SECRET_FILE=/etc/stock-app/secrets/kakao_client_secret
+      - KAKAO_ADMIN_KEY_FILE=/etc/stock-app/secrets/kakao_admin_key
+      - NAVER_CLIENT_SECRET_FILE=/etc/stock-app/secrets/naver_client_secret
+      - SOCIAL_STATE_SECRET_FILE=/etc/stock-app/secrets/social_state_secret

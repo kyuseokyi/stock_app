@@ -1,0 +1,48 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# prod overlay — 상용 클러스터(EKS/GKE/NKS/자체 k8s).
+#   API·워커 2개 이상, stock-api·trading-game 은 HPA(CPU 70%, 2~6개).
+#   celery-beat·game-ws 는 base 그대로 replicas 1 + Recreate(절대 늘리지 말 것).
+# 적용: kubectl apply -k deploy/k8s/overlays/prod   (가이드 docs/deploy/README.md §C-6)
+# 바꿀 곳: images(레지스트리·태그), ConfigMap 주소·도메인, ingress 호스트(아래 patch)
+# ─────────────────────────────────────────────────────────────────────────────
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../base
+  - hpa.yaml
+  - pdb.yaml
+
+images:
+  - name: REGISTRY/stock-app-backend
+    newName: registry.example.com/stock-app-backend   # ← 실제 레지스트리(ECR/GAR/NCR/Docker Hub)
+    newTag: "1.0.0"                                    # ← 배포할 태그(git SHA 권장)
+
+configMapGenerator:
+  - name: stock-app-config
+    behavior: merge
+    literals:
+      - APP_ENV=production
+      - AUTH_GUEST_ENABLED=false
+      - MOCK_TICK_STREAM=false
+      # ↓ 실제 값으로 교체
+      - REDIS_URL=redis://redis.example.internal:6379/0
+      - CLICKHOUSE_HOST=clickhouse.example.internal
+
+replicas:
+  - name: auth
+    count: 2
+  - name: blog
+    count: 2
+  - name: celery-worker
+    count: 2
+  # HPA 대상은 minReplicas 와 같은 값으로 시작(이후 HPA 가 조절)
+  - name: stock-api
+    count: 2
+  - name: trading-game
+    count: 2
+  # 싱글톤 — 명시적으로 1 고정
+  - name: celery-beat
+    count: 1
+  - name: game-ws
+    count: 1

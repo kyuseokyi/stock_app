@@ -1,0 +1,49 @@
+# Celery worker — 수집·정산 등 백그라운드 작업. 복제 안전(태스크 멱등).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: celery-worker
+spec:
+  replicas: 1   # overlays/prod 에서 2
+  revisionHistoryLimit: 5
+  selector:
+    matchLabels:
+      app: celery-worker
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: celery-worker
+    spec:
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 60
+      containers:
+        - name: celery-worker
+          image: REGISTRY/stock-app-backend:TAG
+          command: ["celery", "-A", "apps.collector.celery_app", "worker", "--loglevel=info"]
+          envFrom:
+            - configMapRef:
+                name: stock-app-config
+          volumeMounts:
+            - name: app-secrets
+              mountPath: /etc/stock-app/secrets
+              readOnly: true
+          # HTTP 포트가 없으므로 celery 자체 ping 으로 생존 확인(무거워서 주기를 길게)
+          livenessProbe:
+            exec:
+              command: ["sh", "-c", "celery -A apps.collector.celery_app inspect ping -d celery@$HOSTNAME --timeout 10"]
+            initialDelaySeconds: 60
+            periodSeconds: 120
+            timeoutSeconds: 30
+            failureThreshold: 3
+          resources:
+            requests: {cpu: 200m, memory: 256Mi}
+            limits: {cpu: 1, memory: 1Gi}
+      volumes:
+        - name: app-secrets
+          secret:
+            secretName: stock-app-secrets

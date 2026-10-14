@@ -1,0 +1,44 @@
+# 외부 → 클러스터 진입점(nginx-ingress 컨트롤러 기준). 호스트(서브도메인)별로 서비스에 연결.
+# example.com 은 실제 도메인으로 바꾸세요(overlays 에서 patch 하거나 직접 수정).
+# Ingress 대신 Cloudflare Tunnel 을 쓰려면 cloudflared.yaml 참고(이 Ingress 는 빼도 됨).
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: stock-app
+  annotations:
+    # WebSocket(/ws/game/stream) 은 오래 열려 있으므로 타임아웃을 1시간으로
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+    # Cloudflare 등 앞단에서 TLS 를 끝내는 경우 HTTP 리다이렉트 끔(직접 TLS 를 쓰면 tls: 블록 추가)
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+spec:
+  ingressClassName: nginx
+  # tls:
+  #   - hosts: [auth.example.com, api.example.com, blog.example.com, game.example.com]
+  #     secretName: stock-app-tls   # cert-manager 등으로 발급
+  rules:
+    - host: auth.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend: {service: {name: auth, port: {number: 8001}}}
+    - host: api.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend: {service: {name: stock-api, port: {number: 8002}}}
+    - host: blog.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend: {service: {name: blog, port: {number: 8003}}}
+    - host: game.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend: {service: {name: trading-game, port: {number: 8004}}}

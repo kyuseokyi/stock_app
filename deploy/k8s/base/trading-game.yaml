@@ -1,0 +1,76 @@
+# 트레이딩 게임 REST·WebSocket (game.example.com)
+# Pod 당 워커 1개, 확장은 replicas/HPA. 틱 리스너 등 싱글톤 작업은 Redis 리더 선출로 1개 Pod 만 실행,
+# WS 메시지는 Redis Pub/Sub 로 모든 Pod 에 전달 → sticky 세션 불필요.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: trading-game
+spec:
+  replicas: 1   # base 는 1. overlays/prod 에서 늘림 (prod 는 HPA 가 2~6 자동 조절)
+  revisionHistoryLimit: 5
+  selector:
+    matchLabels:
+      app: trading-game
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0   # 새 Pod 가 Ready 된 뒤 옛 Pod 를 내림(무중단)
+  template:
+    metadata:
+      labels:
+        app: trading-game
+    spec:
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: trading-game
+          image: REGISTRY/stock-app-backend:TAG
+          command: ["uvicorn", "apps.trading_game.main:app", "--host", "0.0.0.0", "--port", "8004", "--workers", "1"]
+          ports:
+            - name: http
+              containerPort: 8004
+          envFrom:
+            - configMapRef:
+                name: stock-app-config
+          volumeMounts:
+            - name: app-secrets
+              mountPath: /etc/stock-app/secrets
+              readOnly: true
+          # Ready = DB·Redis 연결 OK → 그때부터 트래픽 받음
+          readinessProbe:
+            httpGet: {path: /ready, port: http}
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          # Live = 프로세스 생존(의존성 미검사) → 실패 시 컨테이너 재시작
+          livenessProbe:
+            httpGet: {path: /health, port: http}
+            initialDelaySeconds: 20
+            periodSeconds: 20
+            timeoutSeconds: 3
+            failureThreshold: 3
+          lifecycle:
+            preStop:
+              # 로드밸런서 목록에서 빠질 시간을 준 뒤 종료(SIGTERM)
+              exec: {command: ["sleep", "5"]}
+          resources:
+            requests: {cpu: 250m, memory: 192Mi}
+            limits: {cpu: 1, memory: 768Mi}
+      volumes:
+        - name: app-secrets
+          secret:
+            secretName: stock-app-secrets
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: trading-game
+spec:
+  selector:
+    app: trading-game
+  ports:
+    - name: http
+      port: 8004
+      targetPort: http

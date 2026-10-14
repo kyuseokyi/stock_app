@@ -1,0 +1,53 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# dev overlay — 내 컴퓨터의 k3d(또는 minikube) 로컬 실습용.
+#   모든 서비스 1개, 로컬에서 빌드한 이미지(stock-app-backend:dev)를 k3d 에 import 해서 사용.
+#   DB/Redis/ClickHouse 는 내 컴퓨터의 docker-compose.dev.yml 컨테이너를 host.k3d.internal 로 접속.
+# 적용: kubectl apply -k deploy/k8s/overlays/dev   (가이드 docs/deploy/README.md §C)
+# ─────────────────────────────────────────────────────────────────────────────
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../base
+
+# 레지스트리 없이 로컬 이미지 사용: docker build -t stock-app-backend:dev backend && k3d image import ...
+images:
+  - name: REGISTRY/stock-app-backend
+    newName: stock-app-backend
+    newTag: dev
+
+# 로컬 실습용 설정으로 덮어쓰기(base 의 ConfigMap 과 병합)
+configMapGenerator:
+  - name: stock-app-config
+    behavior: merge
+    literals:
+      - APP_ENV=development
+      # Redis DB 3 — 로컬 개발(uv run)용 0번과 Celery 큐가 섞이지 않게
+      - REDIS_URL=redis://host.k3d.internal:6379/3
+      - CLICKHOUSE_HOST=host.k3d.internal
+      - KIS_MODE=vps
+      - AUTH_GUEST_ENABLED=true
+      - MOCK_TICK_STREAM=true   # 장외·키 없이도 Mock 틱으로 게임 실습
+      - CORS_ORIGINS=http://localhost:3000,http://localhost:5173
+
+patches:
+  # 모든 Deployment·Job: 로컬 이미지가 있으면 pull 하지 않음
+  - target:
+      kind: Deployment
+    patch: |-
+      - op: add
+        path: /spec/template/spec/containers/0/imagePullPolicy
+        value: IfNotPresent
+  - target:
+      kind: Job
+    patch: |-
+      - op: add
+        path: /spec/template/spec/containers/0/imagePullPolicy
+        value: IfNotPresent
+  # 노트북 자원 절약 — 요청량 낮춤
+  - target:
+      kind: Deployment
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/requests
+        value: {cpu: 20m, memory: 64Mi}

@@ -1,0 +1,38 @@
+# DB 마이그레이션(alembic upgrade head) — 1회 실행 후 종료하는 Job.
+# ⚠️ Job 은 수정 불가(immutable) → 새 이미지로 다시 돌릴 땐 먼저 지운다:
+#      kubectl -n stock-app delete job stock-app-migrate --ignore-not-found
+# ⚠️ Deployment 는 이 Job 이 끝나기를 기다리지 않는다. 스키마가 바뀌는 배포는
+#      Job 완료(kubectl wait)를 확인한 뒤 앱을 올리는 순서를 지킨다(docs/deploy/README.md §C-6).
+# alembic 은 멱등 — 이미 최신이면 아무것도 하지 않는다.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: stock-app-migrate
+spec:
+  backoffLimit: 2
+  ttlSecondsAfterFinished: 3600   # 끝나고 1시간 뒤 자동 삭제
+  template:
+    metadata:
+      labels:
+        app: stock-app-migrate
+    spec:
+      automountServiceAccountToken: false
+      restartPolicy: Never
+      containers:
+        - name: migrate
+          image: REGISTRY/stock-app-backend:TAG
+          command: ["alembic", "upgrade", "head"]
+          envFrom:
+            - configMapRef:
+                name: stock-app-config
+          volumeMounts:
+            - name: app-secrets
+              mountPath: /etc/stock-app/secrets
+              readOnly: true
+          resources:
+            requests: {cpu: 100m, memory: 128Mi}
+            limits: {cpu: 500m, memory: 512Mi}
+      volumes:
+        - name: app-secrets
+          secret:
+            secretName: stock-app-secrets
