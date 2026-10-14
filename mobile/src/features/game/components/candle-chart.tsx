@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Text, View, type LayoutChangeEvent } from 'react-native';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
@@ -11,6 +11,7 @@ import { formatPrice, kstDateString } from '../lib/format';
 import { bollinger, lineSegments, MA_PERIODS, sma } from '../lib/indicators';
 import { applyTickIntraday, axisLabelIndexes, bucketStartSec, CHART_INTERVALS, dayLabel, kstHm } from '../lib/intraday';
 import type { ChartInterval, Coach, DailyCandle, IntradayCandle, Position } from '../types';
+import { useTradingGameStore } from '../store';
 import { useGameRules } from '../use-game-rules';
 
 // 순수 View 캔들 차트(네이티브 차트 의존성 0). 좌표는 lib/chart-layout 의 순수 함수가 계산한다.
@@ -201,6 +202,35 @@ export function DailyChart({ ticker, lastPrice, coach, position }: DailyChartPro
       cancelled = true;
     };
   }, [ticker, interval]);
+
+  // 1-1) WS 재연결·앱 복귀(streamEpoch 증가) → 끊긴 동안의 캔들을 다시 받아 빈 구간을 채운다.
+  // 서버(game_ws)는 앱과 무관하게 분봉을 계속 저장한다. 첫 로드 전·실패·빈 응답이면 화면을 건드리지 않음
+  const streamEpoch = useTradingGameStore((s) => s.streamEpoch);
+  const current = useRef({ ticker, interval }); // ticker·interval 변경은 위 1) 이 새로 로드 → epoch 변화에만 반응
+  useEffect(() => {
+    current.current = { ticker, interval };
+  }, [ticker, interval]);
+  useEffect(() => {
+    if (streamEpoch === 0) return;
+    let cancelled = false;
+    const { ticker: t, interval: iv } = current.current;
+    if (iv === 'day') {
+      getDailyCandles(t)
+        .then((rows) => {
+          if (!cancelled && rows.length > 0) setDaily((prev) => (prev === null ? prev : rows));
+        })
+        .catch(() => undefined);
+    } else {
+      getGameCandles(iv)
+        .then((rows) => {
+          if (!cancelled && rows.length > 0) setIntraday((prev) => (prev === null ? prev : rows));
+        })
+        .catch(() => undefined);
+    }
+    return () => {
+      cancelled = true;
+    };
+  }, [streamEpoch]);
 
   // 2) 틱 → 오늘 일봉 / 현재 분봉 버킷에 병합(로드 전 틱은 무시 — web 과 동일)
   useEffect(() => {

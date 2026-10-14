@@ -35,6 +35,7 @@ export function useGameSocket(token: string | null, enabled: boolean, onAuthFail
       const resumed = prev !== 'active' && next === 'active';
       prev = next;
       setAppActive(next !== 'background');
+      if (resumed && enabled) useTradingGameStore.getState().bumpStreamEpoch(); // 차트가 놓친 캔들 다시 불러옴
       if (resumed && token && enabled) void useTradingGameStore.getState().refreshTrading();
     });
     return () => sub.remove();
@@ -58,6 +59,7 @@ export function useGameSocket(token: string | null, enabled: boolean, onAuthFail
       ws = sock;
       sock.onopen = () => {
         backoff = INITIAL_BACKOFF_MS;
+        if (opened) store().bumpStreamEpoch(); // 끊긴 동안 놓친 캔들 → 차트가 다시 불러옴
         if (opened && token) void store().refreshTrading();
         opened = true;
         pingTimer = setInterval(() => {

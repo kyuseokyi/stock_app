@@ -22,6 +22,7 @@ export function buildGameWsUrl(baseUrl: string, token: string | null): string {
  * 끊기면 지수 백오프로 재연결, 로그인 연결이 4401 이면 재연결하지 않고 onAuthFailed 호출.
  * 4429(공개 연결 상한)는 accept 직후 닫히므로 별도 백오프(5초→최대 30초)로 재시도 — 첫 메시지 수신 시 초기화.
  * 로그인 연결 재연결 성공 시 놓친 자동청산 등을 반영하려고 계좌/포지션/순위를 다시 불러온다.
+ * 재연결·화면 복귀 시 streamEpoch 를 올려 차트가 끊긴 구간 캔들을 다시 불러오게 한다.
  */
 export function useGameWebSocket(token: string | null, enabled: boolean, onAuthFailed: () => void): void {
   const onAuthFailedRef = useRef(onAuthFailed)
@@ -44,6 +45,7 @@ export function useGameWebSocket(token: string | null, enabled: boolean, onAuthF
       ws = sock
       sock.onopen = () => {
         backoff = INITIAL_BACKOFF_MS
+        if (opened) store().bumpStreamEpoch() // 끊긴 동안 놓친 캔들 → 차트가 다시 불러옴
         if (opened && token) void store().refreshTrading()
         opened = true
         pingTimer = setInterval(() => {
@@ -72,9 +74,16 @@ export function useGameWebSocket(token: string | null, enabled: boolean, onAuthF
       }
     }
 
+    // 다른 앱·탭에 갔다 돌아오면(모바일 브라우저는 그동안 JS·소켓을 멈춤) 연결이 살아 있어도 틱을 놓쳤을 수 있다
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') store().bumpStreamEpoch()
+    }
+    document.addEventListener('visibilitychange', onVisible)
+
     connect()
     return () => {
       stopped = true
+      document.removeEventListener('visibilitychange', onVisible)
       clearTimeout(retryTimer)
       clearInterval(pingTimer)
       ws?.close()

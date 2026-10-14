@@ -11,6 +11,7 @@ import { bucketStartSec, mergeTick, mergeTickIntraday } from '../../lib/candles'
 import { MA_PERIODS, bollinger, sma, type MaPeriod } from '../../lib/indicators'
 import { kstDateString } from '../../lib/format'
 import { THEME } from '../../lib/themeColors'
+import { useTradingGameStore } from '../../store/tradingGame'
 import { chipClass } from '../ui/Chip'
 import {
   CHART_INTERVALS, type ChartInterval, type Coach, type DailyCandle, type IntradayCandle, type Position,
@@ -142,6 +143,7 @@ export default function TradingChart({ ticker, lastPrice, coach, position }: Tra
   const lastIntradayRef = useRef<IntradayCandle | null>(null)
   const linesRef = useRef<IPriceLine[]>([])
   const indRef = useRef<IndicatorSeries | null>(null)
+  const reloadRef = useRef<(() => void) | null>(null) // 현재 차트의 캔들 재로드(스트림 재개 시)
   const barsRef = useRef<{ time: Time; close: number }[]>([]) // 지표 계산용 시각·종가
   const [showMa, setShowMa] = useState(true)
   const [showBb, setShowBb] = useState(false)
@@ -183,53 +185,70 @@ export default function TradingChart({ ticker, lastPrice, coach, position }: Tra
     setEmpty(false)
 
     let cancelled = false
-    if (interval === 'day') {
-      getDailyCandles(ticker)
-        .then((candles) => {
-          if (cancelled) return
-          series.setData(candles.map(toBar))
-          barsRef.current = candles.map((c) => ({ time: c.date, close: c.close }))
-          setIndicatorData(ind, barsRef.current)
-          lastCandleRef.current = candles[candles.length - 1] ?? null
-          // 앞쪽은 지표 워밍업용 — 처음 화면은 최근 180일만(왼쪽으로 스크롤하면 더 보임)
-          const from = kstDateString(new Date(Date.now() - DAILY_VISIBLE_DAYS * 86_400_000))
-          const hidden = candles.findIndex((c) => c.date >= from)
-          if (hidden > 0) {
-            chart.timeScale().setVisibleLogicalRange({ from: hidden, to: candles.length - 1 })
-          } else {
-            chart.timeScale().fitContent()
-          }
-          setLoaded(true)
-        })
-        .catch(() => {
-          if (!cancelled) setFailed(true)
-        })
-    } else {
-      getGameCandles(interval)
-        .then((res) => {
-          if (cancelled) return
-          // 다른 종목(시즌 전환 직후 등) 분봉이면 섞지 않고 빈 상태로
-          const rows = res.ticker && res.ticker !== ticker ? [] : sortUnique(res.candles)
-          series.setData(rows.map(toIntradayBar))
-          barsRef.current = rows.map((c) => ({ time: c.t as UTCTimestamp, close: c.close }))
-          setIndicatorData(ind, barsRef.current)
-          lastIntradayRef.current = rows[rows.length - 1] ?? null
-          // 분봉도 첫 화면은 최근 INTRADAY_VISIBLE_BARS 개(앞쪽은 지표 워밍업 — 왼쪽 스크롤로 보임)
-          if (rows.length > INTRADAY_VISIBLE_BARS) {
-            chart.timeScale().setVisibleLogicalRange({ from: rows.length - INTRADAY_VISIBLE_BARS, to: rows.length - 1 })
-          } else if (rows.length > 0) {
-            chart.timeScale().fitContent()
-          }
-          setEmpty(rows.length === 0)
-          setLoaded(true)
-        })
-        .catch(() => {
-          if (!cancelled) setFailed(true)
-        })
+    let seq = 0 // 늦게 온 이전 요청 응답은 버림(재로드가 겹칠 때)
+    let initialDone = false // 첫 로드가 끝나기 전 재로드는 무시(첫 화면 구간 지정이 건너뛰어지지 않게)
+    // initial=true: 첫 로드(화면 구간 지정·실패 표시). false: 재로드(스트림이 끊겼다 이어짐) — 화면 위치는 그대로,
+    // 실패는 조용히(기존 캔들 유지). 서버(game_ws)는 클라이언트와 무관하게 분봉을 계속 저장하므로 빈 구간이 채워진다.
+    const load = (initial: boolean) => {
+      const my = ++seq
+      const stale = () => cancelled || my !== seq
+      const onFail = () => {
+        if (!stale() && initial) setFailed(true)
+      }
+      if (interval === 'day') {
+        getDailyCandles(ticker)
+          .then((candles) => {
+            if (stale()) return
+            series.setData(candles.map(toBar))
+            barsRef.current = candles.map((c) => ({ time: c.date, close: c.close }))
+            setIndicatorData(ind, barsRef.current)
+            lastCandleRef.current = candles[candles.length - 1] ?? null
+            if (initial) {
+              // 앞쪽은 지표 워밍업용 — 처음 화면은 최근 180일만(왼쪽으로 스크롤하면 더 보임)
+              const from = kstDateString(new Date(Date.now() - DAILY_VISIBLE_DAYS * 86_400_000))
+              const hidden = candles.findIndex((c) => c.date >= from)
+              if (hidden > 0) {
+                chart.timeScale().setVisibleLogicalRange({ from: hidden, to: candles.length - 1 })
+              } else {
+                chart.timeScale().fitContent()
+              }
+            }
+            if (initial) initialDone = true
+            setLoaded(true)
+          })
+          .catch(onFail)
+      } else {
+        getGameCandles(interval)
+          .then((res) => {
+            if (stale()) return
+            // 다른 종목(시즌 전환 직후 등) 분봉이면 섞지 않고 빈 상태로
+            const rows = res.ticker && res.ticker !== ticker ? [] : sortUnique(res.candles)
+            if (!initial && rows.length === 0) return // 재로드가 비면 화면의 캔들을 지우지 않는다
+            series.setData(rows.map(toIntradayBar))
+            barsRef.current = rows.map((c) => ({ time: c.t as UTCTimestamp, close: c.close }))
+            setIndicatorData(ind, barsRef.current)
+            lastIntradayRef.current = rows[rows.length - 1] ?? null
+            // 분봉도 첫 화면은 최근 INTRADAY_VISIBLE_BARS 개(앞쪽은 지표 워밍업 — 왼쪽 스크롤로 보임)
+            if (initial && rows.length > INTRADAY_VISIBLE_BARS) {
+              chart.timeScale().setVisibleLogicalRange({ from: rows.length - INTRADAY_VISIBLE_BARS, to: rows.length - 1 })
+            } else if (initial && rows.length > 0) {
+              chart.timeScale().fitContent()
+            }
+            setEmpty(rows.length === 0)
+            if (initial) initialDone = true
+            setLoaded(true)
+          })
+          .catch(onFail)
+      }
+    }
+    load(true)
+    reloadRef.current = () => {
+      if (initialDone) load(false)
     }
 
     return () => {
       cancelled = true
+      reloadRef.current = null
       seriesRef.current = null
       indRef.current = null
       barsRef.current = []
@@ -239,6 +258,12 @@ export default function TradingChart({ ticker, lastPrice, coach, position }: Tra
       chart.remove()
     }
   }, [ticker, interval])
+
+  // 1-1) WS 재연결·화면 복귀(streamEpoch 증가) → 끊긴 동안의 캔들을 서버에서 다시 받아 빈 구간을 채운다
+  const streamEpoch = useTradingGameStore((s) => s.streamEpoch)
+  useEffect(() => {
+    if (streamEpoch > 0) reloadRef.current?.()
+  }, [streamEpoch])
 
   // 2) 틱 → 오늘 캔들(일봉) / 현재 버킷(분봉) 병합
   useEffect(() => {

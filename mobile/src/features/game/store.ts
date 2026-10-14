@@ -68,6 +68,9 @@ interface TradingGameState extends PrivateState {
   /** 퀴즈 제출 응답의 streak 반영. gen 규칙은 setAcademyUnlocked 와 동일 */
   setStreak: (streak: Streak, gen: number) => void;
   markQuizDisabled: () => void;
+  /** 실시간 스트림이 끊겼다 이어진 횟수(WS 재연결·화면 복귀) — 차트가 구독해 놓친 캔들을 다시 불러온다 */
+  streamEpoch: number;
+  bumpStreamEpoch: () => void;
   pushToast: (t: Omit<GameToast, 'id'>) => void;
   dismissToast: (id: number) => void;
 }
@@ -138,6 +141,7 @@ export const useTradingGameStore = create<TradingGameState>()((set, get) => {
     closing: false,
     toasts: [],
     quizDisabled: false,
+    streamEpoch: 0,
 
     loadSeason: async () => {
       if (!gameApi.isGameConfigured()) {
@@ -300,6 +304,7 @@ export const useTradingGameStore = create<TradingGameState>()((set, get) => {
     },
 
     markQuizDisabled: () => set({ quizDisabled: true }),
+    bumpStreamEpoch: () => set((s) => ({ streamEpoch: s.streamEpoch + 1 })),
 
     pushToast: (t) => set((s) => ({ toasts: [...s.toasts, { ...t, id: ++toastSeq }] })),
     dismissToast: (id) => set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })),
