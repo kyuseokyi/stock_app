@@ -125,3 +125,78 @@ async def test_admin_settings_api_and_reward_config(api, fake_redis, maker):
     cfg = (await client.get("/api/game/reward-config")).json()
     assert cfg == {"weekly": [500000, 300000, 200000], "monthly": [9, 8, 7],
                    "streak": {"3": 100000, "7": 300000, "14": 700000, "30": 2000000}}
+
+
+# ---------------------------------------------------------------- 지급 금액 = 설정값
+from fakeredis import aioredis as fake_aioredis  # noqa: E402
+
+from shared.game_models import GamePosition, StreakRewardClaim, UserStreak  # noqa: E402
+from apps.trading_game.services import streak_reward_service as srs  # noqa: E402
+from apps.trading_game.services import weekly_ranking as wr  # noqa: E402
+from apps.trading_game.services import weekly_service as ws_svc  # noqa: E402
+
+S_START = datetime(2026, 10, 1, 9, 0, tzinfo=KST)
+S_END = datetime(2026, 10, 31, 20, 0, tzinfo=KST)
+W = date(2026, 10, 12)
+
+
+def _r():
+    return fake_aioredis.FakeRedis(decode_responses=True)
+
+
+async def _season(db, start=S_START, end=S_END, period="month"):
+    s = await _seed_season(db)
+    s.start_at, s.end_at, s.period = start.astimezone(UTC), end.astimezone(UTC), period
+    await db.commit()
+    return s
+
+
+async def _open_pos(db, acc, created_at):
+    db.add(GamePosition(account_id=acc.id, side="LONG", entry_price=Decimal("70000"),
+                        size_amount=Decimal("1000000"), leverage=1, status="CLOSED",
+                        created_at=created_at.astimezone(UTC)))
+    await db.commit()
+
+
+async def _rows(db, period_type=None):
+    q = select(WeeklyRankingResult).order_by(WeeklyRankingResult.period_type, WeeklyRankingResult.rank)
+    if period_type:
+        q = q.where(WeeklyRankingResult.period_type == period_type)
+    return [(r.rank, r.user_id, r.reward_amount) for r in (await db.execute(q)).scalars().all()]
+
+
+async def test_close_week_pays_configured_weekly_rewards(session):
+    r = _r()
+    s = await _season(session)
+    await gss.update_settings(session, {"weekly_rewards": [7000, 0, 3000]})
+    users = [await _seed_user(session, nickname=f"w{i}") for i in range(3)]
+    accs = [await _seed_account(session, u, s) for u in users]
+    for i, (u, a) in enumerate(zip(users, accs)):
+        await r.zadd(wr.week_key(s.id, W), {str(u.id): float(10 - i)})
+        await _open_pos(session, a, datetime(2026, 10, 13, 10, 0, tzinfo=KST))
+    assert await ws_svc.close_week(session, r, s, W, with_reward=True) == {"archived": 3, "rewarded": 2}
+    assert await _rows(session) == [(1, users[0].id, Decimal("7000.00")), (2, users[1].id, Decimal("0.00")),
+                                    (3, users[2].id, Decimal("3000.00"))]
+    await session.refresh(accs[0])
+    assert accs[0].cash_balance == Decimal("10007000.00")
+
+
+T = date(2026, 10, 13)
+
+
+async def test_streak_status_and_claim_use_configured_amounts(session):
+    user = await _seed_user(session)
+    await _seed_season(session)
+    session.add(UserStreak(user_id=user.id, current_streak=7, highest_streak=7, last_activity_date=T))
+    await session.commit()
+    await gss.update_settings(session, {"streak_rewards": {"3": 11, "7": 22, "14": 33, "30": 44}})
+    st = await srs.reward_status(session, _r(), user.id, today=T)
+    assert [(x.milestone, x.amount) for x in st] == [(3, Decimal("11")), (7, Decimal("22")),
+                                                      (14, Decimal("33")), (30, Decimal("44"))]
+    acc = await srs.claim(session, _r(), user.id, 7, today=T)
+    assert acc.cash_balance == Decimal("10000022")
+    row = (await session.execute(select(StreakRewardClaim))).scalar_one()
+    assert row.amount == Decimal("22")
+    with pytest.raises(srs.StreakRewardError) as e:
+        await srs.claim(session, _r(), user.id, 5, today=T)
+    assert e.value.code == "UNKNOWN_MILESTONE"

@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from shared.models import User
 from shared.game_models import GameAccount, GamePosition, GameSeason, WeeklyRankingResult
-from apps.trading_game.services import account_service, reward_service, weekly_ranking as wr
+from apps.trading_game.services import account_service, game_settings_service, reward_service, weekly_ranking as wr
 
 log = logging.getLogger("trading_game.weekly")
 _SKIP_MARGIN = 20  # 탈퇴 유저 건너뛰기 대비 추가로 읽는 수
@@ -55,18 +55,19 @@ async def close_week(db: AsyncSession, redis, season: GameSeason, week_id: date,
     if not pairs:
         return {"archived": 0, "rewarded": 0}
     start, end = _week_window(season, week_id)
+    rewards = await game_settings_service.weekly_rewards(db) if with_reward else {}  # 지급 시점 설정값
     rewarded = 0
     try:
         for rank, (uid, score) in enumerate(pairs, start=1):
             amount = Decimal("0")
-            if with_reward and rank in wr.REWARDS:
+            if with_reward and rewards.get(rank, Decimal("0")) > 0:
                 acc = await db.scalar(
                     select(GameAccount).where(GameAccount.season_id == sid, GameAccount.user_id == uid)
                 )
                 if acc is not None and await _opened_in_week(db, acc.id, start, end):
                     try:
-                        await reward_service.grant_cash(db, acc, wr.REWARDS[rank], redis=redis)
-                        amount = wr.REWARDS[rank]
+                        await reward_service.grant_cash(db, acc, rewards[rank], redis=redis)
+                        amount = rewards[rank]
                         rewarded += 1
                     except reward_service.RewardUnavailable:
                         log.warning("주간 보상 보류(시세 없음) season=%s week=%s user=%s", sid, week_id, uid)

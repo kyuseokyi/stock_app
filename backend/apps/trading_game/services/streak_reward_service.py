@@ -15,7 +15,9 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from shared.game_models import GameAccount, StreakRewardClaim, UserStreak
-from apps.trading_game.services import account_service, coach_service, feature_flag_service, reward_service
+from apps.trading_game.services import (
+    account_service, coach_service, feature_flag_service, game_settings_service, reward_service,
+)
 
 STREAK_MILESTONES: tuple[tuple[int, Decimal], ...] = (
     (3, Decimal("100000")),
@@ -23,7 +25,7 @@ STREAK_MILESTONES: tuple[tuple[int, Decimal], ...] = (
     (14, Decimal("700000")),
     (30, Decimal("2000000")),
 )
-_AMOUNT_BY_MILESTONE = dict(STREAK_MILESTONES)
+_AMOUNT_BY_MILESTONE = dict(STREAK_MILESTONES)  # 기본값(마일스톤 집합 고정) — 지급 금액은 game_settings
 
 
 class StreakRewardError(Exception):
@@ -81,12 +83,13 @@ async def reward_status(
     today = today or coach_service.kst_today()
     row = await db.get(UserStreak, user_id)
     claimed = await _claimed_milestones(db, user_id, season_id)
+    amounts = await game_settings_service.streak_rewards(db)
     return [
         RewardStatus(
-            milestone=m, amount=amount, claimed=m in claimed,
+            milestone=m, amount=amounts.get(m, default), claimed=m in claimed,
             claimable=m not in claimed and is_eligible(row, m, today),
         )
-        for m, amount in STREAK_MILESTONES
+        for m, default in STREAK_MILESTONES
     ]
 
 
@@ -94,8 +97,7 @@ async def claim(
     db: AsyncSession, redis, user_id: int, milestone: int, *, today: date | None = None
 ) -> GameAccount:
     """마일스톤 보상 수령 → 지급 후 계좌. 실패 시 StreakRewardError(수령 행은 남지 않음)."""
-    amount = _AMOUNT_BY_MILESTONE.get(milestone)
-    if amount is None:
+    if milestone not in _AMOUNT_BY_MILESTONE:
         raise StreakRewardError("UNKNOWN_MILESTONE", "존재하지 않는 연속 출석 보상입니다.")
     if not await feature_flag_service.is_enabled(db, redis, "STREAK"):
         raise StreakRewardError("FEATURE_DISABLED", "연속 출석은 현재 운영하지 않습니다.")
@@ -109,6 +111,7 @@ async def claim(
     if await _already_claimed(db, user_id, season_id, milestone):
         raise StreakRewardError("ALREADY_CLAIMED", "이미 보상을 받았습니다.")
 
+    amount = (await game_settings_service.streak_rewards(db)).get(milestone, _AMOUNT_BY_MILESTONE[milestone])
     # 계좌 선확보 — get_or_create_account 는 내부 commit 하므로 수령 행 삽입 전에 호출
     account = await account_service.get_or_create_account(db, user_id, season_id)
     db.add(StreakRewardClaim(user_id=user_id, season_id=season_id, milestone=milestone, amount=amount))
