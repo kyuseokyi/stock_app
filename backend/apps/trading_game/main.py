@@ -19,6 +19,8 @@ from apps.trading_game import deps
 from apps.trading_game.routers import (
     academy, academy_admin, coach, feature_flags, leaderboard, orders, quests, quiz, quiz_admin, ws_gateway,
 )
+from apps.trading_game.services import ws_bus
+from apps.trading_game.services.connection_manager import manager
 from apps.trading_game.services.tick_listener import broadcast_loop, fanout_worker, pnl_loop, run_listener
 
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
@@ -27,6 +29,7 @@ REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     stop = asyncio.Event()
+    bus = asyncio.create_task(ws_bus.run_subscriber(manager, stop))  # 발행된 WS 메시지 → 로컬 접속자
     listener = asyncio.create_task(run_listener(REDIS_URL, stop))
     fanout = asyncio.create_task(fanout_worker(stop))
     sentiment = asyncio.create_task(ws_gateway._sentiment_loop(stop))
@@ -36,7 +39,7 @@ async def lifespan(app: FastAPI):
         yield
     finally:
         stop.set()
-        for task in (listener, fanout, sentiment, ticks, pnl):
+        for task in (listener, fanout, sentiment, ticks, pnl, bus):
             task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await task

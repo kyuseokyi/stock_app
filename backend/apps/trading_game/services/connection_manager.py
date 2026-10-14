@@ -1,4 +1,7 @@
-"""WS 연결 레지스트리(로그인 + 비로그인 공개) + Fan-out. 단일 워커 전제(인메모리)."""
+"""WS 연결 레지스트리(로그인 + 비로그인 공개) + Fan-out — 이 프로세스의 로컬 접속자만.
+
+인스턴스 간 전달은 services/ws_bus(Redis Pub/Sub)가 담당: 발행 → 각 인스턴스 구독 → 이 매니저로 전달.
+"""
 from __future__ import annotations
 
 import asyncio
@@ -125,6 +128,21 @@ class ConnectionManager:
         tasks = [self._safe_send(user_id, ws, text) for ws in list(self._conns.get(user_id, set()))]
         if tasks:
             await asyncio.gather(*tasks)
+
+    async def close_all(self, code: int = 1001) -> None:
+        """종료(SIGTERM) 시 로컬 연결 전부 close — 1001(going away)이면 클라이언트가 다른 인스턴스로 재연결."""
+        async with self._lock:
+            sockets = [ws for conns in self._conns.values() for ws in conns] + list(self._public)
+            self._conns.clear()
+            self._public.clear()
+            self._public_per_ip.clear()
+
+        async def _close(ws: WebSocket) -> None:
+            with contextlib.suppress(Exception):
+                await asyncio.wait_for(ws.close(code=code), timeout=SEND_TIMEOUT)
+
+        if sockets:
+            await asyncio.gather(*(_close(ws) for ws in sockets))
 
 
 manager = ConnectionManager()

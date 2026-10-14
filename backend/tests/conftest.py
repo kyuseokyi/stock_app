@@ -23,3 +23,15 @@ def _reset_game_realtime_state():
     _reset()
     yield
     _reset()
+
+
+@pytest.fixture(autouse=True)
+def _isolate_game_redis(monkeypatch):
+    """trading_game 프로세스 Redis 싱글턴을 fakeredis 로 — WS 버스 발행·캐시 dirty 알림이
+    실제 로컬 Redis(db0)로 새지 않게. 개별 테스트의 get_redis monkeypatch 는 그대로 우선한다."""
+    from fakeredis import aioredis as fake_aioredis
+
+    from apps.trading_game import deps  # 가벼운 모듈(redis 클라이언트 지연 생성)
+
+    monkeypatch.setattr(deps, "_redis", fake_aioredis.FakeRedis(decode_responses=True))
+    yield

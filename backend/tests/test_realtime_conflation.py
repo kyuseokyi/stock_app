@@ -269,7 +269,7 @@ async def test_broadcast_once_sends_only_latest_of_many_ticks(maker, listener, m
     async def fake_broadcast(payload):
         sent.append(payload)
 
-    monkeypatch.setattr(tick_listener.manager, "broadcast", fake_broadcast)
+    monkeypatch.setattr(tick_listener.ws_bus, "publish_all", fake_broadcast)
     for i in range(10):
         await tick_listener._handle_tick(json.dumps(
             {"ticker": "005930", "price": 100 + i, "timestamp": f"t{i}"}))
@@ -322,8 +322,7 @@ async def test_push_pnl_once_no_db_updates_rank_and_sends(maker, listener, monke
     async def fake_send(user_id, payload):
         sent.append((user_id, payload))
 
-    monkeypatch.setattr(tick_listener.manager, "send_to_user", fake_send)
-    monkeypatch.setattr(tick_listener.manager, "user_ids", lambda: [uid])
+    monkeypatch.setattr(tick_listener.ws_bus, "publish_user", fake_send)  # 접속 여부와 무관하게 보유자 전원 발행
     ranks = []
     real_update = tick_listener.ranking_service.update_rank
 

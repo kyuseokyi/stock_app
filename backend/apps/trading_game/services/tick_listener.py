@@ -1,4 +1,6 @@
-"""Redis 구독 → 자동청산(인라인, 캐시 후보 + DB 확정) + 묶기 전송 루프. lifespan 백그라운드.
+"""Redis 구독 → 자동청산(인라인, 캐시 후보 + DB 확정) + 묶기 전송 루프. 리더 인스턴스에서만 실행(services/leader).
+
+전송은 모두 ws_bus(Redis Pub/Sub) 발행 → 각 인스턴스가 자기 로컬 접속자에게 전달.
 
 - 리스너: 틱마다 청산 검사(포지션 캐시로 후보만 — DB 조회 없음, 후보 있을 때만 DB 확정) + 최신 틱 덮어쓰기.
 - broadcast_loop(GAME_WS_TICK_INTERVAL_SEC=0.25): 새 틱이 있으면 최신 1개만 전체 전송.
@@ -22,7 +24,7 @@ from apps.trading_game import deps
 from apps.trading_game.services import (
     account_service, liquidation_service, nudge_engine, position_cache, pricing, ranking_service, weekly_ranking,
 )
-from apps.trading_game.services.connection_manager import manager
+from apps.trading_game.services import ws_bus
 
 log = logging.getLogger("trading_game.listener")
 
@@ -88,9 +90,12 @@ def _season_open(window, now: datetime) -> bool:
 
 
 async def _push_personal_pnl(ticker: str, price: Decimal) -> None:
-    """활성 시즌 보유자 전원의 라이브 ROI 를 ZADD(랭킹), 접속자에겐 개인손익 push. 포지션 캐시 사용."""
+    """활성 시즌 보유자 전원의 라이브 ROI 를 ZADD(랭킹) + 개인손익 발행. 포지션 캐시 사용.
+
+    접속 여부는 인스턴스마다 다르므로(리더는 자기 로컬만 앎) 보유자 전원에게 publish_user —
+    각 인스턴스 구독자가 자기 로컬 접속자만 골라 전달한다.
+    """
     snap = await position_cache.cache.get(AsyncSessionLocal)
-    connected = set(manager.user_ids())
     redis = deps.get_redis()
     now = datetime.now(timezone.utc)
     for pos in snap.for_ticker(ticker):
@@ -104,11 +109,10 @@ async def _push_personal_pnl(ticker: str, price: Decimal) -> None:
                 await ranking_service.update_rank(
                     redis, pos.season_id, pos.user_id, live, season_window=window,
                 )
-            if pos.user_id in connected:
-                await manager.send_to_user(pos.user_id, {
-                    "type": "position_pnl", "position_id": str(pos.position_id),
-                    "roi_pct": float(roi), "pnl_amount": float(pnl),
-                })
+            await ws_bus.publish_user(pos.user_id, {
+                "type": "position_pnl", "position_id": str(pos.position_id),
+                "roi_pct": float(roi), "pnl_amount": float(pnl),
+            })
         except Exception:
             log.warning("개인손익/랭킹 갱신 실패 — skip position=%s", pos.position_id, exc_info=True)
 
@@ -120,7 +124,7 @@ async def broadcast_once() -> bool:
         return False
     _broadcast_seq = _tick_seq
     tick, _ = _latest
-    await manager.broadcast({
+    await ws_bus.publish_all({
         "type": "tick", "ticker": tick["ticker"], "price": tick["price"],
         "timestamp": tick.get("timestamp"),
     })
@@ -188,7 +192,7 @@ def _queue_close_nudges(result: liquidation_service.LiquidationResult) -> None:
 
 
 async def fanout_worker(stop: asyncio.Event) -> None:
-    """큐에서 넛지를 받아 해당 유저에게 전송(리스너와 분리된 경로). 틱은 broadcast_loop 가 담당."""
+    """큐에서 넛지를 받아 해당 유저 채널로 발행(리스너와 분리된 경로). 틱은 broadcast_loop 가 담당."""
     q = _get_fanout_queue()
     while not stop.is_set():
         try:
@@ -200,7 +204,7 @@ async def fanout_worker(stop: asyncio.Event) -> None:
         try:
             if item[0] == "nudge":
                 _, user_id, payload = item
-                await manager.send_to_user(user_id, payload)
+                await ws_bus.publish_user(user_id, payload)
         except Exception:
             log.exception("fan-out 실패 — skip")
     log.info("fan-out 워커 종료")

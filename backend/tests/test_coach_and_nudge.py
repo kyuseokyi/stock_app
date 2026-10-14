@@ -325,7 +325,7 @@ import httpx
 from shared.auth import get_current_user
 from shared.database import get_db
 from apps.trading_game.main import app
-from apps.trading_game.services import connection_manager
+from apps.trading_game.services import ws_bus
 
 
 @pytest.fixture
@@ -369,7 +369,7 @@ async def test_router_admin_upsert_flow_and_broadcast(api, maker, monkeypatch):
     async def fake_broadcast(payload):
         sent.append(payload)
 
-    monkeypatch.setattr(connection_manager.manager, "broadcast_users", fake_broadcast)
+    monkeypatch.setattr(ws_bus, "publish_users", fake_broadcast)
     monkeypatch.setattr(coach_service, "kst_today", lambda: date(2026, 10, 13))
 
     r = await client.put("/api/game/admin/coach-messages", json=_body(season.id))
@@ -400,7 +400,7 @@ async def test_router_publish_succeeds_even_if_broadcast_fails(api, maker, monke
     async def boom(payload):
         raise RuntimeError("ws down")
 
-    monkeypatch.setattr(connection_manager.manager, "broadcast_users", boom)
+    monkeypatch.setattr(ws_bus, "publish_users", boom)
     monkeypatch.setattr(coach_service, "kst_today", lambda: date(2026, 10, 13))
     r = await client.put("/api/game/admin/coach-messages", json=_body(season.id, action="publish"))
     assert r.status_code == 200 and r.json()["status"] == "PUBLISHED"
@@ -416,7 +416,7 @@ async def test_router_publish_future_date_does_not_broadcast(api, maker, monkeyp
     async def fake_broadcast(payload):
         sent.append(payload)
 
-    monkeypatch.setattr(connection_manager.manager, "broadcast_users", fake_broadcast)
+    monkeypatch.setattr(ws_bus, "publish_users", fake_broadcast)
     monkeypatch.setattr(coach_service, "kst_today", lambda: date(2026, 10, 13))
     r = await client.put(
         "/api/game/admin/coach-messages",
@@ -460,7 +460,7 @@ async def test_router_coach_today(api, maker, monkeypatch):
     async def noop(payload):
         return None
 
-    monkeypatch.setattr(connection_manager.manager, "broadcast_users", noop)
+    monkeypatch.setattr(ws_bus, "publish_users", noop)
 
     r = await client.get("/api/game/coach/today")
     assert r.status_code == 200
@@ -715,7 +715,7 @@ async def test_fanout_worker_sends_nudge_to_user(fresh_queue, monkeypatch):
     async def fake_send(user_id, payload):
         sent.append((user_id, payload))
 
-    monkeypatch.setattr(tick_listener.manager, "send_to_user", fake_send)
+    monkeypatch.setattr(tick_listener.ws_bus, "publish_user", fake_send)
     stop = _asyncio.Event()
     tick_listener._enqueue_nudge(7, "pos-1", {"type": "PRAISE", "code": "PRINCIPLED_STOP", "message": "m"})
     task = _asyncio.create_task(tick_listener.fanout_worker(stop))

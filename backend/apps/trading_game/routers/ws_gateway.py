@@ -18,7 +18,7 @@ from shared.database import AsyncSessionLocal
 from shared.security import decode_token
 from shared.models import User
 from shared.game_models import GameAccount, GamePosition
-from apps.trading_game.services import account_service
+from apps.trading_game.services import account_service, ws_bus
 from apps.trading_game.services.connection_manager import manager, sentiment_from_counts
 
 router = APIRouter()
@@ -88,7 +88,7 @@ async def _sentiment_loop(stop: asyncio.Event) -> None:
     while not stop.is_set():
         try:
             payload = await _collect_sentiment()
-            await manager.broadcast(payload)
+            await ws_bus.publish_all(payload)
         except asyncio.CancelledError:
             raise
         except Exception:

@@ -13,7 +13,7 @@ from shared.models import User
 from apps.trading_game.schemas.game_dtos import (
     CoachMessageResponse, CoachTodayResponse, CoachUpsertRequest, SeasonOption,
 )
-from apps.trading_game.services import account_service, coach_service, connection_manager
+from apps.trading_game.services import account_service, coach_service, ws_bus
 
 router = APIRouter(prefix="/api/game", tags=["trading-game-coach"])
 log = logging.getLogger("trading_game.coach")
@@ -43,7 +43,7 @@ async def upsert_coach_message(
                 and active.id == msg.season_id
                 and msg.target_date == coach_service.kst_today()
             ):
-                await connection_manager.manager.broadcast_users(coach_service.coach_push_payload(msg))  # 코치는 로그인 전용
+                await ws_bus.publish_users(coach_service.coach_push_payload(msg))  # 코치는 로그인 전용
         except Exception:
             log.warning("코치 발행 WS push 실패(발행은 정상 완료) id=%s", msg.id, exc_info=True)
     return coach_service.to_dto(msg)
