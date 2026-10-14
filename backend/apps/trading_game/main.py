@@ -7,7 +7,8 @@
 인스턴스(컨테이너/파드) N개 실행 가능 — 프로세스당 워커는 1개(--workers 1)로 두고 인스턴스를 늘린다.
   - 모든 인스턴스: WS 버스 구독(ws_bus — 자기 로컬 접속자에게 전달 + game:cache:dirty), 넛지 fan-out.
   - 리더 1개(services/leader, Redis 락): 틱 리스너(+자동청산), 틱 묶기 전송, 개인손익·랭킹, 시장심리.
-종료(SIGTERM): 리더 락 반납 → 구독 해제 → 로컬 WS close(1001).
+종료(SIGTERM): 리더 락 반납 → 구독 해제 → 남은 로컬 WS close(1001).
+  (uvicorn 은 lifespan 종료 전에 열린 WS 를 1012 로 먼저 닫으므로 클라이언트는 보통 1012 를 받는다.)
 """
 from __future__ import annotations
 

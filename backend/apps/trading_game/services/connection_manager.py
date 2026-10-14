@@ -83,6 +83,9 @@ class ConnectionManager:
     def user_ids(self) -> list[int]:
         return list(self._conns.keys())
 
+    def has_user(self, user_id: int) -> bool:
+        return user_id in self._conns
+
     def public_count(self) -> int:
         return len(self._public)
 

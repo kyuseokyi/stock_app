@@ -78,7 +78,7 @@ async def dispatch(manager: ConnectionManager, message: dict) -> None:
             user_id = int(channel[len(USER_CHANNEL_PREFIX):])
         except ValueError:
             return
-        if user_id not in manager.user_ids():  # 이 인스턴스에 접속 안 함 → 무시
+        if not manager.has_user(user_id):  # 이 인스턴스에 접속 안 함 → 무시(O(1))
             return
         await manager.send_to_user(user_id, json.loads(message["data"]))
 
