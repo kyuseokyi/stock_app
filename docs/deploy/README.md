@@ -67,9 +67,9 @@
    - 그래서 **sticky 세션(같은 사용자를 같은 컨테이너로 고정) 필요 없음.**
 2. **싱글톤 작업은 리더 선출** (trading_game)
    - 틱 리스너(+자동청산), 0.25초 방송 루프, 1초 손익 루프, 시장심리 루프는 **전체에서 딱 1개만** 돌아야 함(2개면 청산이 두 번 일어남).
-   - Redis 락(`game:leader:{이름}`)을 잡은 컨테이너 1개만 실행. 그 컨테이너가 죽으면 **TTL(기본 10초) 안에 다른 컨테이너가 이어받음**.
+   - Redis 락(`game:leader:{이름}`)을 잡은 컨테이너 1개만 실행. 그 컨테이너가 갑자기 죽으면 **최대 약 TTL×4/3 + 리스너 기동 시간(기본 TTL 10초 → 약 13초) 안에 다른 컨테이너가 이어받음**(로컬 실측: TTL 3초 → 4.2초). 정상 종료(SIGTERM, 롤링 업데이트)면 락을 즉시 반납해 **1초 이내** 승계(실측 0.65초).
 3. **헬스체크** — 모든 API 에 `/health`(프로세스 생존)·`/ready`(DB `SELECT 1` + Redis `PING`, 실패 시 503).
-4. **비밀값 파일 지원** — `JWT_SECRET_KEY_FILE=/run/secrets/jwt_secret_key` 처럼 `X_FILE` 을 주면 그 파일 내용을 `X` 로 읽음(없으면 기존 env 그대로).
+4. **비밀값 파일 지원** — `JWT_SECRET_KEY_FILE=/run/secrets/jwt_secret_key` 처럼 `X_FILE` 을 주면 그 파일 내용을 `X` 로 읽음(없으면 기존 env 그대로). 허용 목록(`shared/env.py` `FILE_ENV_KEYS`) 키만 처리 — 그 밖의 키는 `APP_FILE_ENV_EXTRA=KEY1,KEY2` 로 추가, 목록 밖 `*_FILE`(SSL_CERT_FILE 등)은 무시.
 
 ### ⚠️ 절대 복제하면 안 되는 서비스 (replicas = 1 고정)
 | 서비스 | 이유 |
@@ -158,7 +158,7 @@ docker secret ls
 - Swarm secret 은 **빈 값으로 만들 수 없습니다.** 안 쓰는 공급자(예: 네이버 미사용)는 `stack.yml` 에서 해당 secret 줄·`*_FILE` env·하단 정의 3곳을 함께 지우세요.
 - secret 은 **수정이 안 됩니다.** 바꾸려면 새 이름으로 만들고(`jwt_secret_key_v2`) stack.yml 을 바꿔 다시 deploy 하거나, 서비스에서 떼고 지운 뒤 다시 만듭니다.
 - 값은 **상용용으로 새로** 준비합니다(개발 서버 `.env.production` 값 재사용 금지 — 특히 JWT·state 키는 새로 생성, DB 호스트는 `postgres` 가 아닌 **외부 DB 주소**). DB 비밀번호에 특수문자가 있으면 URL 인코딩(`@`→`%40`). env 이름 ↔ secret 이름: `DATABASE_URL`→`database_url`, `SYNC_DATABASE_URL`→`sync_database_url`, `CLICKHOUSE_PASSWORD`→`clickhouse_password`, `JWT_SECRET_KEY`→`jwt_secret_key`, `KIS_APP_KEY`/`KIS_APP_SECRET`→`kis_app_key`/`kis_app_secret`, `KAKAO_REST_API_KEY`/`KAKAO_CLIENT_SECRET`/`KAKAO_ADMIN_KEY`, `NAVER_CLIENT_SECRET`, `SOCIAL_STATE_SECRET` → 소문자 이름.
-- 앱은 `X_FILE` 이 가리키는 파일이 없으면 **기동에 실패**합니다(조용히 빈 값으로 뜨는 것 방지). secret 을 지웠다면 해당 `*_FILE` env 도 꼭 지우세요.
+- 앱은 (허용 목록의) `X_FILE` 이 가리키는 파일이 없으면 **기동에 실패**합니다(조용히 빈 값으로 뜨는 것 방지). secret 을 지웠다면 해당 `*_FILE` env 도 꼭 지우세요.
 
 ### B-4. 이미지 빌드 & 레지스트리에 올리기
 Swarm 은 `build:` 를 무시합니다. 모든 노드가 받아 갈 수 있게 **레지스트리에 push** 해야 합니다.
@@ -460,7 +460,7 @@ A. 필요 없습니다. 메시지가 Redis Pub/Sub 로 **모든** trading_game �
 A. 모든 정기 작업이 두 번 실행됩니다(수집 API 호출 2배 → KIS 호출 제한, 퀴즈 중복 생성 등). 정산·주간마감은 멱등이라 결과는 같지만 낭비입니다. 그래서 Swarm `replicas: 1` + `stop-first` + `max_replicas_per_node: 1`, k8s `replicas: 1` + `strategy: Recreate` 로 막아 두었습니다. **`scale` 명령으로 늘리지 마세요.**
 
 **Q. trading_game 을 여러 개 띄우면 자동청산이 중복되지 않나요?**
-A. 틱 리스너(자동청산 포함)는 Redis 리더 락을 가진 **1개 인스턴스에서만** 돕니다. 리더가 죽으면 최대 TTL(10초) 뒤 다른 인스턴스가 이어받습니다. 그 사이 몇 초간 틱 처리가 멈출 수 있습니다(`GAME_LEADER_TTL_MS` 로 조절).
+A. 틱 리스너(자동청산 포함)는 Redis 리더 락을 가진 **1개 인스턴스에서만** 돕니다. 리더가 갑자기 죽으면 최대 약 TTL×4/3 + 리스너 기동 시간(기본 TTL 10초 → 약 13초) 뒤 다른 인스턴스가 이어받습니다(갱신·재시도 주기가 TTL/3 이라서). 그 사이 틱 처리가 멈출 수 있습니다(`GAME_LEADER_TTL_MS` 로 조절). 정상 종료(SIGTERM)는 락을 바로 반납하므로 1초 이내에 넘어갑니다.
 
 **Q. game_ws 가 죽으면?**
 A. Swarm/k8s 가 자동으로 다시 띄웁니다(수 초~수십 초 틱 공백). 1개뿐이라 그 사이 시세가 잠깐 멈출 수 있는데, 이는 KIS 세션 제한 때문에 감수하는 부분입니다.
