@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, type SelectHTMLAttributes } from 'react'
 import Card from '../ui/Card'
 import { chipClass } from '../ui/Chip'
 import {
@@ -17,9 +17,33 @@ interface OrderPanelProps {
   onLockedLeverage: () => void
 }
 
-// 네이티브 select 를 칩과 같은 모양으로(접근성·모바일 웹 호환)
+// 네이티브 select 를 칩과 같은 모양으로(접근성·모바일 웹 호환).
+// 브라우저 기본 화살표는 칩 오른쪽 끝에 붙어 좌우 여백이 어긋나므로 숨기고, 칩 여백(px-3)에 맞춘 ▾ 를 직접 그린다.
+// field-sizing: content — 폭을 가장 긴 옵션이 아니라 선택된 값에 맞춤(미지원 브라우저는 기존 폭).
 const selectClass = (active: boolean) =>
-  `${chipClass(active)} cursor-pointer border-0 outline-none focus-visible:ring-2 focus-visible:ring-brand`
+  `${chipClass(active)} cursor-pointer appearance-none border-0 pr-8 outline-none [field-sizing:content] focus-visible:ring-2 focus-visible:ring-brand`
+
+function ChipSelect({ active, children, ...props }: { active: boolean } & SelectHTMLAttributes<HTMLSelectElement>) {
+  return (
+    <span className={`relative inline-flex items-center ${active ? 'text-brand' : 'text-ink-muted'}`}>
+      <select {...props} className={selectClass(active)}>
+        {children}
+      </select>
+      <svg
+        aria-hidden="true"
+        viewBox="0 0 12 12"
+        className="pointer-events-none absolute right-3 h-3 w-3"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <path d="M3 4.5 6 7.5 9 4.5" />
+      </svg>
+    </span>
+  )
+}
 
 // 원클릭 주문 — 비중(칩 + ▾기타)·배율 칩 + 손절/익절 드롭다운 + BUY(상승=핑크)/SELL(하락=블루).
 // 5x 는 아카데미 미해금 시 잠금. 비중 상태는 하나 — 칩 값이면 드롭다운은 '기타'로 표시(파생).
@@ -48,20 +72,20 @@ export default function OrderPanel({ hasPosition, academyUnlocked, submitting, o
               {ratioLabel(r)}
             </button>
           ))}
-          <select
+          <ChipSelect
             aria-label="비중 기타"
             value={moreActive ? String(ratio) : ''}
             onChange={(e) => {
               const next = RATIO_MORE.find((r) => String(r) === e.target.value)
               if (next !== undefined) setRatio(next)
             }}
-            className={selectClass(moreActive)}
+            active={moreActive}
           >
             <option value="">기타</option>
             {RATIO_MORE.map((r) => (
               <option key={r} value={String(r)}>{ratioLabel(r)}</option>
             ))}
-          </select>
+          </ChipSelect>
         </div>
         <div className="flex items-center gap-2">
           <span className="text-xs text-ink-muted">배율</span>
@@ -83,29 +107,29 @@ export default function OrderPanel({ hasPosition, academyUnlocked, submitting, o
       </div>
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <span className="text-xs text-ink-muted">손절</span>
-        <select
+        <ChipSelect
           aria-label="손절"
           value={stopLoss === null ? '' : String(stopLoss)}
           onChange={(e) => setStopLoss(STOP_LOSS_PCTS.find((p) => String(p) === e.target.value) ?? null)}
-          className={selectClass(stopLoss !== null)}
+          active={stopLoss !== null}
         >
           <option value="">{stopLossLabel(null)}</option>
           {STOP_LOSS_PCTS.map((p) => (
             <option key={p} value={String(p)}>{stopLossLabel(p)}</option>
           ))}
-        </select>
+        </ChipSelect>
         <span className="ml-2 text-xs text-ink-muted">익절</span>
-        <select
+        <ChipSelect
           aria-label="익절"
           value={takeProfit === null ? '' : String(takeProfit)}
           onChange={(e) => setTakeProfit(TAKE_PROFIT_PCTS.find((p) => String(p) === e.target.value) ?? null)}
-          className={selectClass(takeProfit !== null)}
+          active={takeProfit !== null}
         >
           <option value="">{takeProfitLabel(null)}</option>
           {TAKE_PROFIT_PCTS.map((p) => (
             <option key={p} value={String(p)}>{takeProfitLabel(p)}</option>
           ))}
-        </select>
+        </ChipSelect>
       </div>
       <p className="mt-1.5 text-xs text-ink-muted">{slTpHint(stopLoss, takeProfit, leverage)}</p>
       <div className="mt-4 grid grid-cols-2 gap-3">
