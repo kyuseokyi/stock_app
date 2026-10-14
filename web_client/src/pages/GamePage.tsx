@@ -117,7 +117,8 @@ export default function GamePage() {
   const closeModal = () => setActiveModal(null)
 
   return (
-    <div className="space-y-4">
+    // 모바일 폭은 OrderPanel 이 화면 아래 고정 바 → 마지막 내용이 가리지 않게 그 높이만큼 아래 여백
+    <div className="space-y-4 pb-32 sm:pb-0">
       <GameHeader
         season={season}
         account={account}
@@ -131,13 +132,14 @@ export default function GamePage() {
         onOpenStreak={() => openPrivate('streak')}
         onOpenRules={() => setActiveModal('rules')}
       />
-      <CoachBanner coach={coach} />
-      {!loggedIn && <p className="rounded-card bg-surface p-4 text-sm text-ink-muted">로그인하면 주문할 수 있어요</p>}
-      <SentimentBar sentiment={sentiment} intervalSec={rulesState.rules?.sentiment_interval_sec} />
+      {/* 차트를 위로 — 모바일에서 차트와 하단 주문 바가 한 화면에 들어오게. 코치·심리·안내는 차트 아래 */}
       <TradingChart ticker={season.ticker} lastPrice={lastPrice} coach={coach} position={position} />
       {position && (
         <ActivePositionCard position={position} lastPrice={lastPrice} closing={closing} onClose={() => closePosition()} />
       )}
+      {!loggedIn && <p className="rounded-card bg-surface p-4 text-sm text-ink-muted">로그인하면 주문할 수 있어요</p>}
+      <CoachBanner coach={coach} />
+      <SentimentBar sentiment={sentiment} intervalSec={rulesState.rules?.sentiment_interval_sec} />
       {primeTime && !quizDisabled && <QuizBanner onOpen={() => openPrivate('quiz')} />}
       <OrderPanel
         hasPosition={position !== null}

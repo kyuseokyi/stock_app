@@ -103,6 +103,8 @@ const toIntradayBar = (c: IntradayCandle) => ({
 })
 
 const DAILY_VISIBLE_DAYS = 180 // 일봉 첫 화면 구간(조회는 api/stock 의 280일 — 지표 워밍업 포함)
+// 모바일 폭에선 단위·지표 칩 7개가 한 줄에 들어가게 조금 작게
+const CHIP_COMPACT = 'max-sm:px-2.5 max-sm:text-[13px]'
 const INTRADAY_VISIBLE_BARS = 120 // 분봉 첫 화면 캔들 수(60분봉은 서버가 30거래일≈195개를 줌)
 
 const INTERVAL_LABEL: Record<ChartInterval, string> = { day: '일', '1m': '1분', '5m': '5분', '15m': '15분', '60m': '60분' }
@@ -313,8 +315,9 @@ export default function TradingChart({ ticker, lastPrice, coach, position }: Tra
 
   return (
     <div>
-      <div className="mb-2 flex flex-wrap items-center gap-1.5">
-        <div role="tablist" aria-label="차트 단위" className="flex gap-1.5 overflow-x-auto">
+      {/* 한 줄(넘치면 가로 스크롤) — 모바일에서 차트·하단 주문 바가 한 화면에 들어오게 세로 공간 절약 */}
+      <div className="mb-2 flex items-center gap-1.5 overflow-x-auto [scrollbar-width:none]">
+        <div role="tablist" aria-label="차트 단위" className="flex shrink-0 gap-1.5">
           {intervals.map((iv) => (
             <button
               key={iv}
@@ -322,17 +325,18 @@ export default function TradingChart({ ticker, lastPrice, coach, position }: Tra
               role="tab"
               aria-selected={interval === iv}
               onClick={() => setPicked(iv)}
-              className={chipClass(interval === iv)}
+              className={`${chipClass(interval === iv)} ${CHIP_COMPACT}`}
             >
               {INTERVAL_LABEL[iv]}
             </button>
           ))}
         </div>
-        <div role="group" aria-label="보조지표" className="ml-auto flex gap-1.5">
-          <button type="button" aria-pressed={showMa} onClick={() => setShowMa((v) => !v)} className={chipClass(showMa)}>
-            이동평균
+        <div role="group" aria-label="보조지표" className="ml-auto flex shrink-0 gap-1.5">
+          <button type="button" aria-pressed={showMa} onClick={() => setShowMa((v) => !v)} className={`${chipClass(showMa)} ${CHIP_COMPACT}`}>
+            <span className="sm:hidden">이평</span>
+            <span className="hidden sm:inline">이동평균</span>
           </button>
-          <button type="button" aria-pressed={showBb} onClick={() => setShowBb((v) => !v)} className={chipClass(showBb)}>
+          <button type="button" aria-pressed={showBb} onClick={() => setShowBb((v) => !v)} className={`${chipClass(showBb)} ${CHIP_COMPACT}`}>
             볼린저
           </button>
         </div>

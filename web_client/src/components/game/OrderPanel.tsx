@@ -1,9 +1,10 @@
 import { useState, type SelectHTMLAttributes } from 'react'
 import Card from '../ui/Card'
 import { chipClass } from '../ui/Chip'
+import Modal from '../ui/Modal'
 import {
   RATIO_CHIPS, RATIO_MORE, STOP_LOSS_PCTS, TAKE_PROFIT_PCTS,
-  isChipRatio, ratioLabel, slTpHint, stopLossLabel, takeProfitLabel,
+  isChipRatio, orderSummary, ratioLabel, slTpHint, stopLossLabel, takeProfitLabel,
 } from '../../lib/orderOptions'
 import { feeText } from '../../lib/gameRules'
 import { sideLabel } from '../../lib/side'
@@ -53,6 +54,8 @@ function ChipSelect({ active, children, ...props }: { active: boolean } & Select
 
 // 원클릭 주문 — 비중(칩 + ▾기타)·배율 칩 + 손절/익절 드롭다운 + 상승에 걸기(핑크)/하락에 걸기(블루).
 // 5x 는 아카데미 미해금 시 잠금. 비중 상태는 하나 — 칩 값이면 드롭다운은 '기타'로 표시(파생).
+// sm 이상: 카드(기존). 모바일 폭: 화면 아래 고정 바(설정 요약 + 걸기 버튼) — 요약을 누르면 설정 시트.
+// 두 형태가 같은 state 를 쓰므로 화면 폭을 바꿔도 선택이 유지된다.
 export default function OrderPanel({
   hasPosition, academyUnlocked, submitting, onOrder, onLockedLeverage, feePct = null, onOpenRules,
 }: OrderPanelProps) {
@@ -60,12 +63,13 @@ export default function OrderPanel({
   const [leverage, setLeverage] = useState<Leverage>(1)
   const [stopLoss, setStopLoss] = useState<number | null>(null)
   const [takeProfit, setTakeProfit] = useState<number | null>(null)
+  const [sheetOpen, setSheetOpen] = useState(false)
   const disabled = hasPosition || submitting
   const moreActive = !isChipRatio(ratio)
   const order = (side: Side) => onOrder(side, ratio, leverage, { stopLossPct: stopLoss, takeProfitPct: takeProfit })
 
-  return (
-    <Card>
+  const settings = (
+    <>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-xs text-ink-muted">비중</span>
@@ -154,25 +158,67 @@ export default function OrderPanel({
           )}
         </span>
       </p>
-      <div className="mt-4 grid grid-cols-2 gap-3">
-        <button
-          type="button"
-          disabled={disabled}
-          onClick={() => order('LONG')}
-          className="h-14 rounded-btn bg-up-soft text-base font-bold text-up transition hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          🔴 {sideLabel('LONG')}에 걸기
-        </button>
-        <button
-          type="button"
-          disabled={disabled}
-          onClick={() => order('SHORT')}
-          className="h-14 rounded-btn bg-down-soft text-base font-bold text-down transition hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          🔵 {sideLabel('SHORT')}에 걸기
-        </button>
+    </>
+  )
+
+  const sideButton = (side: Side, size: string) => (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={() => order(side)}
+      className={`${size} rounded-btn font-bold transition hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-40 ${
+        side === 'LONG' ? 'bg-up-soft text-up' : 'bg-down-soft text-down'
+      }`}
+    >
+      {side === 'LONG' ? '🔴' : '🔵'} {sideLabel(side)}에 걸기
+    </button>
+  )
+
+  return (
+    <>
+      <Card className="hidden sm:block">
+        {settings}
+        <div className="mt-4 grid grid-cols-2 gap-3">
+          {sideButton('LONG', 'h-14 text-base')}
+          {sideButton('SHORT', 'h-14 text-base')}
+        </div>
+        {hasPosition && <p className="mt-2 text-center text-xs text-ink-muted">보유 포지션을 먼저 청산하세요</p>}
+      </Card>
+
+      {/* 모바일 폭: 차트를 보면서 바로 걸 수 있게 화면 아래 고정(GamePage 가 그만큼 아래 여백을 둔다) */}
+      <div className="fixed inset-x-0 bottom-0 z-30 !m-0 border-t border-line bg-surface/95 backdrop-blur sm:hidden">
+        <div className="mx-auto max-w-3xl px-4 pb-[max(env(safe-area-inset-bottom),0.75rem)] pt-2">
+          {hasPosition ? (
+            <p className="mb-2 text-center text-xs text-ink-muted">보유 포지션을 먼저 청산하세요</p>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setSheetOpen(true)}
+              aria-label="주문 설정 열기"
+              className="mb-2 flex w-full items-center justify-between rounded-btn bg-fill px-3 py-2 text-xs text-ink-muted"
+            >
+              <span className="truncate">{orderSummary(ratio, leverage, stopLoss, takeProfit)}</span>
+              <span className="ml-2 shrink-0 font-semibold text-brand">설정 ▾</span>
+            </button>
+          )}
+          <div className="grid grid-cols-2 gap-2">
+            {sideButton('LONG', 'h-12 text-[15px]')}
+            {sideButton('SHORT', 'h-12 text-[15px]')}
+          </div>
+        </div>
       </div>
-      {hasPosition && <p className="mt-2 text-center text-xs text-ink-muted">보유 포지션을 먼저 청산하세요</p>}
-    </Card>
+      {sheetOpen && (
+        <Modal title="주문 설정" onClose={() => setSheetOpen(false)}>
+          {settings}
+          <button
+            type="button"
+            onClick={() => setSheetOpen(false)}
+            className="mt-4 h-12 w-full rounded-btn bg-brand text-base font-bold text-white"
+          >
+            확인
+          </button>
+        </Modal>
+      )}
+    </>
   )
 }

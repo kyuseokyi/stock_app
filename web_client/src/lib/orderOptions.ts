@@ -39,3 +39,7 @@ export function slTpLine(sl: number | null, tp: number | null): string | null {
   const fmt = (p: number | null) => (p === null ? '—' : `${formatPrice(Math.round(p))}원`)
   return `손절 ${fmt(sl)} · 익절 ${fmt(tp)}`
 }
+
+/** 하단 고정 주문바(모바일 폭)의 설정 요약 한 줄: '25% · 1x · 손절 없음 · 익절 없음' */
+export const orderSummary = (ratio: Ratio, leverage: number, sl: number | null, tp: number | null): string =>
+  `${ratioLabel(ratio)} · ${leverage}x · 손절 ${stopLossLabel(sl)} · 익절 ${takeProfitLabel(tp)}`
