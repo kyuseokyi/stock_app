@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import * as SecureStore from 'expo-secure-store';
 import { ActivityIndicator, Text, View, type LayoutChangeEvent } from 'react-native';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
@@ -6,6 +7,7 @@ import { Chip } from '@/ui';
 
 import { getDailyCandles, getGameCandles } from '../api';
 import { applyTick } from '../lib/candles';
+import { CHART_PREFS_KEY, DEFAULT_CHART_PREFS, parseChartPrefs, serializeChartPrefs } from '../lib/chart-prefs';
 import { layoutCandles, priceToY, type Ohlc } from '../lib/chart-layout';
 import { formatPrice, kstDateString } from '../lib/format';
 import { bollinger, lineSegments, MA_PERIODS, sma } from '../lib/indicators';
@@ -171,12 +173,41 @@ export function DailyChart({ ticker, lastPrice, coach, position }: DailyChartPro
   const { rules } = useGameRules();
   const [picked, setPicked] = useState<ChartInterval | null>(null);
   const interval: ChartInterval = picked ?? rules?.chart_interval_default ?? 'day';
+  const [showMa, setShowMa] = useState(DEFAULT_CHART_PREFS.ma);
+  const [showBb, setShowBb] = useState(DEFAULT_CHART_PREFS.bb);
+
+  // 0) 마지막 설정(단위·지표)을 기기에서 복원 — 읽기 전에는 캔들을 로드하지 않아 기본값→저장값 이중 로드를 막는다.
+  // SecureStore 미지원(web)·실패면 기본값(저장값 > 관리자 기본 단위 > 일봉)
+  const [prefsReady, setPrefsReady] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    SecureStore.getItemAsync(CHART_PREFS_KEY)
+      .then(parseChartPrefs)
+      .catch(() => DEFAULT_CHART_PREFS)
+      .then((p) => {
+        if (cancelled) return;
+        setPicked(p.interval);
+        setShowMa(p.ma);
+        setShowBb(p.bb);
+        setPrefsReady(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  useEffect(() => {
+    if (!prefsReady) return;
+    SecureStore.setItemAsync(CHART_PREFS_KEY, serializeChartPrefs({ interval: picked, ma: showMa, bb: showBb })).catch(
+      () => undefined,
+    );
+  }, [prefsReady, picked, showMa, showBb]);
   const [daily, setDaily] = useState<DailyCandle[] | null>(null);
   const [intraday, setIntraday] = useState<IntradayCandle[] | null>(null);
   const [failed, setFailed] = useState(false);
 
-  // 1) 캔들 로드(종목·단위가 바뀌면 다시). 늦게 온 이전 단위 응답은 cancelled 로 버린다
+  // 1) 캔들 로드(종목·단위가 바뀌면 다시). 늦게 온 이전 단위 응답은 cancelled 로 버린다. 설정 복원 전에는 대기(로딩 표시)
   useEffect(() => {
+    if (!prefsReady) return;
     let cancelled = false;
     setDaily(null);
     setIntraday(null);
@@ -201,7 +232,7 @@ export function DailyChart({ ticker, lastPrice, coach, position }: DailyChartPro
     return () => {
       cancelled = true;
     };
-  }, [ticker, interval]);
+  }, [ticker, interval, prefsReady]);
 
   // 1-1) WS 재연결·앱 복귀(streamEpoch 증가) → 끊긴 동안의 캔들을 다시 받아 빈 구간을 채운다.
   // 서버(game_ws)는 앱과 무관하게 분봉을 계속 저장한다. 첫 로드 전·실패·빈 응답이면 화면을 건드리지 않음
@@ -270,8 +301,6 @@ export function DailyChart({ ticker, lastPrice, coach, position }: DailyChartPro
   const empty = candles !== null && candles.length === 0;
 
   // 보조지표 — 받은 전체 종가로 계산한 뒤 화면 구간(최근 VISIBLE)만 잘라 첫 캔들부터 선이 이어지게
-  const [showMa, setShowMa] = useState(true);
-  const [showBb, setShowBb] = useState(false);
   const overlays = useMemo<Overlay[]>(() => {
     if (all === null) return [];
     const closes = all.map((c) => c.close);
