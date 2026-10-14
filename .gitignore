@@ -45,3 +45,6 @@ backend/logs/
 deploy/swarm/stack.env
 deploy/k8s/**/secret.yaml
 deploy/k8s/**/*.secret.env
+
+# Firecrawl CLI 수집 캐시(웹 페이지 원문) — 커밋 금지
+.firecrawl/
