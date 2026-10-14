@@ -6,7 +6,8 @@ ACTIVE 시즌 종목을 주기적으로(GAME_WS_SEASON_POLL_SEC, 기본 60초) �
 MOCK_TICK_STREAM=true 또는 KIS 키 미설정이면 Mock 생성기로, 아니면 실 KIS WS 로
 분기한다. 각 틱을 Redis stock:tick:{ticker} 로 발행하고, 발행한 틱을 1분봉으로 묶어
 ClickHouse game_minute_bars 에 저장한다(game_ws/minute_bars — 별도 태스크, 실패 무시).
-시작·종목 전환 시 1회 오늘 09:00~첫 틱 이전 분봉을 KIS 당일분봉으로 보충한다(game_ws/kis_backfill).
+시작·종목 전환 시 1회 오늘 09:00~첫 틱 이전 분봉을 KIS 당일분봉으로, 이어서 CH 에 비어 있는 과거
+30거래일을 KIS 일별분봉으로 보충한다(game_ws/kis_backfill — 보조지표 워밍업).
 
 실 KIS WS 체결 TR(CLAUDE.md "KIS 데이터 수집 규칙" UN→J 폴백의 실시간판):
 - 기본 H0UNCNT0(통합 KRX+NXT) — NXT 애프터마켓(16:00~20:00)까지 틱 수신, 일봉 UN 종가와 일치.
@@ -34,7 +35,7 @@ from sqlalchemy import select
 from shared.database import AsyncSessionLocal
 from shared.game_models import GameSeason
 from shared.kis_config import get_kis_config
-from apps.collector.game_ws.kis_backfill import run_backfill
+from apps.collector.game_ws.kis_backfill import run_all_backfills
 from apps.collector.game_ws.minute_bars import MinuteBarRecorder
 from apps.collector.game_ws.mock_stream import mock_ticks
 from apps.collector.game_ws.publisher import TickPublisher
@@ -204,9 +205,12 @@ async def run() -> None:
 
     def start_consumer(ticker: str) -> asyncio.Task:
         log.info("수집 시작: ticker=%s mock=%s", ticker, use_mock)
-        # 시작·종목 전환 시 당일 KIS 분봉 보충(Mock/키 없음이면 생략, 실패는 로그만)
+        # 시작·종목 전환 시 KIS 분봉 보충 — 오늘(첫 틱 이전) + 비어 있는 과거 30거래일(지표 워밍업).
+        # 새 종목이면 (종목, 날짜) 키가 새로 잡혀 자동 실행. Mock/키 없음이면 생략, 실패는 로그만
         if not use_mock and _claim_backfill(backfilled, ticker, datetime.now(KST)):
-            t = asyncio.create_task(asyncio.to_thread(run_backfill, ticker, lambda: recorder.first_minute(ticker)))
+            t = asyncio.create_task(
+                asyncio.to_thread(run_all_backfills, ticker, lambda: recorder.first_minute(ticker))
+            )
             side_tasks.add(t)
             t.add_done_callback(side_tasks.discard)
         return asyncio.create_task(

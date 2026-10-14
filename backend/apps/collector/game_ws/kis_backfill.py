@@ -50,8 +50,11 @@ def parse_rows(rows: list[dict], day: date) -> list[Bar]:
 
 def fetch_today_bars(fetch_page: FetchPage, now: datetime, pause: float = PAGE_PAUSE_SEC) -> list[Bar]:
     """오늘 09:00 ~ now 분봉(중복 제거). UN 첫 페이지가 비면 J."""
-    day = now.date()
-    hour = now.strftime("%H%M%S")
+    return fetch_day_bars(fetch_page, now.date(), now.strftime("%H%M%S"), pause=pause)
+
+
+def fetch_day_bars(fetch_page: FetchPage, day: date, hour: str, pause: float = PAGE_PAUSE_SEC) -> list[Bar]:
+    """day 의 09:00 ~ hour 분봉 — hour 부터 가장 이른 분 - 1분으로 역순 페이지네이션(당일·과거 공통)."""
     market = "UN"
     bars = parse_rows(fetch_page(hour, market), day)
     if not bars:
@@ -73,7 +76,7 @@ def fetch_today_bars(fetch_page: FetchPage, now: datetime, pause: float = PAGE_P
         if pause:
             _time.sleep(pause)
         bars = parse_rows(fetch_page(hour, market), day)
-    log.info("KIS 당일분봉 수집: market=%s bars=%d", market, len(got))
+    log.info("KIS 분봉 수집: day=%s market=%s bars=%d", day, market, len(got))
     return [got[k] for k in sorted(got)]
 
 
@@ -161,3 +164,99 @@ def run_backfill(ticker: str, first_tick_minute: Callable[[], datetime | None]) 
     except Exception as e:  # noqa: BLE001 — 보충 실패는 게임 동작 무관
         log.warning("KIS 당일분봉 보충 실패(무시): ticker=%s err=%s", ticker, e)
         return 0
+
+
+# --- 과거 거래일 보충(주식일별분봉조회 FHKST03010230) ---------------------------------------
+# 보조지표(60선·볼린저) 워밍업용. 60분봉 조회 범위(minute_candles_query, 30거래일)만큼 채운다.
+# - 대상: 오늘 이전 평일 중 CH 에 행이 하나도 없는 날짜(이미 있는 날은 tick/kis 무엇이든 건너뜀 → 멱등).
+# - 휴장일은 KIS 가 빈 응답 → 0건(다음 실행 때 다시 묻지만 2회 호출이라 무시 가능).
+# - 첫 오류에서 중단(모의 미지원 등 같은 오류를 30번 반복하지 않게) — 상위 래퍼가 로그만.
+HISTORY_DAYS = 30
+DAY_CLOSE_HOUR = "153000"
+
+FetchDayPage = Callable[[date, str, str], list[dict]]  # (day, hour HHMMSS, market) -> output2
+
+
+def past_weekdays(today: date, n: int) -> list[date]:
+    """today 이전 평일 n개(최신 → 과거)."""
+    out: list[date] = []
+    d = today
+    while len(out) < n:
+        d -= timedelta(days=1)
+        if d.weekday() < 5:
+            out.append(d)
+    return out
+
+
+def dates_in_ch(ticker: str, since: date, client=None, db: str | None = None) -> set[date]:
+    """since 이후 CH 에 분봉이 있는 날짜(source 무관)."""
+    from shared.clickhouse_schema import CLICKHOUSE_DB, get_client
+
+    rows = (client or get_client()).query(
+        f"SELECT DISTINCT toDate(ts) FROM {db or CLICKHOUSE_DB}.game_minute_bars "
+        "WHERE ticker = %(t)s AND toDate(ts) >= %(d)s",
+        parameters={"t": ticker, "d": since.isoformat()},
+    ).result_rows
+    return {r[0] for r in rows}
+
+
+def backfill_history(
+    ticker: str, *,
+    fetch_day_page: FetchDayPage,
+    insert: Callable[[list[Bar], str], None],
+    existing_dates: Callable[[str, date], set[date]],
+    today: date | None = None,
+    windows=None,
+    days: int = HISTORY_DAYS,
+    pause: float = PAGE_PAUSE_SEC,
+) -> int:
+    """비어 있는 과거 거래일 분봉 보충 — 넣은 분 수 반환. KIS 오류는 그대로 올린다(첫 오류에서 중단)."""
+    from apps.trading_game.services import market_clock
+
+    today = today or datetime.now(KST).date()
+    windows = windows if windows is not None else market_clock.load_windows()
+    targets = past_weekdays(today, days)
+    have = existing_dates(ticker, targets[-1])
+    total = 0
+    for day in targets:
+        if day in have:
+            continue
+        bars = fetch_day_bars(lambda hour, market, d=day: fetch_day_page(d, hour, market), day, DAY_CLOSE_HOUR,
+                              pause=pause)
+        sel = [b for b in bars if b.ts.time() >= OPEN and _in_windows(b.ts, windows)]
+        for b in sel:
+            b.ticker = ticker
+        if sel:
+            insert(sel, "kis")
+            total += len(sel)
+        if pause:
+            _time.sleep(pause)
+    return total
+
+
+def run_history_backfill(ticker: str) -> int:
+    """game_ws 용 실 KIS·CH 래퍼(스레드에서 호출). 어떤 실패도 올리지 않는다."""
+    try:
+        from apps.collector.kis.client import KISClient
+        from shared.clickhouse_schema import ensure_game_minute_bars
+
+        client = KISClient()
+        ensure_game_minute_bars()
+        n = backfill_history(
+            ticker,
+            fetch_day_page=lambda day, hour, market: client.get_daily_minute_bars(
+                ticker, day.strftime("%Y%m%d"), hour, market),
+            insert=insert_bars,
+            existing_dates=dates_in_ch,
+        )
+        log.info("KIS 과거 분봉 보충: ticker=%s inserted=%d", ticker, n)
+        return n
+    except Exception as e:  # noqa: BLE001 — 보충 실패는 게임 동작 무관(모의 미지원 등)
+        log.warning("KIS 과거 분봉 보충 실패(무시): ticker=%s err=%s", ticker, e)
+        return 0
+
+
+def run_all_backfills(ticker: str, first_tick_minute: Callable[[], datetime | None]) -> None:
+    """종목 시작·전환 시 — 오늘(첫 틱 이전) 먼저, 이어서 비어 있는 과거 거래일. 순차라 KIS 호출 제한 공유."""
+    run_backfill(ticker, first_tick_minute)
+    run_history_backfill(ticker)

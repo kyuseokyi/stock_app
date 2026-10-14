@@ -29,6 +29,7 @@ DOMESTIC_MARKET_CODE = "UN"
 KRX_MARKET_CODE = "J"  # UN 빈응답(비-NXT 종목) 폴백용
 TR_DAILY_ITEMCHART = "FHKST03010100"
 TR_TIME_ITEMCHART = "FHKST03010200"  # 주식당일분봉조회
+TR_TIME_DAILYCHART = "FHKST03010230"  # 주식일별분봉조회(과거 거래일, 최대 1년 보관)
 
 _MAX_RETRIES = 5
 _TIMEOUT = 15
@@ -152,6 +153,29 @@ class KISClient:
             "FID_PW_DATA_INCU_YN": "N",  # 당일만(전일 데이터 미포함)
         }
         data = self._request_with_retry("get", url, TR_TIME_ITEMCHART, params)
+        return data.get("output2") or []
+
+    # --- 국내 과거 거래일 분봉 ---
+    def get_daily_minute_bars(
+        self, ticker: str, date_yyyymmdd: str, hour_hhmmss: str, market_code: str = DOMESTIC_MARKET_CODE
+    ) -> list[dict]:
+        """지정 날짜 1분봉 원시 행(output2) — hour_hhmmss 이하 최대 120건, 최신→과거 순.
+
+        모의(vps) 지원 여부는 공식 문서에 없음 — 실패는 상위(game_ws.kis_backfill)가 로그만 남긴다.
+        """
+        url = (
+            f"{self.cfg.base_url}"
+            "/uapi/domestic-stock/v1/quotations/inquire-time-dailychartprice"
+        )
+        params = {
+            "FID_COND_MRKT_DIV_CODE": market_code,
+            "FID_INPUT_ISCD": ticker,
+            "FID_INPUT_HOUR_1": hour_hhmmss,
+            "FID_INPUT_DATE_1": date_yyyymmdd,
+            "FID_PW_DATA_INCU_YN": "N",
+            "FID_FAKE_TICK_INCU_YN": "",
+        }
+        data = self._request_with_retry("get", url, TR_TIME_DAILYCHART, params)
         return data.get("output2") or []
 
     def _request_with_retry(self, method: str, url: str, tr_id: str, params: dict) -> dict:

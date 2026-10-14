@@ -24,7 +24,7 @@ async def anon(maker):
 
 
 def test_build_sql_bucket_and_range():
-    for iv, (mins, days) in {"1m": (1, 2), "5m": (5, 5), "15m": (15, 10), "60m": (60, 20)}.items():
+    for iv, (mins, days) in {"1m": (1, 2), "5m": (5, 5), "15m": (15, 10), "60m": (60, 30)}.items():
         sql = q.build_sql(iv, "db")
         assert f"toStartOfInterval(ts, INTERVAL {mins} MINUTE)" in sql
         assert f"LIMIT {days}" in sql
