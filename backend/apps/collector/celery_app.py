@@ -66,4 +66,9 @@ celery_app.conf.beat_schedule = {
         "task": "close_trading_week",
         "schedule": crontab(hour=8, minute=50, day_of_week=1),
     },
+    # 월간 랭킹 마감(분기 시즌만) — 매월 1일 장 시작 전, 주간 마감(08:50)과 겹치지 않게 08:55
+    "close-trading-month": {
+        "task": "close_trading_month",
+        "schedule": crontab(hour=8, minute=55, day_of_month=1),
+    },
 }

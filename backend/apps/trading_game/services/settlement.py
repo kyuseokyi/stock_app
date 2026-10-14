@@ -149,7 +149,7 @@ async def settle_due_season(db: AsyncSession, redis, close_price_provider) -> di
     await db.commit()
 
     # 아래 주간 기록이 실패·롤백되면 season 이 만료되므로 필요한 값은 미리 잡아 둔다.
-    season_id, season_number = season.id, season.season_number
+    season_id, season_number, season_period = season.id, season.season_number, season.period
     if redis is not None:
         from apps.trading_game.services import weekly_service
         from apps.trading_game.services.ranking_service import ranking_key
@@ -165,6 +165,22 @@ async def settle_due_season(db: AsyncSession, redis, close_price_provider) -> di
                 final_week.isoformat() if final_week else None,
             )
             await db.rollback()
+        if season_period == "quarter":
+            from apps.trading_game.services import monthly_service
+            final_month = None
+            try:
+                # 주간 기록 롤백으로 만료됐을 수 있어 다시 읽는다(async 지연 로드 불가)
+                season = await db.get(GameSeason, season_id, populate_existing=True)
+                final_month = monthly_service.final_month_id(season)
+                await monthly_service.close_final_month(db, redis, season)  # 시즌 마지막 달 기록(보상 없음)
+            except Exception:  # noqa: BLE001 — 월간 기록 실패가 시즌 정산을 막지 않게
+                # 수동 복구: monthly_service.close_month(db, redis, season, month_start, with_reward=False)
+                # (월간 ZSET 은 TTL 100일 동안 남아 있다)
+                log.exception(
+                    "시즌 마지막 달 월간 기록 실패 season=%s month_start=%s", season_id,
+                    final_month.isoformat() if final_month else None,
+                )
+                await db.rollback()
         await redis.delete(ranking_key(season_id))
 
     log.info(

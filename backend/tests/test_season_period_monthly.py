@@ -372,3 +372,223 @@ async def test_account_deletion_removes_user_from_monthly_keys(session):
     assert await r.zscore(mr.month_key(2, M11), "5") is None
     assert await r.zscore(mr.month_key(2, M11), "6") == 2.0
     assert await r.hget(mr.base_key(2, M11), "5") is None
+
+
+# ---------------------------------------------------------------- 월간 마감
+from apps.trading_game.services import monthly_service as ms_svc  # noqa: E402
+
+
+async def _q_season(db, start=Q_START, end=Q_END):
+    return await _season(db, start=start, end=end, period="quarter")
+
+
+async def test_close_month_archives_top10_rewards_eligible_with_monthly_amounts(session):
+    r = _r()
+    s = await _q_season(session)
+    users = [await _seed_user(session, nickname=f"m{i}") for i in range(12)]
+    accs = [await _seed_account(session, u, s) for u in users]
+    for i, u in enumerate(users):
+        await r.zadd(mr.month_key(s.id, M11), {str(u.id): float(100 - i)})
+    await _open_pos(session, accs[0], kst(2026, 11, 20, 10))       # 1위: 그 달 주문 → 보상
+    await _open_pos(session, accs[1], kst(2026, 12, 1, 9))         # 2위: 다음 달 1일 09:00(끝 정각) → 제외
+    await _open_pos(session, accs[2], kst(2026, 11, 1, 9))         # 3위: 시작 정각 → 포함
+    out = await ms_svc.close_month(session, r, s, M11, with_reward=True)
+    assert out == {"archived": 10, "rewarded": 2}
+    res = await _rows(session, "month")
+    assert len(res) == 10
+    assert res[:3] == [(1, users[0].id, Decimal("1500000.00")), (2, users[1].id, Decimal("0.00")),
+                       (3, users[2].id, Decimal("600000.00"))]
+    row = (await session.execute(select(WeeklyRankingResult).where(WeeklyRankingResult.rank == 1))).scalar_one()
+    assert row.period_type == "month" and row.week_start == M11
+    await session.refresh(accs[0])
+    assert accs[0].cash_balance == Decimal("11500000.00")
+
+
+async def test_close_month_uses_configured_monthly_rewards(session):
+    r = _r()
+    s = await _q_season(session)
+    await gss.update_settings(session, {"monthly_rewards": [111, 22, 3]})
+    u = await _seed_user(session)
+    acc = await _seed_account(session, u, s)
+    await _open_pos(session, acc, kst(2026, 11, 5, 10))
+    await r.zadd(mr.month_key(s.id, M11), {str(u.id): 1.0})
+    assert await ms_svc.close_month(session, r, s, M11, with_reward=True) == {"archived": 1, "rewarded": 1}
+    assert await _rows(session, "month") == [(1, u.id, Decimal("111.00"))]
+
+
+async def test_close_month_idempotent_and_skips_deleted_users(session):
+    r = _r()
+    s = await _q_season(session)
+    users = [await _seed_user(session, nickname=f"x{i}") for i in range(2)]
+    await r.zadd(mr.month_key(s.id, M11), {"99999": 500.0, str(users[0].id): 2.0, str(users[1].id): 1.0})
+    assert await ms_svc.close_month(session, r, s, M11, with_reward=False) == {"archived": 2, "rewarded": 0}
+    assert await ms_svc.close_month(session, r, s, M11, with_reward=True) == {"archived": 0, "rewarded": 0}
+    assert await _rows(session, "month") == [(1, users[0].id, Decimal("0.00")), (2, users[1].id, Decimal("0.00"))]
+
+
+async def test_close_month_empty(session):
+    s = await _q_season(session)
+    assert await ms_svc.close_month(session, _r(), s, M11, with_reward=True) == {"archived": 0, "rewarded": 0}
+
+
+async def test_close_month_concurrent_integrity_error_rolls_back(session, monkeypatch):
+    r = _r()
+    s = await _q_season(session)
+    u = await _seed_user(session)
+    acc = await _seed_account(session, u, s)
+    await _open_pos(session, acc, kst(2026, 11, 5, 10))
+    await r.zadd(mr.month_key(s.id, M11), {str(u.id): 5.0})
+    session.add(WeeklyRankingResult(season_id=s.id, period_type="month", week_start=M11, rank=1, user_id=u.id,
+                                    weekly_roi=Decimal("5"), reward_amount=Decimal("0")))
+    await session.commit()
+    uid = u.id
+    real_scalar = session.scalar
+    calls = {"n": 0}
+
+    async def racy_scalar(*a, **kw):
+        calls["n"] += 1
+        return 0 if calls["n"] == 1 else await real_scalar(*a, **kw)
+
+    monkeypatch.setattr(session, "scalar", racy_scalar)
+    assert await ms_svc.close_month(session, r, s, M11, with_reward=True) == {"archived": 0, "rewarded": 0}
+    monkeypatch.undo()
+    await session.refresh(acc)
+    assert acc.cash_balance == Decimal("10000000.00")
+    assert await _rows(session, "month") == [(1, uid, Decimal("0.00"))]
+
+
+async def test_close_previous_month_quarter_only(session):
+    r = _r()
+    s = await _q_season(session)
+    u = await _seed_user(session)
+    acc = await _seed_account(session, u, s)
+    await _open_pos(session, acc, kst(2026, 11, 5, 10))
+    await r.zadd(mr.month_key(s.id, M11), {str(u.id): 5.0})
+    out = await ms_svc.close_previous_month(session, r, now=kst(2026, 12, 1, 8, 55))
+    assert out == {"month_start": "2026-11-01", "archived": 1, "rewarded": 1}
+    s.period = "month"
+    await session.commit()
+    assert await ms_svc.close_previous_month(session, r, now=kst(2026, 12, 1, 8, 55)) is None
+
+
+async def test_close_previous_month_skips_month_before_season(session):
+    await _q_season(session)
+    assert await ms_svc.close_previous_month(session, _r(), now=kst(2026, 11, 1, 8, 55)) is None  # 10월 = 시즌 전
+
+
+async def test_close_previous_month_final_month_without_reward_when_settlement_delayed(session):
+    r = _r()
+    s = await _q_season(session)
+    u = await _seed_user(session)
+    acc = await _seed_account(session, u, s)
+    await _open_pos(session, acc, kst(2026, 12, 5, 10))
+    await r.zadd(mr.month_key(s.id, date(2026, 12, 1)), {str(u.id): 5.0})
+    out = await ms_svc.close_previous_month(session, r, now=kst(2027, 1, 1, 8, 55))
+    assert out == {"month_start": "2026-12-01", "archived": 1, "rewarded": 0}
+
+
+async def test_settlement_records_final_month_for_quarter_season(session):
+    r = _r()
+    s = await _q_season(session, start=kst(2026, 7, 1, 9), end=kst(2026, 9, 30, 20))
+    u = await _seed_user(session)
+    acc = await _seed_account(session, u, s)
+    await _open_pos(session, acc, kst(2026, 9, 5, 10))
+    await r.zadd(mr.month_key(s.id, date(2026, 9, 1)), {str(u.id): 4.0})
+    out = await settlement.settle_due_season(session, r, lambda t, e: Decimal("70000"))
+    assert out["settled_season"] == 1
+    assert await _rows(session, "month") == [(1, u.id, Decimal("0.00"))]
+
+
+async def test_settlement_final_month_recorded_even_if_final_week_fails(session, monkeypatch):
+    r = _r()
+    s = await _q_season(session, start=kst(2026, 7, 1, 9), end=kst(2026, 9, 30, 20))
+    u = await _seed_user(session)
+    await r.zadd(mr.month_key(s.id, date(2026, 9, 1)), {str(u.id): 4.0})
+
+    async def boom(*a, **kw):
+        raise RuntimeError("db down")
+
+    monkeypatch.setattr(ws_svc, "close_week", boom)
+    out = await settlement.settle_due_season(session, r, lambda t, e: Decimal("70000"))
+    assert out["settled_season"] == 1
+    assert await _rows(session, "month") == [(1, u.id, Decimal("0.00"))]
+
+
+async def test_settlement_final_month_failure_does_not_block(session, monkeypatch, caplog):
+    r = _r()
+    s = await _q_season(session, start=kst(2026, 7, 1, 9), end=kst(2026, 9, 30, 20))
+    sid = s.id  # 롤백이 ORM 객체를 만료시키므로 미리
+
+    async def boom(*a, **kw):
+        raise RuntimeError("db down")
+
+    monkeypatch.setattr(ms_svc, "close_month", boom)
+    out = await settlement.settle_due_season(session, r, lambda t, e: Decimal("70000"))
+    assert out is not None and out["next_season"] == 2
+    msgs = [rec.getMessage() for rec in caplog.records if rec.name == "trading_game.settlement"]
+    assert any(f"season={sid}" in m and "month_start=2026-09-01" in m for m in msgs)
+
+
+async def test_settlement_month_season_does_not_record_monthly(session):
+    r = _r()
+    s = await _season(session, start=kst(2026, 9, 1, 9), end=kst(2026, 9, 30, 20))
+    u = await _seed_user(session)
+    await r.zadd(mr.month_key(s.id, date(2026, 9, 1)), {str(u.id): 4.0})
+    await settlement.settle_due_season(session, r, lambda t, e: Decimal("70000"))
+    assert await _rows(session, "month") == []
+
+
+# ---------------------------------------------------------------- 주간 회귀(period_type 분리)
+MON = date(2027, 3, 1)  # 월요일이자 3월 1일 — 주간 week_start 와 월간 month_id 가 같다
+
+
+async def test_weekly_close_not_blocked_by_monthly_row_same_date(session):
+    r = _r()
+    s = await _q_season(session, start=kst(2027, 1, 1, 9), end=kst(2027, 3, 31, 20))
+    u = await _seed_user(session)
+    acc = await _seed_account(session, u, s)
+    session.add(WeeklyRankingResult(season_id=s.id, period_type="month", week_start=MON, rank=1, user_id=u.id,
+                                    weekly_roi=Decimal("9"), reward_amount=Decimal("0")))
+    await session.commit()
+    await _open_pos(session, acc, kst(2027, 3, 2, 10))
+    await r.zadd(wr.week_key(s.id, MON), {str(u.id): 5.0})
+    assert await ws_svc.close_week(session, r, s, MON, with_reward=True) == {"archived": 1, "rewarded": 1}
+    assert await _rows(session, "week") == [(1, u.id, Decimal("500000.00"))]
+    # 반대 방향 — 주간 행이 있어도 월간 마감은 진행
+    await r.zadd(mr.month_key(s.id, date(2027, 2, 1)), {str(u.id): 1.0})
+    session.add(WeeklyRankingResult(season_id=s.id, period_type="week", week_start=date(2027, 2, 1), rank=1,
+                                    user_id=u.id, weekly_roi=Decimal("1"), reward_amount=Decimal("0")))
+    await session.commit()
+    out = await ms_svc.close_month(session, r, s, date(2027, 2, 1), with_reward=False)
+    assert out == {"archived": 1, "rewarded": 0}
+
+
+async def test_weekly_results_exclude_monthly_rows(session):
+    s = await _q_season(session, start=kst(2027, 1, 1, 9), end=kst(2027, 3, 31, 20))
+    u = await _seed_user(session, nickname="가")
+    session.add_all([
+        WeeklyRankingResult(season_id=s.id, period_type="month", week_start=MON, rank=1, user_id=u.id,
+                            nickname="가", weekly_roi=Decimal("9"), reward_amount=Decimal("1500000")),
+        WeeklyRankingResult(season_id=s.id, period_type="week", week_start=MON, rank=1, user_id=u.id,
+                            nickname="가", weekly_roi=Decimal("2"), reward_amount=Decimal("500000")),
+    ])
+    await session.commit()
+    weekly = await ws_svc.weekly_results(session, s.id, 4)
+    assert weekly == [{"season_id": s.id, "week_start": "2027-03-01", "entries": [
+        {"rank": 1, "nickname": "가", "weekly_roi": 2.0, "reward_amount": 500000.0}]}]
+    monthly = await ms_svc.monthly_results(session, s.id, 3)
+    assert monthly == [{"season_id": s.id, "month_start": "2027-03-01", "entries": [
+        {"rank": 1, "nickname": "가", "monthly_roi": 9.0, "reward_amount": 1500000.0}]}]
+    unseen = await ws_svc.unseen_rewards(session, u.id)
+    assert sorted((x["period_type"], x["reward_amount"]) for x in unseen) == [("month", 1500000.0),
+                                                                              ("week", 500000.0)]
+
+
+def test_beat_schedule_close_trading_month():
+    from celery.schedules import crontab
+    from apps.collector.celery_app import celery_app
+    import apps.collector.tasks.weekly_close as wc
+    entry = celery_app.conf.beat_schedule["close-trading-month"]
+    assert entry["task"] == "close_trading_month"
+    assert entry["schedule"] == crontab(hour=8, minute=55, day_of_month=1)
+    assert wc.close_trading_month.name == "close_trading_month"

@@ -15,6 +15,7 @@ from apps.trading_game.services import account_service, game_settings_service, r
 
 log = logging.getLogger("trading_game.weekly")
 _SKIP_MARGIN = 20  # 탈퇴 유저 건너뛰기 대비 추가로 읽는 수
+PERIOD = "week"  # weekly_ranking_results.period_type — 월간(month) 행과 구분(같은 날짜일 수 있음)
 
 
 def _week_window(season: GameSeason, week_id: date) -> tuple[datetime, datetime]:
@@ -36,7 +37,8 @@ async def close_week(db: AsyncSession, redis, season: GameSeason, week_id: date,
     sid = season.id  # 롤백 시 ORM 객체가 만료되므로(async 지연 로드 불가) 미리 잡아 둔다
     exists = await db.scalar(
         select(func.count()).select_from(WeeklyRankingResult)
-        .where(WeeklyRankingResult.season_id == sid, WeeklyRankingResult.week_start == week_id)
+        .where(WeeklyRankingResult.season_id == sid, WeeklyRankingResult.period_type == PERIOD,
+               WeeklyRankingResult.week_start == week_id)
     )
     if exists:
         return {"archived": 0, "rewarded": 0}
@@ -72,7 +74,7 @@ async def close_week(db: AsyncSession, redis, season: GameSeason, week_id: date,
                     except reward_service.RewardUnavailable:
                         log.warning("주간 보상 보류(시세 없음) season=%s week=%s user=%s", sid, week_id, uid)
             db.add(WeeklyRankingResult(
-                season_id=sid, week_start=week_id, rank=rank, user_id=uid, nickname=nicks.get(uid),
+                season_id=sid, period_type=PERIOD, week_start=week_id, rank=rank, user_id=uid, nickname=nicks.get(uid),
                 weekly_roi=Decimal(str(score)).quantize(Decimal("0.0001")), reward_amount=amount,
             ))
         await db.commit()
@@ -156,7 +158,10 @@ async def weekly_my_rank(redis, season: GameSeason, user_id: int) -> dict:
 
 async def weekly_results(db: AsyncSession, season_id: int | None, limit: int) -> list[dict]:
     """지난 주들의 Top 3(최신 주 먼저)."""
-    weeks_q = select(WeeklyRankingResult.season_id, WeeklyRankingResult.week_start).distinct()
+    weeks_q = (
+        select(WeeklyRankingResult.season_id, WeeklyRankingResult.week_start)
+        .where(WeeklyRankingResult.period_type == PERIOD).distinct()
+    )
     if season_id is not None:
         weeks_q = weeks_q.where(WeeklyRankingResult.season_id == season_id)
     weeks = (await db.execute(
@@ -166,8 +171,8 @@ async def weekly_results(db: AsyncSession, season_id: int | None, limit: int) ->
     for sid, wk in weeks:
         rows = (await db.execute(
             select(WeeklyRankingResult)
-            .where(WeeklyRankingResult.season_id == sid, WeeklyRankingResult.week_start == wk,
-                   WeeklyRankingResult.rank <= 3)
+            .where(WeeklyRankingResult.season_id == sid, WeeklyRankingResult.period_type == PERIOD,
+                   WeeklyRankingResult.week_start == wk, WeeklyRankingResult.rank <= 3)
             .order_by(WeeklyRankingResult.rank)
         )).scalars().all()
         out.append({"season_id": sid, "week_start": wk.isoformat(), "entries": [
@@ -178,7 +183,7 @@ async def weekly_results(db: AsyncSession, season_id: int | None, limit: int) ->
 
 
 async def unseen_rewards(db: AsyncSession, user_id: int) -> list[dict]:
-    """내 미확인 보상(reward_amount>0 AND notified_at IS NULL) — 토스트용."""
+    """내 미확인 보상(reward_amount>0 AND notified_at IS NULL) — 토스트용. 주간·월간 모두(period_type 로 구분)."""
     rows = (await db.execute(
         select(WeeklyRankingResult)
         .where(WeeklyRankingResult.user_id == user_id, WeeklyRankingResult.reward_amount > 0,
@@ -186,7 +191,7 @@ async def unseen_rewards(db: AsyncSession, user_id: int) -> list[dict]:
         .order_by(WeeklyRankingResult.id)
     )).scalars().all()
     return [{"id": r.id, "week_start": r.week_start.isoformat(), "rank": r.rank,
-             "reward_amount": float(r.reward_amount)} for r in rows]
+             "reward_amount": float(r.reward_amount), "period_type": r.period_type} for r in rows]
 
 
 async def ack_reward(db: AsyncSession, user_id: int, result_id: int) -> bool:
