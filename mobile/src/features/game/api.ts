@@ -7,6 +7,7 @@ import { ENV } from '@/lib/env';
 
 import { toNum, toNumOrNull } from './lib/decimal';
 import { kstDateString } from './lib/format';
+import { normalizeIntradayCandles } from './lib/intraday';
 import { normalizeRewardConfig } from './lib/ranking-period';
 import { normalizeGameRules } from './lib/rules';
 import type {
@@ -18,6 +19,8 @@ import type {
   DailyCandle,
   GameRules,
   HallOfFameRow,
+  IntradayCandle,
+  IntradayInterval,
   LeaderboardRow,
   MonthlyBoard,
   MonthlyMyRank,
@@ -257,6 +260,13 @@ export function getMyStreak(): Promise<Streak> {
 export async function claimStreakReward(milestone: number): Promise<StreakClaimResult> {
   const data = await client().post<RawStreakClaimResult>(`/api/game/streak/rewards/${milestone}/claim`);
   return { streak: data.streak, cash_balance: toNum(data.cash_balance) };
+}
+
+// ---------------------------------------------------------------- 분봉(trading_game REST, 공개)
+
+/** 활성 시즌 종목 분봉(t 오름차순). 데이터가 없으면 [](빈 상태 문구), 네트워크/서버 오류는 throw */
+export async function getGameCandles(interval: IntradayInterval): Promise<IntradayCandle[]> {
+  return normalizeIntradayCandles(await client().get<unknown>('/api/game/candles', { interval }));
 }
 
 // ---------------------------------------------------------------- 일봉(stock_api GraphQL)

@@ -1,5 +1,6 @@
 // 게임 규칙 화면(rules-sheet)·주문 패널 안내용 순수 함수. 숫자는 모두 GET /api/game/rules 값에서 만든다(하드코딩 금지).
 import type { GameRules, Season } from '../types';
+import { isChartInterval } from './intraday';
 import { normalizeRewardConfig } from './ranking-period';
 import { formatKstShort, formatRewardWon } from './weekly';
 
@@ -29,7 +30,12 @@ export function normalizeGameRules(raw: unknown): GameRules {
   if (isObj(raw.leverage_unlock)) {
     for (const [k, v] of Object.entries(raw.leverage_unlock)) if (typeof v === 'string') unlock[k] = v;
   }
+  // 차트 단위(선택 필드) — 모르는 값은 버린다. 기본값이 없거나 틀리면 화면이 일봉으로 시작
+  const intervals = Array.isArray(raw.chart_intervals) ? raw.chart_intervals.filter(isChartInterval) : null;
+  const chartDefault = isChartInterval(raw.chart_interval_default) ? raw.chart_interval_default : null;
   return {
+    ...(chartDefault ? { chart_interval_default: chartDefault } : {}),
+    ...(intervals ? { chart_intervals: intervals } : {}),
     initial_cash: req('initial_cash'),
     min_order_amount: req('min_order_amount'),
     max_open_positions: req('max_open_positions'),

@@ -30,6 +30,13 @@ const RAW = {
 };
 
 describe('normalizeGameRules', () => {
+  test('차트 기본 단위 — 있으면 반영, 모르는 값은 버림, 없으면 undefined', () => {
+    const r = normalizeGameRules({ ...RAW, chart_interval_default: '5m', chart_intervals: ['day', '5m', '30m'] });
+    expect(r.chart_interval_default).toBe('5m');
+    expect(r.chart_intervals).toEqual(['day', '5m']);
+    expect(normalizeGameRules({ ...RAW, chart_interval_default: '30m' }).chart_interval_default).toBeUndefined();
+    expect(normalizeGameRules(RAW).chart_interval_default).toBeUndefined();
+  });
   test('정상 응답 그대로', () => {
     const r = normalizeGameRules(RAW);
     expect(r.initial_cash).toBe(10_000_000);
