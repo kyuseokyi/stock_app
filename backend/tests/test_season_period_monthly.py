@@ -638,3 +638,16 @@ async def test_monthly_api_empty_for_month_season(api, fake_redis, maker):
         "rank": None, "monthly_roi": None, "total": 0}
     assert (await client.get(f"/api/game/monthly-results?season_id={s.id}")).json() == []
     assert (await client.get("/api/game/monthly-results")).json() == []
+
+
+def test_current_month_before_season_start_uses_first_month(monkeypatch):
+    """정산 직후(새 시즌 시작 전)에는 새 시즌 첫 달을 보여 준다(직전 달 X)."""
+    from apps.trading_game.services import monthly_service as m
+    season = GameSeason(
+        season_number=2, ticker="005930", stock_name="삼성전자", period="quarter",
+        start_at=kst(2026, 11, 1, 9), end_at=kst(2026, 12, 31, 20), status="ACTIVE",
+    )
+    monkeypatch.setattr(m, "_now", lambda: kst(2026, 10, 31, 21))
+    month_id, s, e = m.current_month(season)
+    assert month_id == date(2026, 11, 1)
+    assert s == kst(2026, 11, 1, 9) and e == kst(2026, 12, 1, 9)

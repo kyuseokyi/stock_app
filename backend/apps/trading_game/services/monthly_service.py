@@ -125,8 +125,8 @@ def _now() -> datetime:
 
 
 def current_month(season: GameSeason) -> tuple[date, datetime, datetime]:
-    """현재 달. 시즌이 끝났으면 마지막 달."""
-    now = _now()
+    """현재 달. 시즌 시작 전(정산 직후)이면 첫 달, 시즌이 끝났으면 마지막 달."""
+    now = max(_now(), wr.aware(season.start_at))
     if season.end_at is not None and now >= wr.aware(season.end_at):
         now = wr.aware(season.end_at) - timedelta(seconds=1)
     return mr.month_bounds(now, season.start_at, season.end_at)
