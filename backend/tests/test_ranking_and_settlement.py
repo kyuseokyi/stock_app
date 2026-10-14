@@ -155,7 +155,7 @@ async def test_settlement_closes_archives_and_rolls_over(db):
     past = datetime(2026, 9, 30, 11, 0, tzinfo=timezone.utc)
     season = await _seed_season_with_players(db, end_at=past)
     result = await settlement.settle_due_season(
-        db, redis=None, close_price_provider=lambda t: Decimal("110")
+        db, redis=None, close_price_provider=lambda t, e: Decimal("110")
     )
     assert result is not None
     opens = (await db.execute(select(GamePosition).where(GamePosition.status == "OPEN"))).scalars().all()
@@ -172,8 +172,8 @@ async def test_settlement_closes_archives_and_rolls_over(db):
 async def test_settlement_idempotent(db):
     past = datetime(2026, 9, 30, 11, 0, tzinfo=timezone.utc)
     await _seed_season_with_players(db, end_at=past)
-    await settlement.settle_due_season(db, None, lambda t: Decimal("110"))
-    second = await settlement.settle_due_season(db, None, lambda t: Decimal("110"))
+    await settlement.settle_due_season(db, None, lambda t, e: Decimal("110"))
+    second = await settlement.settle_due_season(db, None, lambda t, e: Decimal("110"))
     assert second is None
     seasons = (await db.execute(select(GameSeason))).scalars().all()
     assert len(seasons) == 2
@@ -181,7 +181,7 @@ async def test_settlement_idempotent(db):
 
 async def test_settlement_skips_open_ended(db):
     await _seed_season_with_players(db, end_at=None)
-    assert await settlement.settle_due_season(db, None, lambda t: Decimal("110")) is None
+    assert await settlement.settle_due_season(db, None, lambda t, e: Decimal("110")) is None
 
 
 def test_next_month_bounds_rollover_and_leap():
@@ -210,7 +210,7 @@ async def test_settlement_hof_ordering_and_winrate(db):
             size_amount=INITIAL_CASH, entry_ratio=Decimal("1.0"), leverage=1, status="OPEN",
         ))
         await db.commit()
-    await settlement.settle_due_season(db, None, lambda t: Decimal("110"))
+    await settlement.settle_due_season(db, None, lambda t, e: Decimal("110"))
     hof = (await db.execute(
         select(HallOfFame).where(HallOfFame.season_id == season.id).order_by(HallOfFame.rank)
     )).scalars().all()
@@ -229,7 +229,7 @@ async def test_settlement_excludes_zero_trade_accounts(db):
     db.add(GameAccount(user_id=idle.id, season_id=season.id, cash_balance=Decimal("10200000"),
                        total_asset=Decimal("10200000"), bonus_cash=Decimal("200000"), total_trades=0))
     await db.commit()
-    await settlement.settle_due_season(db, None, lambda t: Decimal("90"))
+    await settlement.settle_due_season(db, None, lambda t, e: Decimal("90"))
     hof = (await db.execute(select(HallOfFame).where(HallOfFame.season_id == season.id))).scalars().all()
     assert len(hof) == 3
     assert idle.id not in {h.user_id for h in hof}
@@ -238,7 +238,7 @@ async def test_settlement_excludes_zero_trade_accounts(db):
 async def test_settlement_aborts_when_no_close_price(db):
     past = datetime(2026, 9, 30, 11, 0, tzinfo=timezone.utc)
     season = await _seed_season_with_players(db, end_at=past)
-    result = await settlement.settle_due_season(db, None, lambda t: None)
+    result = await settlement.settle_due_season(db, None, lambda t, e: None)
     assert result is None
     await db.refresh(season)
     assert season.status == "ACTIVE"  # 종가 없으면 정산 안 함, 시즌 유지
@@ -248,7 +248,7 @@ async def test_settlement_next_season_dates(db):
     from apps.trading_game.services.settlement import KST
     past = datetime(2026, 9, 30, 11, 0, tzinfo=timezone.utc)  # 9월 말일 → 다음달=10월
     await _seed_season_with_players(db, end_at=past)
-    await settlement.settle_due_season(db, None, lambda t: Decimal("110"))
+    await settlement.settle_due_season(db, None, lambda t, e: Decimal("110"))
     nxt = (await db.execute(select(GameSeason).where(GameSeason.season_number == 2))).scalar_one()
     s = nxt.start_at.astimezone(KST); e = nxt.end_at.astimezone(KST)
     assert (s.month, s.day, s.hour) == (10, 1, 9)
@@ -277,7 +277,7 @@ async def test_settlement_mbti_from_real_trades(db):
             opened_at=opened, had_stop_loss=True,
         ))
     await db.commit()
-    await settlement.settle_due_season(db, None, lambda t: Decimal("110"))
+    await settlement.settle_due_season(db, None, lambda t, e: Decimal("110"))
     hof = (await db.execute(select(HallOfFame).where(HallOfFame.season_id == season.id))).scalars().all()
     assert len(hof) == 1
     assert hof[0].trading_mbti == "냉철한 원칙주의자"

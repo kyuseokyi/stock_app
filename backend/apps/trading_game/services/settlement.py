@@ -47,7 +47,7 @@ async def settle_due_season(db: AsyncSession, redis, close_price_provider) -> di
     if now < end_at or season.status != "ACTIVE":
         return None
 
-    price = close_price_provider(season.ticker)
+    price = close_price_provider(season.ticker, end_at)  # 종료일 당일 또는 직전 거래일 종가
     if price is None:
         log.warning("정산 중단 — 종가 미확보(ticker=%s)", season.ticker)
         return None

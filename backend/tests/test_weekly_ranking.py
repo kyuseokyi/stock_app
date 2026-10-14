@@ -222,7 +222,7 @@ async def test_settlement_archives_final_week_without_reward(session):
     acc = await _seed_account(session, u, s)
     await _open_pos(session, acc, datetime(2026, 9, 29, 10, 0, tzinfo=KST))
     await r.zadd(wr.week_key(s.id, date(2026, 9, 28)), {str(u.id): 3.0})
-    await settlement.settle_due_season(session, r, lambda t: Decimal("70000"))
+    await settlement.settle_due_season(session, r, lambda t, e: Decimal("70000"))
     assert await _results(session) == [(1, u.id, Decimal("0.00"))]
 
 
@@ -354,7 +354,7 @@ async def test_settlement_final_week_failure_logs_season_and_week(session, monke
         raise RuntimeError("db down")
 
     monkeypatch.setattr(ws_svc, "close_week", boom)
-    out = await settlement.settle_due_season(session, r, lambda t: Decimal("70000"))
+    out = await settlement.settle_due_season(session, r, lambda t, e: Decimal("70000"))
     assert out is not None and out["settled_season"] == 1   # 정산은 계속
     msgs = [rec.getMessage() for rec in caplog.records if rec.name == "trading_game.settlement"]
     assert any(f"season={s.id}" in m and "week_start=2026-09-28" in m for m in msgs)
