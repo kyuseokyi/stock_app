@@ -41,4 +41,6 @@ async def build_rules(db: AsyncSession) -> dict:
         "margin_call_roi_pct": _num(pricing.MARGIN_CALL_ROI_PCT),
         "sentiment_interval_sec": _num(connection_manager.SENTIMENT_INTERVAL),
         "rewards": await game_settings_service.reward_config(db),
+        "chart_interval_default": await game_settings_service.chart_interval_default(db),
+        "chart_intervals": list(game_settings_service.CHART_INTERVALS),
     }

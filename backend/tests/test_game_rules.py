@@ -49,6 +49,8 @@ async def test_rules_public_and_values_equal_constants(anon, monkeypatch):
         "sentiment_interval_sec": int(connection_manager.SENTIMENT_INTERVAL),
         "rewards": {"weekly": [500000, 300000, 200000], "monthly": [1500000, 900000, 600000],
                     "streak": {"3": 100000, "7": 300000, "14": 700000, "30": 2000000}},
+        "chart_interval_default": "day",
+        "chart_intervals": ["day", "1m", "5m", "15m", "60m"],
     }
     # 스펙 예시 값과도 일치(상수 회귀 감지)
     body = res.json()
@@ -78,6 +80,16 @@ async def test_rules_rewards_equal_reward_config(anon):
     rules = (await anon.get("/api/game/rules")).json()
     cfg = (await anon.get("/api/game/reward-config")).json()
     assert rules["rewards"] == cfg
+
+
+async def test_rules_chart_interval_follows_settings(anon, maker):
+    from apps.trading_game.services import game_settings_service as gss
+
+    async with maker() as db:
+        await gss.update_settings(db, {"chart_interval_default": "5m"})
+    body = (await anon.get("/api/game/rules")).json()
+    assert body["chart_interval_default"] == "5m"
+    assert body["chart_intervals"] == ["day", "1m", "5m", "15m", "60m"]
 
 
 def test_sentiment_interval_shared_with_ws_gateway():

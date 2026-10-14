@@ -58,6 +58,7 @@ DEFAULTS = {
     "weekly_rewards": [500000, 300000, 200000],
     "monthly_rewards": [1500000, 900000, 600000],
     "streak_rewards": {"3": 100000, "7": 300000, "14": 700000, "30": 2000000},
+    "chart_interval_default": "day",
 }
 
 
@@ -87,6 +88,8 @@ async def test_settings_update_merges_over_defaults(session):
     {"streak_rewards": {"3": 1, "7": 1, "14": 1, "30": 1, "60": 1}},
     {"streak_rewards": {"3": "1", "7": 1, "14": 1, "30": 1}},
     {"unknown_key": 1},
+    {"chart_interval_default": "3m"},
+    {"chart_interval_default": None},
     {},
 ])
 async def test_settings_validation_rejects(session, patch):
