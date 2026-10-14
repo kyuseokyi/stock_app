@@ -1,12 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
 import {
-  CrosshairMode, LineStyle, TickMarkType, createChart, type IPriceLine, type ISeriesApi, type Time,
-  type UTCTimestamp,
+  CrosshairMode, LineStyle, TickMarkType, createChart, type IChartApi, type IPriceLine, type ISeriesApi,
+  type LineData, type Time, type UTCTimestamp,
 } from 'lightweight-charts'
 import { getGameCandles } from '../../api/game'
 import { getDailyCandles } from '../../api/stock'
 import { useGameRules } from '../../hooks/useGameRules'
+import { BandFill } from '../../lib/bandFill'
 import { bucketStartSec, mergeTick, mergeTickIntraday } from '../../lib/candles'
+import { MA_PERIODS, bollinger, sma, type MaPeriod } from '../../lib/indicators'
 import { kstDateString } from '../../lib/format'
 import { THEME } from '../../lib/themeColors'
 import { chipClass } from '../ui/Chip'
@@ -22,6 +24,71 @@ const SUPPORT = '#8b5cf6'
 const RESIST = '#f59e0b'
 const STOP_LOSS = THEME.inkMuted // 손절 — 회색(ink-muted)
 const TAKE_PROFIT = '#16a34a' // 익절 — 초록
+// 보조지표(mobile candle-chart 와 같은 값) — 이동평균 5·20·60, 볼린저밴드(선 + 옅은 띠)
+const MA_COLORS: Record<MaPeriod, string> = { 5: '#14b8a6', 20: '#f97316', 60: '#a16207' }
+const BB_COLOR = 'rgba(99, 102, 241, 0.7)'
+const BB_FILL = 'rgba(99, 102, 241, 0.07)'
+
+/** 지표 선 시리즈 묶음 — 차트와 같이 생성·제거 */
+interface IndicatorSeries {
+  ma: Record<MaPeriod, ISeriesApi<'Line'>>
+  bbUpper: ISeriesApi<'Line'>
+  bbMiddle: ISeriesApi<'Line'>
+  bbLower: ISeriesApi<'Line'>
+  band: BandFill
+}
+
+const addIndicatorSeries = (chart: IChartApi): IndicatorSeries => {
+  // 가격선 라벨과 겹치지 않게 축 라벨·마지막 값 표시 끔
+  const base = { lineWidth: 1 as const, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false }
+  const ma = Object.fromEntries(
+    MA_PERIODS.map((p) => [p, chart.addLineSeries({ ...base, color: MA_COLORS[p] })]),
+  ) as Record<MaPeriod, ISeriesApi<'Line'>>
+  const bbUpper = chart.addLineSeries({ ...base, color: BB_COLOR })
+  const bbMiddle = chart.addLineSeries({ ...base, color: BB_COLOR, lineStyle: LineStyle.Dashed })
+  const bbLower = chart.addLineSeries({ ...base, color: BB_COLOR })
+  const band = new BandFill(BB_FILL)
+  bbUpper.attachPrimitive(band)
+  return { ma, bbUpper, bbMiddle, bbLower, band }
+}
+
+/** 시각·종가 배열로 지표 전체 다시 계산해 반영(로드·틱 공통 — 수백 개라 매 틱 전체 계산도 가볍다) */
+const setIndicatorData = (s: IndicatorSeries, bars: { time: Time; close: number }[]) => {
+  const closes = bars.map((b) => b.close)
+  const line = (values: (number | null)[]): LineData[] =>
+    values.flatMap((v, i) => (v === null ? [] : [{ time: bars[i].time, value: v }]))
+  for (const p of MA_PERIODS) s.ma[p].setData(line(sma(closes, p)))
+  const bands = bollinger(closes)
+  s.bbUpper.setData(line(bands.map((b) => b?.upper ?? null)))
+  s.bbMiddle.setData(line(bands.map((b) => b?.middle ?? null)))
+  s.bbLower.setData(line(bands.map((b) => b?.lower ?? null)))
+  s.band.setPoints(bands.flatMap((b, i) => (b === null ? [] : [{ time: bars[i].time, upper: b.upper, lower: b.lower }])))
+}
+
+/** 틱으로 마지막 캔들이 바뀌었을 때 — 마지막 지표 점만 update(setData 는 스크롤 위치를 흔들 수 있어 피함) */
+const updateIndicatorLast = (s: IndicatorSeries, bars: { time: Time; close: number }[]) => {
+  const n = bars.length
+  if (n === 0) return
+  const closes = bars.map((b) => b.close)
+  const time = bars[n - 1].time
+  for (const p of MA_PERIODS) {
+    const v = sma(closes, p)[n - 1]
+    if (v !== null) s.ma[p].update({ time, value: v })
+  }
+  const bands = bollinger(closes)
+  const b = bands[n - 1]
+  if (b === null) return
+  s.bbUpper.update({ time, value: b.upper })
+  s.bbMiddle.update({ time, value: b.middle })
+  s.bbLower.update({ time, value: b.lower })
+  s.band.setPoints(bands.flatMap((x, i) => (x === null ? [] : [{ time: bars[i].time, upper: x.upper, lower: x.lower }])))
+}
+
+/** 마지막 캔들 반영(같은 시각이면 교체, 새 시각이면 추가) — 원본 불변 */
+const upsertLast = (bars: { time: Time; close: number }[], time: Time, close: number) =>
+  bars.length > 0 && bars[bars.length - 1].time === time
+    ? [...bars.slice(0, -1), { time, close }]
+    : [...bars, { time, close }]
 
 interface TradingChartProps {
   ticker: string
@@ -69,6 +136,10 @@ export default function TradingChart({ ticker, lastPrice, coach, position }: Tra
   const lastCandleRef = useRef<DailyCandle | null>(null)
   const lastIntradayRef = useRef<IntradayCandle | null>(null)
   const linesRef = useRef<IPriceLine[]>([])
+  const indRef = useRef<IndicatorSeries | null>(null)
+  const barsRef = useRef<{ time: Time; close: number }[]>([]) // 지표 계산용 시각·종가
+  const [showMa, setShowMa] = useState(true)
+  const [showBb, setShowBb] = useState(false)
   const [loaded, setLoaded] = useState(false)
   const [failed, setFailed] = useState(false)
   const [empty, setEmpty] = useState(false)
@@ -100,6 +171,8 @@ export default function TradingChart({ ticker, lastPrice, coach, position }: Tra
       upColor: UP, downColor: DOWN, borderUpColor: UP, borderDownColor: DOWN, wickUpColor: UP, wickDownColor: DOWN,
     })
     seriesRef.current = series
+    const ind = addIndicatorSeries(chart)
+    indRef.current = ind
     setLoaded(false)
     setFailed(false)
     setEmpty(false)
@@ -110,6 +183,8 @@ export default function TradingChart({ ticker, lastPrice, coach, position }: Tra
         .then((candles) => {
           if (cancelled) return
           series.setData(candles.map(toBar))
+          barsRef.current = candles.map((c) => ({ time: c.date, close: c.close }))
+          setIndicatorData(ind, barsRef.current)
           lastCandleRef.current = candles[candles.length - 1] ?? null
           chart.timeScale().fitContent()
           setLoaded(true)
@@ -124,6 +199,8 @@ export default function TradingChart({ ticker, lastPrice, coach, position }: Tra
           // 다른 종목(시즌 전환 직후 등) 분봉이면 섞지 않고 빈 상태로
           const rows = res.ticker && res.ticker !== ticker ? [] : sortUnique(res.candles)
           series.setData(rows.map(toIntradayBar))
+          barsRef.current = rows.map((c) => ({ time: c.t as UTCTimestamp, close: c.close }))
+          setIndicatorData(ind, barsRef.current)
           lastIntradayRef.current = rows[rows.length - 1] ?? null
           if (rows.length > 0) chart.timeScale().fitContent()
           setEmpty(rows.length === 0)
@@ -137,6 +214,8 @@ export default function TradingChart({ ticker, lastPrice, coach, position }: Tra
     return () => {
       cancelled = true
       seriesRef.current = null
+      indRef.current = null
+      barsRef.current = []
       linesRef.current = []
       lastCandleRef.current = null
       lastIntradayRef.current = null
@@ -153,16 +232,28 @@ export default function TradingChart({ ticker, lastPrice, coach, position }: Tra
         const next = mergeTick(lastCandleRef.current, kstDateString(), lastPrice)
         lastCandleRef.current = next
         series.update(toBar(next))
+        barsRef.current = upsertLast(barsRef.current, next.date, next.close)
       } else {
         const next = mergeTickIntraday(lastIntradayRef.current, bucketStartSec(Date.now(), interval), lastPrice)
         lastIntradayRef.current = next
         series.update(toIntradayBar(next))
+        barsRef.current = upsertLast(barsRef.current, next.t as UTCTimestamp, next.close)
         setEmpty(false)
       }
+      if (indRef.current) updateIndicatorLast(indRef.current, barsRef.current)
     } catch {
       // lightweight-charts "Cannot update oldest data" 등 — 틱 반영 실패로 앱이 죽지 않게 무시
     }
   }, [lastPrice, loaded, interval])
+
+  // 2-1) 보조지표 켜기/끄기(차트 재생성 시에도 다시 적용 — ticker·interval 의존)
+  useEffect(() => {
+    const ind = indRef.current
+    if (!ind) return
+    for (const p of MA_PERIODS) ind.ma[p].applyOptions({ visible: showMa })
+    for (const s of [ind.bbUpper, ind.bbMiddle, ind.bbLower]) s.applyOptions({ visible: showBb })
+    ind.band.setVisible(showBb)
+  }, [showMa, showBb, ticker, interval])
 
   // 3) 가격선(지지/저항/진입가/손절/익절) — 값이 바뀔 때만 재생성(손익 틱마다 재생성하지 않도록 원시값 의존)
   const support = coach?.support_price ?? null
@@ -207,22 +298,41 @@ export default function TradingChart({ ticker, lastPrice, coach, position }: Tra
 
   return (
     <div>
-      <div role="tablist" aria-label="차트 단위" className="mb-2 flex gap-1.5 overflow-x-auto">
-        {intervals.map((iv) => (
-          <button
-            key={iv}
-            type="button"
-            role="tab"
-            aria-selected={interval === iv}
-            onClick={() => setPicked(iv)}
-            className={chipClass(interval === iv)}
-          >
-            {INTERVAL_LABEL[iv]}
+      <div className="mb-2 flex flex-wrap items-center gap-1.5">
+        <div role="tablist" aria-label="차트 단위" className="flex gap-1.5 overflow-x-auto">
+          {intervals.map((iv) => (
+            <button
+              key={iv}
+              type="button"
+              role="tab"
+              aria-selected={interval === iv}
+              onClick={() => setPicked(iv)}
+              className={chipClass(interval === iv)}
+            >
+              {INTERVAL_LABEL[iv]}
+            </button>
+          ))}
+        </div>
+        <div role="group" aria-label="보조지표" className="ml-auto flex gap-1.5">
+          <button type="button" aria-pressed={showMa} onClick={() => setShowMa((v) => !v)} className={chipClass(showMa)}>
+            이동평균
           </button>
-        ))}
+          <button type="button" aria-pressed={showBb} onClick={() => setShowBb((v) => !v)} className={chipClass(showBb)}>
+            볼린저
+          </button>
+        </div>
       </div>
       <div className="relative h-[260px] overflow-hidden rounded-card border border-line bg-surface sm:h-[320px]">
         <div ref={boxRef} className="h-full w-full" />
+        {showMa && loaded && !failed && !empty && (
+          <div className="pointer-events-none absolute left-2 top-1.5 z-10 flex gap-1.5 text-[11px] font-bold">
+            {MA_PERIODS.map((p) => (
+              <span key={p} style={{ color: MA_COLORS[p] }}>
+                {p}
+              </span>
+            ))}
+          </div>
+        )}
         {failed ? (
           <div className="absolute inset-0 flex items-center justify-center bg-surface text-sm text-ink-muted">
             차트 데이터를 불러오지 못했어요
