@@ -157,7 +157,8 @@ docker secret ls
 ```
 - Swarm secret 은 **빈 값으로 만들 수 없습니다.** 안 쓰는 공급자(예: 네이버 미사용)는 `stack.yml` 에서 해당 secret 줄·`*_FILE` env·하단 정의 3곳을 함께 지우세요.
 - secret 은 **수정이 안 됩니다.** 바꾸려면 새 이름으로 만들고(`jwt_secret_key_v2`) stack.yml 을 바꿔 다시 deploy 하거나, 서비스에서 떼고 지운 뒤 다시 만듭니다.
-- **기존 `.env.production` 에 들어 있던 값을 그대로 옮기면 됩니다.** env 이름 ↔ secret 이름: `DATABASE_URL`→`database_url`, `SYNC_DATABASE_URL`→`sync_database_url`, `CLICKHOUSE_PASSWORD`→`clickhouse_password`, `JWT_SECRET_KEY`→`jwt_secret_key`, `KIS_APP_KEY`/`KIS_APP_SECRET`→`kis_app_key`/`kis_app_secret`, `KAKAO_REST_API_KEY`/`KAKAO_CLIENT_SECRET`/`KAKAO_ADMIN_KEY`, `NAVER_CLIENT_SECRET`, `SOCIAL_STATE_SECRET` → 소문자 이름.
+- 값은 **상용용으로 새로** 준비합니다(개발 서버 `.env.production` 값 재사용 금지 — 특히 JWT·state 키는 새로 생성, DB 호스트는 `postgres` 가 아닌 **외부 DB 주소**). DB 비밀번호에 특수문자가 있으면 URL 인코딩(`@`→`%40`). env 이름 ↔ secret 이름: `DATABASE_URL`→`database_url`, `SYNC_DATABASE_URL`→`sync_database_url`, `CLICKHOUSE_PASSWORD`→`clickhouse_password`, `JWT_SECRET_KEY`→`jwt_secret_key`, `KIS_APP_KEY`/`KIS_APP_SECRET`→`kis_app_key`/`kis_app_secret`, `KAKAO_REST_API_KEY`/`KAKAO_CLIENT_SECRET`/`KAKAO_ADMIN_KEY`, `NAVER_CLIENT_SECRET`, `SOCIAL_STATE_SECRET` → 소문자 이름.
+- 앱은 `X_FILE` 이 가리키는 파일이 없으면 **기동에 실패**합니다(조용히 빈 값으로 뜨는 것 방지). secret 을 지웠다면 해당 `*_FILE` env 도 꼭 지우세요.
 
 ### B-4. 이미지 빌드 & 레지스트리에 올리기
 Swarm 은 `build:` 를 무시합니다. 모든 노드가 받아 갈 수 있게 **레지스트리에 push** 해야 합니다.
@@ -173,16 +174,15 @@ docker push $REGISTRY/stock-app-backend:$TAG
 
 ### B-5. DB 마이그레이션 (배포 전 1회, 매 배포마다)
 마이그레이션은 **딱 한 번만** 돌아야 해서 스택에 넣지 않았습니다. one-off 컨테이너로 실행합니다(멱등 — 이미 최신이면 아무것도 안 함).
-`docker run` 은 Swarm secret 을 못 쓰므로 DB 주소를 직접 env 로 넘깁니다.
+`docker run` 은 Swarm secret 을 못 쓰므로 **상용 DB 주소**를 직접 env 로 넘깁니다.
 ```bash
-# 방법 1: 기존 .env.production 파일 재사용(서버에 이미 있음)
-docker run --rm --env-file /opt/stock_app/env/.env.production \
-  $REGISTRY/stock-app-backend:$TAG alembic upgrade head
-
-# 방법 2: 필요한 값만
-docker run --rm -e SYNC_DATABASE_URL='postgresql+psycopg2://stock_user:<비번>@<DB주소>:5432/stock_db' \
+# 상용 DB 주소(외부 DB 서버/관리형). 비밀번호에 특수문자(@ : / # 등)가 있으면 URL 인코딩(@ → %40)
+docker run --rm \
+  -e SYNC_DATABASE_URL='postgresql+psycopg2://stock_user:<비번>@<상용 DB주소>:5432/stock_db' \
   $REGISTRY/stock-app-backend:$TAG alembic upgrade head
 ```
+> ⚠️ 미니PC 의 `/opt/stock_app/env/.env.production` 을 쓰지 마세요. 그건 **개발 서버(develop)** 용이고 DB 호스트가 compose 서비스 이름 `postgres` 라 Swarm 노드에서는 닿지도 않습니다.
+> 매번 입력이 번거로우면 상용 전용 파일(예: `/opt/stock_app/env/migrate.prod.env`, 권한 600, `SYNC_DATABASE_URL=...` 한 줄)을 만들어 `--env-file` 로 넘기세요.
 
 ### B-6. 스택 배포
 ```bash
@@ -211,10 +211,10 @@ docker service ls
 
 ### B-8. 업데이트 (새 버전 배포)
 ```bash
-export TAG=<새 태그>
+set -a; . deploy/swarm/stack.env; set +a       # 먼저 로드(REGISTRY 등)하고
+export TAG=$(git rev-parse --short HEAD)       # 그다음 TAG 덮어쓰기(순서가 반대면 stack.env 의 TAG 로 돌아감)
 docker build -t $REGISTRY/stock-app-backend:$TAG backend && docker push $REGISTRY/stock-app-backend:$TAG
-docker run --rm --env-file /opt/stock_app/env/.env.production $REGISTRY/stock-app-backend:$TAG alembic upgrade head
-set -a; . deploy/swarm/stack.env; set +a; export TAG
+docker run --rm --env-file /opt/stock_app/env/migrate.prod.env $REGISTRY/stock-app-backend:$TAG alembic upgrade head   # B-5
 docker stack deploy -c deploy/swarm/stack.yml --with-registry-auth stock
 ```
 - API·워커: **start-first** — 새 컨테이너가 healthy 가 된 다음 옛 것을 내립니다(무중단).
@@ -317,6 +317,7 @@ kubectl kustomize deploy/k8s/overlays/dev | less
 # 4) 적용
 kubectl apply -k deploy/k8s/overlays/dev
 ```
+> 다시 apply 할 때 `field is immutable` 오류가 나면 마이그레이션 Job 때문입니다(Job 은 수정 불가) → `kubectl -n stock-app delete job stock-app-migrate --ignore-not-found` 후 다시 apply.
 > `apply -k` 하면 마이그레이션 Job(`stock-app-migrate`)도 같이 실행됩니다. 앱(Deployment)은 Job 을 기다리지 않으니, 처음엔 Job 완료를 확인하세요:
 > `kubectl -n stock-app wait --for=condition=complete job/stock-app-migrate --timeout=180s`
 
