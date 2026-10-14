@@ -122,7 +122,7 @@
 - [x] **⑤-1** 연속 출석 마일스톤 보상 — 3·7·14·30일, 시즌마다 마일스톤별 1회 수동 수령(`streak_reward_claims`, web 모달·모바일 시트) (2026-10-13)
 - [x] **⑤-2** 퀴즈/아카데미 문항 어드민 편집 — 아카데미 문항 DB(`academy_questions`)·관리자 CRUD, 퀴즈 활성/비활성·수정·삭제·일괄 생성·직접 출제(종목·기준일), admin_web 🎓 아카데미 문항·🧩 퀴즈 관리 (2026-10-13)
 - [ ] 실 FCM 전환(`PUSH_BACKEND=fcm` + 자격증명)
-- [ ] **③ 실시간 수평 확장(Redis Pub/Sub 연결 분산)** — 동시접속 ~1,000+ 시. 현재 trading_game 은 단일 워커(인메모리 WS 레지스트리·포지션 캐시) 전제 — 확장 시 청산 리스너는 1개로 두고 묶인 틱·개인손익을 Redis 채널로 내보내 다수 WS 워커가 구독·전송(스펙 `docs/superpowers/specs/2026-10-14-realtime-conflation-public-ws-design.md` 범위 밖)
+- [x] **③ 실시간 수평 확장(Redis Pub/Sub 연결 분산)** — WS 전달 Redis Pub/Sub 버스 + 싱글톤 작업 리더 선출 + `/ready`·`*_FILE` env, 배포 설정 Docker Swarm(`deploy/swarm/`)·Kubernetes Kustomize(`deploy/k8s/`), 초보자 가이드 [`docs/deploy/README.md`](deploy/README.md) (스펙 `docs/superpowers/specs/2026-10-14-horizontal-scaling-swarm-k8s-design.md`, 2026-10-14)
 - [x] web_client TypeScript 전환 (서브페이즈 6 직전, admin_web과 동일 방식) — 2026-10-13 strict 전환 완료
 - [x] **trading_game 개발 서버(develop) 배포 구성** — prod compose 에 `trading_game`(호스트 8004)·`game_ws` 추가, web/admin 빌드에 `VITE_GAME_API_URL=https://game.haezean.com` 주입, Deploy Server 에 `alembic upgrade head` 자동 단계 (2026-10-13). **남은 수동 작업**: Cloudflare `game.haezean.com → localhost:8004`, 서버에서 시즌 시드·퀴즈 생성(`docs/server_setup.md` §7-1)
 - [ ] trading_game product 배포(도메인 확정 시 — 빌드 인자·CORS_ORIGINS 추가)

@@ -418,6 +418,8 @@ uv run python -c "from apps.collector.tasks.universe import backfill_all_daily; 
 
 배포는 GitHub Actions self-hosted 러너(미니PC)에서 동작하며, **대상별 두 워크플로**로 분리돼 있다(프론트 배포가 수집 워커/API를 건드리지 않도록). 상세·명령은 [`docs/run_and_deploy.md`](docs/run_and_deploy.md), 서버 최초 부트스트랩은 [`docs/server_setup.md`](docs/server_setup.md).
 
+> 📈 **상용 수평 확장(Docker Swarm · Kubernetes)**: 설정은 `deploy/swarm/`·`deploy/k8s/`, 초보자용 단계별 가이드는 [`docs/deploy/README.md`](docs/deploy/README.md).
+
 | 워크플로 | 자동 트리거(경로) | 배포 대상 |
 |---|---|---|
 | `deploy-server.yml` | `backend/**`, `docker-compose.prod.yml` | auth/stock/blog API + trading_game(8004, `game.haezean.com`)·game_ws(KIS 실시간) + celery worker/beat. 기동 전 `alembic upgrade head` 자동 |
