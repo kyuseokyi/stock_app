@@ -69,3 +69,29 @@ export function parseGameMessage(raw: string): GameWsMessage | null {
       return null;
   }
 }
+
+// ── 연결 URL·종료 코드 판정(use-game-socket 에서 사용, 순수 함수라 테스트 가능) ──
+
+/** 서버 ws_gateway: 토큰 무효/비활성 유저(로그인 연결) */
+export const WS_AUTH_FAILED = 4401;
+/** 서버 ws_gateway: 공개(비로그인) 연결 상한 초과 — accept 직후 닫힘 */
+export const WS_OVER_CAPACITY = 4429;
+
+/** 게임 WS URL. 토큰이 없으면 token 파라미터 자체를 생략(공개 연결) — 빈 `?token=` 은 서버가 4401 로 거부한다. */
+export function buildGameWsUrl(baseUrl: string, token: string | null): string {
+  const base = `${baseUrl.replace(/\/+$/, '').replace(/^http/, 'ws')}/ws/game/stream`;
+  return token ? `${base}?token=${encodeURIComponent(token)}` : base;
+}
+
+/**
+ * 종료 코드 → 다음 동작.
+ * - auth-failed: 로그인 연결의 4401 — 재연결하지 않고 로그인 만료 처리
+ * - capacity: 4429 — 별도(긴) 백오프로 재시도
+ * - retry: 그 외(공개 연결의 4401 포함) — 일반 지수 백오프 재연결
+ */
+export type WsCloseAction = 'auth-failed' | 'capacity' | 'retry';
+export function classifyWsClose(code: number, hasToken: boolean): WsCloseAction {
+  if (code === WS_AUTH_FAILED && hasToken) return 'auth-failed';
+  if (code === WS_OVER_CAPACITY) return 'capacity';
+  return 'retry';
+}

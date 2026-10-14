@@ -3,18 +3,20 @@ import { AppState, type AppStateStatus } from 'react-native';
 
 import { ENV } from '@/lib/env';
 
-import { parseGameMessage } from './lib/ws';
+import { buildGameWsUrl, classifyWsClose, parseGameMessage } from './lib/ws';
 import { useTradingGameStore } from './store';
 
 const INITIAL_BACKOFF_MS = 1_000;
 const MAX_BACKOFF_MS = 30_000;
 const PING_MS = 25_000;
-const AUTH_FAILED = 4401; // 서버 ws_gateway: 토큰 무효/비활성 유저
+const CAPACITY_INITIAL_MS = 5_000; // 4429(공개 연결 상한) 재시도 시작 간격
 
 /**
- * 게임 실시간 스트림(RN 내장 WebSocket). token 이 있고 enabled 이며 앱이 백그라운드가 아닐 때만(iOS inactive 는 연결 유지) 연결한다.
- * - 끊기면 지수 백오프(1s→30s)로 재연결, 4401 이면 재연결하지 않고 onAuthFailed 호출.
- * - 재연결 성공 시 놓친 자동청산 등을 반영하려고 계좌/포지션/순위를 다시 불러온다(web 과 동일).
+ * 게임 실시간 스트림(RN 내장 WebSocket). enabled 이며 앱이 백그라운드가 아닐 때만(iOS inactive 는 연결 유지) 연결한다.
+ * - token 이 있으면 로그인 연결, 없으면 공개 연결(틱·시장심리만 수신). token 이 바뀌면 맞는 모드로 재연결.
+ * - 끊기면 지수 백오프(1s→30s)로 재연결, 로그인 연결이 4401 이면 재연결하지 않고 onAuthFailed 호출.
+ * - 4429(공개 연결 상한)는 accept 직후 닫히므로 별도 백오프(5s→30s)로 재시도 — 첫 메시지 수신 시 초기화.
+ * - 로그인 연결의 재연결 성공 시 놓친 자동청산 등을 반영하려고 계좌/포지션/순위를 다시 불러온다(web 과 동일).
  * - 앱이 background 로 가면 연결을 닫고(effect 정리), 포그라운드 복귀 시 재연결 + 재조회.
  */
 export function useGameSocket(token: string | null, enabled: boolean, onAuthFailed: () => void): void {
@@ -40,13 +42,14 @@ export function useGameSocket(token: string | null, enabled: boolean, onAuthFail
 
   useEffect(() => {
     const base = ENV.gameApiUrl;
-    if (!token || !enabled || !appActive || !base) return;
-    const url = `${base.replace(/\/+$/, '').replace(/^http/, 'ws')}/ws/game/stream?token=${encodeURIComponent(token)}`;
+    if (!enabled || !appActive || !base) return;
+    const url = buildGameWsUrl(base, token);
     const store = useTradingGameStore.getState;
     let ws: WebSocket | null = null;
     let stopped = false;
     let opened = false;
     let backoff = INITIAL_BACKOFF_MS;
+    let capacityBackoff = CAPACITY_INITIAL_MS;
     let retryTimer: ReturnType<typeof setTimeout> | undefined;
     let pingTimer: ReturnType<typeof setInterval> | undefined;
 
@@ -55,13 +58,14 @@ export function useGameSocket(token: string | null, enabled: boolean, onAuthFail
       ws = sock;
       sock.onopen = () => {
         backoff = INITIAL_BACKOFF_MS;
-        if (opened) void store().refreshTrading();
+        if (opened && token) void store().refreshTrading();
         opened = true;
         pingTimer = setInterval(() => {
           if (sock.readyState === WebSocket.OPEN) sock.send('ping');
         }, PING_MS);
       };
       sock.onmessage = (e) => {
+        capacityBackoff = CAPACITY_INITIAL_MS;
         if (typeof e.data !== 'string') return;
         const msg = parseGameMessage(e.data);
         if (msg) store().applyMessage(msg);
@@ -69,8 +73,14 @@ export function useGameSocket(token: string | null, enabled: boolean, onAuthFail
       sock.onclose = (e) => {
         clearInterval(pingTimer);
         if (stopped) return;
-        if (e.code === AUTH_FAILED) {
+        const action = classifyWsClose(e.code, !!token);
+        if (action === 'auth-failed') {
           onAuthFailedRef.current();
+          return;
+        }
+        if (action === 'capacity') {
+          retryTimer = setTimeout(connect, capacityBackoff);
+          capacityBackoff = Math.min(capacityBackoff * 2, MAX_BACKOFF_MS);
           return;
         }
         retryTimer = setTimeout(connect, backoff);

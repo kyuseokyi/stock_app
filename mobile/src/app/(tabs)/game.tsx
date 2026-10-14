@@ -234,13 +234,12 @@ export default function GameScreen() {
           onOpenStreak={() => openPrivate('streak')}
         />
         <CoachBanner coach={coach} />
-        {loggedIn ? (
-          <SentimentBar sentiment={sentiment} />
-        ) : (
+        {loggedIn ? null : (
           <View style={styles.notice}>
-            <Text style={styles.noticeText}>로그인하면 실시간 시세와 주문이 열려요</Text>
+            <Text style={styles.noticeText}>로그인하면 주문할 수 있어요</Text>
           </View>
         )}
+        <SentimentBar sentiment={sentiment} />
         <DailyChart ticker={season.ticker} lastPrice={lastPrice} coach={coach} position={position} />
         {position ? (
           <PositionCard position={position} lastPrice={lastPrice} closing={closing} onClose={() => void closePosition()} />

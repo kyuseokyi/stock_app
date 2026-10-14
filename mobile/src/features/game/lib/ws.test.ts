@@ -1,4 +1,4 @@
-import { parseGameMessage } from './ws';
+import { buildGameWsUrl, classifyWsClose, parseGameMessage } from './ws';
 
 describe('parseGameMessage', () => {
   test('tick — Decimal 문자열 가격을 number 로', () => {
@@ -50,5 +50,32 @@ describe('parseGameMessage', () => {
     expect(parseGameMessage('{"type":"x"}')).toBeNull();
     expect(parseGameMessage('{"type":"tick","ticker":"","price":1}')).toBeNull();
     expect(parseGameMessage('{"type":"tick","ticker":"005930","price":"abc"}')).toBeNull();
+  });
+});
+
+describe('buildGameWsUrl', () => {
+  test('로그인 — token 쿼리 포함(인코딩)', () => {
+    expect(buildGameWsUrl('https://game.example.com/', 'a b+c')).toBe(
+      'wss://game.example.com/ws/game/stream?token=a%20b%2Bc',
+    );
+  });
+  test('비로그인 — token 파라미터 자체를 생략(빈 ?token= 금지)', () => {
+    expect(buildGameWsUrl('http://localhost:8003', null)).toBe('ws://localhost:8003/ws/game/stream');
+    expect(buildGameWsUrl('http://localhost:8003', '')).toBe('ws://localhost:8003/ws/game/stream');
+  });
+});
+
+describe('classifyWsClose', () => {
+  test('4401 — 로그인 연결이면 만료 처리, 공개 연결이면 일반 재시도', () => {
+    expect(classifyWsClose(4401, true)).toBe('auth-failed');
+    expect(classifyWsClose(4401, false)).toBe('retry');
+  });
+  test('4429 — 상한 초과 백오프', () => {
+    expect(classifyWsClose(4429, false)).toBe('capacity');
+    expect(classifyWsClose(4429, true)).toBe('capacity');
+  });
+  test('그 외 — 일반 재시도', () => {
+    expect(classifyWsClose(1006, true)).toBe('retry');
+    expect(classifyWsClose(1000, false)).toBe('retry');
   });
 });
