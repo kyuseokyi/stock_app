@@ -11,7 +11,7 @@ from apps.trading_game import deps
 from apps.trading_game.schemas.game_dtos import (
     BadgeDTO, QuestClaimResponse, QuestListResponse, QuestResponse,
 )
-from apps.trading_game.services import quest_service
+from apps.trading_game.services import position_cache, quest_service
 
 router = APIRouter(prefix="/api/game", tags=["trading-game-quest"])
 
@@ -59,6 +59,7 @@ async def claim_quest(
         row, account, badge = await quest_service.claim(db, user.id, code, redis=deps.get_redis())
     except quest_service.QuestError as e:
         raise HTTPException(_ERROR_STATUS[e.code], detail={"code": e.code, "message": str(e)})
+    position_cache.mark_dirty()  # 보상 지급(현금·원금) → 실시간 랭킹 캐시 재적재
     quest = quest_service.QUEST_BY_CODE[code]
     return QuestClaimResponse(
         quest=_quest_dto(quest, row),

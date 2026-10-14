@@ -20,8 +20,8 @@ from apps.trading_game.schemas.game_dtos import (
     AccountResponse, NudgeDTO, OrderRequest, OrderResultResponse, PositionResponse,
 )
 from apps.trading_game.services import (
-    account_service, academy_service, market_clock, nudge_engine, order_engine, pricing, quest_service,
-    ranking_service, rsi_service, streak_service,
+    account_service, academy_service, market_clock, nudge_engine, order_engine, position_cache, pricing,
+    quest_service, ranking_service, rsi_service, streak_service,
 )
 
 router = APIRouter(prefix="/api/game", tags=["trading-game"])
@@ -179,6 +179,7 @@ async def open_order(
     except order_engine.OrderError as e:
         code = status.HTTP_409_CONFLICT if e.code == "ALREADY_OPEN" else status.HTTP_422_UNPROCESSABLE_ENTITY
         raise HTTPException(code, str(e))
+    position_cache.mark_dirty()  # 실시간 청산·손익 캐시 재적재(훅 실패와 무관하게 먼저)
     roi = pricing.compute_roi_pct(pos.side, pos.entry_price, entry_price, pos.leverage)
     pnl = pricing.compute_pnl(pos.size_amount, roi)
     dto = _position_dto(pos, roi, pnl)
@@ -210,6 +211,7 @@ async def close_order(
     )
     if trade is None:
         raise HTTPException(status.HTTP_409_CONFLICT, "이미 청산된 포지션입니다.")
+    position_cache.mark_dirty()
     try:
         await ranking_service.sync_account_rank(deps.get_redis(), db, account.id)
     except Exception:

@@ -15,7 +15,7 @@ from apps.trading_game.schemas.game_dtos import (
     StreakRewardDTO,
 )
 from apps.trading_game.services import (
-    feature_flag_service, quiz_service, streak_reward_service, streak_service,
+    feature_flag_service, position_cache, quiz_service, streak_reward_service, streak_service,
 )
 
 router = APIRouter(prefix="/api/game", tags=["trading-game-quiz"])
@@ -94,6 +94,8 @@ async def submit_quiz(
         res = await quiz_service.submit(db, user.id, quiz_id, body.choice, redis=deps.get_redis())
     except quiz_service.QuizError as e:
         raise HTTPException(_ERROR_STATUS.get(e.code, status.HTTP_400_BAD_REQUEST), detail={"code": e.code, "message": str(e)})
+    if res.rewarded:
+        position_cache.mark_dirty()  # 보상 지급(현금·원금) → 실시간 랭킹 캐시 재적재
     quiz = res.quiz
     streak = None
     try:  # best-effort — 채점 결과는 항상 반환(rollback 하지 않음: quiz 속성 expire 방지)
@@ -133,6 +135,7 @@ async def claim_streak_reward(
         account = await streak_reward_service.claim(db, deps.get_redis(), user.id, milestone)
     except streak_reward_service.StreakRewardError as e:
         raise HTTPException(_REWARD_ERROR_STATUS[e.code], detail={"code": e.code, "message": str(e)})
+    position_cache.mark_dirty()  # 보상 지급(현금·원금) → 실시간 랭킹 캐시 재적재
     return StreakRewardClaimResponse(
         streak=await _streak_dto(db, user.id, enabled=True), cash_balance=account.cash_balance,
     )

@@ -1,4 +1,9 @@
-"""실시간 틱 수신 시 TP/SL/마진콜 자동청산 검사기."""
+"""실시간 틱 수신 시 TP/SL/마진콜 자동청산 검사기.
+
+틱 경로(tick_listener)는 포지션 캐시로 후보만 고르고(find_candidates — DB 조회 없음)
+후보가 있을 때만 DB 로 확정한다(liquidate_candidates → close_position 이 OPEN 확인).
+liquidate_for_tick/check_and_liquidate 는 DB 조회식 헬퍼로 유지(하위 호환·회귀 기준).
+"""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -47,6 +52,33 @@ async def liquidate_for_tick(db: AsyncSession, ticker: str, price: Decimal) -> l
         )
         if trade is not None:
             results.append(LiquidationResult(trade=trade, user_id=user_id))
+    return results
+
+
+def find_candidates(positions, price: Decimal) -> list[tuple[object, str]]:
+    """캐시 포지션(CachedPosition 등 side/entry_price/leverage/SL/TP 속성) 중 청산조건 충족분과 사유."""
+    out = []
+    for pos in positions:
+        reason = pricing.liquidation_reason(
+            pos.side, pos.entry_price, price, pos.leverage,
+            pos.stop_loss_price, pos.take_profit_price,
+        )
+        if reason is not None:
+            out.append((pos, reason))
+    return out
+
+
+async def liquidate_candidates(
+    db: AsyncSession, candidates: list[tuple[object, str]], price: Decimal
+) -> list[LiquidationResult]:
+    """후보를 DB 로 확정 청산. 이미 닫힌(캐시가 오래된) 포지션은 close_position 이 None — 건너뜀."""
+    results: list[LiquidationResult] = []
+    for pos, reason in candidates:
+        trade = await order_engine.close_position(
+            db, position_id=pos.position_id, exit_price=price, reason=reason
+        )
+        if trade is not None:
+            results.append(LiquidationResult(trade=trade, user_id=pos.user_id))
     return results
 
 

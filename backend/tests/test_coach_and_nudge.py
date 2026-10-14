@@ -676,8 +676,9 @@ async def test_handle_tick_stop_loss_enqueues_praise_nudge(listener_db, fresh_qu
     await tick_listener._handle_tick(json.dumps({"ticker": "005930", "price": 98}))
     items = _drain(fresh_queue)
     nudges = [i for i in items if i[0] == "nudge"]
-    ticks = [i for i in items if i[0] == "tick"]
-    assert len(ticks) == 1
+    # 틱은 더 이상 큐로 가지 않고 최신 틱으로 저장(broadcast_loop 가 묶어 전송)
+    assert [i for i in items if i[0] == "tick"] == []
+    assert tick_listener.latest_tick()[1] == Decimal("98")
     assert len(nudges) == 1
     _, uid, payload = nudges[0]
     assert uid == user_id
@@ -696,14 +697,16 @@ async def test_handle_tick_rank_sync_failure_still_queues_nudge_and_tick(listene
     monkeypatch.setattr(tick_listener.ranking_service, "sync_account_rank", boom)
     await tick_listener._handle_tick(json.dumps({"ticker": "005930", "price": 98}))
     kinds = sorted(i[0] for i in _drain(fresh_queue))
-    assert kinds == ["nudge", "tick"]
+    assert kinds == ["nudge"]  # 틱은 큐 대신 latest_tick(묶기 전송)
+    assert tick_listener.latest_tick()[1] == Decimal("98")
 
 
 async def test_handle_tick_take_profit_enqueues_no_nudge(listener_db, fresh_queue):
     async with listener_db() as db:
         await _seed_open_position(db, tp=Decimal("105"))
     await tick_listener._handle_tick(json.dumps({"ticker": "005930", "price": 105}))
-    assert [i[0] for i in _drain(fresh_queue)] == ["tick"]
+    assert _drain(fresh_queue) == []  # 넛지 없음(틱은 큐 대신 latest_tick)
+    assert tick_listener.latest_tick()[1] == Decimal("105")
 
 
 async def test_fanout_worker_sends_nudge_to_user(fresh_queue, monkeypatch):
@@ -724,3 +727,20 @@ async def test_fanout_worker_sends_nudge_to_user(fresh_queue, monkeypatch):
     await task
     assert sent == [(7, {"type": "nudge", "position_id": "pos-1",
                          "nudge": {"type": "PRAISE", "code": "PRINCIPLED_STOP", "message": "m"}})]
+
+
+# ---------------------------------------------------------------- position cache invalidation
+async def test_order_open_and_close_mark_position_cache_dirty(api, maker, order_env, monkeypatch):
+    from apps.trading_game.services import position_cache
+    client, set_user = api
+    async with maker() as db:
+        season = await _seed_season(db)
+        set_user(await _seed_player(db))
+    marks = []
+    monkeypatch.setattr(position_cache, "mark_dirty", lambda: marks.append(1))
+    r = await client.post("/api/game/orders", json={
+        "season_id": season.id, "side": "LONG", "ratio": 0.25, "leverage": 1,
+    })
+    assert r.status_code == 201 and len(marks) == 1
+    r = await client.post(f"/api/game/positions/{r.json()['id']}/close")
+    assert r.status_code == 200 and len(marks) == 2
