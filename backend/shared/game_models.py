@@ -15,6 +15,7 @@ from decimal import Decimal
 
 from sqlalchemy import (
     Boolean,
+    CheckConstraint,
     Date,
     DateTime,
     ForeignKey,
@@ -28,7 +29,7 @@ from sqlalchemy import (
     func,
     text,
 )
-from sqlalchemy.dialects.postgresql import UUID as PG_UUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.types import CHAR, TypeDecorator
 
@@ -73,7 +74,10 @@ class GameSeason(Base, TimestampMixin):
     """시즌 마스터. 종목 1개 고정. end_at NULL=무기한/미정."""
 
     __tablename__ = "game_seasons"
-    __table_args__ = (UniqueConstraint("season_number", name="uq_season_number"),)
+    __table_args__ = (
+        UniqueConstraint("season_number", name="uq_season_number"),
+        CheckConstraint("period IN ('month','quarter')", name="ck_game_seasons_period"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     season_number: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -81,7 +85,9 @@ class GameSeason(Base, TimestampMixin):
     stock_name: Mapped[str] = mapped_column(String(50), nullable=False)
     start_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     end_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    period_type: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    period_type: Mapped[str | None] = mapped_column(String(20), nullable=True)  # 미사용(레거시)
+    # 시즌 기간 month|quarter — 운영자가 admin 에서 고른 '다음 시즌 기간'으로 생성 시 고정
+    period: Mapped[str] = mapped_column(String(10), nullable=False, default="month", server_default="month")
     initial_cash: Mapped[Decimal] = mapped_column(Numeric(15, 2), nullable=False, default=INITIAL_CASH)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="READY")
 
@@ -391,18 +397,22 @@ class StreakRewardClaim(Base):
 
 
 class WeeklyRankingResult(Base):
-    """주간 랭킹 마감 기록(Top 10) + 1~3위 보상액. notified_at = 보상 토스트 확인 시각."""
+    """주간·월간 랭킹 마감 기록(Top 10) + 1~3위 보상액. notified_at = 보상 토스트 확인 시각.
+
+    period_type: week(week_start=주 시작 월요일) | month(week_start=그 달 1일).
+    """
 
     __tablename__ = "weekly_ranking_results"
     __table_args__ = (
-        UniqueConstraint("season_id", "week_start", "rank", name="uq_weekly_result_rank"),
-        UniqueConstraint("season_id", "week_start", "user_id", name="uq_weekly_result_user"),
+        UniqueConstraint("season_id", "period_type", "week_start", "rank", name="uq_weekly_result_rank"),
+        UniqueConstraint("season_id", "period_type", "week_start", "user_id", name="uq_weekly_result_user"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     season_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("game_seasons.id", ondelete="CASCADE"), nullable=False
     )
+    period_type: Mapped[str] = mapped_column(String(10), nullable=False, default="week", server_default="week")
     week_start: Mapped[date] = mapped_column(Date, nullable=False)
     rank: Mapped[int] = mapped_column(Integer, nullable=False)
     # 회원 탈퇴 시 행은 남기고(공개 기록) user_id 만 NULL + nickname '탈퇴한 회원'으로 익명화
@@ -425,6 +435,18 @@ class GameFeatureFlag(Base):
 
     key: Mapped[str] = mapped_column(String(30), primary_key=True)
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="true")
+    updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=True
+    )
+
+
+class GameSetting(Base):
+    """게임 운영 설정(key → JSON 값). 행이 없으면 서비스 기본값(game_settings_service)."""
+
+    __tablename__ = "game_settings"
+
+    key: Mapped[str] = mapped_column(String(64), primary_key=True)
+    value: Mapped[object] = mapped_column(JSON().with_variant(JSONB(), "postgresql"), nullable=False)
     updated_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=True
     )
