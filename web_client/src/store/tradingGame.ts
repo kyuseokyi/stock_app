@@ -196,7 +196,10 @@ export const useTradingGameStore = create<TradingGameState>()((set, get) => {
           get().pushToast({
             kind: 'info',
             icon: '🏅',
-            message: `지난주 주간 랭킹 ${r.rank}위! 보상 ${formatWon(r.reward_amount)}이 지급됐어요`,
+            message:
+              r.period_type === 'month'
+                ? `지난달 월간 랭킹 ${r.rank}위! 보상 ${formatWon(r.reward_amount)}이 지급됐어요`
+                : `지난주 주간 랭킹 ${r.rank}위! 보상 ${formatWon(r.reward_amount)}이 지급됐어요`,
           })
           gameApi.ackWeeklyReward(r.id).catch(() => undefined)
         }

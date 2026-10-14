@@ -143,7 +143,7 @@ export default function GamePage() {
         onLockedLeverage={() => openPrivate('academy')}
       />
       {/* 모달은 NudgeToaster 보다 먼저 렌더 — 같은 z-40 에서 토스트가 모달 위에 보이게 */}
-      {activeModal === 'ranking' && <LeaderboardModal seasonId={season.id} myUserId={userId} onClose={closeModal} />}
+      {activeModal === 'ranking' && <LeaderboardModal seasonId={season.id} seasonPeriod={season.period} myUserId={userId} onClose={closeModal} />}
       {activeModal === 'quest' && <QuestModal onClose={closeModal} />}
       {activeModal === 'academy' && <AcademyModal onClose={closeModal} />}
       {activeModal === 'quiz' && <ChartQuizModal onClose={closeModal} />}

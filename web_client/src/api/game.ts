@@ -7,6 +7,7 @@ import type {
   RawAccount, RawClaimResult, RawCoachMessage, RawCoachToday, RawOrderResult, RawPosition, RawQuest,
   RawQuestList, RawQuizQuestion, RawQuizResult, RawStreakClaimResult, Season, Streak, StreakClaimResult,
   WeeklyBoard, WeeklyMyRank, WeeklyResultWeek, WeeklyReward,
+  MonthlyBoard, MonthlyMyRank, MonthlyResultMonth, RewardConfig,
 } from '../types/game'
 
 // trading_game REST. Decimal 문자열은 여기서 number 로 변환해 UI 는 number 만 다룬다.
@@ -153,6 +154,32 @@ export async function getWeeklyResults(seasonId: number, limit = 1): Promise<Wee
   return data
 }
 
+/** 공개 — 이번 달 Top 100(분기 시즌 전용, 월간 시즌이면 빈 결과) */
+export async function getMonthlyLeaderboard(seasonId: number): Promise<MonthlyBoard> {
+  const { data } = await client().get<MonthlyBoard>(`/api/game/seasons/${seasonId}/monthly-leaderboard`)
+  return data
+}
+
+export async function getMonthlyMyRank(seasonId: number): Promise<MonthlyMyRank> {
+  const { data } = await client().get<MonthlyMyRank>(`/api/game/seasons/${seasonId}/monthly-my-rank`)
+  return data
+}
+
+/** 공개 — 지난 달들의 Top 3(최신 달 먼저) */
+export async function getMonthlyResults(seasonId: number, limit = 1): Promise<MonthlyResultMonth[]> {
+  const { data } = await client().get<MonthlyResultMonth[]>('/api/game/monthly-results', {
+    params: { season_id: seasonId, limit },
+  })
+  return data
+}
+
+/** 공개 — 주간·월간·연속 출석 보상 금액(admin 설정값) */
+export async function getRewardConfig(): Promise<RewardConfig> {
+  const { data } = await client().get<RewardConfig>('/api/game/reward-config')
+  return data
+}
+
+/** 미확인 주간·월간 보상(period_type 으로 구분) */
 export async function getUnseenWeeklyRewards(): Promise<WeeklyReward[]> {
   const { data } = await client().get<WeeklyReward[]>('/api/game/weekly-rewards/unseen')
   return data

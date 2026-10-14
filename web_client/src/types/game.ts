@@ -20,7 +20,11 @@ export interface Season {
   status: string
   start_at: string
   end_at: string | null
+  /** 시즌 기간 — 'quarter' 일 때만 월간 랭킹을 연다(구 서버 응답엔 없을 수 있음) */
+  period?: SeasonPeriod
 }
+
+export type SeasonPeriod = 'month' | 'quarter'
 
 export interface RawAccount {
   season_id: number
@@ -372,7 +376,44 @@ export interface WeeklyResultWeek {
 
 export interface WeeklyReward {
   id: number
+  /** 월간은 그 달 1일 */
   week_start: string
   rank: number
   reward_amount: number
+  /** 구 서버 응답엔 없을 수 있음 → 'week' 로 간주 */
+  period_type?: 'week' | 'month'
+}
+
+export interface MonthlyEntry {
+  rank: number
+  user_id: number
+  nickname: string | null
+  monthly_roi: number
+}
+
+/** 월간 시즌이면 month_start·start_at·end_at 이 null, entries 빈 배열 */
+export interface MonthlyBoard {
+  month_start: string | null
+  start_at: string | null
+  end_at: string | null
+  entries: MonthlyEntry[]
+}
+
+export interface MonthlyMyRank {
+  rank: number | null
+  monthly_roi: number | null
+  total: number
+}
+
+export interface MonthlyResultMonth {
+  season_id: number
+  month_start: string
+  entries: { rank: number; nickname: string | null; monthly_roi: number; reward_amount: number }[]
+}
+
+/** GET /api/game/reward-config — 안내 문구용 보상 금액 */
+export interface RewardConfig {
+  weekly: number[]
+  monthly: number[]
+  streak: Record<string, number>
 }

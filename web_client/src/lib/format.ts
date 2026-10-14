@@ -56,3 +56,6 @@ export function formatKstShort(iso: string): string {
 /** 주간 기간 "10/12(월) 09:00 ~ 10/19(월) 09:00" */
 export const formatWeekRange = (startIso: string, endIso: string): string =>
   `${formatKstShort(startIso)} ~ ${formatKstShort(endIso)}`
+
+/** 1~3위 보상 안내: [500000, 300000, 200000] → '500,000원·300,000원·200,000원' */
+export const formatRewardTiers = (amounts: number[]): string => amounts.map(formatWon).join('·')

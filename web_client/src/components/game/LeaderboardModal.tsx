@@ -6,15 +6,17 @@ import WeeklyRankingTab from './WeeklyRankingTab'
 import { getHallOfFame, getLeaderboard } from '../../api/game'
 import { formatPct, pnlClass } from '../../lib/format'
 import { gameErrorMessage } from '../../lib/gameErrors'
-import type { HallOfFameRow, LeaderboardRow } from '../../types/game'
+import type { HallOfFameRow, LeaderboardRow, SeasonPeriod } from '../../types/game'
 
-type Tab = 'weekly' | 'season' | 'hof'
+type Tab = 'weekly' | 'monthly' | 'season' | 'hof'
 type Load<T> = { kind: 'loading' } | { kind: 'error'; message: string } | { kind: 'ok'; data: T }
 
 interface LeaderboardModalProps {
   seasonId: number
   /** 로그인 유저 id(비로그인 null) — 내 행 강조용 */
   myUserId: number | null
+  /** 'quarter' 시즌이면 월간 탭 노출 */
+  seasonPeriod?: SeasonPeriod
   onClose: () => void
 }
 
@@ -32,15 +34,17 @@ function groupBySeason(rows: HallOfFameRow[]): { seasonId: number; seasonNumber:
   return groups
 }
 
-// 랭킹 모달 — 주간 / 시즌 Top 100 / 명예의 전당(MBTI). 공개 API 라 비로그인도 열람. 열릴 때·탭 전환 시 활성 탭만 로드.
-export default function LeaderboardModal({ seasonId, myUserId, onClose }: LeaderboardModalProps) {
+// 랭킹 모달 — 주간 / (분기 시즌만) 월간 / 시즌 Top 100 / 명예의 전당(MBTI). 공개 API 라 비로그인도 열람. 열릴 때·탭 전환 시 활성 탭만 로드.
+export default function LeaderboardModal({ seasonId, myUserId, seasonPeriod, onClose }: LeaderboardModalProps) {
   const [tab, setTab] = useState<Tab>('weekly')
   const [board, setBoard] = useState<Load<LeaderboardRow[]>>({ kind: 'loading' })
   const [hof, setHof] = useState<Load<HallOfFameRow[]>>({ kind: 'loading' })
   const [reloadKey, setReloadKey] = useState(0)
+  const showMonthly = seasonPeriod === 'quarter'
+  const selfLoaded = tab === 'weekly' || tab === 'monthly' // 주간·월간 탭은 자체 로드
 
   useEffect(() => {
-    if (tab === 'weekly') return // 주간 탭은 자체 로드
+    if (selfLoaded) return
     let cancelled = false
     if (tab === 'season') {
       setBoard({ kind: 'loading' })
@@ -64,7 +68,7 @@ export default function LeaderboardModal({ seasonId, myUserId, onClose }: Leader
     return () => {
       cancelled = true
     }
-  }, [tab, seasonId, reloadKey])
+  }, [tab, selfLoaded, seasonId, reloadKey])
 
   const current = tab === 'season' ? board : hof
 
@@ -74,8 +78,13 @@ export default function LeaderboardModal({ seasonId, myUserId, onClose }: Leader
         <button type="button" role="tab" aria-selected={tab === 'weekly'} onClick={() => setTab('weekly')} className={chipClass(tab === 'weekly')}>
           주간
         </button>
+        {showMonthly && (
+          <button type="button" role="tab" aria-selected={tab === 'monthly'} onClick={() => setTab('monthly')} className={chipClass(tab === 'monthly')}>
+            월간
+          </button>
+        )}
         <button type="button" role="tab" aria-selected={tab === 'season'} onClick={() => setTab('season')} className={chipClass(tab === 'season')}>
-          시즌 랭킹
+          {showMonthly ? '시즌' : '시즌 랭킹'}
         </button>
         <button type="button" role="tab" aria-selected={tab === 'hof'} onClick={() => setTab('hof')} className={chipClass(tab === 'hof')}>
           명예의 전당
@@ -83,9 +92,12 @@ export default function LeaderboardModal({ seasonId, myUserId, onClose }: Leader
       </div>
 
       {tab === 'weekly' && <WeeklyRankingTab seasonId={seasonId} myUserId={myUserId} />}
+      {tab === 'monthly' && showMonthly && (
+        <WeeklyRankingTab key="monthly" period="month" seasonId={seasonId} myUserId={myUserId} />
+      )}
 
-      {tab !== 'weekly' && current.kind === 'loading' && <p className="py-10 text-center text-sm text-ink-muted">불러오는 중…</p>}
-      {tab !== 'weekly' && current.kind === 'error' && (
+      {!selfLoaded && current.kind === 'loading' && <p className="py-10 text-center text-sm text-ink-muted">불러오는 중…</p>}
+      {!selfLoaded && current.kind === 'error' && (
         <div className="py-10 text-center">
           <p className="text-sm text-ink-muted">{current.message}</p>
           <Button variant="secondary" className="mt-3" onClick={() => setReloadKey((k) => k + 1)}>
