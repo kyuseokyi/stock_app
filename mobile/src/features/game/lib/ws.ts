@@ -34,7 +34,15 @@ export function parseGameMessage(raw: string): GameWsMessage | null {
     case 'sentiment': {
       const long = toNumOrNull(data.long_pct);
       const short = toNumOrNull(data.short_pct);
-      return long !== null && short !== null ? { type: 'sentiment', long_pct: long, short_pct: short } : null;
+      if (long === null || short === null) return null;
+      // total(보유 인원)은 신규 필드 — 없거나 형식이 틀리면 생략(구 서버 호환)
+      const total = toNumOrNull(data.total);
+      return {
+        type: 'sentiment',
+        long_pct: long,
+        short_pct: short,
+        ...(total !== null && total >= 0 ? { total: Math.round(total) } : {}),
+      };
     }
     case 'nudge': {
       const id = str(data.position_id);

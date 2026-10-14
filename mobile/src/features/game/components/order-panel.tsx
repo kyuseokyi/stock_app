@@ -15,7 +15,9 @@ import {
   stopLossLabel,
   takeProfitLabel,
 } from '../lib/order-options';
+import { orderRulesHint } from '../lib/rules';
 import type { Leverage, OrderOptions, Ratio, Side } from '../types';
+import { useGameRules } from '../use-game-rules';
 import { OptionPicker, type PickerOption } from './option-picker';
 
 const RATIO_MORE_OPTIONS: PickerOption<Ratio | null>[] = RATIO_MORE.map((r) => ({ value: r, label: ratioLabel(r) }));
@@ -29,13 +31,16 @@ type Props = {
   submitting: boolean;
   onOrder: (side: Side, ratio: Ratio, leverage: Leverage, opts: OrderOptions) => void;
   onLockedLeverage: () => void;
+  /** 안내 줄 '규칙 보기' → 규칙 시트(비로그인도 가능) */
+  onOpenRules: () => void;
 };
 
 /**
- * 원클릭 주문 — 비중(칩 + ▾기타)·배율 칩 + 손절/익절 선택 + BUY(상승=빨강)/SELL(하락=파랑).
+ * 원클릭 주문 — 비중(칩 + ▾기타)·배율 칩 + 손절/익절 선택 + 상승에 걸기(빨강)/하락에 걸기(파랑).
  * 5x 는 아카데미 미해금 시 잠금(🔒 → 아카데미). 비중 상태는 하나 — 칩 값이면 기타 트리거는 '기타'(파생).
  */
-export function OrderPanel({ hasPosition, academyUnlocked, submitting, onOrder, onLockedLeverage }: Props) {
+export function OrderPanel({ hasPosition, academyUnlocked, submitting, onOrder, onLockedLeverage, onOpenRules }: Props) {
+  const { rules } = useGameRules();
   const [ratio, setRatio] = useState<Ratio>(0.25);
   const [leverage, setLeverage] = useState<Leverage>(1);
   const [stopLoss, setStopLoss] = useState<number | null>(null);
@@ -102,20 +107,25 @@ export function OrderPanel({ hasPosition, academyUnlocked, submitting, onOrder, 
         />
       </View>
       <Text style={styles.hintLine}>{slTpHint(stopLoss, takeProfit, leverage)}</Text>
+      <Pressable
+        onPress={onOpenRules}
+        hitSlop={8}
+        accessibilityRole="link"
+        style={({ pressed }) => [styles.rulesLink, pressed && styles.pressed]}>
+        <Text style={styles.rulesLinkText}>{orderRulesHint(rules)} ›</Text>
+      </Pressable>
       <View style={styles.buttons}>
         <Pressable
           disabled={disabled}
           onPress={() => order('LONG')}
           style={({ pressed }) => [styles.order, styles.buy, pressed && styles.pressed, disabled && styles.disabled]}>
-          <Text style={[styles.orderLabel, styles.buyText]}>🔴 BUY</Text>
-          <Text style={[styles.orderSub, styles.buyText]}>(상승 베팅)</Text>
+          <Text style={[styles.orderLabel, styles.buyText]}>🔴 상승에 걸기</Text>
         </Pressable>
         <Pressable
           disabled={disabled}
           onPress={() => order('SHORT')}
           style={({ pressed }) => [styles.order, styles.sell, pressed && styles.pressed, disabled && styles.disabled]}>
-          <Text style={[styles.orderLabel, styles.sellText]}>🔵 SELL</Text>
-          <Text style={[styles.orderSub, styles.sellText]}>(하락 베팅)</Text>
+          <Text style={[styles.orderLabel, styles.sellText]}>🔵 하락에 걸기</Text>
         </Pressable>
       </View>
       {hasPosition ? <Text style={styles.hint}>보유 포지션을 먼저 청산하세요</Text> : null}
@@ -129,6 +139,8 @@ const styles = StyleSheet.create((theme) => ({
   caption: { fontSize: 12, color: theme.colors.textSecondary, width: 28 },
   captionGap: { marginLeft: theme.gap(1) },
   hintLine: { fontSize: 12, color: theme.colors.textSecondary, marginBottom: theme.gap(0.5) },
+  rulesLink: { alignSelf: 'flex-start' },
+  rulesLinkText: { fontSize: 12, fontWeight: '600', color: theme.colors.primary },
   buttons: { flexDirection: 'row', gap: theme.gap(1.5), marginTop: theme.gap(1) },
   order: {
     flex: 1,
@@ -144,6 +156,5 @@ const styles = StyleSheet.create((theme) => ({
   pressed: { opacity: 0.85 },
   disabled: { opacity: 0.4 },
   orderLabel: { fontSize: 16, fontWeight: '700' },
-  orderSub: { fontSize: 12, fontWeight: '500' },
   hint: { marginTop: theme.gap(1), fontSize: 12, textAlign: 'center', color: theme.colors.textSecondary },
 }));

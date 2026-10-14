@@ -279,7 +279,7 @@ export const useTradingGameStore = create<TradingGameState>()((set, get) => {
           }
           return;
         case 'sentiment':
-          set({ sentiment: { long_pct: msg.long_pct, short_pct: msg.short_pct } });
+          set({ sentiment: { long_pct: msg.long_pct, short_pct: msg.short_pct, total: msg.total } });
           return;
         case 'nudge':
           pushNudges([msg.nudge]);

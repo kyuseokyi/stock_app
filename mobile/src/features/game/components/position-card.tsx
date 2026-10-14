@@ -5,6 +5,7 @@ import { AmountText, Button, Card } from '@/ui';
 
 import { formatPrice } from '../lib/format';
 import { slTpLine } from '../lib/order-options';
+import { sideLabel } from '../lib/side';
 import type { Position } from '../types';
 
 type Props = {
@@ -22,7 +23,7 @@ export function PositionCard({ position, lastPrice, closing, onClose }: Props) {
     <Card style={styles.card}>
       <View style={styles.row}>
         <Text style={styles.side}>
-          <Text style={long ? styles.long : styles.short}>{position.side}</Text> x{position.leverage}배
+          <Text style={long ? styles.long : styles.short}>{sideLabel(position.side)}</Text> {position.leverage}배
         </Text>
         <View style={styles.pnl}>
           {position.pnl_amount !== null ? (

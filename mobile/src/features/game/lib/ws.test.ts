@@ -20,6 +20,19 @@ describe('parseGameMessage', () => {
       short_pct: 40,
     });
   });
+  test('sentiment — total(보유 인원) 포함, 잘못된 total 은 생략', () => {
+    expect(parseGameMessage('{"type":"sentiment","long_pct":70,"short_pct":30,"total":12}')).toEqual({
+      type: 'sentiment',
+      long_pct: 70,
+      short_pct: 30,
+      total: 12,
+    });
+    expect(parseGameMessage('{"type":"sentiment","long_pct":70,"short_pct":30,"total":"x"}')).toEqual({
+      type: 'sentiment',
+      long_pct: 70,
+      short_pct: 30,
+    });
+  });
   test('nudge — 필드 누락이면 null', () => {
     expect(
       parseGameMessage('{"type":"nudge","position_id":"p1","nudge":{"type":"WARNING","code":"C","message":"m"}}'),

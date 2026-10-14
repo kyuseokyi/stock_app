@@ -8,6 +8,7 @@ import { ENV } from '@/lib/env';
 import { toNum, toNumOrNull } from './lib/decimal';
 import { kstDateString } from './lib/format';
 import { normalizeRewardConfig } from './lib/ranking-period';
+import { normalizeGameRules } from './lib/rules';
 import type {
   AcademyQuiz,
   AcademySubmitResult,
@@ -15,6 +16,7 @@ import type {
   ClaimResult,
   Coach,
   DailyCandle,
+  GameRules,
   HallOfFameRow,
   LeaderboardRow,
   MonthlyBoard,
@@ -207,6 +209,11 @@ export function getMonthlyResults(seasonId: number, limit = 1): Promise<MonthlyR
 /** 공개 — 랭킹·연속 출석 보상 금액(안내 문구용). 잘못된 필드는 기본값으로 정규화 */
 export async function getRewardConfig(): Promise<RewardConfig> {
   return normalizeRewardConfig(await client().get<unknown>('/api/game/reward-config'));
+}
+
+/** 게임 규칙(공개·인증 불필요) — 규칙 시트·주문 패널 안내용 */
+export async function getGameRules(): Promise<GameRules> {
+  return normalizeGameRules(await client().get<unknown>('/api/game/rules'));
 }
 
 /** 204 빈 응답 — http client 가 undefined 로 처리 */

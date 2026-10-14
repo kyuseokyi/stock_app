@@ -19,6 +19,8 @@ type Props = {
   onOpenQuiz: () => void;
   /** Streak 칩 탭 → 연속 출석 보상 시트 */
   onOpenStreak: () => void;
+  /** 📖 규칙 → 규칙 시트(공개) */
+  onOpenRules: () => void;
 };
 
 function NavButton({ label, onPress }: { label: string; onPress: () => void }) {
@@ -29,7 +31,7 @@ function NavButton({ label, onPress }: { label: string; onPress: () => void }) {
   );
 }
 
-/** 시즌·종목·D-day + Streak 칩 + 내 순위/수익률 + 자본금 + 랭킹·퀘스트·퀴즈 진입 버튼 */
+/** 시즌·종목·D-day + Streak 칩 + 내 순위/수익률 + 자본금 + 랭킹·퀘스트·퀴즈·규칙 진입 버튼(좁은 화면은 줄바꿈) */
 export function GameHeader({
   season,
   account,
@@ -41,6 +43,7 @@ export function GameHeader({
   onOpenQuest,
   onOpenQuiz,
   onOpenStreak,
+  onOpenRules,
 }: Props) {
   const dday = daysUntil(season.end_at);
   const rank = myRank?.rank ?? null;
@@ -91,6 +94,7 @@ export function GameHeader({
         <NavButton label="🏆 랭킹" onPress={onOpenRanking} />
         <NavButton label="🎯 퀘스트" onPress={onOpenQuest} />
         {showQuiz ? <NavButton label="🧩 퀴즈" onPress={onOpenQuiz} /> : null}
+        <NavButton label="📖 규칙" onPress={onOpenRules} />
       </View>
     </Card>
   );

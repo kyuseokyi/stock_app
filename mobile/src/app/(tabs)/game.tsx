@@ -16,6 +16,7 @@ import { PositionCard } from '@/features/game/components/position-card';
 import { QuestSheet } from '@/features/game/components/quest-sheet';
 import { QuizBanner } from '@/features/game/components/quiz-banner';
 import { QuizSheet } from '@/features/game/components/quiz-sheet';
+import { RulesSheet } from '@/features/game/components/rules-sheet';
 import { SentimentBar } from '@/features/game/components/sentiment-bar';
 import { StreakRewardSheet } from '@/features/game/components/streak-reward-sheet';
 import { isQuizPrimeTime } from '@/features/game/lib/quiz';
@@ -27,11 +28,11 @@ import { ListState } from '@/ui';
 const RANK_POLL_MS = 30_000;
 const PRIME_CHECK_MS = 60_000;
 
-type ActiveModal = 'ranking' | 'quest' | 'academy' | 'quiz' | 'streak' | null;
-type PrivateModal = Exclude<ActiveModal, 'ranking' | null>;
+type ActiveModal = 'ranking' | 'rules' | 'quest' | 'academy' | 'quiz' | 'streak' | null;
+type PrivateModal = Exclude<ActiveModal, 'ranking' | 'rules' | null>;
 
 // 실시간 트레이딩 게임 — 상태별 분기: 서버 미설정/시즌 없음 → 준비 중, 연결 실패 → 재시도, 정상 → 트레이딩 화면.
-// 시트(RN Modal)는 한 번에 하나(activeModal). 랭킹은 공개, 퀘스트·아카데미·퀴즈·주문은 로그인 필요(내정보 탭으로 이동).
+// 시트(RN Modal)는 한 번에 하나(activeModal). 랭킹·규칙은 공개, 퀘스트·아카데미·퀴즈·주문은 로그인 필요(내정보 탭으로 이동).
 export default function GameScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -98,9 +99,9 @@ export default function GameScreen() {
     else resetPrivate();
   }, [ready, loggedIn, loadPrivate, resetPrivate]);
 
-  // 로그아웃 시 로그인 전용 시트 닫기(랭킹은 공개라 유지)
+  // 로그아웃 시 로그인 전용 시트 닫기(랭킹·규칙은 공개라 유지)
   useEffect(() => {
-    if (!loggedIn) setActiveModal((m) => (m === 'ranking' ? m : null));
+    if (!loggedIn) setActiveModal((m) => (m === 'ranking' || m === 'rules' ? m : null));
   }, [loggedIn]);
 
   // 보유 중 실시간 ROI 로 순위가 움직이므로 주기적으로 갱신(탭이 포커스일 때만 — WS 는 유지)
@@ -232,6 +233,7 @@ export default function GameScreen() {
           onOpenQuest={() => openPrivate('quest')}
           onOpenQuiz={() => openPrivate('quiz')}
           onOpenStreak={() => openPrivate('streak')}
+          onOpenRules={() => setActiveModal('rules')}
         />
         <CoachBanner coach={coach} />
         {loggedIn ? null : (
@@ -251,6 +253,7 @@ export default function GameScreen() {
           submitting={submitting}
           onOrder={handleOrder}
           onLockedLeverage={() => openPrivate('academy')}
+          onOpenRules={() => setActiveModal('rules')}
         />
       </ScrollView>
 
@@ -259,6 +262,7 @@ export default function GameScreen() {
       {activeModal === 'ranking' ? (
         <LeaderboardSheet seasonId={season.id} seasonPeriod={season.period} myUserId={userId} onClose={closeModal} />
       ) : null}
+      {activeModal === 'rules' ? <RulesSheet season={season} onClose={closeModal} /> : null}
       {activeModal === 'quest' ? <QuestSheet onClose={closeModal} /> : null}
       {activeModal === 'academy' ? <AcademySheet onClose={closeModal} /> : null}
       {activeModal === 'quiz' ? <QuizSheet onClose={closeModal} /> : null}
