@@ -72,6 +72,7 @@ class Snapshot:
     positions: tuple[CachedPosition, ...] = ()
     accounts: dict = field(default_factory=dict)        # account_id -> CachedAccount
     season_windows: dict = field(default_factory=dict)  # season_id -> (start_at, end_at)
+    season_periods: dict = field(default_factory=dict)  # season_id -> 'month'|'quarter'(월간 랭킹 여부)
 
     def for_ticker(self, ticker: str) -> list[CachedPosition]:
         return [p for p in self.positions if p.ticker == ticker]
@@ -91,6 +92,7 @@ async def _load(session_factory) -> Snapshot:
         positions: list[CachedPosition] = []
         accounts: dict = {}
         windows: dict = {}
+        periods: dict = {}
         for pos, acc, season in rows.all():
             positions.append(CachedPosition(
                 position_id=pos.id, account_id=acc.id, user_id=acc.user_id, season_id=acc.season_id,
@@ -103,7 +105,9 @@ async def _load(session_factory) -> Snapshot:
                 cash_balance=acc.cash_balance, principal=reward_service.principal(acc),
             )
             windows[season.id] = (season.start_at, season.end_at)
-    return Snapshot(positions=tuple(positions), accounts=accounts, season_windows=windows)
+            periods[season.id] = season.period
+    return Snapshot(positions=tuple(positions), accounts=accounts, season_windows=windows,
+                    season_periods=periods)
 
 
 class PositionCache:

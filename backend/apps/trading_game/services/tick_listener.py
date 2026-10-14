@@ -108,6 +108,7 @@ async def _push_personal_pnl(ticker: str, price: Decimal) -> None:
                 live = ranking_service.compute_live_roi(acc.cash_balance, pos, price, acc.principal)
                 await ranking_service.update_rank(
                     redis, pos.season_id, pos.user_id, live, season_window=window,
+                    period=snap.season_periods.get(pos.season_id),
                 )
             await ws_bus.publish_user(pos.user_id, {
                 "type": "position_pnl", "position_id": str(pos.position_id),

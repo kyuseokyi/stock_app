@@ -268,3 +268,107 @@ async def test_season_dtos_include_period(api, fake_redis, maker):
     assert body["period"] == "quarter" and body["season_number"] == 1
     set_user(admin)
     assert (await client.get("/api/game/admin/seasons")).json()[0]["period"] == "quarter"
+
+
+# ---------------------------------------------------------------- 월간 랭킹 순수 로직·갱신
+from apps.trading_game.services import monthly_ranking as mr  # noqa: E402
+from apps.trading_game.services import ranking_service as rs  # noqa: E402
+
+Q_START = kst(2026, 11, 1, 9)    # 분기 시즌(11월 중간 시작) 11/1~12/31
+Q_END = kst(2026, 12, 31, 20)
+
+
+@pytest.mark.parametrize("now, month_id, start, end", [
+    (kst(2026, 11, 15, 12), date(2026, 11, 1), kst(2026, 11, 1, 9), kst(2026, 12, 1, 9)),
+    (kst(2026, 12, 1, 9), date(2026, 12, 1), kst(2026, 12, 1, 9), Q_END),            # 1일 09:00 = 새 달, 끝은 시즌 종료로 잘림
+    (kst(2026, 12, 1, 8, 59), date(2026, 11, 1), kst(2026, 11, 1, 9), kst(2026, 12, 1, 9)),  # 1일 08:59 = 지난달
+    (kst(2027, 1, 1, 8), date(2026, 12, 1), kst(2026, 12, 1, 9), Q_END),              # 1월 1일 08시 = 12월
+])
+def test_month_bounds(now, month_id, start, end):
+    assert mr.month_bounds(now, Q_START, Q_END) == (month_id, start, end)
+
+
+def test_month_bounds_clipped_by_season_start_and_naive_utc():
+    wid, s, e = mr.month_bounds(kst(2026, 11, 3), kst(2026, 11, 2, 9), None)
+    assert (wid, s, e) == (date(2026, 11, 1), kst(2026, 11, 2, 9), kst(2026, 12, 1, 9))
+    naive_start = datetime(2026, 11, 1, 0, 0)  # SQLite naive → UTC(=KST 09:00)
+    assert mr.month_bounds(kst(2026, 11, 20), naive_start, None)[1] == kst(2026, 11, 1, 9)
+
+
+def test_month_keys_and_ttl():
+    assert mr.month_key(3, date(2026, 11, 1)) == "game:season:3:month:2026-11-01:ranking"
+    assert mr.base_key(3, date(2026, 11, 1)) == "game:season:3:month:2026-11-01:base"
+    assert mr.MONTH_TTL_SEC == 100 * 24 * 3600
+
+
+QWIN = (Q_START, Q_END)
+M11 = date(2026, 11, 1)
+
+
+async def test_update_rank_quarter_updates_monthly_and_weekly():
+    r = _r()
+    await rs.update_rank(r, 1, 7, Decimal("10"), season_window=QWIN, period="quarter", now=kst(2026, 11, 3, 10))
+    await rs.update_rank(r, 1, 7, Decimal("21"), season_window=QWIN, period="quarter", now=kst(2026, 11, 10, 10))
+    assert await r.hget(mr.base_key(1, M11), "7") == "0.0"            # 이번 달 첫 갱신 전 시즌 점수 없음
+    assert await r.zscore(mr.month_key(1, M11), "7") == pytest.approx(21.0)
+    assert await r.hget(wr.base_key(1, date(2026, 11, 9)), "7") == "10.0"
+    assert await r.zscore(wr.week_key(1, date(2026, 11, 9)), "7") == pytest.approx(10.0)
+    assert await r.zscore(rs.ranking_key(1), "7") == pytest.approx(21.0)
+    assert 0 < await r.ttl(mr.month_key(1, M11)) <= mr.MONTH_TTL_SEC
+    assert 0 < await r.ttl(mr.base_key(1, M11)) <= mr.MONTH_TTL_SEC
+    # 다음 달 첫 갱신 — 기준값은 갱신 전 시즌 점수(21)
+    await rs.update_rank(r, 1, 7, Decimal("33.1"), season_window=QWIN, period="quarter", now=kst(2026, 12, 2, 10))
+    assert await r.hget(mr.base_key(1, date(2026, 12, 1)), "7") == "21.0"
+    assert await r.zscore(mr.month_key(1, date(2026, 12, 1)), "7") == pytest.approx(10.0)
+
+
+async def test_update_rank_month_season_or_no_period_skips_monthly():
+    r = _r()
+    await rs.update_rank(r, 1, 7, Decimal("5"), season_window=QWIN, period="month", now=kst(2026, 11, 3, 10))
+    await rs.update_rank(r, 1, 8, Decimal("5"), season_window=QWIN, now=kst(2026, 11, 3, 10))
+    assert await r.keys("game:season:1:month:*") == []
+    assert await r.zscore(wr.week_key(1, date(2026, 11, 2)), "7") == pytest.approx(5.0)
+    assert await r.zscore(rs.ranking_key(1), "8") == pytest.approx(5.0)
+
+
+async def test_sync_account_rank_passes_season_period(session):
+    r = _r()
+    now = datetime.now(UTC)
+    s = await _season(session, start=now - timedelta(days=3), end=now + timedelta(days=30), period="quarter")
+    u = await _seed_user(session)
+    acc = await _seed_account(session, u, s, roi=Decimal("4"))
+    await rs.sync_account_rank(r, session, acc.id)
+    assert len(await r.keys(f"game:season:{s.id}:month:*:ranking")) == 1
+
+
+async def test_position_cache_snapshot_carries_period(maker):
+    from apps.trading_game.services import position_cache
+    async with maker() as db:
+        s = await _season(db, period="quarter")
+        u = await _seed_user(db)
+        acc = await _seed_account(db, u, s)
+        db.add(GamePosition(account_id=acc.id, side="LONG", entry_price=Decimal("1"),
+                            size_amount=Decimal("1"), leverage=1, status="OPEN"))
+        await db.commit()
+    snap = await position_cache._load(maker)
+    assert snap.season_periods == {s.id: "quarter"}
+    assert len(snap.season_windows[s.id]) == 2
+
+
+def test_account_deletion_patterns_cover_monthly_keys():
+    import fnmatch
+    from apps.auth.services import account_deletion
+    assert fnmatch.fnmatchcase(mr.month_key(7, M11), account_deletion.MONTH_RANKING_PATTERN)
+    assert fnmatch.fnmatchcase(mr.base_key(7, M11), account_deletion.MONTH_BASE_PATTERN)
+    assert not fnmatch.fnmatchcase(rs.ranking_key(7), account_deletion.MONTH_RANKING_PATTERN)
+
+
+async def test_account_deletion_removes_user_from_monthly_keys(session):
+    from apps.auth.services import account_deletion
+    r = _r()
+    await r.zadd(mr.month_key(2, M11), {"5": 1.0, "6": 2.0})
+    await r.hset(mr.base_key(2, M11), mapping={"5": "0", "6": "0"})
+    await account_deletion._cleanup_rankings(r, 5, [2])
+    assert await r.zscore(mr.month_key(2, M11), "5") is None
+    assert await r.zscore(mr.month_key(2, M11), "6") == 2.0
+    assert await r.hget(mr.base_key(2, M11), "5") is None

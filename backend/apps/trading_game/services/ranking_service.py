@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from shared.models import User
 from shared.game_models import GameAccount, GameSeason
-from apps.trading_game.services import pricing, weekly_ranking
+from apps.trading_game.services import monthly_ranking, pricing, weekly_ranking
 
 _PCT_Q = Decimal("0.0001")
 
@@ -38,55 +38,69 @@ def compute_live_roi(cash_balance: Decimal, open_pos, price: Decimal, initial_ca
 async def update_rank(
     redis, season_id: int, user_id: int, roi: Decimal, *,
     season_window: tuple[datetime, datetime | None] | None = None,
+    period: str | None = None,
     now: datetime | None = None,
 ) -> None:
-    """시즌 ZSET 갱신 + (season_window 가 있으면) 주간 ZSET 갱신.
+    """시즌 ZSET 갱신 + (season_window 가 있으면) 주간 ZSET, (period == 'quarter' 면) 월간 ZSET 갱신.
 
-    주간 기준값은 그 주 첫 갱신 때 시즌 ZSET 의 '갱신 전' 점수(없으면 0)를 HSETNX 로 기록한다.
+    주간·월간 기준값은 그 구간 첫 갱신 때 시즌 ZSET 의 '갱신 전' 점수(없으면 0)를 HSETNX 로 기록한다.
     HSETNX 를 시즌 ZADD 보다 먼저 해야 동시 갱신이 바꾼 점수가 기준값이 되지 않는다.
     틱마다 불리는 경로라 pipeline 으로 왕복을 줄인다: 기준값이 이미 있으면(대부분) 왕복 2회,
-    이번 주 첫 갱신이면 HSETNX 1회가 더해진다. EXPIRE 는 첫 갱신 때만.
+    구간 첫 갱신이면 HSETNX 가 더해진다. EXPIRE 는 첫 갱신 때만.
     """
     key = ranking_key(season_id)
     member = str(user_id)
+    targets: list[tuple[str, str, int]] = []  # (기준 HASH, 구간 ZSET, TTL)
     if season_window is not None:
         now = weekly_ranking.aware(now) if now is not None else datetime.now(timezone.utc)
         week_id, ws, we = weekly_ranking.week_bounds(now, *season_window)
         if ws <= now < we:
-            bkey = weekly_ranking.base_key(season_id, week_id)
-            wkey = weekly_ranking.week_key(season_id, week_id)
-            # 왕복 1: 갱신 전 시즌 점수 + 이번 주 기준값(대부분 이미 있음 → HSETNX 불필요)
-            pipe = redis.pipeline(transaction=False)
-            pipe.zscore(key, member)
-            pipe.hget(bkey, member)
-            prev, base_s = await pipe.execute()
-            is_new = False
-            if base_s is None:
-                # 이번 주 첫 갱신: HSETNX 는 아래 시즌 ZADD 보다 먼저 실행된다(순서 보장).
-                prev_s = str(float(prev) if prev is not None else 0.0)
-                is_new = bool(await redis.hsetnx(bkey, member, prev_s))
-                base_s = prev_s if is_new else await redis.hget(bkey, member)  # 경합 시 승자 값
-            weekly = float(weekly_ranking.weekly_roi(roi, Decimal(base_s)))
-            # 왕복 2: 주간 ZADD + 시즌 ZADD (+ 첫 갱신이면 EXPIRE — 키가 생긴 뒤여야 적용)
-            pipe = redis.pipeline(transaction=False)
-            pipe.zadd(wkey, {member: weekly})
-            pipe.zadd(key, {member: float(roi)})
-            if is_new:
-                pipe.expire(bkey, weekly_ranking.WEEK_TTL_SEC)
-                pipe.expire(wkey, weekly_ranking.WEEK_TTL_SEC)
-            await pipe.execute()
-            return
-    await redis.zadd(key, {member: float(roi)})
+            targets.append((weekly_ranking.base_key(season_id, week_id),
+                            weekly_ranking.week_key(season_id, week_id), weekly_ranking.WEEK_TTL_SEC))
+        if period == "quarter":
+            month_id, ms, me = monthly_ranking.month_bounds(now, *season_window)
+            if ms <= now < me:
+                targets.append((monthly_ranking.base_key(season_id, month_id),
+                                monthly_ranking.month_key(season_id, month_id), monthly_ranking.MONTH_TTL_SEC))
+    if not targets:
+        await redis.zadd(key, {member: float(roi)})
+        return
+    # 왕복 1: 갱신 전 시즌 점수 + 구간별 기준값(대부분 이미 있음 → HSETNX 불필요)
+    pipe = redis.pipeline(transaction=False)
+    pipe.zscore(key, member)
+    for bkey, _, _ in targets:
+        pipe.hget(bkey, member)
+    prev, *bases = await pipe.execute()
+    prev_s = str(float(prev) if prev is not None else 0.0)
+    scores: list[tuple[str, str, int, float, bool]] = []
+    for (bkey, zkey, ttl), base_s in zip(targets, bases):
+        is_new = False
+        if base_s is None:
+            # 구간 첫 갱신: HSETNX 는 아래 시즌 ZADD 보다 먼저 실행된다(순서 보장).
+            is_new = bool(await redis.hsetnx(bkey, member, prev_s))
+            base_s = prev_s if is_new else await redis.hget(bkey, member)  # 경합 시 승자 값
+        scores.append((bkey, zkey, ttl, float(weekly_ranking.weekly_roi(roi, Decimal(base_s))), is_new))
+    # 왕복 2: 구간 ZADD + 시즌 ZADD (+ 첫 갱신이면 EXPIRE — 키가 생긴 뒤여야 적용)
+    pipe = redis.pipeline(transaction=False)
+    for _, zkey, _, score, _ in scores:
+        pipe.zadd(zkey, {member: score})
+    pipe.zadd(key, {member: float(roi)})
+    for bkey, zkey, ttl, _, is_new in scores:
+        if is_new:
+            pipe.expire(bkey, ttl)
+            pipe.expire(zkey, ttl)
+    await pipe.execute()
 
 
 async def sync_account_rank(redis, db: AsyncSession, account_id) -> None:
-    """계좌의 현재 current_roi 를 랭킹(시즌+주간)에 반영(청산 후 호출)."""
+    """계좌의 현재 current_roi 를 랭킹(시즌+주간+분기 시즌이면 월간)에 반영(청산 후 호출)."""
     acc = await db.get(GameAccount, account_id)
     if acc is None:
         return
     season = await db.get(GameSeason, acc.season_id)
     window = (season.start_at, season.end_at) if season is not None else None
-    await update_rank(redis, acc.season_id, acc.user_id, acc.current_roi, season_window=window)
+    period = season.period if season is not None else None
+    await update_rank(redis, acc.season_id, acc.user_id, acc.current_roi, season_window=window, period=period)
 
 
 async def my_rank(redis, season_id: int, user_id: int) -> dict:

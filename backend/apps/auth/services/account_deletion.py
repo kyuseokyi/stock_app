@@ -27,6 +27,9 @@ KAKAO_TIMEOUT_SECONDS = 5.0
 # auth 가 trading_game 을 import 하지 않도록 패턴만 둔다 — 일치 여부는 테스트로 고정.
 WEEK_RANKING_PATTERN = "game:season:*:week:*:ranking"
 WEEK_BASE_PATTERN = "game:season:*:week:*:base"
+# 월간(분기 시즌) — monthly_ranking.month_key·base_key 와 동일해야 한다
+MONTH_RANKING_PATTERN = "game:season:*:month:*:ranking"
+MONTH_BASE_PATTERN = "game:season:*:month:*:base"
 
 
 def season_ranking_key(season_id: int) -> str:
@@ -80,15 +83,17 @@ async def delete_account(
 
 
 async def _cleanup_rankings(redis, uid: int, season_ids: list[int]) -> None:
-    """시즌 랭킹 ZREM + 주간 랭킹 ZREM·기준 HDEL(SCAN, KEYS 금지). 실패는 경고만."""
+    """시즌 랭킹 ZREM + 주간·월간 랭킹 ZREM·기준 HDEL(SCAN, KEYS 금지). 실패는 경고만."""
     member = str(uid)
     try:
         for sid in season_ids:
             await redis.zrem(season_ranking_key(sid), member)
-        async for key in redis.scan_iter(match=WEEK_RANKING_PATTERN, count=200):
-            await redis.zrem(key, member)
-        async for key in redis.scan_iter(match=WEEK_BASE_PATTERN, count=200):
-            await redis.hdel(key, member)
+        for pattern in (WEEK_RANKING_PATTERN, MONTH_RANKING_PATTERN):
+            async for key in redis.scan_iter(match=pattern, count=200):
+                await redis.zrem(key, member)
+        for pattern in (WEEK_BASE_PATTERN, MONTH_BASE_PATTERN):
+            async for key in redis.scan_iter(match=pattern, count=200):
+                await redis.hdel(key, member)
     except Exception as exc:  # noqa: BLE001 — 베스트 에포트(탈퇴는 이미 커밋됨)
         log.warning("탈퇴 후 Redis 랭킹 정리 실패 user=%s: %s", uid, exc)
 
