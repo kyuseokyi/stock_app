@@ -128,11 +128,8 @@ export default function GamePage() {
         onOpenStreak={() => openPrivate('streak')}
       />
       <CoachBanner coach={coach} />
-      {loggedIn ? (
-        <SentimentBar sentiment={sentiment} />
-      ) : (
-        <p className="rounded-card bg-surface p-4 text-sm text-ink-muted">로그인하면 실시간 시세와 주문이 열려요</p>
-      )}
+      {!loggedIn && <p className="rounded-card bg-surface p-4 text-sm text-ink-muted">로그인하면 주문할 수 있어요</p>}
+      <SentimentBar sentiment={sentiment} />
       <TradingChart ticker={season.ticker} lastPrice={lastPrice} coach={coach} position={position} />
       {position && (
         <ActivePositionCard position={position} lastPrice={lastPrice} closing={closing} onClose={() => closePosition()} />
