@@ -4,7 +4,8 @@ ACTIVE 시즌 종목을 주기적으로(GAME_WS_SEASON_POLL_SEC, 기본 60초) �
 구독을 새 종목으로 교체한다(월말 시즌 롤오버 시 수동 재시작 불필요). 시즌이 없으면 종료하지 않고
 기다리며, 구독 태스크가 예외로 끝나면 다음 확인 때 다시 시작한다.
 MOCK_TICK_STREAM=true 또는 KIS 키 미설정이면 Mock 생성기로, 아니면 실 KIS WS 로
-분기한다. 각 틱을 Redis stock:tick:{ticker} 로 발행한다.
+분기한다. 각 틱을 Redis stock:tick:{ticker} 로 발행하고, 발행한 틱을 1분봉으로 묶어
+ClickHouse game_minute_bars 에 저장한다(game_ws/minute_bars — 별도 태스크, 실패 무시).
 
 실 KIS WS 체결 TR(CLAUDE.md "KIS 데이터 수집 규칙" UN→J 폴백의 실시간판):
 - 기본 H0UNCNT0(통합 KRX+NXT) — NXT 애프터마켓(16:00~20:00)까지 틱 수신, 일봉 UN 종가와 일치.
@@ -32,6 +33,7 @@ from sqlalchemy import select
 from shared.database import AsyncSessionLocal
 from shared.game_models import GameSeason
 from shared.kis_config import get_kis_config
+from apps.collector.game_ws.minute_bars import MinuteBarRecorder
 from apps.collector.game_ws.mock_stream import mock_ticks
 from apps.collector.game_ws.publisher import TickPublisher
 from apps.collector.game_ws.tr_select import select_tr_id
@@ -82,10 +84,21 @@ def _in_window(now_kst: datetime, windows: list[tuple[time, time]]) -> bool:
     return market_clock.in_trading_window(now_kst.replace(second=0, microsecond=0), windows)
 
 
-async def _consume(use_mock, cfg, ticker, base_price, redis_url, publisher) -> None:
+def _record(recorder, tick: dict) -> None:
+    """발행한 틱을 분봉 집계기에 — 실패해도 발행 경로에 영향 없음."""
+    if recorder is None:
+        return
+    try:
+        recorder.record(tick)
+    except Exception:  # noqa: BLE001
+        log.exception("분봉 기록 실패(무시)")
+
+
+async def _consume(use_mock, cfg, ticker, base_price, redis_url, publisher, recorder=None) -> None:
     if use_mock:
         async for tick in mock_ticks(ticker, base_price):
             await publisher.publish(tick)
+            _record(recorder, tick)
     else:
         tr_id = await select_tr_id(ticker)
         client = KISWebSocketClient(cfg, ticker, redis_url, tr_id=tr_id)
@@ -97,7 +110,9 @@ async def _consume(use_mock, cfg, ticker, base_price, redis_url, publisher) -> N
             if not _in_window(datetime.now(KST), windows):
                 continue  # 거래창 밖(NXT 프리마켓 등) 틱 미발행
             for t in parsed:
-                await publisher.publish(_payload_from_parsed(t))
+                payload = _payload_from_parsed(t)
+                await publisher.publish(payload)
+                _record(recorder, payload)
 
 
 async def _finish(task: asyncio.Task | None) -> None:
@@ -163,14 +178,25 @@ async def run() -> None:
     use_mock = os.getenv("MOCK_TICK_STREAM", "").lower() == "true" or not cfg.is_configured
     base_price = float(os.getenv("MOCK_BASE_PRICE", "71500"))
     poll_sec = float(os.getenv("GAME_WS_SEASON_POLL_SEC", "60"))
+    # 1분봉 저장(ClickHouse) — 별도 태스크, 실패해도 틱 발행 무관
+    recorder = MinuteBarRecorder()
+    bars_stop = asyncio.Event()
+    bars_task = asyncio.create_task(recorder.run(bars_stop))
 
     def start_consumer(ticker: str) -> asyncio.Task:
         log.info("수집 시작: ticker=%s mock=%s", ticker, use_mock)
-        return asyncio.create_task(_consume(use_mock, cfg, ticker, base_price, redis_url, publisher))
+        return asyncio.create_task(
+            _consume(use_mock, cfg, ticker, base_price, redis_url, publisher, recorder=recorder)
+        )
 
     try:
         await supervise(_active_season_ticker, start_consumer, stop, poll_sec)
     finally:
+        bars_stop.set()
+        try:
+            await asyncio.wait_for(bars_task, timeout=10)
+        except Exception:  # noqa: BLE001
+            log.warning("분봉 저장 종료 대기 실패(무시)")
         await publisher.close()
         log.info("수집 데몬 종료")
 
