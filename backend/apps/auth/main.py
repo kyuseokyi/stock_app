@@ -16,7 +16,9 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from shared.cors import build_allowed_origins
+from shared.health import add_health_routes
 
+from . import deps
 from .routers import auth, social
 from .social.config import load_social_settings, startup_warnings
 
@@ -43,6 +45,9 @@ for _msg in startup_warnings(load_social_settings()):
 @app.get("/health", tags=["health"])
 async def health():
     return {"status": "ok", "service": "auth"}
+
+
+add_health_routes(app, "auth", redis_getter=lambda: deps.get_redis())  # /ready(DB + Redis)
 
 
 if __name__ == "__main__":

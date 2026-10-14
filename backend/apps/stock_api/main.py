@@ -16,6 +16,7 @@ from strawberry.fastapi import GraphQLRouter
 
 from apps.stock_api.graphql.schema import schema
 from shared.cors import build_allowed_origins
+from shared.health import add_health_routes
 
 app = FastAPI(title="Stock App - Stock API Service", version="0.1.0")
 
@@ -36,6 +37,9 @@ app.include_router(graphql_app, prefix="/graphql")
 @app.get("/health", tags=["health"])
 async def health():
     return {"status": "ok", "service": "stock_api"}
+
+
+add_health_routes(app, "stock_api")  # /ready(DB — Redis 미사용)
 
 
 if __name__ == "__main__":

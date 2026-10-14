@@ -28,6 +28,7 @@ from apps.trading_game.services import position_cache, ws_bus
 from apps.trading_game.services.connection_manager import manager
 from apps.trading_game.services.leader import LeaderElector
 from apps.trading_game.services.tick_listener import broadcast_loop, fanout_worker, pnl_loop, run_listener
+from shared.health import add_health_routes
 
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 LEADER_NAME = "trading_game"
@@ -97,6 +98,8 @@ app.include_router(quiz_admin.router)
 async def health():
     return {"status": "ok", "service": "trading_game"}
 
+
+add_health_routes(app, "trading_game", redis_getter=lambda: deps.get_redis())  # /ready(DB + Redis)
 
 
 if __name__ == "__main__":
