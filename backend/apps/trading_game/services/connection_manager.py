@@ -11,15 +11,17 @@ import json
 from fastapi import WebSocket
 
 SEND_TIMEOUT = 2.0  # 느린 클라이언트 전송 타임아웃(초)
+SENTIMENT_INTERVAL = 5.0  # 베팅 심리 브로드캐스트 주기(초) — ws_gateway·규칙 API 공용
 
 
 def sentiment_from_counts(long_count: int, short_count: int) -> dict:
-    total = long_count + short_count
+    total = long_count + short_count  # 보유 중 포지션 수 = 보유 인원(1인 1포지션)
     if total == 0:
-        return {"long_pct": 0.0, "short_pct": 0.0}
+        return {"long_pct": 0.0, "short_pct": 0.0, "total": 0}
     return {
         "long_pct": round(long_count / total * 100, 1),
         "short_pct": round(short_count / total * 100, 1),
+        "total": total,
     }
 
 

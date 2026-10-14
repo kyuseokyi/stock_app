@@ -1,4 +1,4 @@
-"""게임 운영 설정 — 관리자 조회·변경 + 공개 보상 안내(reward-config)."""
+"""게임 운영 설정 — 관리자 조회·변경 + 공개 보상 안내(reward-config)·규칙(rules)."""
 from __future__ import annotations
 
 import logging
@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from shared.auth import require_admin
 from shared.database import get_db
 from shared.models import User
-from apps.trading_game.services import game_settings_service
+from apps.trading_game.services import game_settings_service, rules_service
 
 log = logging.getLogger("trading_game.settings_admin")
 router = APIRouter(prefix="/api/game", tags=["trading-game-settings"])
@@ -42,5 +42,10 @@ async def update_game_settings(
 @router.get("/reward-config")
 async def reward_config(db: AsyncSession = Depends(get_db)):
     """공개 — 클라이언트 보상 안내 문구용 금액."""
-    s = await game_settings_service.get_settings(db)
-    return {"weekly": s["weekly_rewards"], "monthly": s["monthly_rewards"], "streak": s["streak_rewards"]}
+    return await game_settings_service.reward_config(db)
+
+
+@router.get("/rules")
+async def game_rules(db: AsyncSession = Depends(get_db)):
+    """공개 — 게임 규칙 화면용 값(실제 계산 상수에서 조립)."""
+    return await rules_service.build_rules(db)

@@ -19,12 +19,13 @@ from shared.security import decode_token
 from shared.models import User
 from shared.game_models import GameAccount, GamePosition
 from apps.trading_game.services import account_service, ws_bus
-from apps.trading_game.services.connection_manager import manager, sentiment_from_counts
+from apps.trading_game.services.connection_manager import (  # noqa: F401 — SENTIMENT_INTERVAL 재노출
+    SENTIMENT_INTERVAL, manager, sentiment_from_counts,
+)
 
 router = APIRouter()
 log = logging.getLogger("trading_game.sentiment")
 
-SENTIMENT_INTERVAL = 5.0
 DEFAULT_PUBLIC_PER_IP = 3
 DEFAULT_PUBLIC_MAX = 2000
 

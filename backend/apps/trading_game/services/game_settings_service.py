@@ -106,6 +106,12 @@ async def streak_rewards(db: AsyncSession) -> dict[int, Decimal]:
     return {int(m): Decimal(str(a)) for m, a in (await get_settings(db))["streak_rewards"].items()}
 
 
+async def reward_config(db: AsyncSession) -> dict:
+    """공개 보상 안내 — reward-config·규칙 API 공용."""
+    s = await get_settings(db)
+    return {"weekly": s["weekly_rewards"], "monthly": s["monthly_rewards"], "streak": s["streak_rewards"]}
+
+
 async def next_season_period(db: AsyncSession) -> str:
     p = (await get_settings(db))["next_season_period"]
     return p if p in PERIODS else "month"

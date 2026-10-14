@@ -39,7 +39,7 @@ QUESTS: tuple[QuestDef, ...] = (
     QuestDef("Q1_STOP_LOSS", "첫 손절선 걸고 거래하기",
              "손절선(Stop-Loss)을 설정하고 포지션에 진입하세요.", 1, reward_cash=Decimal("500000")),
     QuestDef("Q2_GOLDEN_CROSS", "골든크로스에 매수하기",
-             "5일선이 20일선을 상향 돌파한 뒤 3거래일 이내에 LONG으로 진입하세요.", 1,
+             "5일선이 20일선을 상향 돌파한 뒤 3거래일 이내에 상승에 걸어 진입하세요.", 1,
              reward_cash=Decimal("1000000")),
     QuestDef("Q3_SMALL_SIZE", "소분할 진입 3회",
              "자본금의 25% 이하 비중으로 3번 진입하세요.", 3, reward_badge="PRINCIPLED"),

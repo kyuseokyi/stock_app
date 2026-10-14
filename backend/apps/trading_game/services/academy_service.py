@@ -13,6 +13,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from shared.game_models import AcademyQuestion, UserAcademy
 
+ACADEMY_LEVERAGE = 5  # 아카데미 통과 시 해금되는 배율(orders 게이트·규칙 API 공용)
+
 
 class AcademyError(Exception):
     """code: NO_QUESTIONS | NOT_FOUND"""

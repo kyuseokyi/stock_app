@@ -459,12 +459,16 @@ from apps.trading_game.services.connection_manager import sentiment_from_counts
 
 def test_sentiment_ratio():
     s = sentiment_from_counts(long_count=65, short_count=35)
-    assert s == {"long_pct": 65.0, "short_pct": 35.0}
+    assert s == {"long_pct": 65.0, "short_pct": 35.0, "total": 100}
 
 
 def test_sentiment_zero_positions():
     s = sentiment_from_counts(long_count=0, short_count=0)
-    assert s == {"long_pct": 0.0, "short_pct": 0.0}
+    assert s == {"long_pct": 0.0, "short_pct": 0.0, "total": 0}
+
+
+def test_sentiment_total_is_long_plus_short():
+    assert sentiment_from_counts(long_count=2, short_count=1)["total"] == 3
 
 
 async def test_close_updates_account_aggregates(session):

@@ -12,6 +12,8 @@ from shared.game_models import GameAccount, GamePosition, GameTrade
 from apps.trading_game.services import pricing, reward_service
 
 MIN_ORDER_AMOUNT = Decimal("100000")  # 최소 주문 10만 원
+# 계좌당 동시 보유 포지션 수 — 실제 강제는 DB 부분 유니크 인덱스(위반 시 ALREADY_OPEN). 규칙 API 노출용.
+MAX_OPEN_POSITIONS = 1
 
 
 class OrderError(Exception):

@@ -155,7 +155,7 @@ async def open_order(
         raise HTTPException(status.HTTP_409_CONFLICT, "거래 가능한 ACTIVE 시즌이 아닙니다.")
 
     # Phase 5b: 5배 레버리지는 아카데미 통과자만(필수 게이트 — 체결 전에 거부)
-    if body.leverage == 5 and not await academy_service.is_unlocked(db, user.id):
+    if body.leverage == academy_service.ACADEMY_LEVERAGE and not await academy_service.is_unlocked(db, user.id):
         raise HTTPException(
             status.HTTP_403_FORBIDDEN,
             detail={"code": "LEVERAGE_LOCKED",
