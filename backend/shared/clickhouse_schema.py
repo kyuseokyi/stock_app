@@ -70,6 +70,35 @@ ORDER BY (ticker, date)
 """
 
 
+def game_minute_bars_ddl(db: str = CLICKHOUSE_DB) -> str:
+    """게임 종목 1분봉(ts=분 시작 KST). source: tick(게임 틱 집계)|kis(당일분봉 보충).
+
+    같은 (ticker, ts) 는 최신 ingested_at 이 남는다(진행 중 바 덮어쓰기). 조회는 항상 FINAL.
+    """
+    return f"""
+CREATE TABLE IF NOT EXISTS {db}.game_minute_bars
+(
+    ticker       String,
+    ts           DateTime('Asia/Seoul'),
+    open         Float64,
+    high         Float64,
+    low          Float64,
+    close        Float64,
+    volume       UInt64,
+    source       LowCardinality(String),
+    ingested_at  DateTime64(3)
+)
+ENGINE = ReplacingMergeTree(ingested_at)
+PARTITION BY toYYYYMM(ts)
+ORDER BY (ticker, ts)
+"""
+
+
+def ensure_game_minute_bars(client=None, db: str = CLICKHOUSE_DB) -> None:
+    """game_ws 시작 시 멱등 생성(init_clickhouse 를 배포에서 따로 돌리지 않아도 되게)."""
+    (client or get_client()).command(game_minute_bars_ddl(db))
+
+
 # 프로세스별 재사용 클라이언트 캐시.
 # 매 호출 새 클라이언트를 만들면 clickhouse_connect 가 여는 HTTP 소켓이 닫히지 않고
 # 쌓여 FD 누수(EMFILE)로 이어진다 → 전종목 수집이 ~1000종목 부근에서
@@ -102,6 +131,7 @@ def init_clickhouse() -> None:
     client.command(f"CREATE DATABASE IF NOT EXISTS {CLICKHOUSE_DB}")
     client.command(DAILY_PRICES_DDL)
     client.command(FUNDAMENTALS_DDL)
+    client.command(game_minute_bars_ddl())
     tables = client.query(
         f"SELECT name FROM system.tables WHERE database = '{CLICKHOUSE_DB}'"
     ).result_rows
