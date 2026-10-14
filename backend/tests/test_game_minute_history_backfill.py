@@ -62,7 +62,30 @@ def test_history_fills_missing_days_0900_to_1530_kis_source():
     assert all(b.ticker == "005930" for b in bars)
     assert min(b.ts for b in bars).time().isoformat() == "09:00:00"
     assert max(b.ts for b in bars).time().isoformat() == "15:30:00"
-    assert kis.calls[0][1] == "153000"
+    assert kis.calls[0][1] == "200000"
+
+
+def test_history_includes_after_market_within_windows():
+    """UN 은 16:00~20:00(NXT 애프터마켓)도 준다 — 거래창 안(15:31~15:59 제외)만 저장."""
+    kis = FakeDaily({date(2026, 10, 13)}, end=(20, 0))
+    n, inserted = _run(kis, days=1)
+    bars = [b for chunk, _ in inserted for b in chunk]
+    assert n == 391 + 241  # 09:00~15:30 + 16:00~20:00
+    assert max(b.ts for b in bars).time().isoformat() == "20:00:00"
+    assert not any(b.ts.hour == 15 and b.ts.minute > 30 for b in bars)
+
+
+def test_dates_in_ch_counts_only_complete_days():
+    seen = {}
+
+    class C:
+        def query(self, sql, parameters):
+            seen.update(sql=sql, p=parameters)
+            return type("R", (), {"result_rows": [(date(2026, 10, 13),)]})()
+
+    assert kb.dates_in_ch("005930", date(2026, 9, 1), client=C(), db="x") == {date(2026, 10, 13)}
+    assert "countIf(source = 'tick') > 0" in seen["sql"] and "max(toHour(ts)) >= 16" in seen["sql"]
+    assert seen["p"] == {"t": "005930", "d": "2026-09-01"}
 
 
 def test_history_skips_days_already_in_ch_and_holidays():

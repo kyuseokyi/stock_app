@@ -168,11 +168,14 @@ def run_backfill(ticker: str, first_tick_minute: Callable[[], datetime | None]) 
 
 # --- 과거 거래일 보충(주식일별분봉조회 FHKST03010230) ---------------------------------------
 # 보조지표(60선·볼린저) 워밍업용. 60분봉 조회 범위(minute_candles_query, 30거래일)만큼 채운다.
-# - 대상: 오늘 이전 평일 중 CH 에 행이 하나도 없는 날짜(이미 있는 날은 tick/kis 무엇이든 건너뜀 → 멱등).
+# - 대상: 오늘 이전 평일 중 "완성된" 날이 아닌 날짜. 완성 = tick 행이 있음(game_ws 가 그날 돌았음) 또는
+#   16시 이후(NXT 애프터마켓) 행이 있음. 09:00~15:30 만 있는 kis 날짜는 다시 받아 애프터마켓을 채운다(멱등 —
+#   같은 (ticker, ts) 는 Replacing 으로 1행). NXT 미상장(J) 종목은 16시 이후가 없어 시작마다 다시 받는다(호출 수 한정).
 # - 휴장일은 KIS 가 빈 응답 → 0건(다음 실행 때 다시 묻지만 2회 호출이라 무시 가능).
 # - 첫 오류에서 중단(모의 미지원 등 같은 오류를 30번 반복하지 않게) — 상위 래퍼가 로그만.
 HISTORY_DAYS = 30
-DAY_CLOSE_HOUR = "153000"
+DAY_CLOSE_HOUR = "200000"  # 게임 거래창 끝(NXT 애프터마켓 20:00) — UN 이면 16:00~20:00 도 포함
+AFTER_MARKET_HOUR = 16
 
 FetchDayPage = Callable[[date, str, str], list[dict]]  # (day, hour HHMMSS, market) -> output2
 
@@ -189,12 +192,13 @@ def past_weekdays(today: date, n: int) -> list[date]:
 
 
 def dates_in_ch(ticker: str, since: date, client=None, db: str | None = None) -> set[date]:
-    """since 이후 CH 에 분봉이 있는 날짜(source 무관)."""
+    """since 이후 분봉이 '완성된' 날짜 — tick 행이 있거나 16시 이후 행이 있는 날."""
     from shared.clickhouse_schema import CLICKHOUSE_DB, get_client
 
     rows = (client or get_client()).query(
-        f"SELECT DISTINCT toDate(ts) FROM {db or CLICKHOUSE_DB}.game_minute_bars "
-        "WHERE ticker = %(t)s AND toDate(ts) >= %(d)s",
+        f"SELECT toDate(ts) AS d FROM {db or CLICKHOUSE_DB}.game_minute_bars "
+        "WHERE ticker = %(t)s AND toDate(ts) >= %(d)s GROUP BY d "
+        f"HAVING countIf(source = 'tick') > 0 OR max(toHour(ts)) >= {AFTER_MARKET_HOUR}",
         parameters={"t": ticker, "d": since.isoformat()},
     ).result_rows
     return {r[0] for r in rows}
