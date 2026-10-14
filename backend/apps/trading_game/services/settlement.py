@@ -13,7 +13,7 @@ from shared.models import User
 from shared.game_models import (
     GameAccount, GamePosition, GameSeason, GameTrade, HallOfFame, INITIAL_CASH,
 )
-from apps.trading_game.services import account_service, mbti_analyzer, order_engine
+from apps.trading_game.services import account_service, game_settings_service, mbti_analyzer, order_engine
 
 log = logging.getLogger("trading_game.settlement")
 KST = timezone(timedelta(hours=9))
@@ -36,6 +36,34 @@ def next_month_bounds(ref: datetime) -> tuple[datetime, datetime]:
     y, m = ref.year, ref.month
     ny, nm = (y + 1, 1) if m == 12 else (y, m + 1)
     return _bounds(ny, nm)
+
+
+def _kst(dt: datetime) -> datetime:
+    """naive 는 UTC 로 해석(weekly_ranking.aware 와 같은 규칙)."""
+    return (dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)).astimezone(KST)
+
+
+def season_bounds(ref: datetime, period: str) -> tuple[datetime, datetime]:
+    """ref(KST) 가 속한 달 1일 09:00 시작. 끝 = month: 그 달 말일 20:00, quarter: 그 분기 마지막 달 말일 20:00.
+
+    분기 중간에 시작하면 그 분기 말까지(예: 11월 시작 분기 시즌 = 11/1~12/31).
+    """
+    k = _kst(ref)
+    if period == "month":
+        end_month = k.month
+    elif period == "quarter":
+        end_month = ((k.month - 1) // 3 + 1) * 3
+    else:
+        raise ValueError(f"unknown period: {period}")
+    start = datetime(k.year, k.month, 1, 9, 0, tzinfo=KST)
+    return start, _bounds(k.year, end_month)[1]
+
+
+def next_season_bounds(prev_end_at: datetime, period: str) -> tuple[datetime, datetime]:
+    """이전 시즌 종료(KST) 다음 달을 시작 달로 season_bounds."""
+    k = _kst(prev_end_at)
+    ny, nm = (k.year + 1, 1) if k.month == 12 else (k.year, k.month + 1)
+    return season_bounds(datetime(ny, nm, 1, tzinfo=KST), period)
 
 
 async def settle_due_season(db: AsyncSession, redis, close_price_provider) -> dict | None:
@@ -108,12 +136,13 @@ async def settle_due_season(db: AsyncSession, redis, close_price_provider) -> di
     dup = await db.execute(select(GameSeason).where(GameSeason.season_number == next_num))
     next_season_num = None
     if dup.scalar_one_or_none() is None:
-        # 차기 시즌 창은 이번 시즌 end_at(말일) 기준 '다음 달'. 워커가 한 달 이상
-        # 멈췄다면 이미 만료된 시즌이 생성될 수 있고, 다음 실행에서 연쇄 정산된다(의도된 동작).
-        start, end = next_month_bounds(end_at.astimezone(KST))
+        # 차기 시즌 창은 이번 시즌 end_at(말일) 기준 '다음 달'부터, 기간은 admin 설정(다음 시즌 기간).
+        # 워커가 한 달 이상 멈췄다면 이미 만료된 시즌이 생성될 수 있고, 다음 실행에서 연쇄 정산된다(의도된 동작).
+        period = await game_settings_service.next_season_period(db)
+        start, end = next_season_bounds(end_at, period)
         db.add(GameSeason(
             season_number=next_num, ticker=season.ticker, stock_name=season.stock_name,
-            start_at=start, end_at=end, status="ACTIVE", initial_cash=INITIAL_CASH,
+            start_at=start, end_at=end, status="ACTIVE", initial_cash=INITIAL_CASH, period=period,
         ))
         next_season_num = next_num
     season.status = "FINISHED"

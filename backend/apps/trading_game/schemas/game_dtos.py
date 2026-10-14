@@ -111,6 +111,7 @@ class SeasonOption(BaseModel):
     status: str
     start_at: datetime
     end_at: datetime | None
+    period: str = "month"  # month|quarter — 분기 시즌이면 클라이언트가 월간 랭킹 탭을 연다
 
 
 # ---------------------------------------------------------------- Phase 5b

@@ -69,6 +69,7 @@ async def list_seasons(
         SeasonOption(
             id=s.id, season_number=s.season_number, ticker=s.ticker, stock_name=s.stock_name,
             status=s.status, start_at=s.start_at, end_at=s.end_at,
+            period=s.period,
         )
         for s in await coach_service.list_seasons(db)
     ]

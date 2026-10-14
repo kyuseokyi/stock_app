@@ -200,3 +200,71 @@ async def test_streak_status_and_claim_use_configured_amounts(session):
     with pytest.raises(srs.StreakRewardError) as e:
         await srs.claim(session, _r(), user.id, 5, today=T)
     assert e.value.code == "UNKNOWN_MILESTONE"
+
+
+# ---------------------------------------------------------------- 시즌 기간
+from apps.trading_game.services import settlement  # noqa: E402
+
+
+def kst(y, m, d, h=0, mi=0):
+    return datetime(y, m, d, h, mi, tzinfo=KST)
+
+
+@pytest.mark.parametrize("ref, period, start, end", [
+    (kst(2026, 10, 15), "month", kst(2026, 10, 1, 9), kst(2026, 10, 31, 20)),
+    (kst(2026, 10, 15), "quarter", kst(2026, 10, 1, 9), kst(2026, 12, 31, 20)),
+    (kst(2026, 11, 1), "quarter", kst(2026, 11, 1, 9), kst(2026, 12, 31, 20)),   # 분기 중간 시작 → 분기 말까지
+    (kst(2027, 1, 1), "quarter", kst(2027, 1, 1, 9), kst(2027, 3, 31, 20)),
+    (kst(2027, 5, 3), "quarter", kst(2027, 5, 1, 9), kst(2027, 6, 30, 20)),
+    (kst(2027, 9, 1), "quarter", kst(2027, 9, 1, 9), kst(2027, 9, 30, 20)),      # 분기 마지막 달 시작 → 그 달만
+    (kst(2028, 2, 10), "month", kst(2028, 2, 1, 9), kst(2028, 2, 29, 20)),       # 윤년
+])
+def test_season_bounds(ref, period, start, end):
+    assert settlement.season_bounds(ref, period) == (start, end)
+
+
+@pytest.mark.parametrize("prev_end, period, start, end", [
+    (kst(2026, 10, 31, 20), "month", kst(2026, 11, 1, 9), kst(2026, 11, 30, 20)),
+    (kst(2026, 10, 31, 20), "quarter", kst(2026, 11, 1, 9), kst(2026, 12, 31, 20)),
+    (kst(2026, 12, 31, 20), "quarter", kst(2027, 1, 1, 9), kst(2027, 3, 31, 20)),   # 12월 → 다음 해
+    (kst(2026, 12, 31, 20), "month", kst(2027, 1, 1, 9), kst(2027, 1, 31, 20)),
+    (kst(2026, 12, 31, 20).astimezone(UTC), "month", kst(2027, 1, 1, 9), kst(2027, 1, 31, 20)),  # UTC 입력
+])
+def test_next_season_bounds(prev_end, period, start, end):
+    assert settlement.next_season_bounds(prev_end, period) == (start, end)
+
+
+def test_season_bounds_rejects_unknown_period():
+    with pytest.raises(ValueError):
+        settlement.season_bounds(kst(2026, 10, 1), "year")
+
+
+async def test_settlement_creates_next_season_with_configured_period(session):
+    s = await _season(session, start=kst(2026, 9, 1, 9), end=kst(2026, 9, 30, 20))
+    await gss.update_settings(session, {"next_season_period": "quarter"})
+    out = await settlement.settle_due_season(session, None, lambda t, e: Decimal("70000"))
+    assert out["next_season"] == 2
+    nxt = (await session.execute(select(GameSeason).where(GameSeason.season_number == 2))).scalar_one()
+    assert nxt.period == "quarter"
+    # SQLite 는 KST aware 값을 벽시계 그대로 naive 로 돌려준다
+    assert (nxt.start_at.replace(tzinfo=None), nxt.end_at.replace(tzinfo=None)) == (
+        datetime(2026, 10, 1, 9), datetime(2026, 12, 31, 20))
+    assert s.period == "month"  # 진행 중(이번) 시즌 기간은 그대로
+
+
+async def test_settlement_next_season_defaults_to_month(session):
+    await _season(session, start=kst(2026, 9, 1, 9), end=kst(2026, 9, 30, 20))
+    await settlement.settle_due_season(session, None, lambda t, e: Decimal("70000"))
+    nxt = (await session.execute(select(GameSeason).where(GameSeason.season_number == 2))).scalar_one()
+    assert nxt.period == "month" and nxt.end_at.replace(tzinfo=None) == datetime(2026, 10, 31, 20)
+
+
+async def test_season_dtos_include_period(api, fake_redis, maker):
+    client, set_user = api
+    async with maker() as db:
+        await _season(db, period="quarter")
+        admin = await _seed_user(db, role=UserRole.ADMIN, nickname="관리자")
+    body = (await client.get("/api/game/seasons/active")).json()
+    assert body["period"] == "quarter" and body["season_number"] == 1
+    set_user(admin)
+    assert (await client.get("/api/game/admin/seasons")).json()[0]["period"] == "quarter"
