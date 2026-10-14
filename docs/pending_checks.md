@@ -31,7 +31,7 @@
 
 ## 3. 개발 서버에서 해야 할 작업
 - [ ] ⑤-2 까지 push 후 배포 확인(마이그레이션 2개 자동 적용: `streak_reward_claims`, `academy_questions`/`chart_quiz_pool.is_active`)
-- [ ] 배포 후 `docker compose -f docker-compose.prod.yml run --rm trading_game python -m scripts.seed_trading_game` → 출력 `end_at_backfilled=True`(시즌 1기 종료일 10/31 20:00)
+- [x] 시즌 1기 종료일 backfill — 서버에서 `docker exec stock_trading_game python -m scripts.seed_trading_game` → `end_at_backfilled=True`, API `end_at=2026-10-31T11:00:00Z` 확인(2026-10-14). 이때 오늘 코치 브리핑이 예시 값으로 생성됨 → 아래 코치 항목 처리 필요
 - [ ] 주간 랭킹 push 후: 마이그레이션 `c9d0e1f2a3b4` 자동 적용 확인, celery beat 재시작으로 `close-trading-week` 등록, 첫 월요일 08:50 이후 `weekly_ranking_results` 행·보상 지급·토스트 확인
 - [ ] admin → 데일리 코치에서 오늘 브리핑을 **실제 지지선·저항선**으로 수정·재발행(시드 값 71,000/73,500 은 예시라 차트 축척이 깨짐)
 
