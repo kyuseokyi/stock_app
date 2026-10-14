@@ -14,6 +14,7 @@ log = logging.getLogger(__name__)
 
 # 동기 CH 조회가 이벤트 루프·기본 executor 를 막지 않게(rsi_service 와 같은 방식)
 _CH_EXECUTOR = ThreadPoolExecutor(max_workers=2, thread_name_prefix="candles-ch")
+QUERY_TIMEOUT_SEC = 5.0  # CH 무응답 시 대기 대신 503
 
 Fetch = Callable[[str, str], list[dict]]
 
@@ -30,7 +31,9 @@ async def get_candles(db: AsyncSession, interval: str, fetch: Fetch | None = Non
     fetch = fetch or minute_candles_query.fetch_candles
     loop = asyncio.get_running_loop()
     try:
-        candles = await loop.run_in_executor(_CH_EXECUTOR, fetch, season.ticker, interval)
+        candles = await asyncio.wait_for(
+            loop.run_in_executor(_CH_EXECUTOR, fetch, season.ticker, interval), timeout=QUERY_TIMEOUT_SEC,
+        )
     except Exception as e:  # noqa: BLE001
         log.warning("분봉 조회 실패: ticker=%s interval=%s err=%s", season.ticker, interval, e)
         raise CandlesUnavailable(str(e)) from e

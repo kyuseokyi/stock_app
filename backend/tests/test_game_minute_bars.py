@@ -203,3 +203,11 @@ async def test_consume_feeds_recorder_with_published_payload(monkeypatch):
     monkeypatch.setattr(run_game_ws, "mock_ticks", fake_mock_ticks)
     await run_game_ws._consume(True, None, "005930", 100, "redis://x", Pub(), recorder=Rec())
     assert [t["price"] for t in seen] == [100]
+
+
+def test_mock_ticks_not_recorded_unless_opt_in():
+    from apps.collector import run_game_ws
+
+    assert run_game_ws._should_record_bars(False, None) is True
+    assert run_game_ws._should_record_bars(True, None) is False
+    assert run_game_ws._should_record_bars(True, "true") is True

@@ -101,3 +101,16 @@ async def test_candles_clickhouse_failure_503(anon, maker, monkeypatch):
     monkeypatch.setattr(q, "fetch_candles", boom)
     res = await anon.get("/api/game/candles", params={"interval": "15m"})
     assert res.status_code == 503
+
+
+async def test_candles_clickhouse_timeout_503(anon, maker, monkeypatch):
+    import time
+
+    from apps.trading_game.services import candles_service
+
+    async with maker() as db:
+        await _seed_season(db)
+    monkeypatch.setattr(candles_service, "QUERY_TIMEOUT_SEC", 0.05)
+    monkeypatch.setattr(q, "fetch_candles", lambda t, i: time.sleep(0.3) or [])
+    res = await anon.get("/api/game/candles", params={"interval": "5m"})
+    assert res.status_code == 503

@@ -117,6 +117,10 @@ async def _consume(use_mock, cfg, ticker, base_price, redis_url, publisher, reco
                 _record(recorder, payload)
 
 
+def _should_record_bars(use_mock: bool, mock_opt_in: str | None) -> bool:
+    return not use_mock or (mock_opt_in or "").lower() == "true"
+
+
 def _claim_backfill(done: set[tuple[str, str]], ticker: str, now_kst: datetime) -> bool:
     """(종목, KST 날짜)당 1회만 — 구독 태스크 재시작(크래시)마다 KIS 를 다시 부르지 않게."""
     key = (ticker, now_kst.date().isoformat())
@@ -190,6 +194,8 @@ async def run() -> None:
     base_price = float(os.getenv("MOCK_BASE_PRICE", "71500"))
     poll_sec = float(os.getenv("GAME_WS_SEASON_POLL_SEC", "60"))
     # 1분봉 저장(ClickHouse) — 별도 태스크, 실패해도 틱 발행 무관
+    # Mock 틱은 기본 미저장(운영 차트 오염 방지) — 로컬 스모크만 GAME_MINUTE_BARS_MOCK=true
+    record_bars = _should_record_bars(use_mock, os.getenv("GAME_MINUTE_BARS_MOCK"))
     recorder = MinuteBarRecorder()
     bars_stop = asyncio.Event()
     bars_task = asyncio.create_task(recorder.run(bars_stop))
@@ -204,7 +210,8 @@ async def run() -> None:
             side_tasks.add(t)
             t.add_done_callback(side_tasks.discard)
         return asyncio.create_task(
-            _consume(use_mock, cfg, ticker, base_price, redis_url, publisher, recorder=recorder)
+            _consume(use_mock, cfg, ticker, base_price, redis_url, publisher,
+                     recorder=recorder if record_bars else None)
         )
 
     try:
