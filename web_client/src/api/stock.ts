@@ -11,7 +11,8 @@ const QUERY = `query GameDailyCandles($symbol: String!, $startDate: String!, $en
   }
 }`
 
-const LOOKBACK_DAYS = 180
+// 화면 180일 + 보조지표 워밍업(60일선·볼린저 20일 ≈ 60거래일 ≈ 달력 100일). 화면 구간은 TradingChart 가 잡는다
+const LOOKBACK_DAYS = 280
 const DAY_MS = 86_400_000
 
 interface ChartResponse {
@@ -19,7 +20,7 @@ interface ChartResponse {
   errors?: { message: string }[]
 }
 
-/** 최근 약 180일 일봉. URL 미설정·GraphQL 오류·빈 응답이면 throw(차트만 오류 표시) */
+/** 최근 약 280일 일봉(지표 워밍업 포함). URL 미설정·GraphQL 오류·빈 응답이면 throw(차트만 오류 표시) */
 export async function getDailyCandles(ticker: string, now: Date = new Date()): Promise<DailyCandle[]> {
   if (!STOCK_API_URL) throw new Error('STOCK_API_URL 미설정')
   const variables = {

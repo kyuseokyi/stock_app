@@ -102,6 +102,8 @@ const toIntradayBar = (c: IntradayCandle) => ({
   time: c.t as UTCTimestamp, open: c.open, high: c.high, low: c.low, close: c.close,
 })
 
+const DAILY_VISIBLE_DAYS = 180 // 일봉 첫 화면 구간(조회는 api/stock 의 280일 — 지표 워밍업 포함)
+
 const INTERVAL_LABEL: Record<ChartInterval, string> = { day: '일', '1m': '1분', '5m': '5분', '15m': '15분', '60m': '60분' }
 
 // 분봉 time 은 UTC epoch seconds — lightweight-charts 는 UTC 로 그리므로 KST(+9h)로 옮겨 라벨을 만든다.
@@ -186,7 +188,14 @@ export default function TradingChart({ ticker, lastPrice, coach, position }: Tra
           barsRef.current = candles.map((c) => ({ time: c.date, close: c.close }))
           setIndicatorData(ind, barsRef.current)
           lastCandleRef.current = candles[candles.length - 1] ?? null
-          chart.timeScale().fitContent()
+          // 앞쪽은 지표 워밍업용 — 처음 화면은 최근 180일만(왼쪽으로 스크롤하면 더 보임)
+          const from = kstDateString(new Date(Date.now() - DAILY_VISIBLE_DAYS * 86_400_000))
+          const hidden = candles.findIndex((c) => c.date >= from)
+          if (hidden > 0) {
+            chart.timeScale().setVisibleLogicalRange({ from: hidden, to: candles.length - 1 })
+          } else {
+            chart.timeScale().fitContent()
+          }
           setLoaded(true)
         })
         .catch(() => {
