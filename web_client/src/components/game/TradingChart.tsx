@@ -103,6 +103,7 @@ const toIntradayBar = (c: IntradayCandle) => ({
 })
 
 const DAILY_VISIBLE_DAYS = 180 // 일봉 첫 화면 구간(조회는 api/stock 의 280일 — 지표 워밍업 포함)
+const INTRADAY_VISIBLE_BARS = 120 // 분봉 첫 화면 캔들 수(60분봉은 서버가 30거래일≈195개를 줌)
 
 const INTERVAL_LABEL: Record<ChartInterval, string> = { day: '일', '1m': '1분', '5m': '5분', '15m': '15분', '60m': '60분' }
 
@@ -211,7 +212,12 @@ export default function TradingChart({ ticker, lastPrice, coach, position }: Tra
           barsRef.current = rows.map((c) => ({ time: c.t as UTCTimestamp, close: c.close }))
           setIndicatorData(ind, barsRef.current)
           lastIntradayRef.current = rows[rows.length - 1] ?? null
-          if (rows.length > 0) chart.timeScale().fitContent()
+          // 분봉도 첫 화면은 최근 INTRADAY_VISIBLE_BARS 개(앞쪽은 지표 워밍업 — 왼쪽 스크롤로 보임)
+          if (rows.length > INTRADAY_VISIBLE_BARS) {
+            chart.timeScale().setVisibleLogicalRange({ from: rows.length - INTRADAY_VISIBLE_BARS, to: rows.length - 1 })
+          } else if (rows.length > 0) {
+            chart.timeScale().fitContent()
+          }
           setEmpty(rows.length === 0)
           setLoaded(true)
         })

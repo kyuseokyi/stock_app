@@ -11,6 +11,7 @@
 - 문제 시 즉시 되돌리기: `.env.production` 에 `GAME_WS_TR_ID=H0STCNT0` → `game_ws` 재생성
 - [ ] **게임 분봉 적재**: 장중 `game_ws` 로그에 `분봉 저장 실패` 없고, CH `SELECT source, count() FROM stock_data.game_minute_bars FINAL WHERE ticker=<시즌 종목> AND toDate(ts)=today() GROUP BY source` 에 `tick` 행이 분마다 늘어나는지(진행 중 분은 15초마다 갱신)
 - [ ] **KIS 당일분봉 보충**: 장중 `game_ws` 재시작 → 로그 `KIS 당일분봉 수집: market=UN`(NXT 미상장 종목은 `market=J`)·`KIS 당일분봉 보충: inserted=N`, 09:00~재시작 직전 분이 `source='kis'` 로 채워지고 첫 틱 분부터는 `tick` 인지. 실제 응답 필드(`stck_cntg_hour`·`cntg_vol`)·페이지네이션(30건 역순)·모의(vps) 지원 여부 확인
+- [ ] **KIS 과거 분봉 보충(보조지표 워밍업)**: push 후 `game_ws` 재시작 로그에서 `KIS 과거 분봉 보충: inserted=N`(30거래일 × 391분 ≈ 11,700) 확인. `KIS 과거 분봉 보충 실패(무시) … rt_cd=…` 이면 주식일별분봉조회(`FHKST03010230`)가 현재 `KIS_MODE`(모의 vps)에서 미지원일 가능성 → 실전 키 필요, 그 경우 분봉 지표는 데이터가 쌓이며 자연히 길어짐(60분봉 60선 ≈ 10거래일). 성공하면 `/api/game/candles?interval=60m` 캔들 수 ≈ 195개, 차트 60선이 화면 왼쪽부터 이어지는지. 종목 전환 시에도 새 종목으로 자동 실행되는지
 - [ ] **분봉 시각 라벨**: KIS `stck_cntg_hour`(예: `093000`)를 **분 시작**(09:30:00~09:30:59)으로 저장함 — MTS 1분봉과 같은 분의 OHLC 가 맞는지 비교(한 분 밀리면 kis_backfill.parse_rows 에서 -1분 보정)
 - [ ] `GET /api/game/candles?interval=5m` 응답 캔들 수·시각(KST 09:00 = `t` 가 UTC 00:00)이 맞는지
 
