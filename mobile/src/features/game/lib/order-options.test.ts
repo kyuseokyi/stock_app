@@ -1,4 +1,6 @@
 import {
+  ALL_RATIOS,
+  orderSummary,
   RATIO_CHIPS,
   RATIO_MORE,
   STOP_LOSS_PCTS,
@@ -64,5 +66,17 @@ describe('slTpLine (포지션 카드)', () => {
   test('한쪽만 있으면 — 표시', () => {
     expect(slTpLine(67640, null)).toBe('손절 67,640원 · 익절 —');
     expect(slTpLine(null, 78100.4)).toBe('손절 — · 익절 78,100원');
+  });
+});
+
+describe('하단 주문바 요약', () => {
+  it('비중 · 배율 · 손절 · 익절 한 줄', () => {
+    expect(orderSummary(0.25, 1, null, null)).toBe('25% · 1x · 손절 없음 · 익절 없음');
+    expect(orderSummary(0.75, 2, 0.05, 0.1)).toBe('75% · 2x · 손절 -5% · 익절 +10%');
+  });
+
+  it('설정 시트용 전체 비중은 칩 + 기타를 오름차순으로', () => {
+    expect(ALL_RATIOS).toEqual([...RATIO_CHIPS, ...RATIO_MORE].sort((a, b) => a - b));
+    expect(new Set(ALL_RATIOS).size).toBe(ALL_RATIOS.length);
   });
 });

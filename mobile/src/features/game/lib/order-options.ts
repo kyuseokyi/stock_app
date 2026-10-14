@@ -39,3 +39,10 @@ export function slTpLine(sl: number | null, tp: number | null): string | null {
   const fmt = (p: number | null) => (p === null ? '—' : `${formatPrice(p)}원`);
   return `손절 ${fmt(sl)} · 익절 ${fmt(tp)}`;
 }
+
+/** 설정 시트에서 한 번에 보여 줄 전체 비중(칩 + 기타, 오름차순) */
+export const ALL_RATIOS: readonly Ratio[] = [...RATIO_CHIPS, ...RATIO_MORE].sort((a, b) => a - b);
+
+/** 하단 고정 주문바의 설정 요약 한 줄: '25% · 1x · 손절 없음 · 익절 없음' */
+export const orderSummary = (ratio: Ratio, leverage: number, sl: number | null, tp: number | null): string =>
+  `${ratioLabel(ratio)} · ${leverage}x · 손절 ${stopLossLabel(sl)} · 익절 ${takeProfitLabel(tp)}`;

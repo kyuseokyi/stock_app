@@ -235,27 +235,29 @@ export default function GameScreen() {
           onOpenStreak={() => openPrivate('streak')}
           onOpenRules={() => setActiveModal('rules')}
         />
-        <CoachBanner coach={coach} />
+        {/* 차트를 위로 — 아래 고정 주문 바와 한 화면에 들어오게. 코치·심리·안내는 차트 아래 */}
+        <DailyChart ticker={season.ticker} lastPrice={lastPrice} coach={coach} position={position} />
+        {position ? (
+          <PositionCard position={position} lastPrice={lastPrice} closing={closing} onClose={() => void closePosition()} />
+        ) : null}
         {loggedIn ? null : (
           <View style={styles.notice}>
             <Text style={styles.noticeText}>로그인하면 주문할 수 있어요</Text>
           </View>
         )}
+        <CoachBanner coach={coach} />
         <SentimentBar sentiment={sentiment} />
-        <DailyChart ticker={season.ticker} lastPrice={lastPrice} coach={coach} position={position} />
-        {position ? (
-          <PositionCard position={position} lastPrice={lastPrice} closing={closing} onClose={() => void closePosition()} />
-        ) : null}
         {primeTime && !quizDisabled ? <QuizBanner onOpen={() => openPrivate('quiz')} /> : null}
-        <OrderPanel
-          hasPosition={position !== null}
-          academyUnlocked={academyUnlocked}
-          submitting={submitting}
-          onOrder={handleOrder}
-          onLockedLeverage={() => openPrivate('academy')}
-          onOpenRules={() => setActiveModal('rules')}
-        />
       </ScrollView>
+      {/* 주문 바는 스크롤 밖 화면 아래 고정(탭 바 바로 위) — 차트를 보면서 바로 건다 */}
+      <OrderPanel
+        hasPosition={position !== null}
+        academyUnlocked={academyUnlocked}
+        submitting={submitting}
+        onOrder={handleOrder}
+        onLockedLeverage={() => openPrivate('academy')}
+        onOpenRules={() => setActiveModal('rules')}
+      />
 
       {/* 시트가 열려 있으면 토스트는 시트 안(Sheet → GameToaster)에서 보인다 — 화면 오버레이는 시트에 가려지므로 숨김 */}
       {activeModal === null ? <GameToaster /> : null}
