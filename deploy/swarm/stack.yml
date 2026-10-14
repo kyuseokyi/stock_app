@@ -1,0 +1,343 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Docker Swarm 스택 — 상용 수평 확장용 (개발 서버는 계속 docker-compose.prod.yml)
+#
+# 가이드(초보자용): docs/deploy/README.md  §B
+# 사용 예:
+#   set -a; . deploy/swarm/stack.env; set +a          # 비밀 아닌 설정을 셸 env 로 로드
+#   docker stack deploy -c deploy/swarm/stack.yml stock
+#
+# 원칙
+#   - Swarm 은 build: 를 무시한다 → 미리 빌드·push 한 이미지(REGISTRY/stock-app-backend:TAG)만 사용.
+#   - DB(PostgreSQL)·Redis·ClickHouse 는 스택 밖(기존 서버·관리형). 주소는 env 로 주입.
+#   - 비밀값은 Swarm secret(external) → 컨테이너 /run/secrets/<이름> 파일 → 앱은 X_FILE env 로 읽음.
+#   - 마이그레이션(alembic upgrade head)은 스택에 넣지 않는다(복제 실행 방지) — 배포 전 1회 one-off.
+#   - 단일 실행 전용: game_ws(KIS 실시간 세션은 앱키당 제한), celery_beat(스케줄 중복 방지) → replicas 1 고정.
+#   - WebSocket 은 Redis Pub/Sub 로 인스턴스 간 전달되므로 sticky 세션 불필요.
+#
+# 포트(published, 라우팅 메시 — 어느 노드로 와도 해당 서비스로 분산):
+#   auth 8001 · stock_api 8002 · blog 8003 · trading_game 8004  (= 기존 Cloudflare Tunnel 대상과 동일)
+# ─────────────────────────────────────────────────────────────────────────────
+version: "3.8"
+
+# ── 공통 블록(YAML 앵커) ──────────────────────────────────────────────────────
+x-backend-image: &backend-image ${REGISTRY:-registry.example.com}/stock-app-backend:${TAG:-latest}
+
+x-backend-env: &backend-env
+  APP_ENV: production
+  # 외부 인프라 주소(비밀 아님). Redis 에 비밀번호가 있으면 URL 에 포함 — celery 가 import 시점에
+  # REDIS_URL 을 직접 읽으므로 REDIS_URL_FILE 은 쓰지 않는다(일반 env 로 주입).
+  REDIS_URL: ${REDIS_URL:-redis://redis.example.internal:6379/0}
+  CLICKHOUSE_HOST: ${CLICKHOUSE_HOST:-clickhouse.example.internal}
+  CLICKHOUSE_PORT: ${CLICKHOUSE_PORT:-8123}
+  CLICKHOUSE_USER: ${CLICKHOUSE_USER:-default}
+  CLICKHOUSE_DB: ${CLICKHOUSE_DB:-stock_data}
+  JWT_ALGORITHM: ${JWT_ALGORITHM:-HS256}
+  JWT_EXPIRE_HOURS: ${JWT_EXPIRE_HOURS:-12}
+  KIS_MODE: ${KIS_MODE:-prod}
+  KIS_ACCOUNT_NO: ${KIS_ACCOUNT_NO:-}
+  KIS_RATE_PER_SEC: ${KIS_RATE_PER_SEC:-8}
+  STOCK_MASTER_SOURCE: ${STOCK_MASTER_SOURCE:-auto}
+  CORS_ORIGINS: ${CORS_ORIGINS:-}
+  # 상용: 게스트 로그인 끔
+  AUTH_GUEST_ENABLED: ${AUTH_GUEST_ENABLED:-false}
+  NAVER_CLIENT_ID: ${NAVER_CLIENT_ID:-}
+  SOCIAL_REDIRECT_BASE: ${SOCIAL_REDIRECT_BASE:-}
+  SOCIAL_WEB_RETURN_URL: ${SOCIAL_WEB_RETURN_URL:-}
+  SOCIAL_APP_RETURN_URL_PROD: ${SOCIAL_APP_RETURN_URL_PROD:-}
+  SOCIAL_APP_RETURN_URL_DEV: ${SOCIAL_APP_RETURN_URL_DEV:-}
+  PUSH_BACKEND: ${PUSH_BACKEND:-mock}
+  MOCK_TICK_STREAM: ${MOCK_TICK_STREAM:-false}
+  GAME_LEADER_TTL_MS: ${GAME_LEADER_TTL_MS:-10000}
+  # 비밀값: 파일 경로만 env 로 — 앱(shared/env.py)이 X_FILE 내용을 X 로 읽는다.
+  DATABASE_URL_FILE: /run/secrets/database_url
+  SYNC_DATABASE_URL_FILE: /run/secrets/sync_database_url
+  CLICKHOUSE_PASSWORD_FILE: /run/secrets/clickhouse_password
+  JWT_SECRET_KEY_FILE: /run/secrets/jwt_secret_key
+  KIS_APP_KEY_FILE: /run/secrets/kis_app_key
+  KIS_APP_SECRET_FILE: /run/secrets/kis_app_secret
+
+x-backend-secrets: &backend-secrets
+  - database_url
+  - sync_database_url
+  - clickhouse_password
+  - jwt_secret_key
+  - kis_app_key
+  - kis_app_secret
+
+x-log: &log
+  driver: json-file
+  options:
+    max-size: "20m"
+    max-file: "5"
+
+# 복제 가능한 서비스: 새 컨테이너가 healthy 된 뒤 옛 컨테이너를 내림(무중단)
+x-deploy-rolling: &deploy-rolling
+  update_config:
+    parallelism: 1
+    delay: 10s
+    order: start-first
+    failure_action: rollback
+    monitor: 30s
+  rollback_config:
+    parallelism: 1
+    order: start-first
+  restart_policy:
+    condition: any
+    delay: 5s
+    max_attempts: 0
+    window: 30s
+
+# 단일 실행 전용: 옛 것을 먼저 내리고 새 것을 올림(동시 2개 금지)
+x-deploy-singleton: &deploy-singleton
+  replicas: 1
+  update_config:
+    parallelism: 1
+    order: stop-first
+    failure_action: rollback
+    monitor: 30s
+  rollback_config:
+    parallelism: 1
+    order: stop-first
+  restart_policy:
+    condition: any
+    delay: 10s
+    max_attempts: 0
+    window: 60s
+  placement:
+    max_replicas_per_node: 1
+
+services:
+  # ── API (FastAPI) ─────────────────────────────────────────────────────────
+  auth_api:
+    image: *backend-image
+    command: uvicorn apps.auth.main:app --host 0.0.0.0 --port 8001
+    ports:
+      - target: 8001
+        published: 8001
+        protocol: tcp
+        mode: ingress
+    environment:
+      <<: *backend-env
+      KAKAO_REST_API_KEY_FILE: /run/secrets/kakao_rest_api_key
+      KAKAO_CLIENT_SECRET_FILE: /run/secrets/kakao_client_secret
+      KAKAO_ADMIN_KEY_FILE: /run/secrets/kakao_admin_key
+      NAVER_CLIENT_SECRET_FILE: /run/secrets/naver_client_secret
+      SOCIAL_STATE_SECRET_FILE: /run/secrets/social_state_secret
+    secrets:
+      - database_url
+      - sync_database_url
+      - clickhouse_password
+      - jwt_secret_key
+      - kis_app_key
+      - kis_app_secret
+      # 간편 로그인(카카오·네이버) — 쓰지 않는 공급자는 이 줄과 위 *_FILE env, 하단 secrets 정의를 함께 삭제
+      - kakao_rest_api_key
+      - kakao_client_secret
+      - kakao_admin_key
+      - naver_client_secret
+      - social_state_secret
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://localhost:8001/ready',timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 4
+      start_period: 30s
+    networks: [backend]
+    logging: *log
+    deploy:
+      <<: *deploy-rolling
+      replicas: 2
+      resources:
+        limits: {cpus: "0.5", memory: 512M}
+        reservations: {cpus: "0.1", memory: 128M}
+
+  stock_api:
+    image: *backend-image
+    command: uvicorn apps.stock_api.main:app --host 0.0.0.0 --port 8002
+    ports:
+      - target: 8002
+        published: 8002
+        protocol: tcp
+        mode: ingress
+    environment: *backend-env
+    secrets: *backend-secrets
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://localhost:8002/ready',timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 4
+      start_period: 30s
+    networks: [backend]
+    logging: *log
+    deploy:
+      <<: *deploy-rolling
+      replicas: 2
+      resources:
+        limits: {cpus: "1.0", memory: 768M}
+        reservations: {cpus: "0.2", memory: 192M}
+
+  blog_api:
+    image: *backend-image
+    command: uvicorn apps.blog.main:app --host 0.0.0.0 --port 8003
+    ports:
+      - target: 8003
+        published: 8003
+        protocol: tcp
+        mode: ingress
+    environment: *backend-env
+    secrets: *backend-secrets
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://localhost:8003/ready',timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 4
+      start_period: 30s
+    networks: [backend]
+    logging: *log
+    deploy:
+      <<: *deploy-rolling
+      replicas: 2
+      resources:
+        limits: {cpus: "0.5", memory: 512M}
+        reservations: {cpus: "0.1", memory: 128M}
+
+  # 트레이딩 게임 REST·WS. 컨테이너당 워커 1개, 확장은 replicas 로.
+  # 틱 리스너·브로드캐스트 루프 등 싱글톤 작업은 Redis 리더 선출로 1개 인스턴스만 실행.
+  trading_game:
+    image: *backend-image
+    command: uvicorn apps.trading_game.main:app --host 0.0.0.0 --port 8004 --workers 1
+    ports:
+      - target: 8004
+        published: 8004
+        protocol: tcp
+        mode: ingress
+    environment: *backend-env
+    secrets: *backend-secrets
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://localhost:8004/ready',timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 4
+      start_period: 40s
+    # SIGTERM 후 WS close·리더 락 반납 시간
+    stop_grace_period: 30s
+    networks: [backend]
+    logging: *log
+    deploy:
+      <<: *deploy-rolling
+      replicas: 2
+      resources:
+        limits: {cpus: "1.0", memory: 768M}
+        reservations: {cpus: "0.25", memory: 192M}
+
+  # ── 단일 실행 전용 ───────────────────────────────────────────────────────
+  # KIS 실시간 시세 데몬 → Redis stock:tick:{ticker}. 앱키당 WS 세션 제한 → 절대 복제 금지.
+  game_ws:
+    image: *backend-image
+    command: python -m apps.collector.run_game_ws
+    environment: *backend-env
+    secrets: *backend-secrets
+    stop_grace_period: 20s
+    networks: [backend]
+    logging: *log
+    deploy:
+      <<: *deploy-singleton
+      resources:
+        limits: {cpus: "0.5", memory: 384M}
+        reservations: {cpus: "0.1", memory: 128M}
+
+  # Celery beat(스케줄러) — 2개 뜨면 모든 정기 작업이 두 번 실행됨 → 절대 복제 금지.
+  celery_beat:
+    image: *backend-image
+    command: celery -A apps.collector.celery_app beat --loglevel=info
+    environment: *backend-env
+    secrets: *backend-secrets
+    networks: [backend]
+    logging: *log
+    deploy:
+      <<: *deploy-singleton
+      resources:
+        limits: {cpus: "0.25", memory: 256M}
+        reservations: {cpus: "0.05", memory: 96M}
+
+  # ── 복제 가능한 워커 ─────────────────────────────────────────────────────
+  # Celery worker — 같은 큐를 나눠 소비. 정산·주간마감 태스크는 멱등이라 복제 안전.
+  celery_worker:
+    image: *backend-image
+    command: celery -A apps.collector.celery_app worker --loglevel=info
+    environment: *backend-env
+    secrets: *backend-secrets
+    # FD 방어선(docker-compose.prod.yml 과 동일)
+    ulimits:
+      nofile:
+        soft: 8192
+        hard: 8192
+    stop_grace_period: 60s
+    networks: [backend]
+    logging: *log
+    deploy:
+      <<: *deploy-rolling
+      replicas: 2
+      resources:
+        limits: {cpus: "1.0", memory: 1G}
+        reservations: {cpus: "0.2", memory: 256M}
+
+  # ── (선택) 단일 노드 DB 예시 — 기본은 스택 밖 DB 를 쓴다. 실습용으로만 주석 해제.
+  #    볼륨이 특정 노드에 묶이므로 placement 로 노드를 고정해야 한다(데이터 유실 주의).
+  # postgres:
+  #   image: postgres:15-alpine
+  #   environment:
+  #     POSTGRES_USER: stock_user
+  #     POSTGRES_DB: stock_db
+  #     POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+  #   secrets: [postgres_password]
+  #   volumes: [pg_data:/var/lib/postgresql/data]
+  #   networks: [backend]
+  #   deploy:
+  #     replicas: 1
+  #     placement:
+  #       constraints: ["node.labels.db == true"]   # docker node update --label-add db=true <노드>
+  # redis:
+  #   image: redis:7-alpine
+  #   volumes: [redis_data:/data]
+  #   networks: [backend]
+  #   deploy:
+  #     replicas: 1
+  #     placement:
+  #       constraints: ["node.labels.db == true"]
+
+networks:
+  backend:
+    driver: overlay
+    attachable: true   # 마이그레이션 one-off 컨테이너가 붙을 수 있게
+
+# 모든 secret 은 배포 전에 `docker secret create <이름> -` 로 만들어 둔다(가이드 §B-3).
+secrets:
+  database_url:
+    external: true
+  sync_database_url:
+    external: true
+  clickhouse_password:
+    external: true
+  jwt_secret_key:
+    external: true
+  kis_app_key:
+    external: true
+  kis_app_secret:
+    external: true
+  kakao_rest_api_key:
+    external: true
+  kakao_client_secret:
+    external: true
+  kakao_admin_key:
+    external: true
+  naver_client_secret:
+    external: true
+  social_state_secret:
+    external: true
+  # postgres_password:
+  #   external: true
+
+# volumes:
+#   pg_data:
+#   redis_data:

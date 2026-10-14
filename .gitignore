@@ -40,3 +40,8 @@ backend/logs/
 
 # superpowers brainstorming (visual companion) 임시 산출물
 .superpowers/
+
+# 배포 설정 — 실값(비밀) 파일 커밋 금지 (예시 파일만 커밋)
+deploy/swarm/stack.env
+deploy/k8s/**/secret.yaml
+deploy/k8s/**/*.secret.env
