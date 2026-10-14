@@ -85,6 +85,8 @@ uv run uvicorn apps.trading_game.main:app --reload --port 8003 --workers 1
 ```
 - **선행**: Phase 2 수집 데몬(`apps.collector.run_game_ws`)이 돌아 `stock:tick:*`·`stock:latest:*` 를 채워야 주문 체결 가능(장외엔 `MOCK_TICK_STREAM=true`). ACTIVE 시즌 시드 필요(`python -m scripts.seed_trading_game`).
 - **환경변수**: `REDIS_URL`(기본 `redis://localhost:6379/0`) · `TRADING_WINDOWS`(기본 `09:00-15:30,16:00-20:00` KST — KRX 정규장+애프터마켓, NXT 프리마켓 제외) · `STALE_SECONDS`(기본 `10` — 최신가가 이보다 오래되면 주문 거부).
+- **실시간 전송(묶기)**: 자동청산은 **모든 틱**에서 검사하되 포지션 메모리 캐시로 후보만 고르고 후보가 있을 때만 DB 확정(틱당 DB 조회 없음). 화면 전송은 최신 틱만 모아 `GAME_WS_TICK_INTERVAL_SEC`(기본 `0.25`)초마다 `{type:"tick"}` 1회(새 틱 없으면 전송 안 함), 개인손익 `position_pnl`·라이브 랭킹은 `GAME_WS_PNL_INTERVAL_SEC`(기본 `1.0`)초마다. 캐시는 주문·청산·보상 지급 시 즉시 무효화 + `GAME_POSITION_CACHE_TTL_SEC`(기본 `5`)초 주기 재적재(Celery 정산 등 다른 프로세스 변경 반영).
+- **비로그인 공개 WS**: `ws://…:8003/ws/game/stream` 를 `token` 없이 연결하면 공개 연결(틱·시장심리만, 개인손익·넛지 없음). `token` 이 있으면 기존 검증 — 잘못된/빈 토큰은 4401(공개로 강등 안 함). 공개 연결 상한 IP당 `GAME_WS_PUBLIC_PER_IP`(기본 `3`)·전체 `GAME_WS_PUBLIC_MAX`(기본 `2000`), 초과 시 close `4429`(IP = `CF-Connecting-IP` 우선, 없으면 소켓 주소).
 - **주문 이중 게이트**: 거래 세션 창 + 최신가 신선도. 둘 다 통과해야 체결(세션 밖/시세 끊김 → 409).
 - **실시간 랭킹(Phase 4)**: Redis ZSET(`game:season:{id}:ranking`)에 매 틱 보유자 라이브 ROI·청산 시 실현 ROI 반영. 조회 — `GET /api/game/seasons/{id}/leaderboard`(Top100), `GET /api/game/seasons/{id}/my-rank`, `GET /api/game/hall-of-fame`.
 - **시즌 정산(Phase 4)**: Celery beat `settle_trading_season` 매일 20:40 KST → 말일 도래 시 ClickHouse 당일 종가로 전액 강제청산 → 명예의 전당 박제(+Trading MBTI) → 시즌 FINISHED + 차기 시즌 자동 생성(멱등). worker+beat 가동 필요(`uv run celery -A apps.collector.celery_app worker/beat`).
@@ -334,6 +336,11 @@ uv run pytest tests/test_universe_cooldown.py    # 특정 파일
 | `KIS_ACCOUNT_NO` | collector | (빈값) | 계좌번호(시세조회만이면 생략 가능) |
 | `MOCK_TICK_STREAM` | collector(게임 WS) | (빈값) | `true`면 실 KIS WS 대신 Mock 틱 생성(장외/키 없이 검증). 키 미설정 시 자동 Mock |
 | `MOCK_BASE_PRICE` | collector(게임 WS) | `71500` | Mock 틱 기준가(랜덤워크 시작가) |
+| `GAME_WS_TICK_INTERVAL_SEC` | trading_game | `0.25` | WS 틱 묶기 전송 간격(초) — 새 틱이 있을 때만 최신 1개 전송 |
+| `GAME_WS_PNL_INTERVAL_SEC` | trading_game | `1.0` | 개인손익(`position_pnl`)·라이브 랭킹 갱신 간격(초) |
+| `GAME_POSITION_CACHE_TTL_SEC` | trading_game | `5` | OPEN 포지션 메모리 캐시 주기 재적재(초). 같은 프로세스 주문·청산·보상은 즉시 무효화 |
+| `GAME_WS_PUBLIC_PER_IP` | trading_game | `3` | 비로그인 공개 WS IP당 최대 연결(초과 시 4429) |
+| `GAME_WS_PUBLIC_MAX` | trading_game | `2000` | 비로그인 공개 WS 전체 최대 연결(초과 시 4429) |
 
 ## 🌍 환경 3단계 (local / develop / product)
 
