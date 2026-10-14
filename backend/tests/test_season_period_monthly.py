@@ -592,3 +592,49 @@ def test_beat_schedule_close_trading_month():
     assert entry["task"] == "close_trading_month"
     assert entry["schedule"] == crontab(hour=8, minute=55, day_of_month=1)
     assert wc.close_trading_month.name == "close_trading_month"
+
+
+# ---------------------------------------------------------------- 월간 API
+async def test_monthly_leaderboard_my_rank_and_results_api(api, fake_redis, maker, monkeypatch):
+    client, set_user = api
+    async with maker() as db:
+        s = await _q_season(db)
+        u1 = await _seed_user(db, nickname="가")
+        u2 = await _seed_user(db, nickname="나")
+        db.add(WeeklyRankingResult(season_id=s.id, period_type="month", week_start=M11, rank=1, user_id=u1.id,
+                                   nickname="가", weekly_roi=Decimal("7"), reward_amount=Decimal("1500000")))
+        await db.commit()
+    monkeypatch.setattr(ms_svc, "_now", lambda: kst(2026, 12, 10, 12))
+    M12 = date(2026, 12, 1)
+    await fake_redis.zadd(mr.month_key(s.id, M12), {str(u1.id): 1.5, str(u2.id): 3.0})
+    body = (await client.get(f"/api/game/seasons/{s.id}/monthly-leaderboard")).json()
+    assert body["month_start"] == "2026-12-01"
+    assert body["start_at"] == kst(2026, 12, 1, 9).isoformat() and body["end_at"] == Q_END.isoformat()
+    assert body["entries"] == [{"rank": 1, "user_id": u2.id, "nickname": "나", "monthly_roi": 3.0},
+                               {"rank": 2, "user_id": u1.id, "nickname": "가", "monthly_roi": 1.5}]
+    set_user(u1)
+    assert (await client.get(f"/api/game/seasons/{s.id}/monthly-my-rank")).json() == {
+        "rank": 2, "monthly_roi": 1.5, "total": 2}
+    res = (await client.get(f"/api/game/monthly-results?season_id={s.id}")).json()
+    assert res == [{"season_id": s.id, "month_start": "2026-11-01", "entries": [
+        {"rank": 1, "nickname": "가", "monthly_roi": 7.0, "reward_amount": 1500000.0}]}]
+    unseen = (await client.get("/api/game/weekly-rewards/unseen")).json()
+    assert [(x["period_type"], x["week_start"], x["rank"]) for x in unseen] == [("month", "2026-11-01", 1)]
+    assert (await client.post(f"/api/game/weekly-rewards/{unseen[0]['id']}/ack")).status_code == 204
+    assert (await client.get("/api/game/weekly-rewards/unseen")).json() == []
+    assert (await client.get("/api/game/seasons/999/monthly-leaderboard")).status_code == 404
+    assert (await client.get("/api/game/seasons/999/monthly-my-rank")).status_code == 404
+
+
+async def test_monthly_api_empty_for_month_season(api, fake_redis, maker):
+    client, set_user = api
+    async with maker() as db:
+        s = await _season(db)
+        u = await _seed_user(db)
+    assert (await client.get(f"/api/game/seasons/{s.id}/monthly-leaderboard")).json() == {
+        "month_start": None, "start_at": None, "end_at": None, "entries": []}
+    set_user(u)
+    assert (await client.get(f"/api/game/seasons/{s.id}/monthly-my-rank")).json() == {
+        "rank": None, "monthly_roi": None, "total": 0}
+    assert (await client.get(f"/api/game/monthly-results?season_id={s.id}")).json() == []
+    assert (await client.get("/api/game/monthly-results")).json() == []

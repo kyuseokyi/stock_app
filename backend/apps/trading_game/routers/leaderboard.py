@@ -11,7 +11,7 @@ from shared.models import User
 from shared.game_models import GameSeason, HallOfFame
 from apps.trading_game import deps
 from apps.trading_game.schemas.game_dtos import SeasonOption
-from apps.trading_game.services import account_service, ranking_service, weekly_service
+from apps.trading_game.services import account_service, monthly_service, ranking_service, weekly_service
 
 router = APIRouter(prefix="/api/game", tags=["trading-game-ranking"])
 
@@ -93,6 +93,7 @@ async def weekly_results(
 
 @router.get("/weekly-rewards/unseen")
 async def weekly_rewards_unseen(user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    """미확인 보상(주간·월간) — 항목 period_type: week|month. 확인은 /weekly-rewards/{id}/ack 공용."""
     return await weekly_service.unseen_rewards(db, user.id)
 
 
@@ -103,3 +104,29 @@ async def weekly_reward_ack(
     if not await weekly_service.ack_reward(db, user.id, result_id):
         raise HTTPException(status_code=404, detail="NOT_FOUND")
     return Response(status_code=204)
+
+
+# ---------------------------------------------------------------- 월간 랭킹(분기 시즌 전용, 월간 시즌이면 빈 결과)
+@router.get("/seasons/{season_id}/monthly-leaderboard")
+async def monthly_leaderboard(season_id: int, db: AsyncSession = Depends(get_db)):
+    """공개 — 이번 달 Top 100(1일 09:00 시작, 시즌 경계로 잘림)."""
+    season = await _season_or_404(db, season_id)
+    return await monthly_service.monthly_leaderboard(db, deps.get_redis(), season)
+
+
+@router.get("/seasons/{season_id}/monthly-my-rank")
+async def monthly_my_rank(
+    season_id: int, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db),
+):
+    season = await _season_or_404(db, season_id)
+    return await monthly_service.monthly_my_rank(deps.get_redis(), season, user.id)
+
+
+@router.get("/monthly-results")
+async def monthly_results(
+    season_id: int | None = Query(default=None),
+    limit: int = Query(default=3, ge=1, le=12),
+    db: AsyncSession = Depends(get_db),
+):
+    """공개 — 지난달들의 Top 3(최신 달 먼저)."""
+    return await monthly_service.monthly_results(db, season_id, limit)
