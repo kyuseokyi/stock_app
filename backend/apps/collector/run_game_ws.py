@@ -6,6 +6,7 @@ ACTIVE 시즌 종목을 주기적으로(GAME_WS_SEASON_POLL_SEC, 기본 60초) �
 MOCK_TICK_STREAM=true 또는 KIS 키 미설정이면 Mock 생성기로, 아니면 실 KIS WS 로
 분기한다. 각 틱을 Redis stock:tick:{ticker} 로 발행하고, 발행한 틱을 1분봉으로 묶어
 ClickHouse game_minute_bars 에 저장한다(game_ws/minute_bars — 별도 태스크, 실패 무시).
+시작·종목 전환 시 1회 오늘 09:00~첫 틱 이전 분봉을 KIS 당일분봉으로 보충한다(game_ws/kis_backfill).
 
 실 KIS WS 체결 TR(CLAUDE.md "KIS 데이터 수집 규칙" UN→J 폴백의 실시간판):
 - 기본 H0UNCNT0(통합 KRX+NXT) — NXT 애프터마켓(16:00~20:00)까지 틱 수신, 일봉 UN 종가와 일치.
@@ -33,6 +34,7 @@ from sqlalchemy import select
 from shared.database import AsyncSessionLocal
 from shared.game_models import GameSeason
 from shared.kis_config import get_kis_config
+from apps.collector.game_ws.kis_backfill import run_backfill
 from apps.collector.game_ws.minute_bars import MinuteBarRecorder
 from apps.collector.game_ws.mock_stream import mock_ticks
 from apps.collector.game_ws.publisher import TickPublisher
@@ -115,6 +117,15 @@ async def _consume(use_mock, cfg, ticker, base_price, redis_url, publisher, reco
                 _record(recorder, payload)
 
 
+def _claim_backfill(done: set[tuple[str, str]], ticker: str, now_kst: datetime) -> bool:
+    """(종목, KST 날짜)당 1회만 — 구독 태스크 재시작(크래시)마다 KIS 를 다시 부르지 않게."""
+    key = (ticker, now_kst.date().isoformat())
+    if key in done:
+        return False
+    done.add(key)
+    return True
+
+
 async def _finish(task: asyncio.Task | None) -> None:
     """구독 태스크를 취소하고 끝날 때까지 기다린다(예외는 로그만)."""
     if task is None:
@@ -182,9 +193,16 @@ async def run() -> None:
     recorder = MinuteBarRecorder()
     bars_stop = asyncio.Event()
     bars_task = asyncio.create_task(recorder.run(bars_stop))
+    backfilled: set[tuple[str, str]] = set()
+    side_tasks: set[asyncio.Task] = set()
 
     def start_consumer(ticker: str) -> asyncio.Task:
         log.info("수집 시작: ticker=%s mock=%s", ticker, use_mock)
+        # 시작·종목 전환 시 당일 KIS 분봉 보충(Mock/키 없음이면 생략, 실패는 로그만)
+        if not use_mock and _claim_backfill(backfilled, ticker, datetime.now(KST)):
+            t = asyncio.create_task(asyncio.to_thread(run_backfill, ticker, lambda: recorder.first_minute(ticker)))
+            side_tasks.add(t)
+            t.add_done_callback(side_tasks.discard)
         return asyncio.create_task(
             _consume(use_mock, cfg, ticker, base_price, redis_url, publisher, recorder=recorder)
         )

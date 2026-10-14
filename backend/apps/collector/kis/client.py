@@ -2,6 +2,7 @@
 
 - OAuth 토큰: Redis 공유 캐시(발급 제한 대응) → 없으면 발급 후 저장
 - 국내 일봉: inquire-daily-itemchartprice (tr_id=FHKST03010100, 수정주가, 시장=UN 통합)
+- 국내 당일 분봉: inquire-time-itemchartprice (tr_id=FHKST03010200, 30건/호출, 게임 분봉 보충용)
 - 재시도: 5xx·타임아웃·연결오류만 지수 백오프, 4xx 즉시 실패
 
 참조(ams): app/libs/external_api/kis_client.py, schemas/kis/domestic_stock/inquire_daily_itemchartprice.py
@@ -27,6 +28,7 @@ from shared.kis_config import KISConfig, get_kis_config
 DOMESTIC_MARKET_CODE = "UN"
 KRX_MARKET_CODE = "J"  # UN 빈응답(비-NXT 종목) 폴백용
 TR_DAILY_ITEMCHART = "FHKST03010100"
+TR_TIME_ITEMCHART = "FHKST03010200"  # 주식당일분봉조회
 
 _MAX_RETRIES = 5
 _TIMEOUT = 15
@@ -128,6 +130,28 @@ class KISClient:
             "FID_ORG_ADJ_PRC": "0",  # 수정주가
         }
         data = self._request_with_retry("get", url, TR_DAILY_ITEMCHART, params)
+        return data.get("output2") or []
+
+    # --- 국내 당일 분봉 ---
+    def get_today_minute_bars(
+        self, ticker: str, hour_hhmmss: str, market_code: str = DOMESTIC_MARKET_CODE
+    ) -> list[dict]:
+        """당일 1분봉 원시 행(output2) — hour_hhmmss 이하 최신 30건, 최신→과거 순.
+
+        UN 빈 응답(NXT 미상장) 시 J 폴백은 상위(game_ws.kis_backfill)에서 처리한다.
+        """
+        url = (
+            f"{self.cfg.base_url}"
+            "/uapi/domestic-stock/v1/quotations/inquire-time-itemchartprice"
+        )
+        params = {
+            "FID_ETC_CLS_CODE": "",
+            "FID_COND_MRKT_DIV_CODE": market_code,
+            "FID_INPUT_ISCD": ticker,
+            "FID_INPUT_HOUR_1": hour_hhmmss,
+            "FID_PW_DATA_INCU_YN": "N",  # 당일만(전일 데이터 미포함)
+        }
+        data = self._request_with_retry("get", url, TR_TIME_ITEMCHART, params)
         return data.get("output2") or []
 
     def _request_with_retry(self, method: str, url: str, tr_id: str, params: dict) -> dict:
