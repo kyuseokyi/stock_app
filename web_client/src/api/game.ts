@@ -7,7 +7,7 @@ import type {
   RawAccount, RawClaimResult, RawCoachMessage, RawCoachToday, RawOrderResult, RawPosition, RawQuest,
   RawQuestList, RawQuizQuestion, RawQuizResult, RawStreakClaimResult, Season, Streak, StreakClaimResult,
   WeeklyBoard, WeeklyMyRank, WeeklyResultWeek, WeeklyReward,
-  MonthlyBoard, MonthlyMyRank, MonthlyResultMonth, RewardConfig,
+  MonthlyBoard, MonthlyMyRank, MonthlyResultMonth, RewardConfig, GameRules,
 } from '../types/game'
 
 // trading_game REST. Decimal 문자열은 여기서 number 로 변환해 UI 는 number 만 다룬다.
@@ -176,6 +176,12 @@ export async function getMonthlyResults(seasonId: number, limit = 1): Promise<Mo
 /** 공개 — 주간·월간·연속 출석 보상 금액(admin 설정값) */
 export async function getRewardConfig(): Promise<RewardConfig> {
   const { data } = await client().get<RewardConfig>('/api/game/reward-config')
+  return data
+}
+
+/** 공개 — 게임 규칙 상수(자본금·최소 주문·거래 시간·배율·수수료·자동 청산·보상) */
+export async function getGameRules(): Promise<GameRules> {
+  const { data } = await client().get<GameRules>('/api/game/rules')
   return data
 }
 

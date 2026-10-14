@@ -7,6 +7,7 @@ import ActivePositionCard from '../components/game/ActivePositionCard'
 import ChartQuizModal from '../components/game/ChartQuizModal'
 import CoachBanner from '../components/game/CoachBanner'
 import GameHeader from '../components/game/GameHeader'
+import GameRulesModal from '../components/game/GameRulesModal'
 import LeaderboardModal from '../components/game/LeaderboardModal'
 import NudgeToaster from '../components/game/NudgeToaster'
 import OrderPanel from '../components/game/OrderPanel'
@@ -15,6 +16,7 @@ import QuizBanner from '../components/game/QuizBanner'
 import SentimentBar from '../components/game/SentimentBar'
 import StreakRewardModal from '../components/game/StreakRewardModal'
 import TradingChart from '../components/game/TradingChart'
+import { useGameRules } from '../hooks/useGameRules'
 import { useGameWebSocket } from '../hooks/useGameWebSocket'
 import { isQuizPrimeTime } from '../lib/quiz'
 import { useAuthStore } from '../store/auth'
@@ -24,11 +26,11 @@ import type { Leverage, OrderOptions, Ratio, Side } from '../types/game'
 const RANK_POLL_MS = 30_000
 const PRIME_CHECK_MS = 60_000
 
-type ActiveModal = 'ranking' | 'quest' | 'academy' | 'quiz' | 'streak' | null
-type PrivateModal = Exclude<ActiveModal, 'ranking' | null>
+type ActiveModal = 'ranking' | 'rules' | 'quest' | 'academy' | 'quiz' | 'streak' | null
+type PrivateModal = Exclude<ActiveModal, 'ranking' | 'rules' | null>
 
 // 실시간 트레이딩 게임 — 상태별 분기: 서버 미설정/시즌 없음 → 준비 중, 연결 실패 → 재시도, 정상 → 트레이딩 화면
-// 모달은 한 번에 하나(activeModal). 랭킹은 공개, 퀘스트·아카데미·퀴즈는 로그인 필요.
+// 모달은 한 번에 하나(activeModal). 랭킹·규칙은 공개, 퀘스트·아카데미·퀴즈는 로그인 필요.
 export default function GamePage() {
   const token = useAuthStore((s) => s.token)
   const userId = useAuthStore((s) => s.user?.id ?? null)
@@ -40,6 +42,7 @@ export default function GamePage() {
   const [loginOpen, setLoginOpen] = useState(false)
   const [activeModal, setActiveModal] = useState<ActiveModal>(null)
   const [primeTime, setPrimeTime] = useState(() => isQuizPrimeTime(new Date()))
+  const rulesState = useGameRules() // 공개 /rules — 페이지당 1회 요청(규칙 모달·수수료 안내·심리 바 주기)
   const ready = status === 'ready'
 
   useEffect(() => {
@@ -53,9 +56,9 @@ export default function GamePage() {
     else resetPrivate()
   }, [ready, loggedIn, loadPrivate, resetPrivate])
 
-  // 로그아웃 시 로그인 전용 모달 닫기(랭킹은 공개라 유지)
+  // 로그아웃 시 로그인 전용 모달 닫기(랭킹·규칙은 공개라 유지)
   useEffect(() => {
-    if (!loggedIn) setActiveModal((m) => (m === 'ranking' ? m : null))
+    if (!loggedIn) setActiveModal((m) => (m === 'ranking' || m === 'rules' ? m : null))
   }, [loggedIn])
 
   // 보유 중 실시간 ROI 로 순위가 움직이므로 주기적으로 갱신
@@ -126,10 +129,11 @@ export default function GamePage() {
         onOpenQuest={() => openPrivate('quest')}
         onOpenQuiz={() => openPrivate('quiz')}
         onOpenStreak={() => openPrivate('streak')}
+        onOpenRules={() => setActiveModal('rules')}
       />
       <CoachBanner coach={coach} />
       {!loggedIn && <p className="rounded-card bg-surface p-4 text-sm text-ink-muted">로그인하면 주문할 수 있어요</p>}
-      <SentimentBar sentiment={sentiment} />
+      <SentimentBar sentiment={sentiment} intervalSec={rulesState.rules?.sentiment_interval_sec} />
       <TradingChart ticker={season.ticker} lastPrice={lastPrice} coach={coach} position={position} />
       {position && (
         <ActivePositionCard position={position} lastPrice={lastPrice} closing={closing} onClose={() => closePosition()} />
@@ -141,9 +145,12 @@ export default function GamePage() {
         submitting={submitting}
         onOrder={handleOrder}
         onLockedLeverage={() => openPrivate('academy')}
+        feePct={rulesState.rules?.fee_roundtrip_pct ?? null}
+        onOpenRules={() => setActiveModal('rules')}
       />
       {/* 모달은 NudgeToaster 보다 먼저 렌더 — 같은 z-40 에서 토스트가 모달 위에 보이게 */}
       {activeModal === 'ranking' && <LeaderboardModal seasonId={season.id} seasonPeriod={season.period} myUserId={userId} onClose={closeModal} />}
+      {activeModal === 'rules' && <GameRulesModal rulesState={rulesState} season={season} onClose={closeModal} />}
       {activeModal === 'quest' && <QuestModal onClose={closeModal} />}
       {activeModal === 'academy' && <AcademyModal onClose={closeModal} />}
       {activeModal === 'quiz' && <ChartQuizModal onClose={closeModal} />}

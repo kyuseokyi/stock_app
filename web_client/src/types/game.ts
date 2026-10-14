@@ -146,6 +146,8 @@ export interface Coach {
 export interface Sentiment {
   long_pct: number
   short_pct: number
+  /** 보유 중 포지션 수(=보유 인원). 구 서버 응답엔 없을 수 있음 */
+  total?: number
 }
 
 /** stock_api getChartData.candles (date = 'YYYY-MM-DD') */
@@ -416,4 +418,22 @@ export interface RewardConfig {
   weekly: number[]
   monthly: number[]
   streak: Record<string, number>
+}
+
+/** GET /api/game/rules (공개) — 실제 계산 상수. 규칙 화면 문구의 숫자는 모두 여기서 */
+export interface GameRules {
+  initial_cash: number
+  min_order_amount: number
+  max_open_positions: number
+  /** KST [["09:00","15:30"], ...] */
+  trading_windows: [string, string][]
+  leverages: number[]
+  /** {"5": "academy"} — 해금 조건 */
+  leverage_unlock: Record<string, string>
+  /** 왕복 수수료 % (0.03 = 0.03%) */
+  fee_roundtrip_pct: number
+  /** 자동 청산 수익률 % (-80) */
+  margin_call_roi_pct: number
+  sentiment_interval_sec: number
+  rewards: RewardConfig
 }

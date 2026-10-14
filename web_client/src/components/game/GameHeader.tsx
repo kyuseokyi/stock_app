@@ -15,13 +15,15 @@ interface GameHeaderProps {
   onOpenQuiz: () => void
   /** Streak 칩 클릭 → 연속 출석 보상 모달 */
   onOpenStreak: () => void
+  /** 📖 규칙 모달(비로그인도 열람) */
+  onOpenRules: () => void
 }
 
 const NAV_BUTTON = 'rounded-field bg-fill px-3 py-1.5 text-sm text-ink transition hover:brightness-95'
 
-// 시즌·종목·D-day + Streak + 내 순위/수익률 + 자본금 + 랭킹·퀘스트·퀴즈 진입 버튼.
+// 시즌·종목·D-day + Streak + 내 순위/수익률 + 자본금 + 랭킹·퀘스트·퀴즈·규칙 진입 버튼.
 export default function GameHeader({
-  season, account, myRank, loggedIn, streak, showQuiz, onOpenRanking, onOpenQuest, onOpenQuiz, onOpenStreak,
+  season, account, myRank, loggedIn, streak, showQuiz, onOpenRanking, onOpenQuest, onOpenQuiz, onOpenStreak, onOpenRules,
 }: GameHeaderProps) {
   const dday = daysUntil(season.end_at)
   const rank = myRank?.rank ?? null
@@ -84,6 +86,9 @@ export default function GameHeader({
               🧩 퀴즈
             </button>
           )}
+          <button type="button" onClick={onOpenRules} className={NAV_BUTTON}>
+            📖 규칙
+          </button>
         </div>
       </div>
     </Card>

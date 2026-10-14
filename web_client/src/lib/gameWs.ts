@@ -34,7 +34,11 @@ export function parseGameMessage(raw: string): GameWsMessage | null {
     case 'sentiment': {
       const long = toNumOrNull(data.long_pct)
       const short = toNumOrNull(data.short_pct)
-      return long !== null && short !== null ? { type: 'sentiment', long_pct: long, short_pct: short } : null
+      if (long === null || short === null) return null
+      const total = toNumOrNull(data.total) // 신규 필드(선택) — 구 서버는 없음
+      return total !== null
+        ? { type: 'sentiment', long_pct: long, short_pct: short, total }
+        : { type: 'sentiment', long_pct: long, short_pct: short }
     }
     case 'nudge': {
       const id = str(data.position_id)

@@ -2,6 +2,7 @@ import Button from '../ui/Button'
 import Card from '../ui/Card'
 import { formatPct, formatPrice, formatSignedKrw, pnlClass } from '../../lib/format'
 import { slTpLine } from '../../lib/orderOptions'
+import { sideClass, sideLabel } from '../../lib/side'
 import type { Position } from '../../types/game'
 
 interface ActivePositionCardProps {
@@ -13,13 +14,12 @@ interface ActivePositionCardProps {
 
 // 보유 포지션 — 평가손익(₩, %)은 WS position_pnl 로 틱마다 갱신. 원클릭 전액 청산.
 export default function ActivePositionCard({ position, lastPrice, closing, onClose }: ActivePositionCardProps) {
-  const long = position.side === 'LONG'
   const slTp = slTpLine(position.stop_loss_price, position.take_profit_price)
   return (
     <Card>
       <div className="flex items-center justify-between gap-2">
         <p className="font-bold text-ink">
-          <span className={long ? 'text-up' : 'text-down'}>{position.side}</span> x{position.leverage}배
+          <span className={sideClass(position.side)}>{sideLabel(position.side)}</span> {position.leverage}배
         </p>
         <p className={`text-right font-bold tabular-nums transition-colors ${pnlClass(position.pnl_amount)}`}>
           {position.pnl_amount !== null ? formatSignedKrw(position.pnl_amount) : '—'}

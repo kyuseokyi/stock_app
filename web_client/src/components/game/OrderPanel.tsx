@@ -5,6 +5,8 @@ import {
   RATIO_CHIPS, RATIO_MORE, STOP_LOSS_PCTS, TAKE_PROFIT_PCTS,
   isChipRatio, ratioLabel, slTpHint, stopLossLabel, takeProfitLabel,
 } from '../../lib/orderOptions'
+import { feeText } from '../../lib/gameRules'
+import { sideLabel } from '../../lib/side'
 import type { Leverage, OrderOptions, Ratio, Side } from '../../types/game'
 
 const LEVERAGES: Leverage[] = [1, 2, 5]
@@ -15,6 +17,10 @@ interface OrderPanelProps {
   submitting: boolean
   onOrder: (side: Side, ratio: Ratio, leverage: Leverage, opts: OrderOptions) => void
   onLockedLeverage: () => void
+  /** 왕복 수수료 %(/rules). 없으면 숫자 없이 '수수료 포함' */
+  feePct?: number | null
+  /** 규칙 모달 열기 */
+  onOpenRules?: () => void
 }
 
 // 네이티브 select 를 칩과 같은 모양으로(접근성·모바일 웹 호환).
@@ -45,9 +51,11 @@ function ChipSelect({ active, children, ...props }: { active: boolean } & Select
   )
 }
 
-// 원클릭 주문 — 비중(칩 + ▾기타)·배율 칩 + 손절/익절 드롭다운 + BUY(상승=핑크)/SELL(하락=블루).
+// 원클릭 주문 — 비중(칩 + ▾기타)·배율 칩 + 손절/익절 드롭다운 + 상승에 걸기(핑크)/하락에 걸기(블루).
 // 5x 는 아카데미 미해금 시 잠금. 비중 상태는 하나 — 칩 값이면 드롭다운은 '기타'로 표시(파생).
-export default function OrderPanel({ hasPosition, academyUnlocked, submitting, onOrder, onLockedLeverage }: OrderPanelProps) {
+export default function OrderPanel({
+  hasPosition, academyUnlocked, submitting, onOrder, onLockedLeverage, feePct = null, onOpenRules,
+}: OrderPanelProps) {
   const [ratio, setRatio] = useState<Ratio>(0.25)
   const [leverage, setLeverage] = useState<Leverage>(1)
   const [stopLoss, setStopLoss] = useState<number | null>(null)
@@ -131,7 +139,21 @@ export default function OrderPanel({ hasPosition, academyUnlocked, submitting, o
           ))}
         </ChipSelect>
       </div>
-      <p className="mt-1.5 text-xs text-ink-muted">{slTpHint(stopLoss, takeProfit, leverage)}</p>
+      <p className="mt-1.5 text-xs text-ink-muted">
+        {slTpHint(stopLoss, takeProfit, leverage)}
+        <span className="whitespace-nowrap">
+          {' · '}
+          {feePct !== null ? `수수료 ${feeText(feePct)} 포함` : '수수료 포함'}
+          {onOpenRules && (
+            <>
+              {' · '}
+              <button type="button" onClick={onOpenRules} className="font-semibold text-brand underline-offset-2 hover:underline">
+                규칙 보기
+              </button>
+            </>
+          )}
+        </span>
+      </p>
       <div className="mt-4 grid grid-cols-2 gap-3">
         <button
           type="button"
@@ -139,7 +161,7 @@ export default function OrderPanel({ hasPosition, academyUnlocked, submitting, o
           onClick={() => order('LONG')}
           className="h-14 rounded-btn bg-up-soft text-base font-bold text-up transition hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-40"
         >
-          🔴 BUY <span className="text-sm font-medium">(상승 베팅)</span>
+          🔴 {sideLabel('LONG')}에 걸기
         </button>
         <button
           type="button"
@@ -147,7 +169,7 @@ export default function OrderPanel({ hasPosition, academyUnlocked, submitting, o
           onClick={() => order('SHORT')}
           className="h-14 rounded-btn bg-down-soft text-base font-bold text-down transition hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-40"
         >
-          🔵 SELL <span className="text-sm font-medium">(하락 베팅)</span>
+          🔵 {sideLabel('SHORT')}에 걸기
         </button>
       </div>
       {hasPosition && <p className="mt-2 text-center text-xs text-ink-muted">보유 포지션을 먼저 청산하세요</p>}
