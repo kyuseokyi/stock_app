@@ -23,7 +23,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from shared.cors import build_allowed_origins
 from apps.trading_game import deps
 from apps.trading_game.routers import (
-    academy, academy_admin, coach, feature_flags, game_settings, leaderboard, orders, quests, quiz, quiz_admin,
+    academy, academy_admin, candles, coach, feature_flags, game_settings, leaderboard, orders, quests, quiz, quiz_admin,
     ws_gateway,
 )
 from apps.trading_game.services import position_cache, ws_bus
@@ -90,6 +90,7 @@ app.include_router(leaderboard.router)
 app.include_router(coach.router)
 app.include_router(feature_flags.router)
 app.include_router(game_settings.router)
+app.include_router(candles.router)
 app.include_router(quiz.router)
 app.include_router(quests.router)
 app.include_router(academy.router)
