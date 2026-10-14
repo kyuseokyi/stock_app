@@ -39,6 +39,18 @@ export interface SeasonOption {
   status: string // READY | ACTIVE | FINISHED
   start_at: string
   end_at: string | null
+  period?: SeasonPeriod // 구버전 서버 응답엔 없을 수 있음(기본 month)
+}
+
+// 게임 운영 설정(시즌 기간·보상 금액). 출처: game_settings_service / GET·PUT /api/game/admin/settings
+export type SeasonPeriod = 'month' | 'quarter'
+export type StreakRewardKey = '3' | '7' | '14' | '30'
+
+export interface GameSettings {
+  next_season_period: SeasonPeriod
+  weekly_rewards: [number, number, number]
+  monthly_rewards: [number, number, number]
+  streak_rewards: Record<StreakRewardKey, number>
 }
 
 // 기능 on/off (Phase 5b). 출처: game_dtos.FeatureFlagResponse

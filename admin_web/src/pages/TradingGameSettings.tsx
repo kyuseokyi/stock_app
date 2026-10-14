@@ -3,6 +3,7 @@ import type { AxiosError } from 'axios'
 import { GAME_API_URL } from '../config'
 import { listFeatureFlags, updateFeatureFlag } from '../api/featureFlags'
 import { showToast } from '../lib/toast'
+import GameSeasonRewardSettings from '../components/GameSeasonRewardSettings'
 import type { FeatureFlag, FeatureFlagKey } from '../types/game'
 
 const FLAG_META: Record<FeatureFlagKey, { title: string; description: string }> = {
@@ -68,7 +69,8 @@ function SettingsPanel() {
 
   return (
     <div>
-      <h2 className="mb-6 text-2xl font-bold text-slate-900">기능 설정</h2>
+      <h2 className="mb-6 text-2xl font-bold text-slate-900">게임 설정</h2>
+      <h3 className="mb-4 text-lg font-bold text-slate-900">기능 on/off</h3>
       {loading ? (
         <p className="text-sm text-slate-400">불러오는 중…</p>
       ) : loadFailed ? (
@@ -116,6 +118,7 @@ function SettingsPanel() {
           ))}
         </ul>
       )}
+      <GameSeasonRewardSettings />
     </div>
   )
 }
@@ -124,12 +127,12 @@ export default function TradingGameSettings() {
   if (!GAME_API_URL) {
     return (
       <div>
-        <h2 className="mb-6 text-2xl font-bold text-slate-900">기능 설정</h2>
+        <h2 className="mb-6 text-2xl font-bold text-slate-900">게임 설정</h2>
         <div className="rounded-xl border border-dashed border-slate-300 bg-white px-6 py-16 text-center">
           <p className="text-3xl">🔌</p>
           <p className="mt-3 font-medium text-slate-600">게임 서버 미연결</p>
           <p className="mt-1 text-sm text-slate-400">
-            VITE_GAME_API_URL 을 설정해 빌드하면 기능 설정을 사용할 수 있습니다.
+            VITE_GAME_API_URL 을 설정해 빌드하면 게임 설정을 사용할 수 있습니다.
           </p>
         </div>
       </div>

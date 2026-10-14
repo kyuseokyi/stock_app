@@ -26,7 +26,7 @@ const NAV_GROUPS: NavGroup[] = [
       { to: '/game/coach', label: '데일리 코치', icon: '📣' },
       { to: '/game/academy', label: '아카데미 문항', icon: '🎓' },
       { to: '/game/quizzes', label: '퀴즈 관리', icon: '🧩' },
-      { to: '/game/settings', label: '기능 설정', icon: '⚙️' },
+      { to: '/game/settings', label: '게임 설정', icon: '⚙️' },
     ],
   },
   {
