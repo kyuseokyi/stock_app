@@ -61,7 +61,8 @@ export default function Modal({ title, onClose, children }: ModalProps) {
   return (
     <div
       ref={backdropRef}
-      className="fixed inset-0 z-40 flex items-end justify-center bg-black/40 sm:items-center sm:p-4"
+      // !m-0: 부모가 space-y-* 면 형제 margin-top 이 fixed 백드롭에도 붙어 상단이 비므로 강제로 0
+      className="fixed inset-0 z-40 !m-0 flex items-end justify-center bg-black/40 sm:items-center sm:p-4"
       onMouseDown={(e) => {
         downTargetRef.current = e.target
       }}
