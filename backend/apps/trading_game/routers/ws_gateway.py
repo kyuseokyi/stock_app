@@ -1,9 +1,14 @@
-"""클라이언트 실시간 WebSocket — 틱/개인손익/시장심리."""
+"""클라이언트 실시간 WebSocket — 틱/개인손익/시장심리.
+
+token 선택: 없으면 비로그인 공개 연결(틱·시장심리만), 있으면 기존 검증(잘못된 토큰 4401 — 공개로 강등하지 않음).
+공개 연결 상한: IP당 GAME_WS_PUBLIC_PER_IP(3)·전체 GAME_WS_PUBLIC_MAX(2000), 초과 시 4429.
+"""
 from __future__ import annotations
 
 import asyncio
 import contextlib
 import logging
+import os
 
 import jwt
 from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect
@@ -20,6 +25,47 @@ router = APIRouter()
 log = logging.getLogger("trading_game.sentiment")
 
 SENTIMENT_INTERVAL = 5.0
+DEFAULT_PUBLIC_PER_IP = 3
+DEFAULT_PUBLIC_MAX = 2000
+
+
+def _env_int(name: str, default: int) -> int:
+    try:
+        v = int(os.getenv(name, default))
+        return v if v >= 0 else default
+    except ValueError:
+        return default
+
+
+def public_limits() -> tuple[int, int]:
+    """(IP당, 전체) 공개 연결 상한 — 연결 시점에 env 를 읽는다."""
+    return _env_int("GAME_WS_PUBLIC_PER_IP", DEFAULT_PUBLIC_PER_IP), _env_int("GAME_WS_PUBLIC_MAX", DEFAULT_PUBLIC_MAX)
+
+
+def client_ip(ws: WebSocket) -> str:
+    """CF-Connecting-IP(Cloudflare Tunnel) 우선, 없으면 소켓 peer host."""
+    ip = (ws.headers.get("cf-connecting-ip") or "").strip()
+    if ip:
+        return ip
+    return ws.client.host if ws.client else "unknown"
+
+
+async def _keepalive(ws: WebSocket) -> None:
+    try:
+        while True:
+            await ws.receive_text()  # 클라이언트 keep-alive(수신 무시)
+    except WebSocketDisconnect:
+        pass
+
+
+async def _serve_public(ws: WebSocket) -> None:
+    per_ip, max_total = public_limits()
+    if not await manager.connect_public(ws, client_ip(ws), per_ip=per_ip, max_total=max_total):
+        return
+    try:
+        await _keepalive(ws)
+    finally:
+        await manager.disconnect_public(ws)
 
 
 async def _collect_sentiment() -> dict:
@@ -52,7 +98,10 @@ async def _sentiment_loop(stop: asyncio.Event) -> None:
 
 
 @router.websocket("/ws/game/stream")
-async def game_stream(ws: WebSocket, token: str = Query(...)):
+async def game_stream(ws: WebSocket, token: str | None = Query(None)):
+    if token is None:  # 비로그인 공개 연결(빈 문자열 ?token= 은 잘못된 토큰 → 4401)
+        await _serve_public(ws)
+        return
     try:
         payload = decode_token(token)
         sub = payload.get("sub")
@@ -72,9 +121,6 @@ async def game_stream(ws: WebSocket, token: str = Query(...)):
         return
     await manager.connect(user_id, ws)
     try:
-        while True:
-            await ws.receive_text()  # 클라이언트 keep-alive(수신 무시)
-    except WebSocketDisconnect:
-        pass
+        await _keepalive(ws)
     finally:
         await manager.disconnect(user_id, ws)
