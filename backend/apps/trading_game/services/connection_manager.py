@@ -109,6 +109,17 @@ class ConnectionManager:
         if tasks:
             await asyncio.gather(*tasks)
 
+    async def broadcast_users(self, payload: dict) -> None:
+        """로그인 연결에만 전송(공개 연결 제외) — 로그인 전용 콘텐츠(데일리 코치 등)."""
+        text = json.dumps(payload, ensure_ascii=False)
+        tasks = [
+            self._safe_send(user_id, ws, text)
+            for user_id, conns in list(self._conns.items())
+            for ws in list(conns)
+        ]
+        if tasks:
+            await asyncio.gather(*tasks)
+
     async def send_to_user(self, user_id: int, payload: dict) -> None:
         text = json.dumps(payload, ensure_ascii=False)
         tasks = [self._safe_send(user_id, ws, text) for ws in list(self._conns.get(user_id, set()))]

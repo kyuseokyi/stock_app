@@ -47,6 +47,15 @@ async def test_public_receives_broadcast_but_not_personal_messages():
     assert m.user_ids() == [7]  # 공개 연결은 user_ids(개인손익 대상)에 없음
 
 
+async def test_broadcast_users_excludes_public():
+    m = ConnectionManager()
+    user_ws, pub_ws = FakeWS(), FakeWS()
+    await m.connect(7, user_ws)
+    await m.connect_public(pub_ws, "1.1.1.1", per_ip=3, max_total=10)
+    await m.broadcast_users({"type": "coach"})
+    assert user_ws.sent == [{"type": "coach"}] and pub_ws.sent == []
+
+
 async def test_public_per_ip_cap_closes_4429():
     m = ConnectionManager()
     for _ in range(3):

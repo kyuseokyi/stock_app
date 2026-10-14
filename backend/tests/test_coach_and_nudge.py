@@ -369,7 +369,7 @@ async def test_router_admin_upsert_flow_and_broadcast(api, maker, monkeypatch):
     async def fake_broadcast(payload):
         sent.append(payload)
 
-    monkeypatch.setattr(connection_manager.manager, "broadcast", fake_broadcast)
+    monkeypatch.setattr(connection_manager.manager, "broadcast_users", fake_broadcast)
     monkeypatch.setattr(coach_service, "kst_today", lambda: date(2026, 10, 13))
 
     r = await client.put("/api/game/admin/coach-messages", json=_body(season.id))
@@ -400,7 +400,7 @@ async def test_router_publish_succeeds_even_if_broadcast_fails(api, maker, monke
     async def boom(payload):
         raise RuntimeError("ws down")
 
-    monkeypatch.setattr(connection_manager.manager, "broadcast", boom)
+    monkeypatch.setattr(connection_manager.manager, "broadcast_users", boom)
     monkeypatch.setattr(coach_service, "kst_today", lambda: date(2026, 10, 13))
     r = await client.put("/api/game/admin/coach-messages", json=_body(season.id, action="publish"))
     assert r.status_code == 200 and r.json()["status"] == "PUBLISHED"
@@ -416,7 +416,7 @@ async def test_router_publish_future_date_does_not_broadcast(api, maker, monkeyp
     async def fake_broadcast(payload):
         sent.append(payload)
 
-    monkeypatch.setattr(connection_manager.manager, "broadcast", fake_broadcast)
+    monkeypatch.setattr(connection_manager.manager, "broadcast_users", fake_broadcast)
     monkeypatch.setattr(coach_service, "kst_today", lambda: date(2026, 10, 13))
     r = await client.put(
         "/api/game/admin/coach-messages",
@@ -460,7 +460,7 @@ async def test_router_coach_today(api, maker, monkeypatch):
     async def noop(payload):
         return None
 
-    monkeypatch.setattr(connection_manager.manager, "broadcast", noop)
+    monkeypatch.setattr(connection_manager.manager, "broadcast_users", noop)
 
     r = await client.get("/api/game/coach/today")
     assert r.status_code == 200
