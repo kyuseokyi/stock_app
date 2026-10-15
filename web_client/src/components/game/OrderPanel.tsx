@@ -186,8 +186,9 @@ export default function OrderPanel({
       </Card>
 
       {/* 모바일 폭: 차트를 보면서 바로 걸 수 있게 화면 아래 고정(GamePage 가 그만큼 아래 여백을 둔다) */}
-      <div className="fixed inset-x-0 bottom-0 z-30 !m-0 border-t border-line bg-surface/95 backdrop-blur sm:hidden">
-        <div className="mx-auto max-w-3xl px-4 pb-[max(env(safe-area-inset-bottom),0.75rem)] pt-2">
+      {/* 하단 탭바(3.5rem + safe-area, Layout BottomTabBar) 바로 위 — safe-area 는 탭바가 처리 */}
+      <div className="fixed inset-x-0 bottom-[calc(3.5rem+env(safe-area-inset-bottom))] z-30 !m-0 border-t border-line bg-surface/95 backdrop-blur sm:hidden">
+        <div className="mx-auto max-w-3xl px-4 pb-2 pt-2">
           {hasPosition ? (
             <p className="mb-2 text-center text-xs text-ink-muted">보유 포지션을 먼저 청산하세요</p>
           ) : (

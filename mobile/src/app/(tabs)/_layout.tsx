@@ -26,7 +26,7 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="blog"
         options={{
-          title: '블로그',
+          title: '커뮤니티', // 웹 메뉴와 같은 이름(홈·커뮤니티·게임·내정보) — 라우트는 blog 유지
           tabBarIcon: ({ color, size }) => <Ionicons name="newspaper-outline" color={color} size={size} />,
         }}
       />

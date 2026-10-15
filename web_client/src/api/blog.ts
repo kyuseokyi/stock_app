@@ -9,13 +9,16 @@ export const listBoards = async (): Promise<BoardOut[]> => {
 
 interface ListBlogsParams {
   boardId?: number
+  /** true 면 홈 추천 글만(featured_at 최신순) */
+  featured?: boolean
   page?: number
   size?: number
 }
 
-export const listBlogs = async ({ boardId, page = 1, size = 10 }: ListBlogsParams = {}): Promise<BlogListOut> => {
-  const params: Record<string, number> = { page, size }
+export const listBlogs = async ({ boardId, featured, page = 1, size = 10 }: ListBlogsParams = {}): Promise<BlogListOut> => {
+  const params: Record<string, number | boolean> = { page, size }
   if (boardId != null) params.board_id = boardId
+  if (featured) params.featured = true
   const { data } = await client.get<BlogListOut>('/blogs', { params })
   return data // { total, page, size, items }
 }

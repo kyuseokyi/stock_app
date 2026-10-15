@@ -81,7 +81,7 @@ export default function BlogScreen() {
         </View>
       ) : error ? (
         <View style={styles.center}>
-          <Text style={styles.errorTitle}>블로그를 불러오지 못했습니다</Text>
+          <Text style={styles.errorTitle}>커뮤니티를 불러오지 못했습니다</Text>
           <Text style={styles.hint}>{error}</Text>
           <Pressable style={styles.retry} onPress={reload}>
             <Text style={styles.retryText}>다시 시도</Text>

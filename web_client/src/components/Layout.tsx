@@ -3,18 +3,13 @@ import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-do
 import { useBoardStore } from '../store/boards'
 import { useAuthStore } from '../store/auth'
 import { chipClass } from './ui/Chip'
+import { BottomTabBar, TopNav, sectionOf } from './AppNav'
 import LoginModal from './LoginModal'
 import NotificationToaster from './NotificationToaster'
 import UserMenu from './UserMenu'
 import DeleteAccountModal from './DeleteAccountModal'
 import AppToaster from './AppToaster'
 import { showToast } from '../store/toast'
-
-// 1차 섹션(커뮤니티·게임) 탭 스타일
-const sectionClass = (active: boolean) =>
-  `pb-1.5 text-base font-bold transition ${
-    active ? 'border-b-2 border-accent text-ink' : 'text-ink-muted hover:text-ink'
-  }`
 
 export default function Layout() {
   const { boards, fetchBoards } = useBoardStore()
@@ -23,8 +18,8 @@ export default function Layout() {
   const [deleteOpen, setDeleteOpen] = useState(false)
   const location = useLocation()
   const navigate = useNavigate()
-  // 섹션 판별: /game 경로면 게임, 그 외 전부 커뮤니티(별도 상태 불필요)
-  const isGame = location.pathname.startsWith('/game')
+  // 섹션 판별: 경로로(별도 상태 불필요) — 게시판·글 상세는 커뮤니티
+  const section = sectionOf(location.pathname)
 
   useEffect(() => {
     fetchBoards()
@@ -57,18 +52,11 @@ export default function Layout() {
             )}
           </div>
 
-          {/* 1차 네비: 커뮤니티 · 게임 */}
-          <nav className="mt-3 flex items-center gap-5">
-            <Link to="/" className={sectionClass(!isGame)}>
-              커뮤니티
-            </Link>
-            <Link to="/game" className={sectionClass(isGame)}>
-              게임
-            </Link>
-          </nav>
+          {/* 1차 메뉴: 홈 · 커뮤니티 · 게임 · 내정보 (데스크톱 상단 — 모바일 폭은 아래 BottomTabBar) */}
+          <TopNav section={section} />
 
           {/* 커뮤니티 섹션일 때만 게시판 탭 */}
-          {!isGame && (
+          {section === 'community' && (
             <nav className="mt-3 flex gap-2 overflow-x-auto pb-1">
               {boards.map((b) => (
                 <NavLink
@@ -84,9 +72,12 @@ export default function Layout() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-3xl px-4 py-6">
+      {/* 모바일 폭은 하단 탭바(3.5rem + safe-area)만큼 아래 여백 */}
+      <main className="mx-auto max-w-3xl px-4 pb-[calc(5rem+env(safe-area-inset-bottom))] pt-6 sm:py-6">
         <Outlet />
       </main>
+
+      <BottomTabBar section={section} />
 
       <NotificationToaster />
       <LoginModal open={loginOpen} onClose={() => setLoginOpen(false)} />

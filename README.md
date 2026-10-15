@@ -158,6 +158,10 @@ npm run build -- --mode development    # 빌드 검증(테스트 러너 없음 �
 > `npm run build`(prod 모드)는 `VITE_API_BASE_URL`·`VITE_AUTH_BASE_URL` 누락 시 실패하므로, 로컬 검증은 `.env.development`를 로드하는 `-- --mode development`로 돌립니다.
 - web_client 는 **TypeScript(strict)** 다. `npm run build` = `tsc --noEmit && vite build` 이므로 타입 에러가 있으면 빌드(및 Docker 배포 빌드)가 실패한다. 타입만 확인하려면 `npx tsc --noEmit`.
 - API 응답 타입은 `web_client/src/types/`(백엔드 pydantic 스키마 기준)에 있다. 백엔드 응답 스키마를 바꾸면 admin_web 타입과 함께 갱신한다.
+- **메뉴(앱과 동일)**: 홈 `/`(📌 추천 글 `featured=true`) · 커뮤니티 `/community`(→ 첫 게시판, `/boards/:id`·`/posts/:id` 포함) · 게임 `/game` · 내정보 `/me`(로그인 / 닉네임·로그아웃·탈퇴).
+  - 데스크톱은 상단 메뉴, 모바일 폭은 하단 고정 탭바(`components/AppNav.tsx`)에 둔다. 게임 주문바는 탭바 바로 위에 붙는다.
+  - 앱 하단 탭 이름도 홈 · 커뮤니티 · 게임 · 내정보로 맞췄다.
+  - 설계 문서: `docs/superpowers/specs/2026-10-15-unified-nav-design.md`
 - **게임 탭(`/game`)** 은 trading_game(8003)·stock_api(8002, 일봉 차트)를 호출한다. 실시간 화면을 보려면 auth(8001)·blog(8000)와 함께 두 서비스도 띄운다. `VITE_GAME_API_URL`·`VITE_STOCK_API_URL`은 **선택** 변수 — dev 미설정 시 `http://localhost:8003`·`http://localhost:8002/graphql`, 배포 빌드 미설정이면 게임 탭은 "시즌을 준비하고 있어요"(빌드는 실패하지 않음). trading_game 운영 배포 전까지 필수 목록에 넣지 않는다.
 - **게임 모달(6b)**: 헤더 `🏆 랭킹`(시즌 Top 100·명예의 전당 MBTI 칩, 비로그인 열람) · `🎯 퀘스트`(Q1~Q3 진행률·보상 수령·뱃지) · `🧩 퀴즈`(야간 10초 차트 퀴즈 — KST 15:30 이후·주말엔 주문 패널 위 배너, 관리자 플래그 QUIZ 가 꺼지면 숨김), 5x 🔒 칩 → 아카데미(활성 문항 전부 정답 시 5배 레버리지 해금), 헤더 `🔥 n일 연속` Streak 칩. 백엔드 변경 없음(Phase 5b API). 퀘스트·퀴즈·아카데미는 로그인 필요.
 - **간편 로그인(카카오·네이버)**: 로그인 모달 버튼 → auth `GET /api/v1/auth/social/{kakao|naver}/start?client=web&cc=…` → 공급자 → auth 콜백 → `/auth/complete?code=…` → `POST /api/v1/auth/social/exchange {code, code_verifier}` 로 JWT 저장 후 원래 페이지로 복귀. **verifier(PKCE 방식)**: 시작 전 32바이트 난수 verifier 를 `sessionStorage`(`wc_social_verifier`)에 두고 `cc=base64url(SHA-256(verifier))` 만 보낸다 — 교환 코드만으로는 토큰을 받을 수 없음(로그인 CSRF 방지). `crypto.subtle` 이 필요하므로 https 또는 localhost 에서만 동작. 키가 없는 공급자 버튼은 숨김(`GET /api/v1/auth/social/providers`). 키 없이 로컬에서 흐름을 보려면 auth 를 `SOCIAL_FAKE_PROVIDER=true` 로 띄운다(공급자 대신 "테스트유저" 로그인, `APP_ENV` 가 명시적으로 `development`/`test` 일 때만 유효). 콜백·교환 코드는 Redis 를 쓰므로 Redis(도커)도 필요.
