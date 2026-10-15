@@ -329,6 +329,22 @@ export function DailyChart({ ticker, lastPrice, coach, position }: DailyChartPro
   const off = clampOffset(offset, total, VISIBLE);
   const { start, end } = windowRange(total, VISIBLE, off);
   const candles = all?.slice(start, end) ?? null;
+
+  // 현재가(웹 차트 가격축 태그와 같은 역할) — 최신 구간을 볼 때만. 직전 봉 대비 상승=빨강/하락=파랑
+  const nowBar = all !== null && all.length > 0 ? all[all.length - 1] : null;
+  const prevClose = all !== null && all.length > 1 ? all[all.length - 2].close : null;
+  const chartLines: PriceLine[] =
+    nowBar !== null && off === 0
+      ? [
+          ...lines,
+          {
+            price: nowBar.close,
+            color: prevClose !== null && nowBar.close < prevClose ? theme.colors.down : theme.colors.up,
+            label: '현재',
+            dashed: true,
+          },
+        ]
+      : lines;
   const xLabels =
     interval === 'day'
       ? daily?.slice(start, end).map((c) => dayLabel(c.date))
@@ -402,7 +418,7 @@ export function DailyChart({ ticker, lastPrice, coach, position }: DailyChartPro
         onTouchStart={() => setIndOpen(false)} // 차트를 만지면 지표 팝오버 닫기(팝오버 자체 터치는 형제라 해당 없음)
         {...pan.panHandlers}>
         {candles !== null && !empty ? (
-          <CandleChart candles={candles} height={PLOT_H} lines={lines} overlays={overlays} xLabels={xLabels} />
+          <CandleChart candles={candles} height={PLOT_H} lines={chartLines} overlays={overlays} xLabels={xLabels} />
         ) : null}
         {off > 0 ? (
           <View style={styles.latest}>
