@@ -1,9 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import * as SecureStore from 'expo-secure-store';
-import { ActivityIndicator, PanResponder, Text, View, type LayoutChangeEvent } from 'react-native';
+import { ActivityIndicator, PanResponder, Pressable, Text, View, type LayoutChangeEvent } from 'react-native';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
-import { Chip } from '@/ui';
 
 import { getDailyCandles, getGameCandles } from '../api';
 import { applyTick } from '../lib/candles';
@@ -158,6 +157,22 @@ function CandlePlot({ height, lines = [], overlays = [], showLabels = true, layo
   );
 }
 
+/** 차트 전용 작은 칩(공용 Chip 보다 낮고 글씨 작게) — 단위·지표·최신 버튼 */
+function MiniChip({ label, selected = false, onPress }: { label: string; selected?: boolean; onPress: () => void }) {
+  return (
+    <Pressable
+      onPress={onPress}
+      hitSlop={4}
+      accessibilityRole="button"
+      accessibilityState={{ selected }}
+      style={[styles.miniChip, selected && styles.miniChipOn]}>
+      <Text style={[styles.miniLabel, selected && styles.miniLabelOn]} allowFontScaling={false}>
+        {label}
+      </Text>
+    </Pressable>
+  );
+}
+
 type DailyChartProps = {
   ticker: string;
   lastPrice: number | null;
@@ -209,6 +224,8 @@ export function DailyChart({ ticker, lastPrice, coach, position }: DailyChartPro
   // 좌우 이동: offset = 최신에서 과거로 민 봉 수(0 = 최신). plotWidth 로 캔들 1개 폭을 구해 드래그 px → 봉 수
   const [offset, setOffset] = useState(0);
   const [plotWidth, setPlotWidth] = useState(0);
+  const [indOpen, setIndOpen] = useState(false); // 지표 팝오버
+  const [chipsBottom, setChipsBottom] = useState(40); // 칩 줄 아래 y — 팝오버 위치
 
   // 1) 캔들 로드(종목·단위가 바뀌면 다시). 늦게 온 이전 단위 응답은 cancelled 로 버린다. 설정 복원 전에는 대기(로딩 표시)
   useEffect(() => {
@@ -364,25 +381,32 @@ export function DailyChart({ ticker, lastPrice, coach, position }: DailyChartPro
 
   return (
     <View style={styles.frame}>
-      <View style={styles.chips}>
-        {CHART_INTERVALS.map((it) => (
-          <Chip key={it.value} label={it.label} selected={it.value === interval} onPress={() => setPicked(it.value)} />
-        ))}
-        <View style={styles.indicatorChips}>
-          <Chip label="이동평균" selected={showMa} onPress={() => setShowMa((v) => !v)} />
-          <Chip label="볼린저" selected={showBb} onPress={() => setShowBb((v) => !v)} />
+      {/* 단위 + 지표 버튼 한 줄. 지표는 '지표 ▾' 를 누르면 오른쪽 위 팝오버로 켜고 끈다 */}
+      <View style={styles.chipsWrap} onLayout={(e: LayoutChangeEvent) => setChipsBottom(e.nativeEvent.layout.y + e.nativeEvent.layout.height)}>
+        <View style={styles.chips}>
+          {CHART_INTERVALS.map((it) => (
+            <MiniChip key={it.value} label={it.label} selected={it.value === interval} onPress={() => setPicked(it.value)} />
+          ))}
+          <View style={styles.indicatorBtn}>
+            <MiniChip
+              label={`지표${showMa || showBb ? ` ${Number(showMa) + Number(showBb)}` : ''} ${indOpen ? '▴' : '▾'}`}
+              selected={indOpen}
+              onPress={() => setIndOpen((v) => !v)}
+            />
+          </View>
         </View>
       </View>
       <View
         style={styles.plotArea}
         onLayout={(e: LayoutChangeEvent) => setPlotWidth(e.nativeEvent.layout.width)}
+        onTouchStart={() => setIndOpen(false)} // 차트를 만지면 지표 팝오버 닫기(팝오버 자체 터치는 형제라 해당 없음)
         {...pan.panHandlers}>
         {candles !== null && !empty ? (
           <CandleChart candles={candles} height={PLOT_H} lines={lines} overlays={overlays} xLabels={xLabels} />
         ) : null}
         {off > 0 ? (
           <View style={styles.latest}>
-            <Chip label="최신 ›" selected onPress={() => setOffset(0)} />
+            <MiniChip label="최신 ›" selected onPress={() => setOffset(0)} />
           </View>
         ) : null}
         {candles !== null && !empty && showMa ? (
@@ -410,6 +434,13 @@ export function DailyChart({ ticker, lastPrice, coach, position }: DailyChartPro
           </View>
         ) : null}
       </View>
+      {/* 지표 팝오버 — 프레임의 마지막 자식(차트 위에 그려지고, Android 는 부모 영역 밖 자식에 터치를 안 주므로 칩 줄 밖 형제로) */}
+      {indOpen ? (
+        <View style={[styles.indicatorMenu, { top: chipsBottom + 4 }]}>
+          <MiniChip label="이동평균 5·20·60" selected={showMa} onPress={() => setShowMa((v) => !v)} />
+          <MiniChip label="볼린저 20·2σ" selected={showBb} onPress={() => setShowBb((v) => !v)} />
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -421,11 +452,37 @@ const styles = StyleSheet.create((theme) => ({
     borderWidth: 1,
     borderColor: theme.colors.border,
     backgroundColor: theme.colors.background,
-    paddingVertical: theme.gap(1.25),
+    paddingVertical: theme.gap(1),
     paddingHorizontal: theme.gap(1),
     overflow: 'hidden',
   },
-  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: theme.gap(0.75), marginBottom: theme.gap(1) },
+  chipsWrap: { marginBottom: theme.gap(0.75) },
+  chips: { flexDirection: 'row', alignItems: 'center', gap: theme.gap(0.5) },
+  indicatorBtn: { marginLeft: 'auto' },
+  indicatorMenu: {
+    position: 'absolute',
+    right: theme.gap(1),
+    gap: theme.gap(0.75),
+    padding: theme.gap(1),
+    borderRadius: theme.radius.card,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    backgroundColor: theme.colors.surface,
+    elevation: 6,
+    shadowColor: '#000',
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+  },
+  miniChip: {
+    borderRadius: theme.radius.chip,
+    paddingVertical: 4,
+    paddingHorizontal: theme.gap(1),
+    backgroundColor: theme.colors.fill,
+  },
+  miniChipOn: { backgroundColor: theme.colors.primarySoft },
+  miniLabel: { fontSize: 12, fontWeight: '600', color: theme.colors.textSecondary },
+  miniLabelOn: { color: theme.colors.primary },
   plotArea: { minHeight: PLOT_H + AXIS_H, position: 'relative' },
   plot: { width: '100%', position: 'relative' },
   axis: { height: AXIS_H, position: 'relative' },
@@ -440,7 +497,6 @@ const styles = StyleSheet.create((theme) => ({
   abs: { position: 'absolute' },
   segment: { height: 1 },
   faint: { opacity: 0.55 },
-  indicatorChips: { flexDirection: 'row', gap: theme.gap(0.75), marginLeft: 'auto' },
   legend: {
     position: 'absolute',
     top: 0,

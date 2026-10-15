@@ -50,11 +50,15 @@ export function GameHeader({
   const roi = myRank?.roi_pct ?? null;
   const showStreak = loggedIn && streak !== null && streak.enabled && streak.current_streak >= 1;
 
+  // 컴팩트: 1줄 종목·시즌 / 2줄 순위·자본금 / 3줄 진입 버튼(한 줄 고정) — 차트가 첫 화면에 크게 들어오게
   return (
     <Card style={styles.card}>
-      <View style={styles.metaRow}>
+      <View style={styles.topRow}>
+        <Text style={styles.stock} numberOfLines={1}>
+          {season.stock_name} <Text style={styles.ticker}>{season.ticker}</Text>
+        </Text>
         <Text style={styles.season}>
-          시즌 {season.season_number}기{dday !== null ? ` · 종료 D-${dday}` : ''}
+          {season.season_number}기{dday !== null ? ` · D-${dday}` : ''}
         </Text>
         {showStreak && streak !== null ? (
           <Pressable
@@ -63,31 +67,32 @@ export function GameHeader({
             accessibilityLabel={`${streak.current_streak}일 연속 · 최고 기록 ${streak.highest_streak}일 · 연속 출석 보상 보기`}
             style={({ pressed }) => pressed && styles.pressed}>
             <Text style={styles.streak}>
-              🔥 {streak.current_streak}일 연속{streak.rewards.some((r) => r.claimable) ? ' 🎁' : ''}
+              🔥{streak.current_streak}
+              {streak.rewards.some((r) => r.claimable) ? ' 🎁' : ''}
             </Text>
           </Pressable>
         ) : null}
       </View>
-      <Text style={styles.stock}>
-        {season.stock_name} <Text style={styles.ticker}>({season.ticker})</Text>
-      </Text>
 
-      <View style={styles.rankRow}>
+      <View style={styles.statusRow}>
         {!loggedIn ? (
-          <Text style={styles.muted}>로그인하고 시즌에 참여하세요</Text>
+          <Text style={styles.muted} numberOfLines={1}>
+            로그인하고 시즌에 참여하세요
+          </Text>
         ) : rank !== null ? (
           <View style={styles.inline}>
-            <Text style={styles.rank}>내 순위 {rank}위</Text>
-            {roi !== null ? <AmountText value={roi} kind="pct" size={15} /> : null}
+            <Text style={styles.rank}>{rank}위</Text>
+            {roi !== null ? <AmountText value={roi} kind="pct" size={13} /> : null}
           </View>
         ) : (
-          <Text style={styles.muted}>첫 거래 후 순위가 집계돼요</Text>
+          <Text style={styles.muted} numberOfLines={1}>
+            첫 거래 후 순위가 집계돼요
+          </Text>
         )}
-      </View>
-
-      <View style={styles.inline}>
-        <Text style={styles.muted}>자본금</Text>
-        <Text style={styles.asset}>{account ? formatWon(account.total_asset) : '—'}</Text>
+        <View style={styles.inline}>
+          <Text style={styles.muted}>자본금</Text>
+          <Text style={styles.asset}>{account ? formatWon(account.total_asset) : '—'}</Text>
+        </View>
       </View>
 
       <View style={styles.navRow}>
@@ -101,33 +106,35 @@ export function GameHeader({
 }
 
 const styles = StyleSheet.create((theme) => ({
-  card: { backgroundColor: theme.colors.surface },
-  metaRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: theme.gap(0.75) },
-  season: { fontSize: 13, fontWeight: '600', color: theme.colors.primary },
+  card: { backgroundColor: theme.colors.surface, paddingVertical: theme.gap(1.5), gap: theme.gap(0.75) },
+  topRow: { flexDirection: 'row', alignItems: 'center', gap: theme.gap(0.75) },
+  season: { fontSize: 12, fontWeight: '600', color: theme.colors.primary, marginLeft: 'auto' },
   streak: {
     fontSize: 12,
     fontWeight: '600',
     color: theme.colors.up,
     backgroundColor: theme.colors.fill,
     borderRadius: theme.radius.chip,
-    paddingHorizontal: theme.gap(1),
+    paddingHorizontal: theme.gap(0.75),
     paddingVertical: 2,
     overflow: 'hidden',
   },
-  stock: { fontSize: 20, fontWeight: '700', color: theme.colors.text },
-  ticker: { fontSize: 14, fontWeight: '500', color: theme.colors.textSecondary },
-  rankRow: { marginTop: theme.gap(0.5) },
-  inline: { flexDirection: 'row', alignItems: 'center', gap: theme.gap(0.75) },
-  rank: { fontSize: 15, fontWeight: '600', color: theme.colors.text },
-  muted: { fontSize: 14, color: theme.colors.textSecondary },
-  asset: { fontSize: 17, fontWeight: '700', color: theme.colors.text, fontVariant: ['tabular-nums'] },
-  navRow: { flexDirection: 'row', flexWrap: 'wrap', gap: theme.gap(1), marginTop: theme.gap(1) },
+  stock: { flexShrink: 1, fontSize: 17, fontWeight: '700', color: theme.colors.text },
+  ticker: { fontSize: 12, fontWeight: '500', color: theme.colors.textSecondary },
+  statusRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: theme.gap(1) },
+  inline: { flexDirection: 'row', alignItems: 'center', gap: theme.gap(0.5) },
+  rank: { fontSize: 13, fontWeight: '600', color: theme.colors.text },
+  muted: { flexShrink: 1, fontSize: 12, color: theme.colors.textSecondary },
+  asset: { fontSize: 14, fontWeight: '700', color: theme.colors.text, fontVariant: ['tabular-nums'] },
+  // 버튼 4개를 한 줄에 균등 배치(줄바꿈 없음)
+  navRow: { flexDirection: 'row', gap: theme.gap(0.75) },
   nav: {
+    flex: 1,
+    alignItems: 'center',
     borderRadius: theme.radius.chip,
     backgroundColor: theme.colors.fill,
-    paddingVertical: theme.gap(0.75),
-    paddingHorizontal: theme.gap(1.5),
+    paddingVertical: theme.gap(0.5),
   },
   pressed: { opacity: 0.7 },
-  navLabel: { fontSize: 14, fontWeight: '600', color: theme.colors.text },
+  navLabel: { fontSize: 12, fontWeight: '600', color: theme.colors.text },
 }));

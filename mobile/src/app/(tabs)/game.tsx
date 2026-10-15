@@ -221,7 +221,7 @@ export default function GameScreen() {
         style={styles.flex}
         contentContainerStyle={[styles.content, { paddingTop: insets.top + 8 }]}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void onRefresh()} />}>
-        <Text style={[styles.screenTitle, styles.titleInScroll]}>트레이딩 게임</Text>
+        {/* 큰 제목은 생략(하단 탭이 '게임') — 차트가 첫 화면에 더 크게 들어오게 */}
         <GameHeader
           season={season}
           account={account}
@@ -276,7 +276,7 @@ export default function GameScreen() {
 const styles = StyleSheet.create((theme) => ({
   flex: { flex: 1, backgroundColor: theme.colors.background },
   grow: { flexGrow: 1 },
-  content: { paddingHorizontal: theme.gap(2), paddingBottom: theme.gap(4), gap: theme.gap(1.5) },
+  content: { paddingHorizontal: theme.gap(1.5), paddingBottom: theme.gap(4), gap: theme.gap(1) },
   screenTitle: {
     fontSize: 24,
     fontWeight: '700',
@@ -284,7 +284,6 @@ const styles = StyleSheet.create((theme) => ({
     paddingHorizontal: theme.gap(2.5),
     paddingTop: theme.gap(2),
   },
-  titleInScroll: { paddingHorizontal: theme.gap(0.5), paddingTop: theme.gap(1), paddingBottom: theme.gap(0.5) },
   notice: { backgroundColor: theme.colors.surfaceBlue, borderRadius: theme.radius.card, padding: theme.gap(2) },
   noticeText: { fontSize: 14, color: theme.colors.textSecondary },
 }));
