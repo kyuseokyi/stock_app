@@ -1,6 +1,6 @@
 # Stock App 로드맵 & 진행 현황
 
-> 최종 업데이트: 2026-10-12
+> 최종 업데이트: 2026-10-15
 
 한국투자증권 API 기반 주식 데이터 파이프라인 + 블로그/커뮤니티 + 관리자/유저 웹/모바일 풀스택 모노레포의 진행 현황과 향후 단계.
 
@@ -112,6 +112,8 @@
   - [x] **6a** web 트레이딩 코어(헤더·코치 배너·심리 바·일봉+실시간 차트·주문/포지션·넛지) + `GET /api/game/seasons/active` (2026-10-13)
   - [x] **6b** web 모달 — 랭킹/명예의전당(MBTI)·퀘스트·아카데미(5x 해금)·야간 퀴즈·Streak (2026-10-13)
   - [x] **6c** 모바일(Expo) 동일 기능 — 순수 View 캔들 차트·RN Modal 시트·AppState WS (2026-10-13)
+  - [x] **앱 게임 차트를 웹과 같은 lightweight-charts(WebView)로 교체** — `chart-web/`(번들 생성 스크립트 `mobile/scripts/gen-lwc-bundle.js`·차트 페이지)·`lib/chart-bridge.ts`·`components/tv-chart.tsx`, 데이터 로드·캐시·틱은 기존 유지. 퀴즈 차트는 순수 View 유지. 실기기 확인 (2026-10-15)
+  - [x] **웹 게임 화면 반응형 주문 패널** — lg 이상은 오른쪽에 따라다니는 패널(2단), 그 외는 하단 고정 바 (2026-10-15)
 
 ### 상시 백로그
 - [x] **주간 랭킹** — 월 09:00 KST 시작·시즌 경계로 잘림, 주간 ROI=NAV 비율, 월 08:50 마감(Top 10 기록·1~3위 50/30/20만 보상), web·모바일 주간 탭+보상 토스트 (2026-10-13)
@@ -127,6 +129,10 @@
 - [x] web_client TypeScript 전환 (서브페이즈 6 직전, admin_web과 동일 방식) — 2026-10-13 strict 전환 완료
 - [x] **trading_game 개발 서버(develop) 배포 구성** — prod compose 에 `trading_game`(호스트 8004)·`game_ws` 추가, web/admin 빌드에 `VITE_GAME_API_URL=https://game.haezean.com` 주입, Deploy Server 에 `alembic upgrade head` 자동 단계 (2026-10-13). **남은 수동 작업**: Cloudflare `game.haezean.com → localhost:8004`, 서버에서 시즌 시드·퀴즈 생성(`docs/server_setup.md` §7-1)
 - [ ] trading_game product 배포(도메인 확정 시 — 빌드 인자·CORS_ORIGINS 추가)
+- [ ] 게임 일봉 현재가가 분봉과 다르게 보이는 문제 — 재조회 rows 가 틱 병합 값을 덮어씀(제안·보류)
+- [ ] 랭킹 창 자동 갱신 — 현재 열 때 1회 조회, 내 순위만 30초 폴링(제안·보류)
+- [ ] 웹 차트 지지·저항선이 autoscale 범위에 포함되지 않음(제안·보류)
+- [ ] 로그인 상태 새로고침 지연 측정(비로그인은 0.13~0.2초 정상 확인)
 - [x] admin_web `prose` 스타일 — `@tailwindcss/typography`(0.5.19) 도입으로 에디터/코치 미리보기 제목·목록 스타일 적용 (2026-10-13)
 - [x] 명예의 전당 응답 `season_number` — 웹·모바일 그룹 헤더가 시즌 id 대신 시즌 번호 표기 (2026-10-13)
 - [x] 게스트 로그인 백엔드 게이트 `AUTH_GUEST_ENABLED` — 미설정 시 `APP_ENV=development|test` 에서만 허용, 꺼지면 404. develop 서버는 `true` (2026-10-13)
