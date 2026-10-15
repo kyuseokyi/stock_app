@@ -18,6 +18,12 @@ export class ApiError extends Error {
 
 type Query = Record<string, string | number | boolean | undefined | null>;
 
+/**
+ * 요청 타임아웃. RN Android(OkHttp) fetch 는 기본 읽기 타임아웃이 없어(0=무제한) 네트워크 전환 직후
+ * 걸린 연결이 끝나지 않으면 await 가 영원히 대기 → 당겨서 새로고침 스피너가 멈춘 채로 남았다.
+ */
+export const REQUEST_TIMEOUT_MS = 15_000;
+
 function buildUrl(baseUrl: string, path: string, query?: Query): string {
   const url = `${baseUrl.replace(/\/$/, '')}${path.startsWith('/') ? path : `/${path}`}`;
   if (!query) return url;
@@ -35,14 +41,23 @@ async function request<T>(
 ): Promise<T> {
   const { query, ...rest } = init ?? {};
   const token = getAuthToken();
-  const res = await fetch(buildUrl(baseUrl, path, query), {
-    ...rest,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...(rest.headers ?? {}),
-    },
-  });
+  // 호출부가 signal 을 주지 않았으면 기본 타임아웃(abort → fetch reject → 호출부의 기존 오류 처리)
+  const ctrl = rest.signal ? null : new AbortController();
+  const timer = ctrl ? setTimeout(() => ctrl.abort(), REQUEST_TIMEOUT_MS) : null;
+  let res: Response;
+  try {
+    res = await fetch(buildUrl(baseUrl, path, query), {
+      ...rest,
+      signal: rest.signal ?? ctrl?.signal,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...(rest.headers ?? {}),
+      },
+    });
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 
   if (!res.ok) {
     let body: unknown;
