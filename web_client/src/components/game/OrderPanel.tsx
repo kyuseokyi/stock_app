@@ -176,7 +176,8 @@ export default function OrderPanel({
 
   return (
     <>
-      <Card className="hidden sm:block">
+      {/* 넓은 화면(lg+): GamePage 오른쪽 열에 붙어 스크롤을 따라온다(sticky) */}
+      <Card className="hidden lg:block">
         {settings}
         <div className="mt-4 grid grid-cols-2 gap-3">
           {sideButton('LONG', 'h-14 text-base')}
@@ -185,9 +186,9 @@ export default function OrderPanel({
         {hasPosition && <p className="mt-2 text-center text-xs text-ink-muted">보유 포지션을 먼저 청산하세요</p>}
       </Card>
 
-      {/* 모바일 폭: 차트를 보면서 바로 걸 수 있게 화면 아래 고정(GamePage 가 그만큼 아래 여백을 둔다) */}
-      {/* 하단 탭바(3.5rem + safe-area, Layout BottomTabBar) 바로 위 — safe-area 는 탭바가 처리 */}
-      <div className="fixed inset-x-0 bottom-[calc(3.5rem+env(safe-area-inset-bottom))] z-30 !m-0 border-t border-line bg-surface/95 backdrop-blur sm:hidden">
+      {/* lg 미만(모바일·태블릿·좁은 노트북 창): 차트를 보면서 바로 걸 수 있게 화면 아래 고정(GamePage 가 그만큼 아래 여백) */}
+      {/* 모바일 폭은 하단 탭바(3.5rem + safe-area, Layout BottomTabBar) 바로 위, sm 이상은 탭바가 없어 맨 아래 */}
+      <div className="fixed inset-x-0 bottom-[calc(3.5rem+env(safe-area-inset-bottom))] z-30 !m-0 border-t border-line bg-surface/95 backdrop-blur sm:bottom-0 lg:hidden">
         <div className="mx-auto max-w-3xl px-4 pb-2 pt-2">
           {hasPosition ? (
             <p className="mb-2 text-center text-xs text-ink-muted">보유 포지션을 먼저 청산하세요</p>

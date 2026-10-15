@@ -117,8 +117,9 @@ export default function GamePage() {
   const closeModal = () => setActiveModal(null)
 
   return (
-    // 모바일 폭은 OrderPanel 이 화면 아래 고정 바 → 마지막 내용이 가리지 않게 그 높이만큼 아래 여백
-    <div className="space-y-3 pb-32 sm:space-y-4 sm:pb-0">
+    // lg 미만은 OrderPanel 이 화면 아래 고정 바 → 마지막 내용이 가리지 않게 그 높이만큼 아래 여백.
+    // lg 이상은 2단(왼쪽 차트·정보 / 오른쪽 주문 패널이 스크롤을 따라옴) — 노트북에서도 버튼이 늘 보이게
+    <div className="space-y-3 pb-32 sm:space-y-4 lg:pb-0">
       <GameHeader
         season={season}
         account={account}
@@ -132,24 +133,31 @@ export default function GamePage() {
         onOpenStreak={() => openPrivate('streak')}
         onOpenRules={() => setActiveModal('rules')}
       />
-      {/* 차트를 위로 — 모바일에서 차트와 하단 주문 바가 한 화면에 들어오게. 코치·심리·안내는 차트 아래 */}
-      <TradingChart ticker={season.ticker} lastPrice={lastPrice} coach={coach} position={position} />
-      {position && (
-        <ActivePositionCard position={position} lastPrice={lastPrice} closing={closing} onClose={() => closePosition()} />
-      )}
-      {!loggedIn && <p className="rounded-card bg-surface p-4 text-sm text-ink-muted">로그인하면 주문할 수 있어요</p>}
-      <CoachBanner coach={coach} />
-      <SentimentBar sentiment={sentiment} intervalSec={rulesState.rules?.sentiment_interval_sec} />
-      {primeTime && !quizDisabled && <QuizBanner onOpen={() => openPrivate('quiz')} />}
-      <OrderPanel
-        hasPosition={position !== null}
-        academyUnlocked={academyUnlocked}
-        submitting={submitting}
-        onOrder={handleOrder}
-        onLockedLeverage={() => openPrivate('academy')}
-        feePct={rulesState.rules?.fee_roundtrip_pct ?? null}
-        onOpenRules={() => setActiveModal('rules')}
-      />
+      <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-start lg:gap-4">
+        <div className="space-y-3 sm:space-y-4">
+          {/* 차트를 위로 — 모바일에서 차트와 하단 주문 바가 한 화면에 들어오게. 코치·심리·안내는 차트 아래 */}
+          <TradingChart ticker={season.ticker} lastPrice={lastPrice} coach={coach} position={position} />
+          {position && (
+            <ActivePositionCard position={position} lastPrice={lastPrice} closing={closing} onClose={() => closePosition()} />
+          )}
+          {!loggedIn && <p className="rounded-card bg-surface p-4 text-sm text-ink-muted">로그인하면 주문할 수 있어요</p>}
+          <CoachBanner coach={coach} />
+          <SentimentBar sentiment={sentiment} intervalSec={rulesState.rules?.sentiment_interval_sec} />
+          {primeTime && !quizDisabled && <QuizBanner onOpen={() => openPrivate('quiz')} />}
+        </div>
+        {/* top: 고정 헤더(약 101px) 아래 여백 */}
+        <aside className="lg:sticky lg:top-[7.5rem]">
+          <OrderPanel
+            hasPosition={position !== null}
+            academyUnlocked={academyUnlocked}
+            submitting={submitting}
+            onOrder={handleOrder}
+            onLockedLeverage={() => openPrivate('academy')}
+            feePct={rulesState.rules?.fee_roundtrip_pct ?? null}
+            onOpenRules={() => setActiveModal('rules')}
+          />
+        </aside>
+      </div>
       {/* 모달은 NudgeToaster 보다 먼저 렌더 — 같은 z-40 에서 토스트가 모달 위에 보이게 */}
       {activeModal === 'ranking' && <LeaderboardModal seasonId={season.id} seasonPeriod={season.period} myUserId={userId} onClose={closeModal} />}
       {activeModal === 'rules' && <GameRulesModal rulesState={rulesState} season={season} onClose={closeModal} />}

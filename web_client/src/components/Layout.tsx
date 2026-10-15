@@ -20,6 +20,8 @@ export default function Layout() {
   const navigate = useNavigate()
   // 섹션 판별: 경로로(별도 상태 불필요) — 게시판·글 상세는 커뮤니티
   const section = sectionOf(location.pathname)
+  // 게임은 넓은 화면(lg+)에서 차트 + 오른쪽 주문 패널 2단 → 헤더·본문 폭을 함께 넓힌다(로고·메뉴 정렬 유지)
+  const width = section === 'game' ? 'max-w-3xl lg:max-w-6xl' : 'max-w-3xl'
 
   useEffect(() => {
     fetchBoards()
@@ -35,7 +37,7 @@ export default function Layout() {
   return (
     <div className="min-h-screen">
       <header className="sticky top-0 z-30 border-b border-line bg-canvas/90 backdrop-blur">
-        <div className="mx-auto max-w-3xl px-4 py-3">
+        <div className={`mx-auto ${width} px-4 py-3`}>
           <div className="flex items-center justify-between">
             <Link to="/" className="text-lg font-bold text-ink">
               📈 StockApp
@@ -73,7 +75,7 @@ export default function Layout() {
       </header>
 
       {/* 모바일 폭은 하단 탭바(3.5rem + safe-area)만큼 아래 여백 */}
-      <main className="mx-auto max-w-3xl px-4 pb-[calc(5rem+env(safe-area-inset-bottom))] pt-6 sm:py-6">
+      <main className={`mx-auto ${width} px-4 pb-[calc(5rem+env(safe-area-inset-bottom))] pt-6 sm:py-6`}>
         <Outlet />
       </main>
 
