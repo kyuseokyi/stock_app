@@ -34,10 +34,11 @@ type PrivateModal = Exclude<ActiveModal, 'ranking' | 'rules' | null>
 export default function GamePage() {
   const token = useAuthStore((s) => s.token)
   const userId = useAuthStore((s) => s.user?.id ?? null)
+  const expireSession = useAuthStore((s) => s.expireSession)
   const loggedIn = token !== null
   const {
     status, season, account, position, myRank, coach, academyUnlocked, streak, quizDisabled, lastPrice, sentiment,
-    submitting, closing, loadSeason, loadPrivate, resetPrivate, refreshRank, placeOrder, closePosition, pushToast,
+    submitting, closing, loadSeason, loadPrivate, resetPrivate, refreshRank, placeOrder, closePosition,
   } = useTradingGameStore()
   const [loginOpen, setLoginOpen] = useState(false)
   const [activeModal, setActiveModal] = useState<ActiveModal>(null)
@@ -74,9 +75,8 @@ export default function GamePage() {
     return () => clearInterval(t)
   }, [])
 
-  useGameWebSocket(token, ready, () =>
-    pushToast({ kind: 'error', icon: '🔑', message: '로그인이 만료되었어요. 다시 로그인해 주세요' }),
-  )
+  // 4401(토큰 만료/무효) → 로그아웃 + 만료 안내(REST 401 과 같은 경로, 헤더 닉네임도 정리)
+  useGameWebSocket(token, ready, () => expireSession(token))
 
   if (status === 'unavailable' || status === 'no-season') {
     return (

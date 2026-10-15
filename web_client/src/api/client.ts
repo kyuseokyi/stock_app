@@ -1,5 +1,5 @@
 import axios, { type AxiosError } from 'axios'
-import { TOKEN_KEY } from '../store/auth'
+import { TOKEN_KEY, bearerToken, useAuthStore } from '../store/auth'
 import { API_BASE_URL as baseURL } from '../config'
 
 // 블로그 서비스 base URL (조회 + 인증형 댓글 작성) — 빌드 타임 주입, 폴백/fail-fast 는 ../config
@@ -16,13 +16,12 @@ client.interceptors.request.use((config) => {
   return config
 })
 
-// 401(토큰 만료/무효) → 저장 토큰 정리(재로그인 유도)
+// 401(토큰 만료/무효) → 로그아웃(저장 토큰 + 화면 로그인 상태까지 정리해 재로그인 유도)
 client.interceptors.response.use(
   (res) => res,
   (err: AxiosError) => {
     if (err.response?.status === 401) {
-      localStorage.removeItem(TOKEN_KEY)
-      localStorage.removeItem('wc_user')
+      useAuthStore.getState().expireSession(bearerToken(err.config?.headers?.Authorization))
     }
     return Promise.reject(err)
   },
