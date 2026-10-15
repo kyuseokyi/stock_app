@@ -24,6 +24,7 @@ const TAKE_PROFIT = '#16a34a'; // 익절 — 초록(손절은 theme textSecondar
 const VISIBLE = 60; // 일봉·분봉 모두 한 화면 60개(가로로 끌면 과거로 이동)
 const PAN_START_PX = 8; // 이만큼 가로로 움직여야 차트 이동 시작(세로 스크롤과 구분)
 const LABEL_H = 16;
+const TAG_H = 18; // 현재가 태그 높이
 const PLOT_H = 240;
 const AXIS_H = 16; // 아래 시간축 라벨 줄
 const AXIS_LABEL_W = 48;
@@ -31,7 +32,8 @@ const AXIS_LABEL_W = 48;
 const MA_COLORS: Record<(typeof MA_PERIODS)[number], string> = { 5: '#14b8a6', 20: '#f97316', 60: '#a16207' };
 const BB_COLOR = '#6366f1';
 
-export type PriceLine = { price: number; color: string; label: string; thick?: boolean; dashed?: boolean };
+/** tag: 웹 차트 가격축 태그처럼 오른쪽 끝에 색 채운 박스로 가격만 표시(현재가용) */
+export type PriceLine = { price: number; color: string; label: string; thick?: boolean; dashed?: boolean; tag?: boolean };
 /** 캔들 위 꺾은선(보조지표). values 는 candles 와 같은 길이, null 구간은 끊김 */
 export type Overlay = { key: string; color: string; values: (number | null)[]; faint?: boolean };
 
@@ -135,7 +137,14 @@ function CandlePlot({ height, lines = [], overlays = [], showLabels = true, layo
                 ) : (
                   <View style={[styles.line, { top: y - thickness / 2, height: thickness, backgroundColor: l.color }]} />
                 )}
-                {showLabels ? (
+                {showLabels && l.tag ? (
+                  <Text
+                    style={[styles.priceTag, { top: Math.min(Math.max(0, y - TAG_H / 2), height - TAG_H), backgroundColor: l.color }]}
+                    numberOfLines={1}
+                    allowFontScaling={false}>
+                    {formatPrice(l.price)}
+                  </Text>
+                ) : showLabels ? (
                   <Text
                     style={[styles.lineLabel, { top: y < LABEL_H + 2 ? y + 2 : y - LABEL_H - 2, color: l.color }]}
                     numberOfLines={1}
@@ -342,6 +351,7 @@ export function DailyChart({ ticker, lastPrice, coach, position }: DailyChartPro
             color: prevClose !== null && nowBar.close < prevClose ? theme.colors.down : theme.colors.up,
             label: '현재',
             dashed: true,
+            tag: true,
           },
         ]
       : lines;
@@ -537,6 +547,20 @@ const styles = StyleSheet.create((theme) => ({
     fontWeight: '600',
     backgroundColor: theme.colors.background,
     paddingHorizontal: 4,
+  },
+  // 현재가 태그 — 오른쪽 끝, 선 높이 가운데(웹 가격축 태그와 같은 모양)
+  priceTag: {
+    position: 'absolute',
+    right: 0,
+    height: TAG_H,
+    lineHeight: TAG_H,
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#ffffff',
+    paddingHorizontal: 5,
+    borderRadius: 3,
+    overflow: 'hidden',
+    fontVariant: ['tabular-nums'],
   },
   rangeLabel: {
     position: 'absolute',
