@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import * as SecureStore from 'expo-secure-store';
-import { ActivityIndicator, Text, View, type LayoutChangeEvent } from 'react-native';
+import { ActivityIndicator, PanResponder, Text, View, type LayoutChangeEvent } from 'react-native';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
 import { Chip } from '@/ui';
@@ -9,6 +9,7 @@ import { getDailyCandles, getGameCandles } from '../api';
 import { applyTick } from '../lib/candles';
 import { CHART_PREFS_KEY, DEFAULT_CHART_PREFS, parseChartPrefs, serializeChartPrefs } from '../lib/chart-prefs';
 import { layoutCandles, priceToY, type Ohlc } from '../lib/chart-layout';
+import { clampOffset, dragOffset, offsetAfterGrowth, windowRange } from '../lib/chart-window';
 import { formatPrice, kstDateString } from '../lib/format';
 import { bollinger, lineSegments, MA_PERIODS, sma } from '../lib/indicators';
 import { applyTickIntraday, axisLabelIndexes, bucketStartSec, CHART_INTERVALS, dayLabel, kstHm } from '../lib/intraday';
@@ -21,7 +22,8 @@ import { useGameRules } from '../use-game-rules';
 const SUPPORT = '#8b5cf6';
 const RESIST = '#f59e0b';
 const TAKE_PROFIT = '#16a34a'; // 익절 — 초록(손절은 theme textSecondary 회색)
-const VISIBLE = 60; // 일봉·분봉 모두 최근 60개만 표시
+const VISIBLE = 60; // 일봉·분봉 모두 한 화면 60개(가로로 끌면 과거로 이동)
+const PAN_START_PX = 8; // 이만큼 가로로 움직여야 차트 이동 시작(세로 스크롤과 구분)
 const LABEL_H = 16;
 const PLOT_H = 240;
 const AXIS_H = 16; // 아래 시간축 라벨 줄
@@ -204,6 +206,9 @@ export function DailyChart({ ticker, lastPrice, coach, position }: DailyChartPro
   const [daily, setDaily] = useState<DailyCandle[] | null>(null);
   const [intraday, setIntraday] = useState<IntradayCandle[] | null>(null);
   const [failed, setFailed] = useState(false);
+  // 좌우 이동: offset = 최신에서 과거로 민 봉 수(0 = 최신). plotWidth 로 캔들 1개 폭을 구해 드래그 px → 봉 수
+  const [offset, setOffset] = useState(0);
+  const [plotWidth, setPlotWidth] = useState(0);
 
   // 1) 캔들 로드(종목·단위가 바뀌면 다시). 늦게 온 이전 단위 응답은 cancelled 로 버린다. 설정 복원 전에는 대기(로딩 표시)
   useEffect(() => {
@@ -212,10 +217,11 @@ export function DailyChart({ ticker, lastPrice, coach, position }: DailyChartPro
     setDaily(null);
     setIntraday(null);
     setFailed(false);
+    setOffset(0); // 종목·단위가 바뀌면 최신 구간부터
     const onFail = () => {
       if (!cancelled) setFailed(true);
     };
-    // 받은 전체를 보관(지표 계산용) — 화면에는 아래에서 최근 VISIBLE 개만 그린다
+    // 받은 전체를 보관(지표 계산·좌우 이동용) — 화면에는 아래에서 VISIBLE 개 구간만 그린다
     if (interval === 'day') {
       getDailyCandles(ticker)
         .then((rows) => {
@@ -293,18 +299,54 @@ export function DailyChart({ ticker, lastPrice, coach, position }: DailyChartPro
   }
 
   const all: Ohlc[] | null = interval === 'day' ? daily : intraday;
-  const candles = all?.slice(-VISIBLE) ?? null;
+  const total = all?.length ?? 0;
+
+  // 새 캔들이 붙으면: 최신을 보는 중이면 따라가고, 과거를 보는 중이면 화면을 그대로(offset 을 늘어난 만큼 민다)
+  const prevTotal = useRef(0);
+  useEffect(() => {
+    const prev = prevTotal.current;
+    prevTotal.current = total;
+    if (prev > 0 && total > 0) setOffset((o) => offsetAfterGrowth(o, prev, total));
+  }, [total]);
+
+  const off = clampOffset(offset, total, VISIBLE);
+  const { start, end } = windowRange(total, VISIBLE, off);
+  const candles = all?.slice(start, end) ?? null;
   const xLabels =
     interval === 'day'
-      ? daily?.slice(-VISIBLE).map((c) => dayLabel(c.date))
-      : intraday?.slice(-VISIBLE).map((c) => kstHm(c.t));
+      ? daily?.slice(start, end).map((c) => dayLabel(c.date))
+      : intraday?.slice(start, end).map((c) => kstHm(c.t));
   const empty = candles !== null && candles.length === 0;
 
-  // 보조지표 — 받은 전체 종가로 계산한 뒤 화면 구간(최근 VISIBLE)만 잘라 첫 캔들부터 선이 이어지게
+  // 가로 드래그 → offset. 세로 움직임은 페이지 스크롤에 양보하고, 잡은 뒤에는 스크롤에 뺏기지 않는다
+  const panState = useRef({ startOffset: 0, offset: 0, total: 0, slot: 0 });
+  useEffect(() => {
+    panState.current.offset = off;
+    panState.current.total = total;
+    panState.current.slot = plotWidth / VISIBLE;
+  }, [off, total, plotWidth]);
+  const pan = useMemo(
+    () =>
+      PanResponder.create({
+        onMoveShouldSetPanResponder: (_e, g) =>
+          panState.current.total > VISIBLE && Math.abs(g.dx) > PAN_START_PX && Math.abs(g.dx) > Math.abs(g.dy) * 1.5,
+        onPanResponderGrant: () => {
+          panState.current.startOffset = panState.current.offset;
+        },
+        onPanResponderMove: (_e, g) => {
+          const s = panState.current;
+          setOffset(clampOffset(dragOffset(s.startOffset, g.dx, s.slot), s.total, VISIBLE));
+        },
+        onPanResponderTerminationRequest: () => false,
+      }),
+    [],
+  );
+
+  // 보조지표 — 받은 전체 종가로 계산한 뒤 화면 구간만 잘라 첫 캔들부터 선이 이어지게
   const overlays = useMemo<Overlay[]>(() => {
     if (all === null) return [];
     const closes = all.map((c) => c.close);
-    const tail = <T,>(xs: T[]) => xs.slice(-VISIBLE);
+    const tail = <T,>(xs: T[]) => xs.slice(start, end);
     const out: Overlay[] = [];
     if (showBb) {
       const bands = tail(bollinger(closes));
@@ -318,7 +360,7 @@ export function DailyChart({ ticker, lastPrice, coach, position }: DailyChartPro
       for (const p of MA_PERIODS) out.push({ key: `ma${p}`, color: MA_COLORS[p], values: tail(sma(closes, p)) });
     }
     return out;
-  }, [all, showMa, showBb]);
+  }, [all, showMa, showBb, start, end]);
 
   return (
     <View style={styles.frame}>
@@ -331,9 +373,17 @@ export function DailyChart({ ticker, lastPrice, coach, position }: DailyChartPro
           <Chip label="볼린저" selected={showBb} onPress={() => setShowBb((v) => !v)} />
         </View>
       </View>
-      <View style={styles.plotArea}>
+      <View
+        style={styles.plotArea}
+        onLayout={(e: LayoutChangeEvent) => setPlotWidth(e.nativeEvent.layout.width)}
+        {...pan.panHandlers}>
         {candles !== null && !empty ? (
           <CandleChart candles={candles} height={PLOT_H} lines={lines} overlays={overlays} xLabels={xLabels} />
+        ) : null}
+        {off > 0 ? (
+          <View style={styles.latest}>
+            <Chip label="최신 ›" selected onPress={() => setOffset(0)} />
+          </View>
         ) : null}
         {candles !== null && !empty && showMa ? (
           <View style={styles.legend} pointerEvents="none">
@@ -401,6 +451,8 @@ const styles = StyleSheet.create((theme) => ({
     gap: theme.gap(0.75),
   },
   legendText: { fontSize: 10, fontWeight: '700' },
+  // 과거를 보는 중일 때만 — 가격선 라벨(오른쪽 위)·범위 라벨(왼쪽)과 겹치지 않게 오른쪽 아래(시간축 위)
+  latest: { position: 'absolute', right: 0, bottom: AXIS_H + 4 },
   fill: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0 },
   line: { position: 'absolute', left: 0, right: 0, opacity: 0.9 },
   // 점선 — 높이 0 + 테두리 전체 dashed(iOS 는 변별 두께가 같아야 dashed 렌더) → 위아래 테두리가 겹친 한 줄
