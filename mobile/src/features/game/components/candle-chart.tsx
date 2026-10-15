@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import * as SecureStore from 'expo-secure-store';
-import { ActivityIndicator, PanResponder, Pressable, Text, View, type LayoutChangeEvent } from 'react-native';
+import { ActivityIndicator, Pressable, Text, View, type LayoutChangeEvent } from 'react-native';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
 
@@ -8,30 +8,25 @@ import { getDailyCandles, getGameCandles } from '../api';
 import { applyTick } from '../lib/candles';
 import { CHART_PREFS_KEY, DEFAULT_CHART_PREFS, parseChartPrefs, serializeChartPrefs } from '../lib/chart-prefs';
 import { layoutCandles, niceTicks, priceToY, type Ohlc } from '../lib/chart-layout';
-import { clampOffset, dragOffset, offsetAfterGrowth, windowRange } from '../lib/chart-window';
+import { priceLines, type ChartColors } from '../lib/chart-bridge';
 import { formatPrice, kstDateString } from '../lib/format';
-import { bollinger, lineSegments, MA_PERIODS, sma } from '../lib/indicators';
+import { lineSegments, MA_PERIODS } from '../lib/indicators';
 import { applyTickIntraday, axisLabelIndexes, bucketStartSec, CHART_INTERVALS, dayLabel, kstHm } from '../lib/intraday';
 import type { ChartInterval, Coach, DailyCandle, IntradayCandle, Position } from '../types';
 import { useTradingGameStore } from '../store';
 import { useGameRules } from '../use-game-rules';
+import { TvChart, type TvChartData } from './tv-chart';
 
-// 순수 View 캔들 차트(네이티브 차트 의존성 0). 좌표는 lib/chart-layout 의 순수 함수가 계산한다.
-// 색: 상승=빨강(theme up)/하락=파랑(theme down). 지지선 보라·저항선 주황·익절 초록은 고정 상수, 손절은 회색.
-const SUPPORT = '#8b5cf6';
-const RESIST = '#f59e0b';
-const TAKE_PROFIT = '#16a34a'; // 익절 — 초록(손절은 theme textSecondary 회색)
-const VISIBLE = 60; // 일봉·분봉 모두 한 화면 60개(가로로 끌면 과거로 이동)
-const PAN_START_PX = 8; // 이만큼 가로로 움직여야 차트 이동 시작(세로 스크롤과 구분)
+// CandleChart: 순수 View 캔들 차트(퀴즈 차트용). 좌표는 lib/chart-layout 의 순수 함수가 계산한다.
+// DailyChart(게임 차트): 웹과 같은 lightweight-charts 를 WebView 로(tv-chart). 이 파일은 데이터·캐시·틱만 맡는다.
+// 색: 상승=빨강(theme up)/하락=파랑(theme down).
 const LABEL_H = 16;
 const TAG_H = 18; // 현재가 태그 높이
 const PRICE_AXIS_W = 54; // 오른쪽 가격축 폭("400,000" 이 들어가는 폭)
-const PLOT_H = 240;
 const AXIS_H = 16; // 아래 시간축 라벨 줄
 const AXIS_LABEL_W = 48;
 // 보조지표 색(web TradingChart 와 같은 값) — 이동평균 5·20·60, 볼린저밴드
 const MA_COLORS: Record<(typeof MA_PERIODS)[number], string> = { 5: '#14b8a6', 20: '#f97316', 60: '#a16207' };
-const BB_COLOR = '#6366f1';
 
 /** tag: 웹 차트 가격축 태그처럼 오른쪽 끝에 색 채운 박스로 가격만 표시(현재가용) */
 export type PriceLine = { price: number; color: string; label: string; thick?: boolean; dashed?: boolean; tag?: boolean };
@@ -225,11 +220,16 @@ const seriesCache = new Map<string, Series>();
 const cacheKey = (ticker: string, interval: ChartInterval) => `${ticker}|${interval}`;
 const sameSeries = (s: Series, ticker: string, interval: ChartInterval) => s.ticker === ticker && s.interval === interval;
 const PREFETCH_DELAY_MS = 1500; // 첫 화면을 그린 뒤 나머지 단위를 미리 받기 시작
+const CHART_H = 260; // 웹 TradingChart 모바일 폭 높이(h-[260px])와 같게
 
 async function fetchSeries(ticker: string, interval: ChartInterval): Promise<Series> {
   if (interval === 'day') return { kind: 'day', ticker, interval, rows: await getDailyCandles(ticker) };
   return { kind: 'min', ticker, interval, rows: await getGameCandles(interval) };
 }
+
+/** 화면에 그리는 캔들 + 전체 로드 번호(seq). 틱은 seq 를 유지한 채 series 만 바꾼다(→ WebView 에 tick) */
+type ShownSeries = { series: Series; seq: number; keepView: boolean };
+let loadSeq = 0;
 
 type DailyChartProps = {
   ticker: string;
@@ -239,9 +239,9 @@ type DailyChartProps = {
 };
 
 /**
- * 게임 차트 — 단위 칩(일·1분·5분·15분·60분) + 캔들 + 지지/저항/진입가/손절/익절 라인.
- * 일봉: stock_api GraphQL + 오늘 캔들 실시간 병합(기존 경로). 분봉: GET /api/game/candles + 현재 버킷 실시간 병합.
- * 초기 단위 = 규칙 chart_interval_default(로드 전/실패 시 일봉). 사용자가 고른 단위는 이 화면 상태로만 유지.
+ * 게임 차트 — 단위 칩(일·1분·5분·15분·60분) + lightweight-charts(웹과 같은 엔진, WebView) 캔들 + 지지/저항/진입가/손절/익절 라인.
+ * 일봉: stock_api GraphQL + 오늘 캔들 실시간 병합. 분봉: GET /api/game/candles + 현재 버킷 실시간 병합.
+ * 초기 단위 = 저장값 > 규칙 chart_interval_default > 일봉.
  */
 export function DailyChart({ ticker, lastPrice, coach, position }: DailyChartProps) {
   const { theme } = useUnistyles();
@@ -277,11 +277,14 @@ export function DailyChart({ ticker, lastPrice, coach, position }: DailyChartPro
     );
   }, [prefsReady, picked, showMa, showBb]);
   // 화면에 그리는 캔들 묶음(어느 종목·단위의 데이터인지 함께) — 단위를 바꾸면 새 데이터가 올 때까지 이전 것을 흐리게 유지
-  const [series, setSeries] = useState<Series | null>(null);
+  const [shown, setShown] = useState<ShownSeries | null>(null);
+  const shownRef = useRef<ShownSeries | null>(null); // 틱 병합이 최신 값을 읽도록(상태 갱신 함수 안 부수효과 방지)
+  const show = (v: ShownSeries) => {
+    shownRef.current = v;
+    setShown(v);
+  };
   const [failed, setFailed] = useState(false);
-  // 좌우 이동: offset = 최신에서 과거로 민 봉 수(0 = 최신). plotWidth 로 캔들 1개 폭을 구해 드래그 px → 봉 수
-  const [offset, setOffset] = useState(0);
-  const [plotWidth, setPlotWidth] = useState(0);
+  const [chartReady, setChartReady] = useState(false); // WebView 차트 페이지 준비 전엔 로딩 표시
   const [indOpen, setIndOpen] = useState(false); // 지표 팝오버
   const [chipsBottom, setChipsBottom] = useState(40); // 칩 줄 아래 y — 팝오버 위치
 
@@ -292,15 +295,14 @@ export function DailyChart({ ticker, lastPrice, coach, position }: DailyChartPro
     let cancelled = false;
     const key = cacheKey(ticker, interval);
     const cached = seriesCache.get(key);
-    if (cached) setSeries(cached);
+    if (cached) show({ series: cached, seq: ++loadSeq, keepView: false });
     setFailed(false);
-    setOffset(0); // 종목·단위가 바뀌면 최신 구간부터
-    // 받은 전체를 보관(지표 계산·좌우 이동용) — 화면에는 아래에서 VISIBLE 개 구간만 그린다
     fetchSeries(ticker, interval)
       .then((s) => {
         if (s.rows.length === 0 && cached) return; // 빈 재응답이 캐시를 지우지 않게
         seriesCache.set(key, s);
-        if (!cancelled) setSeries(s);
+        // 캐시로 이미 첫 화면 구간을 잡았으면 사용자가 보던 위치 유지
+        if (!cancelled) show({ series: s, seq: ++loadSeq, keepView: cached !== undefined });
       })
       .catch(() => {
         if (!cancelled && !cached) setFailed(true); // 캐시가 있으면 그대로 보여 준다
@@ -333,7 +335,7 @@ export function DailyChart({ ticker, lastPrice, coach, position }: DailyChartPro
     };
   }, [ticker, prefsReady]);
 
-  // 1-1) WS 재연결·앱 복귀(streamEpoch 증가) → 끊긴 동안의 캔들을 다시 받아 빈 구간을 채운다.
+  // 1-1) WS 재연결·앱 복귀(streamEpoch 증가) → 끊긴 동안의 캔들을 다시 받아 빈 구간을 채운다(보던 위치 유지).
   // 서버(game_ws)는 앱과 무관하게 분봉을 계속 저장한다. 첫 로드 전·실패·빈 응답이면 화면을 건드리지 않음
   const streamEpoch = useTradingGameStore((s) => s.streamEpoch);
   const current = useRef({ ticker, interval }); // ticker·interval 변경은 위 1) 이 새로 로드 → epoch 변화에만 반응
@@ -348,7 +350,8 @@ export function DailyChart({ ticker, lastPrice, coach, position }: DailyChartPro
       .then((s) => {
         if (s.rows.length === 0) return;
         seriesCache.set(cacheKey(t, iv), s);
-        if (!cancelled) setSeries((prev) => (prev === null || !sameSeries(prev, t, iv) ? prev : s));
+        const prev = shownRef.current;
+        if (!cancelled && prev !== null && sameSeries(prev.series, t, iv)) show({ series: s, seq: ++loadSeq, keepView: true });
       })
       .catch(() => undefined);
     return () => {
@@ -358,120 +361,48 @@ export function DailyChart({ ticker, lastPrice, coach, position }: DailyChartPro
 
   // 2) 틱 → 오늘 일봉 / 현재 분봉 버킷에 병합(로드 전·다른 단위 데이터를 보여 주는 중이면 무시). 캐시도 함께 최신으로
   useEffect(() => {
-    if (lastPrice === null) return;
-    setSeries((prev) => {
-      if (prev === null || !sameSeries(prev, ticker, interval)) return prev;
-      let next: Series;
-      if (prev.kind === 'day') next = { ...prev, rows: applyTick(prev.rows, kstDateString(), lastPrice) };
-      else if (interval !== 'day') next = { ...prev, rows: applyTickIntraday(prev.rows, bucketStartSec(Date.now(), interval), lastPrice) };
-      else return prev;
-      seriesCache.set(cacheKey(ticker, interval), next);
-      return next;
-    });
+    const prev = shownRef.current;
+    if (lastPrice === null || prev === null || !sameSeries(prev.series, ticker, interval)) return;
+    const s = prev.series;
+    let next: Series;
+    if (s.kind === 'day') next = { ...s, rows: applyTick(s.rows, kstDateString(), lastPrice) };
+    else if (interval !== 'day') next = { ...s, rows: applyTickIntraday(s.rows, bucketStartSec(Date.now(), interval), lastPrice) };
+    else return;
+    seriesCache.set(cacheKey(ticker, interval), next);
+    show({ ...prev, series: next }); // seq 유지 → WebView 에는 마지막 봉만(tick)
   }, [lastPrice, interval, ticker]);
 
-  const lines: PriceLine[] = [];
-  if (coach?.support_price != null) lines.push({ price: coach.support_price, color: SUPPORT, label: '지지' });
-  if (coach?.resistance_price != null) lines.push({ price: coach.resistance_price, color: RESIST, label: '저항' });
-  if (position) {
-    lines.push({
-      price: position.entry_price,
-      color: position.side === 'LONG' ? theme.colors.up : theme.colors.down,
-      label: '진입',
-      thick: true,
-    });
-    if (position.stop_loss_price != null) {
-      lines.push({ price: position.stop_loss_price, color: theme.colors.textSecondary, label: '손절', dashed: true });
-    }
-    if (position.take_profit_price != null) {
-      lines.push({ price: position.take_profit_price, color: TAKE_PROFIT, label: '익절', dashed: true });
-    }
-  }
-
-  const all: Ohlc[] | null = series?.rows ?? null;
-  const total = all?.length ?? 0;
-  // 다른 단위 데이터를 보여 주는 중(새 데이터 대기) — 흐리게 + 작은 로딩 표시
-  const stale = series !== null && !sameSeries(series, ticker, interval);
-
-  // 새 캔들이 붙으면: 최신을 보는 중이면 따라가고, 과거를 보는 중이면 화면을 그대로(offset 을 늘어난 만큼 민다)
-  const prevTotal = useRef(0);
-  useEffect(() => {
-    const prev = prevTotal.current;
-    prevTotal.current = total;
-    if (prev > 0 && total > 0) setOffset((o) => offsetAfterGrowth(o, prev, total));
-  }, [total]);
-
-  const off = clampOffset(offset, total, VISIBLE);
-  const { start, end } = windowRange(total, VISIBLE, off);
-  const candles = all?.slice(start, end) ?? null;
-
-  // 현재가(웹 차트 가격축 태그와 같은 역할) — 최신 구간을 볼 때만. 직전 봉 대비 상승=빨강/하락=파랑
-  const nowBar = all !== null && all.length > 0 ? all[all.length - 1] : null;
-  const prevClose = all !== null && all.length > 1 ? all[all.length - 2].close : null;
-  const chartLines: PriceLine[] =
-    nowBar !== null && off === 0
-      ? [
-          ...lines,
-          {
-            price: nowBar.close,
-            color: prevClose !== null && nowBar.close < prevClose ? theme.colors.down : theme.colors.up,
-            label: '현재',
-            dashed: true,
-            tag: true,
-          },
-        ]
-      : lines;
-  const xLabels =
-    series === null
-      ? undefined
-      : series.kind === 'day'
-        ? series.rows.slice(start, end).map((c) => dayLabel(c.date))
-        : series.rows.slice(start, end).map((c) => kstHm(c.t));
-  const empty = candles !== null && candles.length === 0;
-
-  // 가로 드래그 → offset. 세로 움직임은 페이지 스크롤에 양보하고, 잡은 뒤에는 스크롤에 뺏기지 않는다
-  const panState = useRef({ startOffset: 0, offset: 0, total: 0, slot: 0 });
-  useEffect(() => {
-    panState.current.offset = off;
-    panState.current.total = total;
-    panState.current.slot = (plotWidth - PRICE_AXIS_W) / VISIBLE; // 캔들 영역 = 전체 - 가격축
-  }, [off, total, plotWidth]);
-  const pan = useMemo(
+  // 가격선·색은 값이 바뀔 때만 새 객체(매 렌더 새 배열이면 WebView 에 매번 다시 보냄)
+  const lines = useMemo(
+    () => priceLines(coach, position, { up: theme.colors.up, down: theme.colors.down, muted: theme.colors.textSecondary }),
+    [coach, position, theme.colors.up, theme.colors.down, theme.colors.textSecondary],
+  );
+  const colors = useMemo<ChartColors>(
+    () => ({
+      up: theme.colors.up,
+      down: theme.colors.down,
+      text: theme.colors.textSecondary,
+      grid: theme.colors.background,
+      border: theme.colors.border,
+    }),
+    [theme.colors.up, theme.colors.down, theme.colors.textSecondary, theme.colors.background, theme.colors.border],
+  );
+  const chartView = useMemo<TvChartData | null>(
     () =>
-      PanResponder.create({
-        onMoveShouldSetPanResponder: (_e, g) =>
-          panState.current.total > VISIBLE && Math.abs(g.dx) > PAN_START_PX && Math.abs(g.dx) > Math.abs(g.dy) * 1.5,
-        onPanResponderGrant: () => {
-          panState.current.startOffset = panState.current.offset;
-        },
-        onPanResponderMove: (_e, g) => {
-          const s = panState.current;
-          setOffset(clampOffset(dragOffset(s.startOffset, g.dx, s.slot), s.total, VISIBLE));
-        },
-        onPanResponderTerminationRequest: () => false,
-      }),
-    [],
+      shown === null
+        ? null
+        : {
+            data: shown.series.kind === 'day' ? { kind: 'day', rows: shown.series.rows } : { kind: 'min', rows: shown.series.rows },
+            seq: shown.seq,
+            keepView: shown.keepView,
+          },
+    [shown],
   );
 
-  // 보조지표 — 받은 전체 종가로 계산한 뒤 화면 구간만 잘라 첫 캔들부터 선이 이어지게
-  const overlays = useMemo<Overlay[]>(() => {
-    if (all === null) return [];
-    const closes = all.map((c) => c.close);
-    const tail = <T,>(xs: T[]) => xs.slice(start, end);
-    const out: Overlay[] = [];
-    if (showBb) {
-      const bands = tail(bollinger(closes));
-      out.push(
-        { key: 'bb-upper', color: BB_COLOR, values: bands.map((b) => b?.upper ?? null), faint: true },
-        { key: 'bb-middle', color: BB_COLOR, values: bands.map((b) => b?.middle ?? null), faint: true },
-        { key: 'bb-lower', color: BB_COLOR, values: bands.map((b) => b?.lower ?? null), faint: true },
-      );
-    }
-    if (showMa) {
-      for (const p of MA_PERIODS) out.push({ key: `ma${p}`, color: MA_COLORS[p], values: tail(sma(closes, p)) });
-    }
-    return out;
-  }, [all, showMa, showBb, start, end]);
+  // 다른 단위 데이터를 보여 주는 중(새 데이터 대기) — 흐리게 + 작은 로딩 표시
+  const stale = shown !== null && !sameSeries(shown.series, ticker, interval);
+  const empty = shown !== null && !stale && shown.series.rows.length === 0;
+  const hasBars = shown !== null && shown.series.rows.length > 0;
 
   return (
     <View style={styles.frame}>
@@ -490,27 +421,25 @@ export function DailyChart({ ticker, lastPrice, coach, position }: DailyChartPro
           </View>
         </View>
       </View>
-      <View
-        style={styles.plotArea}
-        onLayout={(e: LayoutChangeEvent) => setPlotWidth(e.nativeEvent.layout.width)}
-        onTouchStart={() => setIndOpen(false)} // 차트를 만지면 지표 팝오버 닫기(팝오버 자체 터치는 형제라 해당 없음)
-        {...pan.panHandlers}>
-        {candles !== null && !empty && !failed ? (
-          <View style={stale ? styles.staleChart : null}>
-            <CandleChart candles={candles} height={PLOT_H} lines={chartLines} overlays={overlays} xLabels={xLabels} priceAxis />
-          </View>
-        ) : null}
+      <View style={styles.plotArea} onTouchStart={() => setIndOpen(false)}>
+        {/* 실패 시에도 WebView 는 유지(다시 받으면 바로 그림) — 위에 안내만 덮는다 */}
+        <View style={stale ? styles.staleChart : null}>
+          <TvChart
+            view={chartView}
+            lines={lines}
+            ma={showMa}
+            bb={showBb}
+            colors={colors}
+            height={CHART_H}
+            onReady={() => setChartReady(true)}
+          />
+        </View>
         {stale && !failed ? (
           <View style={styles.staleSpinner} pointerEvents="none">
             <ActivityIndicator size="small" />
           </View>
         ) : null}
-        {off > 0 ? (
-          <View style={styles.latest}>
-            <MiniChip label="최신 ›" selected onPress={() => setOffset(0)} />
-          </View>
-        ) : null}
-        {candles !== null && !empty && showMa ? (
+        {hasBars && showMa && chartReady ? (
           <View style={styles.legend} pointerEvents="none">
             {MA_PERIODS.map((p) => (
               <Text key={p} style={[styles.legendText, { color: MA_COLORS[p] }]} allowFontScaling={false}>
@@ -519,18 +448,18 @@ export function DailyChart({ ticker, lastPrice, coach, position }: DailyChartPro
             ))}
           </View>
         ) : null}
-        {candles === null && !failed ? (
-          <View style={styles.center}>
+        {(shown === null || !chartReady) && !failed ? (
+          <View style={styles.center} pointerEvents="none">
             <ActivityIndicator />
           </View>
         ) : null}
         {empty ? (
-          <View style={styles.center}>
+          <View style={styles.center} pointerEvents="none">
             <Text style={styles.muted}>분봉은 오늘부터 쌓이고 있어요</Text>
           </View>
         ) : null}
         {failed ? (
-          <View style={styles.center}>
+          <View style={[styles.center, styles.failedCover]}>
             <Text style={styles.muted}>차트 데이터를 불러오지 못했어요</Text>
           </View>
         ) : null}
@@ -584,7 +513,7 @@ const styles = StyleSheet.create((theme) => ({
   miniChipOn: { backgroundColor: theme.colors.primarySoft },
   miniLabel: { fontSize: 12, fontWeight: '600', color: theme.colors.textSecondary },
   miniLabelOn: { color: theme.colors.primary },
-  plotArea: { minHeight: PLOT_H + AXIS_H, position: 'relative' },
+  plotArea: { minHeight: CHART_H, position: 'relative' },
   plot: { width: '100%', position: 'relative' },
   axis: { height: AXIS_H, position: 'relative' },
   axisLabel: {
@@ -611,8 +540,7 @@ const styles = StyleSheet.create((theme) => ({
   // 단위 전환 중(새 데이터 대기) — 이전 차트를 흐리게 + 가운데 위 작은 로딩
   staleChart: { opacity: 0.35 },
   staleSpinner: { position: 'absolute', top: theme.gap(1), left: 0, right: 0, alignItems: 'center' },
-  // 과거를 보는 중일 때만 — 오른쪽 위(아래쪽은 하단 고정 주문바에 가려짐, 왼쪽 위는 범위 라벨)
-  latest: { position: 'absolute', right: 0, top: 0 },
+  failedCover: { backgroundColor: theme.colors.background },
   fill: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0 },
   line: { position: 'absolute', left: 0, right: 0, opacity: 0.9 },
   // 점선 — 높이 0 + 테두리 전체 dashed(iOS 는 변별 두께가 같아야 dashed 렌더) → 위아래 테두리가 겹친 한 줄
