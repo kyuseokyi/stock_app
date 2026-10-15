@@ -103,6 +103,22 @@ class CoachTodayResponse(BaseModel):
     active: CoachMessageResponse | None
 
 
+class CoachLevelSuggestion(BaseModel):
+    price: int
+    touches: int
+    basis: str
+
+
+class CoachLevelsResponse(BaseModel):
+    """지지·저항 추천값 — admin 폼 채우기용(저장·발행 안 함)."""
+    ticker: str
+    basis_end: date  # 이 날짜까지의 일봉으로 계산(MORNING=전날, EVENING=당일)
+    bars: int
+    last_close: int
+    support: CoachLevelSuggestion | None
+    resistance: CoachLevelSuggestion | None
+
+
 class SeasonOption(BaseModel):
     id: int
     season_number: int

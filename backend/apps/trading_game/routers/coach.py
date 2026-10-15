@@ -11,9 +11,10 @@ from shared.auth import get_current_user, require_admin
 from shared.database import get_db
 from shared.models import User
 from apps.trading_game.schemas.game_dtos import (
-    CoachMessageResponse, CoachTodayResponse, CoachUpsertRequest, SeasonOption,
+    CoachLevelsResponse, CoachMessageResponse, CoachTodayResponse, CoachType, CoachUpsertRequest,
+    SeasonOption,
 )
-from apps.trading_game.services import account_service, coach_service, ws_bus
+from apps.trading_game.services import account_service, coach_levels_service, coach_service, ws_bus
 
 router = APIRouter(prefix="/api/game", tags=["trading-game-coach"])
 log = logging.getLogger("trading_game.coach")
@@ -58,6 +59,23 @@ async def list_coach_messages(
 ):
     rows = await coach_service.list_slot_messages(db, season_id, target_date)
     return [coach_service.to_dto(m) for m in rows]
+
+
+@router.get("/admin/coach-levels/suggest", response_model=CoachLevelsResponse)
+async def suggest_coach_levels(
+    season_id: int,
+    target_date: date,
+    coach_type: CoachType,
+    _admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """시즌 종목 일봉으로 지지·저항 추천값 계산 — 폼 채우기용, 저장하지 않는다."""
+    try:
+        return await coach_levels_service.suggest(db, season_id, target_date, coach_type)
+    except coach_levels_service.SeasonNotFound:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "시즌을 찾을 수 없습니다.")
+    except coach_levels_service.BarsUnavailable:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "일봉 데이터를 불러올 수 없어요.")
 
 
 @router.get("/admin/seasons", response_model=list[SeasonOption])

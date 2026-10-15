@@ -93,6 +93,19 @@ uv run uvicorn apps.trading_game.main:app --reload --port 8003 --workers 1
 - **실시간 랭킹(Phase 4)**: Redis ZSET(`game:season:{id}:ranking`)에 매 틱 보유자 라이브 ROI·청산 시 실현 ROI 반영. 조회 — `GET /api/game/seasons/{id}/leaderboard`(Top100), `GET /api/game/seasons/{id}/my-rank`, `GET /api/game/hall-of-fame`.
 - **시즌 정산(Phase 4)**: Celery beat `settle_trading_season` 매일 20:40 KST → 종료일 도래 시 ClickHouse 종가(종료일 당일, 주말·휴장이면 직전 거래일 — 평일 당일 봉이 없으면 보류 후 다음 날 전 종목 0행이면 휴장으로 판단, 최후 3일 뒤 폴백)로 전액 강제청산 → 명예의 전당 박제(+Trading MBTI) → 시즌 FINISHED + 차기 시즌 자동 생성(멱등). worker+beat 가동 필요(`uv run celery -A apps.collector.celery_app worker/beat`).
 - **데일리 스마트 코치(Phase 5a)**: 관리자 `PUT /api/game/admin/coach-messages`(슬롯 upsert, `action=draft|publish` — 발행된 슬롯은 초안 저장 불가 409), `GET /api/game/admin/coach-messages?season_id&target_date`, `GET /api/game/admin/seasons`(ADMIN). 유저 `GET /api/game/coach/today`(KST 오늘·활성 시즌의 발행분, `active`=이브닝 우선). 발행 시 WS로 `{type:"coach", season_id, ...}` 전원 push(활성 시즌·오늘(KST) 브리핑일 때만).
+  - **지지·저항 추천값**: `GET /api/game/admin/coach-levels/suggest?season_id&target_date&coach_type`(ADMIN)
+    - 데이터: 선택한 시즌 종목의 일봉(CH `daily_prices`)
+      - MORNING은 target_date 전날까지
+      - EVENING은 당일까지
+    - 계산 방식
+      - 최근 60거래일의 확정 스윙 고점·저점을 ±1.5%로 묶는다.
+      - `터치 수 × 거리 가중` 점수로 고른다. 기준가에서 15% 밖은 제외한다.
+      - KRX 호가단위로 반올림한다.
+    - 응답
+      - 해당하는 가격대가 없으면 `null`이다(예: 신고가 돌파 시 저항 없음).
+      - 일봉이 없거나 CH 장애면 503이다.
+    - admin "📐 추천값 채우기" 버튼은 폼만 채운다. 저장·발행은 관리자가 직접 한다.
+    - 설계: `docs/superpowers/specs/2026-10-15-coach-sr-suggest-design.md`
 - **스마트 넛지(Phase 5a)**: `POST /api/game/orders`·`POST /api/game/positions/{id}/close` 응답에 `nudges[]`(WARNING 과열 추격 RSI≥80 LONG · ADVICE 100%+5x · PRAISE 손절/수동 ROI −3~−1%). 자동청산(STOP_LOSS)은 WS `{type:"nudge", position_id, nudge}`. 넛지는 best-effort(실패해도 주문·청산 정상). RSI는 Wilder(14) = ClickHouse 일봉(오늘 이전) + 현재가, 종가 캐시 `game:rsi:closes:{ticker}:{YYYYMMDD}`(26h). fan-out 큐 포화 시 오래된 항목부터 드롭되므로 WS 넛지도 유실될 수 있음(best-effort).
 - **Phase 5b API**: 유저 `GET /api/game/quests`, `POST /api/game/quests/{code}/claim`(Q1 손절·Q2 골든크로스·Q3' 주문 비중 25% 이하 — 10·20·25%), `GET /api/game/academy/quiz`, `POST /api/game/academy/submit`, `GET /api/game/quiz/random`, `POST /api/game/quiz/{id}/submit`, `GET /api/game/streak/my`. 관리자 `GET /api/game/admin/feature-flags`, `PUT /api/game/admin/feature-flags/{key}`.
 - **연속 출석 보상(백로그 ⑤-1)**: 3일 +100,000 · 7일 +300,000 · 14일 +700,000 · 30일 +2,000,000, 시즌마다 마일스톤별 1회 수동 수령(수령 시점 `current_streak ≥ 마일스톤` + 마지막 활동일 오늘/어제 KST). `GET /api/game/streak/my` 응답에 `rewards[{milestone, amount, claimed, claimable}]`(플래그 STREAK 꺼짐·활성 시즌 없음 → `[]`), `POST /api/game/streak/rewards/{milestone}/claim` → `{streak, cash_balance}`(404 `UNKNOWN_MILESTONE` · 409 `NOT_REACHED`/`ALREADY_CLAIMED`/`NO_ACTIVE_SEASON`/`PRICE_UNAVAILABLE` · 503 `FEATURE_DISABLED`). 수령 기록 `streak_reward_claims`(마이그레이션 `a7b8c9d0e1f2`). web·모바일은 헤더 `🔥 n일 연속` 칩 → 보상 모달/시트.

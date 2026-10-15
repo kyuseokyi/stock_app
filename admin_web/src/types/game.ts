@@ -31,6 +31,22 @@ export interface CoachUpsertBody {
   action: CoachAction
 }
 
+// 지지·저항 추천값(GET /api/game/admin/coach-levels/suggest) — 폼 채우기용
+export interface CoachLevelSuggestion {
+  price: number
+  touches: number
+  basis: string
+}
+
+export interface CoachLevels {
+  ticker: string
+  basis_end: string // 이 날짜까지의 일봉으로 계산
+  bars: number
+  last_close: number
+  support: CoachLevelSuggestion | null
+  resistance: CoachLevelSuggestion | null
+}
+
 export interface SeasonOption {
   id: number
   season_number: number

@@ -3,9 +3,9 @@ import type { AxiosError } from 'axios'
 import DOMPurify from 'dompurify'
 import { marked } from 'marked'
 import { GAME_API_URL } from '../config'
-import { listCoachMessages, listSeasons, upsertCoachMessage } from '../api/coach'
+import { listCoachMessages, listSeasons, suggestCoachLevels, upsertCoachMessage } from '../api/coach'
 import { showToast } from '../lib/toast'
-import type { CoachAction, CoachMessage, CoachType, SeasonOption } from '../types/game'
+import type { CoachAction, CoachLevelSuggestion, CoachLevels, CoachMessage, CoachType, SeasonOption } from '../types/game'
 
 // KST 오늘(YYYY-MM-DD) — en-CA 로케일은 ISO 날짜 형식으로 포맷된다
 const kstToday = (): string =>
@@ -58,6 +58,10 @@ const validate = (f: CoachForm): string | null => {
   return null
 }
 
+const won = (n: number): string => `${n.toLocaleString('ko-KR')}원`
+const levelHint = (s: CoachLevelSuggestion | null): string =>
+  s ? `추천 ${won(s.price)} · ${s.basis}` : '추천 없음 (근처에 뚜렷한 가격대가 없어요)'
+
 const inputCls =
   'w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none'
 
@@ -71,6 +75,8 @@ function CoachEditor() {
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [tab, setTab] = useState<'write' | 'preview'>('write')
+  const [suggesting, setSuggesting] = useState(false)
+  const [levels, setLevels] = useState<CoachLevels | null>(null)
 
   // 시즌 목록 — 기본은 ACTIVE 시즌
   useEffect(() => {
@@ -88,6 +94,7 @@ function CoachEditor() {
     if (seasonId === null) return
     let cancelled = false
     setLoading(true)
+    setLevels(null) // 다른 슬롯의 추천 근거가 남지 않게
     listCoachMessages(seasonId, targetDate)
       .then((rows) => {
         if (cancelled) return
@@ -150,6 +157,29 @@ function CoachEditor() {
       showToast(errorMessage(e), { icon: '⚠️' })
     } finally {
       setSaving(false)
+    }
+  }
+
+  // 추천값은 폼만 채운다(저장·발행은 관리자가 확인 후 기존 버튼으로). 추천 없는 쪽은 기존 값 유지.
+  const fillSuggested = async () => {
+    if (seasonId === null) {
+      showToast('시즌을 선택하세요.', { icon: '⚠️' })
+      return
+    }
+    setSuggesting(true)
+    try {
+      const res = await suggestCoachLevels(seasonId, targetDate, coachType)
+      setLevels(res)
+      setForm((f) => ({
+        ...f,
+        support_price: res.support ? String(res.support.price) : f.support_price,
+        resistance_price: res.resistance ? String(res.resistance.price) : f.resistance_price,
+      }))
+      if (!res.support && !res.resistance) showToast('추천할 지지·저항 가격대가 없어요.', { icon: 'ℹ️' })
+    } catch (e) {
+      showToast(errorMessage(e), { icon: '⚠️' })
+    } finally {
+      setSuggesting(false)
     }
   }
 
@@ -250,6 +280,24 @@ function CoachEditor() {
               />
             </div>
 
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-xs text-slate-400">
+                {levels
+                  ? `${levels.basis_end}까지 일봉 ${levels.bars}개 · 기준 종가 ${won(levels.last_close)}`
+                  : coachType === 'MORNING'
+                    ? '모닝은 전날까지의 일봉으로 추천해요.'
+                    : '이브닝은 당일 일봉까지 포함해 추천해요.'}
+              </p>
+              <button
+                type="button"
+                onClick={fillSuggested}
+                disabled={suggesting || saving || seasonId === null}
+                className="rounded-lg border border-indigo-300 px-3 py-1.5 text-xs font-medium text-indigo-600 hover:bg-indigo-50 disabled:opacity-50"
+              >
+                {suggesting ? '계산 중…' : '📐 추천값 채우기'}
+              </button>
+            </div>
+
             <div className="grid gap-4 sm:grid-cols-2">
               <div>
                 <label className="mb-1 block text-sm font-medium text-slate-600">지지선 (원)</label>
@@ -261,6 +309,7 @@ function CoachEditor() {
                   placeholder="비우면 표시 안 함"
                   className={inputCls}
                 />
+                {levels && <p className="mt-1 text-xs text-slate-400">{levelHint(levels.support)}</p>}
               </div>
               <div>
                 <label className="mb-1 block text-sm font-medium text-slate-600">저항선 (원)</label>
@@ -272,6 +321,7 @@ function CoachEditor() {
                   placeholder="비우면 표시 안 함"
                   className={inputCls}
                 />
+                {levels && <p className="mt-1 text-xs text-slate-400">{levelHint(levels.resistance)}</p>}
               </div>
             </div>
 
