@@ -215,6 +215,22 @@ function MiniChip({ label, selected = false, onPress }: { label: string; selecte
   );
 }
 
+// ---------------------------------------------------------------- 단위별 캔들 캐시(전환 지연 줄이기)
+type Series =
+  | { kind: 'day'; ticker: string; interval: ChartInterval; rows: DailyCandle[] }
+  | { kind: 'min'; ticker: string; interval: ChartInterval; rows: IntradayCandle[] };
+
+/** 단위별 마지막 응답 — 앱이 켜져 있는 동안 유지(탭 이동 후에도). 다시 고르면 즉시 표시 후 뒤에서 갱신 */
+const seriesCache = new Map<string, Series>();
+const cacheKey = (ticker: string, interval: ChartInterval) => `${ticker}|${interval}`;
+const sameSeries = (s: Series, ticker: string, interval: ChartInterval) => s.ticker === ticker && s.interval === interval;
+const PREFETCH_DELAY_MS = 1500; // 첫 화면을 그린 뒤 나머지 단위를 미리 받기 시작
+
+async function fetchSeries(ticker: string, interval: ChartInterval): Promise<Series> {
+  if (interval === 'day') return { kind: 'day', ticker, interval, rows: await getDailyCandles(ticker) };
+  return { kind: 'min', ticker, interval, rows: await getGameCandles(interval) };
+}
+
 type DailyChartProps = {
   ticker: string;
   lastPrice: number | null;
@@ -260,8 +276,8 @@ export function DailyChart({ ticker, lastPrice, coach, position }: DailyChartPro
       () => undefined,
     );
   }, [prefsReady, picked, showMa, showBb]);
-  const [daily, setDaily] = useState<DailyCandle[] | null>(null);
-  const [intraday, setIntraday] = useState<IntradayCandle[] | null>(null);
+  // 화면에 그리는 캔들 묶음(어느 종목·단위의 데이터인지 함께) — 단위를 바꾸면 새 데이터가 올 때까지 이전 것을 흐리게 유지
+  const [series, setSeries] = useState<Series | null>(null);
   const [failed, setFailed] = useState(false);
   // 좌우 이동: offset = 최신에서 과거로 민 봉 수(0 = 최신). plotWidth 로 캔들 1개 폭을 구해 드래그 px → 봉 수
   const [offset, setOffset] = useState(0);
@@ -269,35 +285,53 @@ export function DailyChart({ ticker, lastPrice, coach, position }: DailyChartPro
   const [indOpen, setIndOpen] = useState(false); // 지표 팝오버
   const [chipsBottom, setChipsBottom] = useState(40); // 칩 줄 아래 y — 팝오버 위치
 
-  // 1) 캔들 로드(종목·단위가 바뀌면 다시). 늦게 온 이전 단위 응답은 cancelled 로 버린다. 설정 복원 전에는 대기(로딩 표시)
+  // 1) 캔들 로드(종목·단위가 바뀌면). 캐시가 있으면 즉시 보여 주고 뒤에서 최신으로 갱신(stale-while-revalidate).
+  // 캐시가 없으면 새 데이터가 올 때까지 이전 차트를 흐리게 유지. 늦게 온 응답도 캐시에는 넣고 화면은 cancelled 로 막는다.
   useEffect(() => {
     if (!prefsReady) return;
     let cancelled = false;
-    setDaily(null);
-    setIntraday(null);
+    const key = cacheKey(ticker, interval);
+    const cached = seriesCache.get(key);
+    if (cached) setSeries(cached);
     setFailed(false);
     setOffset(0); // 종목·단위가 바뀌면 최신 구간부터
-    const onFail = () => {
-      if (!cancelled) setFailed(true);
-    };
     // 받은 전체를 보관(지표 계산·좌우 이동용) — 화면에는 아래에서 VISIBLE 개 구간만 그린다
-    if (interval === 'day') {
-      getDailyCandles(ticker)
-        .then((rows) => {
-          if (!cancelled) setDaily(rows);
-        })
-        .catch(onFail);
-    } else {
-      getGameCandles(interval)
-        .then((rows) => {
-          if (!cancelled) setIntraday(rows);
-        })
-        .catch(onFail);
-    }
+    fetchSeries(ticker, interval)
+      .then((s) => {
+        if (s.rows.length === 0 && cached) return; // 빈 재응답이 캐시를 지우지 않게
+        seriesCache.set(key, s);
+        if (!cancelled) setSeries(s);
+      })
+      .catch(() => {
+        if (!cancelled && !cached) setFailed(true); // 캐시가 있으면 그대로 보여 준다
+      });
     return () => {
       cancelled = true;
     };
   }, [ticker, interval, prefsReady]);
+
+  // 1-2) 나머지 단위 미리 받기 — 첫 화면이 그려진 뒤 하나씩(동시 요청 폭주 방지). 첫 전환도 캐시로 즉시 보이게
+  useEffect(() => {
+    if (!prefsReady) return;
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      for (const it of CHART_INTERVALS) {
+        if (cancelled) return;
+        const key = cacheKey(ticker, it.value);
+        if (seriesCache.has(key)) continue;
+        try {
+          const s = await fetchSeries(ticker, it.value);
+          if (s.rows.length > 0 && !seriesCache.has(key)) seriesCache.set(key, s);
+        } catch {
+          // 미리 받기 실패는 무시(전환할 때 다시 받는다)
+        }
+      }
+    }, PREFETCH_DELAY_MS);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [ticker, prefsReady]);
 
   // 1-1) WS 재연결·앱 복귀(streamEpoch 증가) → 끊긴 동안의 캔들을 다시 받아 빈 구간을 채운다.
   // 서버(game_ws)는 앱과 무관하게 분봉을 계속 저장한다. 첫 로드 전·실패·빈 응답이면 화면을 건드리지 않음
@@ -310,34 +344,31 @@ export function DailyChart({ ticker, lastPrice, coach, position }: DailyChartPro
     if (streamEpoch === 0) return;
     let cancelled = false;
     const { ticker: t, interval: iv } = current.current;
-    if (iv === 'day') {
-      getDailyCandles(t)
-        .then((rows) => {
-          if (!cancelled && rows.length > 0) setDaily((prev) => (prev === null ? prev : rows));
-        })
-        .catch(() => undefined);
-    } else {
-      getGameCandles(iv)
-        .then((rows) => {
-          if (!cancelled && rows.length > 0) setIntraday((prev) => (prev === null ? prev : rows));
-        })
-        .catch(() => undefined);
-    }
+    fetchSeries(t, iv)
+      .then((s) => {
+        if (s.rows.length === 0) return;
+        seriesCache.set(cacheKey(t, iv), s);
+        if (!cancelled) setSeries((prev) => (prev === null || !sameSeries(prev, t, iv) ? prev : s));
+      })
+      .catch(() => undefined);
     return () => {
       cancelled = true;
     };
   }, [streamEpoch]);
 
-  // 2) 틱 → 오늘 일봉 / 현재 분봉 버킷에 병합(로드 전 틱은 무시 — web 과 동일)
+  // 2) 틱 → 오늘 일봉 / 현재 분봉 버킷에 병합(로드 전·다른 단위 데이터를 보여 주는 중이면 무시). 캐시도 함께 최신으로
   useEffect(() => {
     if (lastPrice === null) return;
-    if (interval === 'day') {
-      setDaily((prev) => (prev === null ? prev : applyTick(prev, kstDateString(), lastPrice)));
-    } else {
-      const bucket = bucketStartSec(Date.now(), interval);
-      setIntraday((prev) => (prev === null ? prev : applyTickIntraday(prev, bucket, lastPrice)));
-    }
-  }, [lastPrice, interval]);
+    setSeries((prev) => {
+      if (prev === null || !sameSeries(prev, ticker, interval)) return prev;
+      let next: Series;
+      if (prev.kind === 'day') next = { ...prev, rows: applyTick(prev.rows, kstDateString(), lastPrice) };
+      else if (interval !== 'day') next = { ...prev, rows: applyTickIntraday(prev.rows, bucketStartSec(Date.now(), interval), lastPrice) };
+      else return prev;
+      seriesCache.set(cacheKey(ticker, interval), next);
+      return next;
+    });
+  }, [lastPrice, interval, ticker]);
 
   const lines: PriceLine[] = [];
   if (coach?.support_price != null) lines.push({ price: coach.support_price, color: SUPPORT, label: '지지' });
@@ -357,8 +388,10 @@ export function DailyChart({ ticker, lastPrice, coach, position }: DailyChartPro
     }
   }
 
-  const all: Ohlc[] | null = interval === 'day' ? daily : intraday;
+  const all: Ohlc[] | null = series?.rows ?? null;
   const total = all?.length ?? 0;
+  // 다른 단위 데이터를 보여 주는 중(새 데이터 대기) — 흐리게 + 작은 로딩 표시
+  const stale = series !== null && !sameSeries(series, ticker, interval);
 
   // 새 캔들이 붙으면: 최신을 보는 중이면 따라가고, 과거를 보는 중이면 화면을 그대로(offset 을 늘어난 만큼 민다)
   const prevTotal = useRef(0);
@@ -389,9 +422,11 @@ export function DailyChart({ ticker, lastPrice, coach, position }: DailyChartPro
         ]
       : lines;
   const xLabels =
-    interval === 'day'
-      ? daily?.slice(start, end).map((c) => dayLabel(c.date))
-      : intraday?.slice(start, end).map((c) => kstHm(c.t));
+    series === null
+      ? undefined
+      : series.kind === 'day'
+        ? series.rows.slice(start, end).map((c) => dayLabel(c.date))
+        : series.rows.slice(start, end).map((c) => kstHm(c.t));
   const empty = candles !== null && candles.length === 0;
 
   // 가로 드래그 → offset. 세로 움직임은 페이지 스크롤에 양보하고, 잡은 뒤에는 스크롤에 뺏기지 않는다
@@ -460,8 +495,15 @@ export function DailyChart({ ticker, lastPrice, coach, position }: DailyChartPro
         onLayout={(e: LayoutChangeEvent) => setPlotWidth(e.nativeEvent.layout.width)}
         onTouchStart={() => setIndOpen(false)} // 차트를 만지면 지표 팝오버 닫기(팝오버 자체 터치는 형제라 해당 없음)
         {...pan.panHandlers}>
-        {candles !== null && !empty ? (
-          <CandleChart candles={candles} height={PLOT_H} lines={chartLines} overlays={overlays} xLabels={xLabels} priceAxis />
+        {candles !== null && !empty && !failed ? (
+          <View style={stale ? styles.staleChart : null}>
+            <CandleChart candles={candles} height={PLOT_H} lines={chartLines} overlays={overlays} xLabels={xLabels} priceAxis />
+          </View>
+        ) : null}
+        {stale && !failed ? (
+          <View style={styles.staleSpinner} pointerEvents="none">
+            <ActivityIndicator size="small" />
+          </View>
         ) : null}
         {off > 0 ? (
           <View style={styles.latest}>
@@ -566,6 +608,9 @@ const styles = StyleSheet.create((theme) => ({
     gap: theme.gap(0.75),
   },
   legendText: { fontSize: 10, fontWeight: '700' },
+  // 단위 전환 중(새 데이터 대기) — 이전 차트를 흐리게 + 가운데 위 작은 로딩
+  staleChart: { opacity: 0.35 },
+  staleSpinner: { position: 'absolute', top: theme.gap(1), left: 0, right: 0, alignItems: 'center' },
   // 과거를 보는 중일 때만 — 오른쪽 위(아래쪽은 하단 고정 주문바에 가려짐, 왼쪽 위는 범위 라벨)
   latest: { position: 'absolute', right: 0, top: 0 },
   fill: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0 },
