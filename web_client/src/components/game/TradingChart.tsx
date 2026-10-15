@@ -150,6 +150,7 @@ export default function TradingChart({ ticker, lastPrice, coach, position }: Tra
   const [initialPrefs] = useState(loadChartPrefs)
   const [showMa, setShowMa] = useState(initialPrefs.ma)
   const [showBb, setShowBb] = useState(initialPrefs.bb)
+  const [indOpen, setIndOpen] = useState(false) // 모바일 폭 지표 팝오버
   const [loaded, setLoaded] = useState(false)
   const [failed, setFailed] = useState(false)
   const [empty, setEmpty] = useState(false)
@@ -367,19 +368,44 @@ export default function TradingChart({ ticker, lastPrice, coach, position }: Tra
             </button>
           ))}
         </div>
-        <div role="group" aria-label="보조지표" className="ml-auto flex shrink-0 gap-1.5">
-          <button type="button" aria-pressed={showMa} onClick={() => setShowMa((v) => !v)} className={`${chipClass(showMa)} ${CHIP_COMPACT}`}>
-            <span className="sm:hidden">이평</span>
-            <span className="hidden sm:inline">이동평균</span>
+        {/* 데스크톱: 지표 칩 2개 그대로 */}
+        <div role="group" aria-label="보조지표" className="ml-auto hidden shrink-0 gap-1.5 sm:flex">
+          <button type="button" aria-pressed={showMa} onClick={() => setShowMa((v) => !v)} className={chipClass(showMa)}>
+            이동평균
           </button>
-          <button type="button" aria-pressed={showBb} onClick={() => setShowBb((v) => !v)} className={`${chipClass(showBb)} ${CHIP_COMPACT}`}>
+          <button type="button" aria-pressed={showBb} onClick={() => setShowBb((v) => !v)} className={chipClass(showBb)}>
             볼린저
           </button>
         </div>
+        {/* 모바일 폭: '지표 N ▾' 하나 → 차트 위 팝오버(앱과 같은 방식) */}
+        <button
+          type="button"
+          aria-expanded={indOpen}
+          aria-haspopup="true"
+          onClick={() => setIndOpen((v) => !v)}
+          className={`ml-auto shrink-0 sm:hidden ${chipClass(indOpen)} ${CHIP_COMPACT}`}
+        >
+          지표{(showMa || showBb) && ` ${Number(showMa) + Number(showBb)}`} {indOpen ? '▴' : '▾'}
+        </button>
       </div>
       <div className="relative h-[260px] overflow-hidden rounded-card border border-line bg-surface sm:h-[320px]">
         {/* pan-y: 세로 스크롤만 브라우저가 맡고 가로 제스처는 차트가 받음(첫 touchmove 를 브라우저가 가로채 차트가 안 움직이던 문제) */}
-        <div ref={boxRef} className="h-full w-full touch-pan-y" />
+        {/* 차트를 누르면 지표 팝오버 닫기 */}
+        <div ref={boxRef} className="h-full w-full touch-pan-y" onPointerDown={() => setIndOpen(false)} />
+        {indOpen && (
+          <div
+            role="group"
+            aria-label="보조지표"
+            className="absolute right-2 top-2 z-20 flex flex-col gap-2 rounded-card border border-line bg-surface p-2.5 shadow-lg sm:hidden"
+          >
+            <button type="button" aria-pressed={showMa} onClick={() => setShowMa((v) => !v)} className={`${chipClass(showMa)} ${CHIP_COMPACT}`}>
+              이동평균 5·20·60
+            </button>
+            <button type="button" aria-pressed={showBb} onClick={() => setShowBb((v) => !v)} className={`${chipClass(showBb)} ${CHIP_COMPACT}`}>
+              볼린저 20·2σ
+            </button>
+          </div>
+        )}
         {showMa && loaded && !failed && !empty && (
           <div className="pointer-events-none absolute left-2 top-1.5 z-10 flex gap-1.5 text-[11px] font-bold">
             {MA_PERIODS.map((p) => (

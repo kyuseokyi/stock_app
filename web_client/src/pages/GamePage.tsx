@@ -118,7 +118,7 @@ export default function GamePage() {
 
   return (
     // 모바일 폭은 OrderPanel 이 화면 아래 고정 바 → 마지막 내용이 가리지 않게 그 높이만큼 아래 여백
-    <div className="space-y-4 pb-32 sm:pb-0">
+    <div className="space-y-3 pb-32 sm:space-y-4 sm:pb-0">
       <GameHeader
         season={season}
         account={account}

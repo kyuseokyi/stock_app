@@ -19,9 +19,12 @@ interface GameHeaderProps {
   onOpenRules: () => void
 }
 
-const NAV_BUTTON = 'rounded-field bg-fill px-3 py-1.5 text-sm text-ink transition hover:brightness-95'
+// 모바일 폭은 4개가 한 줄에 균등(flex-1·작은 글씨), 데스크톱은 기존 크기
+const NAV_BUTTON =
+  'flex-1 whitespace-nowrap rounded-field bg-fill px-2 py-1 text-xs text-ink transition hover:brightness-95 sm:flex-none sm:px-3 sm:py-1.5 sm:text-sm'
 
 // 시즌·종목·D-day + Streak + 내 순위/수익률 + 자본금 + 랭킹·퀘스트·퀴즈·규칙 진입 버튼.
+// 컴팩트(앱과 같은 배치): 1줄 종목·시즌 / 2줄 순위·자본금 / 3줄 진입 버튼 한 줄 — 모바일에서 차트가 첫 화면에 들어오게
 export default function GameHeader({
   season, account, myRank, loggedIn, streak, showQuiz, onOpenRanking, onOpenQuest, onOpenQuiz, onOpenStreak, onOpenRules,
 }: GameHeaderProps) {
@@ -31,50 +34,46 @@ export default function GameHeader({
   const showStreak = loggedIn && streak !== null && streak.enabled && streak.current_streak >= 1
 
   return (
-    <Card className="sm:p-5">
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <div>
-          <p className="flex flex-wrap items-center gap-1.5 text-xs font-semibold text-brand">
-            <span>
-              시즌 {season.season_number}기{dday !== null && ` · 종료 D-${dday}`}
-            </span>
-            {showStreak && (
-              <button
-                type="button"
-                onClick={onOpenStreak}
-                className="rounded-full bg-fill px-2 py-0.5 text-up transition hover:brightness-95"
-                title={`최고 기록 ${streak.highest_streak}일 · 연속 출석 보상 보기`}
-              >
-                🔥 {streak.current_streak}일 연속
-                {streak.rewards.some((r) => r.claimable) && <span className="ml-1">🎁</span>}
-              </button>
-            )}
-          </p>
-          <h1 className="mt-0.5 text-lg font-bold text-ink">
-            {season.stock_name} <span className="text-sm font-medium text-ink-muted">({season.ticker})</span>
-          </h1>
-        </div>
-        <div className="text-right text-sm">
-          {!loggedIn ? (
-            <p className="text-ink-muted">로그인하고 시즌에 참여하세요</p>
-          ) : rank !== null ? (
-            <p className="font-semibold text-ink">
-              내 순위 {rank}위
-              {roi !== null && <span className={`ml-1 ${pnlClass(roi)}`}>{formatPct(roi)}</span>}
-            </p>
-          ) : (
-            <p className="text-ink-muted">첫 거래 후 순위가 집계돼요</p>
-          )}
-        </div>
+    <Card className="space-y-2 p-3 sm:p-5">
+      <div className="flex items-center gap-2">
+        <h1 className="min-w-0 truncate text-base font-bold text-ink sm:text-lg">
+          {season.stock_name} <span className="text-xs font-medium text-ink-muted sm:text-sm">{season.ticker}</span>
+        </h1>
+        <span className="ml-auto shrink-0 text-xs font-semibold text-brand">
+          {season.season_number}기{dday !== null && ` · D-${dday}`}
+        </span>
+        {showStreak && (
+          <button
+            type="button"
+            onClick={onOpenStreak}
+            className="shrink-0 rounded-full bg-fill px-2 py-0.5 text-xs font-semibold text-up transition hover:brightness-95"
+            title={`${streak.current_streak}일 연속 · 최고 기록 ${streak.highest_streak}일 · 연속 출석 보상 보기`}
+          >
+            🔥{streak.current_streak}
+            {streak.rewards.some((r) => r.claimable) && <span className="ml-1">🎁</span>}
+          </button>
+        )}
       </div>
-      <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-        <p className="text-sm text-ink-muted">
+      <div className="flex items-center justify-between gap-2 text-xs sm:text-sm">
+        {!loggedIn ? (
+          <p className="truncate text-ink-muted">로그인하고 시즌에 참여하세요</p>
+        ) : rank !== null ? (
+          <p className="font-semibold text-ink">
+            {rank}위
+            {roi !== null && <span className={`ml-1 ${pnlClass(roi)}`}>{formatPct(roi)}</span>}
+          </p>
+        ) : (
+          <p className="truncate text-ink-muted">첫 거래 후 순위가 집계돼요</p>
+        )}
+        <p className="shrink-0 text-ink-muted">
           자본금
-          <span className="ml-1.5 text-base font-bold text-ink tabular-nums">
+          <span className="ml-1.5 font-bold text-ink tabular-nums sm:text-base">
             {account ? formatKrw(account.total_asset) : '—'}
           </span>
         </p>
-        <div className="flex flex-wrap gap-2">
+      </div>
+      <div>
+        <div className="flex gap-1.5 sm:justify-end sm:gap-2">
           <button type="button" onClick={onOpenRanking} className={NAV_BUTTON}>
             🏆 랭킹
           </button>
