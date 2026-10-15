@@ -66,7 +66,8 @@ export function TopNav({ section }: { section: Section }) {
 /** 모바일 폭 하단 고정 탭바(앱과 같은 배치). 높이 3.5rem + safe-area — 게임 주문바가 이 위에 붙는다 */
 export function BottomTabBar({ section }: { section: Section }) {
   return (
-    <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-surface/95 pb-[env(safe-area-inset-bottom)] backdrop-blur sm:hidden">
+    // z-30: 모달(ui/Modal z-40)·토스트(z-50)가 탭바 위에 오도록. 같은 z-30 인 게임 주문바와는 위아래로 안 겹침
+    <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-surface/95 pb-[env(safe-area-inset-bottom)] backdrop-blur sm:hidden">
       <div className="mx-auto flex h-14 max-w-3xl">
         {ITEMS.map((it) => {
           const active = section === it.key
