@@ -1,6 +1,6 @@
 import { useFocusEffect, useIsFocused, useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
-import { Alert, Platform, RefreshControl, ScrollView, Text, View } from 'react-native';
+import { RefreshControl, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StyleSheet } from 'react-native-unistyles';
 
@@ -23,7 +23,7 @@ import { isQuizPrimeTime } from '@/features/game/lib/quiz';
 import { useTradingGameStore } from '@/features/game/store';
 import type { Leverage, OrderOptions, Ratio, Side } from '@/features/game/types';
 import { useGameSocket } from '@/features/game/use-game-socket';
-import { ListState } from '@/ui';
+import { BottomSheet, Button, ListState } from '@/ui';
 
 const RANK_POLL_MS = 30_000;
 const PRIME_CHECK_MS = 60_000;
@@ -64,6 +64,7 @@ export default function GameScreen() {
   const [activeModal, setActiveModal] = useState<ActiveModal>(null);
   const [primeTime, setPrimeTime] = useState(() => isQuizPrimeTime(new Date()));
   const [refreshing, setRefreshing] = useState(false);
+  const [loginPrompt, setLoginPrompt] = useState(false);
   const ready = status === 'ready';
   const focused = useIsFocused();
 
@@ -174,17 +175,11 @@ export default function GameScreen() {
     );
   }
 
-  /** 비로그인 — Alert 로 안내하고 내정보 탭(게스트 로그인)으로 보낸다. web 은 Alert 미지원이라 토스트 + 즉시 이동 */
-  const requireLogin = () => {
-    if (Platform.OS === 'web') {
-      pushToast({ kind: 'info', icon: '🔑', message: '내정보 탭에서 로그인하고 시즌에 참여하세요' });
-      router.push('/(tabs)/profile');
-      return;
-    }
-    Alert.alert('로그인이 필요해요', '내정보 탭에서 닉네임으로 시작할 수 있어요.', [
-      { text: '취소', style: 'cancel' },
-      { text: '로그인하러 가기', onPress: () => router.push('/(tabs)/profile') },
-    ]);
+  /** 비로그인 — OS 기본 Alert 대신 앱 디자인의 바텀시트로 안내하고 내정보 탭(간편 로그인)으로 보낸다 */
+  const requireLogin = () => setLoginPrompt(true);
+  const goLogin = () => {
+    setLoginPrompt(false);
+    router.push('/(tabs)/profile');
   };
 
   const handleOrder = (side: Side, ratio: Ratio, leverage: Leverage, opts?: OrderOptions) => {
@@ -269,6 +264,13 @@ export default function GameScreen() {
       {activeModal === 'academy' ? <AcademySheet onClose={closeModal} /> : null}
       {activeModal === 'quiz' ? <QuizSheet onClose={closeModal} /> : null}
       {activeModal === 'streak' ? <StreakRewardSheet onClose={closeModal} /> : null}
+      {loginPrompt ? (
+        <BottomSheet title="로그인이 필요해요" onClose={() => setLoginPrompt(false)}>
+          <Text style={styles.sheetText}>내정보 탭에서 간편 로그인으로 시작하고{'\n'}시즌에 참여해 보세요.</Text>
+          <Button label="로그인하러 가기" onPress={goLogin} />
+          <Button label="다음에 할게요" variant="secondary" onPress={() => setLoginPrompt(false)} />
+        </BottomSheet>
+      ) : null}
     </View>
   );
 }
@@ -286,4 +288,5 @@ const styles = StyleSheet.create((theme) => ({
   },
   notice: { backgroundColor: theme.colors.surfaceBlue, borderRadius: theme.radius.card, padding: theme.gap(2) },
   noticeText: { fontSize: 14, color: theme.colors.textSecondary },
+  sheetText: { fontSize: 15, lineHeight: 22, color: theme.colors.textSecondary, marginBottom: theme.gap(0.5) },
 }));
