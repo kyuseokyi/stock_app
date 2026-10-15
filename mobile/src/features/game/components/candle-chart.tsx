@@ -481,7 +481,7 @@ const styles = StyleSheet.create((theme) => ({
     borderRadius: theme.radius.card,
     borderWidth: 1,
     borderColor: theme.colors.border,
-    backgroundColor: theme.colors.background,
+    backgroundColor: theme.colors.surface, // 웹 차트 상자(bg-surface)와 같게 — 격자선(background 색)이 보이도록
     paddingVertical: theme.gap(1),
     paddingHorizontal: theme.gap(1),
     overflow: 'hidden',
@@ -540,7 +540,7 @@ const styles = StyleSheet.create((theme) => ({
   // 단위 전환 중(새 데이터 대기) — 이전 차트를 흐리게 + 가운데 위 작은 로딩
   staleChart: { opacity: 0.35 },
   staleSpinner: { position: 'absolute', top: theme.gap(1), left: 0, right: 0, alignItems: 'center' },
-  failedCover: { backgroundColor: theme.colors.background },
+  failedCover: { backgroundColor: theme.colors.surface },
   fill: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0 },
   line: { position: 'absolute', left: 0, right: 0, opacity: 0.9 },
   // 점선 — 높이 0 + 테두리 전체 dashed(iOS 는 변별 두께가 같아야 dashed 렌더) → 위아래 테두리가 겹친 한 줄
