@@ -93,3 +93,19 @@ export function layoutCandles(
   });
   return { range, slot, bars };
 }
+
+const NICE_STEPS = [1, 2, 2.5, 5, 10];
+
+/**
+ * 오른쪽 가격축 눈금 — 간격 = (1·2·2.5·5)×10ⁿ 중 (범위/target) 이상 가장 작은 값, 범위 [min,max] 안의 배수만.
+ * 웹(lightweight-charts) 가격축처럼 보기 좋은 값(200,000 / 250,000 …)이 되게 한다.
+ */
+export function niceTicks(min: number, max: number, target = 6): number[] {
+  if (!(max > min) || !Number.isFinite(min) || !Number.isFinite(max)) return [];
+  const raw = (max - min) / target;
+  const mag = 10 ** Math.floor(Math.log10(raw));
+  const step = (NICE_STEPS.find((s) => s * mag >= raw) ?? 10) * mag;
+  const out: number[] = [];
+  for (let v = Math.ceil(min / step) * step; v <= max + 1e-9; v += step) out.push(Math.round(v * 1e6) / 1e6);
+  return out;
+}

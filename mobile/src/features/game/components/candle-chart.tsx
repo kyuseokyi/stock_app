@@ -7,7 +7,7 @@ import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import { getDailyCandles, getGameCandles } from '../api';
 import { applyTick } from '../lib/candles';
 import { CHART_PREFS_KEY, DEFAULT_CHART_PREFS, parseChartPrefs, serializeChartPrefs } from '../lib/chart-prefs';
-import { layoutCandles, priceToY, type Ohlc } from '../lib/chart-layout';
+import { layoutCandles, niceTicks, priceToY, type Ohlc } from '../lib/chart-layout';
 import { clampOffset, dragOffset, offsetAfterGrowth, windowRange } from '../lib/chart-window';
 import { formatPrice, kstDateString } from '../lib/format';
 import { bollinger, lineSegments, MA_PERIODS, sma } from '../lib/indicators';
@@ -25,6 +25,7 @@ const VISIBLE = 60; // 일봉·분봉 모두 한 화면 60개(가로로 끌면 �
 const PAN_START_PX = 8; // 이만큼 가로로 움직여야 차트 이동 시작(세로 스크롤과 구분)
 const LABEL_H = 16;
 const TAG_H = 18; // 현재가 태그 높이
+const PRICE_AXIS_W = 54; // 오른쪽 가격축 폭("400,000" 이 들어가는 폭)
 const PLOT_H = 240;
 const AXIS_H = 16; // 아래 시간축 라벨 줄
 const AXIS_LABEL_W = 48;
@@ -46,6 +47,8 @@ type CandleChartProps = {
   showLabels?: boolean;
   /** 캔들별 시간축 라벨(candles 와 같은 길이). 주면 처음·가운데·끝만 아래 줄에 표시 */
   xLabels?: string[];
+  /** 오른쪽 가격축(웹 차트처럼 눈금 값 + 현재가 태그). 게임 차트만 true, 퀴즈 차트는 기존(왼쪽 최고/최저) */
+  priceAxis?: boolean;
 };
 
 /** 캔들 + 가격선 렌더러. 폭은 onLayout 으로 측정(측정 전에는 빈 영역). xLabels 를 주면 아래에 시간축 라벨 */
@@ -53,7 +56,8 @@ export function CandleChart({ xLabels, ...plot }: CandleChartProps) {
   const [width, setWidth] = useState(0);
   // 가격 범위에 가격선 + 지표 값도 포함(선이 차트 밖으로 나가지 않게)
   const extra = [...(plot.lines ?? []).map((l) => l.price), ...(plot.overlays ?? []).flatMap((o) => o.values)];
-  const layout = layoutCandles(plot.candles, width, plot.height, extra);
+  const axisW = plot.priceAxis ? PRICE_AXIS_W : 0; // 캔들은 축 왼쪽 영역에만
+  const layout = layoutCandles(plot.candles, Math.max(0, width - axisW), plot.height, extra);
   if (!xLabels) return <CandlePlot {...plot} layout={layout} onWidth={setWidth} />;
   const last = layout !== null ? Math.min(xLabels.length, layout.bars.length) - 1 : -1;
   return (
@@ -63,7 +67,7 @@ export function CandleChart({ xLabels, ...plot }: CandleChartProps) {
         {layout !== null
           ? axisLabelIndexes(last + 1).map((i) => {
               // 라벨 중앙을 캔들 중앙에 맞추되 양 끝은 차트 폭 안으로 붙인다
-              const left = Math.min(Math.max(0, layout.bars[i].wickLeft - AXIS_LABEL_W / 2), width - AXIS_LABEL_W);
+              const left = Math.min(Math.max(0, layout.bars[i].wickLeft - AXIS_LABEL_W / 2), width - axisW - AXIS_LABEL_W);
               return (
                 <Text key={i} style={[styles.axisLabel, { left }]} numberOfLines={1} allowFontScaling={false}>
                   {xLabels[i]}
@@ -81,12 +85,37 @@ type CandlePlotProps = Omit<CandleChartProps, 'xLabels'> & {
   onWidth: (w: number) => void;
 };
 
-function CandlePlot({ height, lines = [], overlays = [], showLabels = true, layout, onWidth }: CandlePlotProps) {
+function CandlePlot({ height, lines = [], overlays = [], showLabels = true, priceAxis = false, layout, onWidth }: CandlePlotProps) {
   const { theme } = useUnistyles();
   const onLayout = (e: LayoutChangeEvent) => onWidth(e.nativeEvent.layout.width);
+  const axisW = priceAxis ? PRICE_AXIS_W : 0;
+  // 오른쪽 가격축 눈금(위아래 끝에 걸쳐 잘리는 값은 생략)
+  const ticks =
+    priceAxis && layout !== null
+      ? niceTicks(layout.range.min, layout.range.max)
+          .map((p) => ({ p, y: priceToY(p, layout.range, height) }))
+          .filter((t) => t.y >= 6 && t.y <= height - 6)
+      : [];
 
   return (
     <View style={[styles.plot, { height }]} onLayout={onLayout}>
+      {priceAxis ? (
+        <>
+          {ticks.map((t) => (
+            <View key={`g${t.p}`} pointerEvents="none" style={[styles.gridLine, { top: t.y, right: axisW }]} />
+          ))}
+          <View pointerEvents="none" style={[styles.axisBorder, { right: axisW }]} />
+          {ticks.map((t) => (
+            <Text
+              key={`t${t.p}`}
+              style={[styles.axisTick, { top: t.y - 7, width: axisW }]}
+              numberOfLines={1}
+              allowFontScaling={false}>
+              {formatPrice(t.p)}
+            </Text>
+          ))}
+        </>
+      ) : null}
       {layout !== null
         ? layout.bars.map((b, i) => {
             const color = b.rising ? theme.colors.up : theme.colors.down;
@@ -133,20 +162,24 @@ function CandlePlot({ height, lines = [], overlays = [], showLabels = true, layo
             return (
               <View key={`${l.label}-${l.price}`} pointerEvents="none" style={styles.fill}>
                 {l.dashed ? (
-                  <View style={[styles.line, styles.dashed, { top: y - 1, borderColor: l.color }]} />
+                  <View style={[styles.line, styles.dashed, { top: y - 1, right: axisW, borderColor: l.color }]} />
                 ) : (
-                  <View style={[styles.line, { top: y - thickness / 2, height: thickness, backgroundColor: l.color }]} />
+                  <View style={[styles.line, { top: y - thickness / 2, right: axisW, height: thickness, backgroundColor: l.color }]} />
                 )}
                 {showLabels && l.tag ? (
                   <Text
-                    style={[styles.priceTag, { top: Math.min(Math.max(0, y - TAG_H / 2), height - TAG_H), backgroundColor: l.color }]}
+                    style={[
+                      styles.priceTag,
+                      { top: Math.min(Math.max(0, y - TAG_H / 2), height - TAG_H), backgroundColor: l.color },
+                      priceAxis ? { width: axisW, paddingHorizontal: 0, textAlign: 'center', borderRadius: 2 } : null,
+                    ]}
                     numberOfLines={1}
                     allowFontScaling={false}>
                     {formatPrice(l.price)}
                   </Text>
                 ) : showLabels ? (
                   <Text
-                    style={[styles.lineLabel, { top: y < LABEL_H + 2 ? y + 2 : y - LABEL_H - 2, color: l.color }]}
+                    style={[styles.lineLabel, { top: y < LABEL_H + 2 ? y + 2 : y - LABEL_H - 2, right: axisW + 4, color: l.color }]}
                     numberOfLines={1}
                     allowFontScaling={false}>
                     {l.label} {formatPrice(l.price)}
@@ -156,7 +189,7 @@ function CandlePlot({ height, lines = [], overlays = [], showLabels = true, layo
             );
           })
         : null}
-      {layout !== null && showLabels ? (
+      {layout !== null && showLabels && !priceAxis ? (
         <>
           <Text style={[styles.rangeLabel, styles.rangeTop]}>{formatPrice(layout.range.max)}</Text>
           <Text style={[styles.rangeLabel, styles.rangeBottom]}>{formatPrice(layout.range.min)}</Text>
@@ -366,7 +399,7 @@ export function DailyChart({ ticker, lastPrice, coach, position }: DailyChartPro
   useEffect(() => {
     panState.current.offset = off;
     panState.current.total = total;
-    panState.current.slot = plotWidth / VISIBLE;
+    panState.current.slot = (plotWidth - PRICE_AXIS_W) / VISIBLE; // 캔들 영역 = 전체 - 가격축
   }, [off, total, plotWidth]);
   const pan = useMemo(
     () =>
@@ -428,7 +461,7 @@ export function DailyChart({ ticker, lastPrice, coach, position }: DailyChartPro
         onTouchStart={() => setIndOpen(false)} // 차트를 만지면 지표 팝오버 닫기(팝오버 자체 터치는 형제라 해당 없음)
         {...pan.panHandlers}>
         {candles !== null && !empty ? (
-          <CandleChart candles={candles} height={PLOT_H} lines={chartLines} overlays={overlays} xLabels={xLabels} />
+          <CandleChart candles={candles} height={PLOT_H} lines={chartLines} overlays={overlays} xLabels={xLabels} priceAxis />
         ) : null}
         {off > 0 ? (
           <View style={styles.latest}>
@@ -547,6 +580,18 @@ const styles = StyleSheet.create((theme) => ({
     fontWeight: '600',
     backgroundColor: theme.colors.background,
     paddingHorizontal: 4,
+  },
+  // 오른쪽 가격축 — 옅은 가로 격자선 · 축 경계선 · 눈금 값(웹 lightweight-charts 가격축과 같은 배치)
+  gridLine: { position: 'absolute', left: 0, height: 1, backgroundColor: theme.colors.border, opacity: 0.5 },
+  axisBorder: { position: 'absolute', top: 0, bottom: 0, width: 1, backgroundColor: theme.colors.border },
+  axisTick: {
+    position: 'absolute',
+    right: 0,
+    height: 14,
+    fontSize: 10,
+    textAlign: 'center',
+    color: theme.colors.textSecondary,
+    fontVariant: ['tabular-nums'],
   },
   // 현재가 태그 — 오른쪽 끝, 선 높이 가운데(웹 가격축 태그와 같은 모양)
   priceTag: {

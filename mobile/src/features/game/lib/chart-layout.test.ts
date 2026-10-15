@@ -1,4 +1,4 @@
-import { CHART_PAD_Y, layoutCandles, priceRange, priceToY } from './chart-layout';
+import { CHART_PAD_Y, layoutCandles, niceTicks, priceRange, priceToY } from './chart-layout';
 
 const k = (open: number, high: number, low: number, close: number) => ({ open, high, low, close });
 
@@ -80,5 +80,21 @@ describe('layoutCandles', () => {
   test('가격선 포함 범위가 결과 range 에 반영', () => {
     const out = layoutCandles([k(100, 110, 90, 105)], 100, 100, [150]);
     expect(out?.range).toEqual({ min: 90, max: 150 });
+  });
+});
+
+describe('niceTicks — 오른쪽 가격축 눈금', () => {
+  test('1·2·2.5·5 ×10ⁿ 간격, 범위 안 값만', () => {
+    expect(niceTicks(189_200, 372_427)).toEqual([200_000, 250_000, 300_000, 350_000]);
+    expect(niceTicks(209_000, 236_000)).toEqual([210_000, 215_000, 220_000, 225_000, 230_000, 235_000]);
+  });
+
+  test('범위가 0 이하·뒤집힘이면 빈 배열', () => {
+    expect(niceTicks(100, 100)).toEqual([]);
+    expect(niceTicks(200, 100)).toEqual([]);
+  });
+
+  test('작은 가격대도 정수 눈금', () => {
+    expect(niceTicks(1_020, 1_180)).toEqual([1_050, 1_100, 1_150]);
   });
 });
