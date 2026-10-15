@@ -451,8 +451,8 @@ const styles = StyleSheet.create((theme) => ({
     gap: theme.gap(0.75),
   },
   legendText: { fontSize: 10, fontWeight: '700' },
-  // 과거를 보는 중일 때만 — 가격선 라벨(오른쪽 위)·범위 라벨(왼쪽)과 겹치지 않게 오른쪽 아래(시간축 위)
-  latest: { position: 'absolute', right: 0, bottom: AXIS_H + 4 },
+  // 과거를 보는 중일 때만 — 오른쪽 위(아래쪽은 하단 고정 주문바에 가려짐, 왼쪽 위는 범위 라벨)
+  latest: { position: 'absolute', right: 0, top: 0 },
   fill: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0 },
   line: { position: 'absolute', left: 0, right: 0, opacity: 0.9 },
   // 점선 — 높이 0 + 테두리 전체 dashed(iOS 는 변별 두께가 같아야 dashed 렌더) → 위아래 테두리가 겹친 한 줄
