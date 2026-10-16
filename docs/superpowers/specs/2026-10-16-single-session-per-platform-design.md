@@ -6,7 +6,7 @@
 
 **목표**
 - 같은 계정은 플랫폼(`web`·`app`·`admin`)마다 **마지막으로 로그인한 1곳만** 유효. 노트북 웹 + 폰 앱 동시 사용은 허용.
-- 밀려난 기기: REST 는 다음 요청에서 `401 SESSION_REPLACED`, 게임 WS 는 **즉시** 끊김. 클라이언트는 로그아웃 + "다른 기기에서 로그인되어 로그아웃됐어요" 안내.
+- 밀려난 기기: REST 는 다음 요청에서 `401 SESSION_REPLACED`, 게임 WS 는 **즉시** 끊김, 인증 요청이 없는 화면은 **시작·복귀 시 `/auth/me` 확인**(7-1)으로 감지. 클라이언트는 로그아웃 + "다른 기기에서 로그인되어 로그아웃됐어요" 안내.
 - 정확성은 PostgreSQL 이 보장, Redis 는 반응 속도(즉시 끊기)만 담당 — Redis 장애 시에도 REST 검증은 그대로 동작.
 
 **비목표**
@@ -89,6 +89,21 @@
 
 **admin_web**: 변경 없음(기존 401 처리).
 
+### 7-1. 시작·복귀 시 세션 확인 (`GET /auth/me`)
+
+밀려난(또는 만료된) 기기가 블로그·홈처럼 인증 요청이 없는 화면에 있으면, 헤더 닉네임이 저장값 그대로 남는다. 시작·복귀 시점에 한 번 확인한다.
+
+- **시점**: 웹 = 앱 로드 시 + 탭 재포커스(`visibilitychange` → visible), 앱 = 실행 시 + 포그라운드 복귀(`AppState` → active).
+- **조건**: 토큰이 있을 때만. 재포커스·복귀는 **마지막 확인 후 60초 이내면 생략**(탭 전환마다 요청하지 않도록).
+- **결과 처리**
+  - 200 → 응답 사용자로 저장된 user 갱신(닉네임 변경 반영).
+  - 401 → 위 401 경로와 동일(`SESSION_REPLACED` 면 replaced 문구, 그 외 expired 문구로 로그아웃).
+  - 네트워크 오류·5xx → 아무것도 하지 않음(오프라인에서 로그아웃시키지 않는다).
+- **위치**
+  - web: `store/auth.validateSession()` — auth 서비스 클라이언트(`api/auth.ts`)로 `GET /auth/me`, 401 이면 `expireSession(token, reason)`. `Layout` 에서 마운트 시 + `visibilitychange` 구독.
+  - mobile: auth store `validateSession()` — `authApi.get('/api/v1/auth/me')`(http 클라이언트의 401 → `notifyUnauthorized(reason)` 경로 그대로). 루트 레이아웃에서 실행 시 + `AppState` active 구독.
+- 서버 변경 없음(`/auth/me` 는 이미 `get_current_user` 사용 → 6장 1번의 세션 검증이 그대로 적용).
+
 ## 8. 에러 처리 / 장애
 
 - `start_session` 실패(DB) → 로그인 실패(500) — 세션 없이 토큰을 내주지 않는다.
@@ -105,8 +120,8 @@
 - WS: 핸드셰이크 거부 4401+reason, `close_replaced` 가 sid 다른 소켓만 닫고 새 소켓·다른 플랫폼·레거시 소켓은 유지, 버스 디스패치 → 핸들러 호출.
 - 회원 탈퇴 시 `user_sessions` 행 삭제(cascade).
 
-**web**: `tsc --noEmit` + vite build, 브라우저에서 두 isolatedContext 로 같은 계정 게스트 로그인 → 이전 컨텍스트 WS 즉시 끊김·헤더 로그인 버튼·문구 확인(개발 서버/로컬 기준).
-**mobile**: `tsc --noEmit` + jest(401 reason 판정·4401 로그아웃).
+**web**: `tsc --noEmit` + vite build, 브라우저에서 두 isolatedContext 로 같은 계정 게스트 로그인 → 이전 컨텍스트 WS 즉시 끊김·헤더 로그인 버튼·문구 확인 + 블로그 화면에서 새로고침·탭 재포커스 시 로그아웃 확인(개발 서버/로컬 기준).
+**mobile**: `tsc --noEmit` + jest(401 reason 판정·4401 로그아웃·`validateSession` 의 200 갱신/401 로그아웃/네트워크 오류 무시/60초 생략).
 
 ## 10. 배포 / 롤아웃
 
