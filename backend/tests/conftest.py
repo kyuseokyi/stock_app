@@ -35,3 +35,14 @@ def _isolate_game_redis(monkeypatch):
 
     monkeypatch.setattr(deps, "_redis", fake_aioredis.FakeRedis(decode_responses=True))
     yield
+
+
+@pytest.fixture(autouse=True)
+def _isolate_auth_redis(monkeypatch):
+    """auth 프로세스 Redis 싱글턴도 fakeredis 로 — 로그인 시 세션 교체 알림 발행이 실제 Redis 로 새지 않게."""
+    from fakeredis import aioredis as fake_aioredis
+
+    from apps.auth import deps as auth_deps
+
+    monkeypatch.setattr(auth_deps, "_redis", fake_aioredis.FakeRedis(decode_responses=True))
+    yield

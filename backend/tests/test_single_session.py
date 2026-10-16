@@ -12,6 +12,8 @@ from fastapi import Depends, FastAPI
 from fakeredis import aioredis as fake_aioredis
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
+from apps.auth.deps import get_redis as auth_get_redis
+from apps.auth.main import app as auth_app
 from shared import sessions
 from shared.auth import get_current_user
 from shared.database import get_db
@@ -150,3 +152,69 @@ async def test_legacy_token_without_sid_is_allowed(maker, me_client):
     await _user(maker)
     legacy = create_access_token(subject=1, role="FREE")
     assert (await me_client.get("/whoami", headers=_bearer(legacy))).status_code == 200
+
+
+@pytest.fixture
+async def auth_ctx(maker, monkeypatch):
+    """auth 앱 + 공유 fakeredis(발행 확인용). 게스트 게이트는 켠다."""
+    monkeypatch.setenv("AUTH_GUEST_ENABLED", "true")
+    redis = fake_aioredis.FakeRedis(decode_responses=True)
+
+    async def _db():
+        async with maker() as s:
+            yield s
+
+    auth_app.dependency_overrides[get_db] = _db
+    auth_app.dependency_overrides[auth_get_redis] = lambda: redis
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=auth_app), base_url="http://t") as c:
+        yield c, redis
+    auth_app.dependency_overrides.clear()
+
+
+async def test_guest_default_platform_is_web(auth_ctx):
+    c, _ = auth_ctx
+    r = await c.post("/api/v1/auth/guest", json={"nickname": "주린이"})
+    assert r.status_code == 200
+    assert decode_token(r.json()["access_token"])["plt"] == "web"
+
+
+async def test_guest_app_platform_and_relogin_publishes(auth_ctx):
+    c, redis = auth_ctx
+    ps = redis.pubsub()
+    await ps.subscribe(sessions.SESSION_REPLACED_CHANNEL)
+    await ps.get_message(timeout=1)
+    r = await c.post("/api/v1/auth/guest", json={"nickname": "주린이", "platform": "app"})
+    p = decode_token(r.json()["access_token"])
+    assert p["plt"] == "app"
+    msg = await ps.get_message(ignore_subscribe_messages=True, timeout=1)
+    assert json.loads(msg["data"])["sid"] == p["sid"]
+
+
+async def test_guest_rejects_admin_platform(auth_ctx):
+    c, _ = auth_ctx
+    r = await c.post("/api/v1/auth/guest", json={"nickname": "x", "platform": "admin"})
+    assert r.status_code == 422
+
+
+async def test_admin_login_uses_admin_platform(maker, auth_ctx):
+    from shared.security import hash_password
+
+    async with maker() as db:
+        db.add(User(email="admin@stock.app", nickname="관리자", role=UserRole.ADMIN, is_active=True,
+                    password_hash=hash_password("pw1234")))
+        await db.commit()
+    c, _ = auth_ctx
+    r = await c.post("/api/v1/auth/login", json={"email": "admin@stock.app", "password": "pw1234"})
+    assert r.status_code == 200
+    assert decode_token(r.json()["access_token"])["plt"] == "admin"
+
+
+async def test_login_succeeds_when_redis_publish_fails(auth_ctx):
+    class Broken:
+        async def publish(self, *_a):
+            raise ConnectionError("down")
+
+    c, _ = auth_ctx
+    auth_app.dependency_overrides[auth_get_redis] = lambda: Broken()
+    r = await c.post("/api/v1/auth/guest", json={"nickname": "주린이"})
+    assert r.status_code == 200

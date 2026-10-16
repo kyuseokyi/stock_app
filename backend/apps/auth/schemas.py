@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel, ConfigDict, Field
 
 from shared.models import UserRole
@@ -13,9 +15,10 @@ class LoginRequest(BaseModel):
 
 
 class GuestLoginRequest(BaseModel):
-    """임시 로그인 — 닉네임만 입력(카카오/구글 도입 전 임시)."""
+    """임시 로그인 — 닉네임만 입력(개발용). platform 은 단일 세션 구분(web_client=web, 앱=app)."""
 
     nickname: str = Field(..., min_length=1, max_length=20, description="표시 닉네임")
+    platform: Literal["web", "app"] = Field("web", description="로그인 플랫폼(미지정 시 web — 구 앱 빌드 호환)")
 
 
 class DeleteAccountRequest(BaseModel):

@@ -11,12 +11,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from shared.auth import get_current_user
 from shared.database import get_db
 from shared.models import User, UserRole
-from shared.security import create_access_token, verify_password
+from shared.security import verify_password
 
 from .. import schemas
 from ..deps import get_redis
 from ..guest_gate import require_guest_enabled
 from ..services import account_deletion
+from ..services.session_login import issue_login_token
 from ..social.config import SocialSettings, get_social_settings
 from ..social.providers import get_http_transport
 
@@ -32,7 +33,9 @@ def _guest_email(nickname: str) -> str:
 
 
 @router.post("/login", response_model=schemas.TokenResponse)
-async def login(payload: schemas.LoginRequest, db: AsyncSession = Depends(get_db)):
+async def login(
+    payload: schemas.LoginRequest, db: AsyncSession = Depends(get_db), redis=Depends(get_redis)
+):
     result = await db.execute(select(User).where(User.email == payload.email))
     user = result.scalar_one_or_none()
 
@@ -47,7 +50,7 @@ async def login(payload: schemas.LoginRequest, db: AsyncSession = Depends(get_db
     if not user.is_active:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "비활성화된 계정입니다.")
 
-    token = create_access_token(subject=user.id, role=user.role.value)
+    token = await issue_login_token(db, redis, user, "admin")  # /login 은 admin_web 전용
     return schemas.TokenResponse(access_token=token, user=user)
 
 
@@ -57,7 +60,7 @@ async def login(payload: schemas.LoginRequest, db: AsyncSession = Depends(get_db
     dependencies=[Depends(require_guest_enabled)],  # AUTH_GUEST_ENABLED 게이트(꺼짐 → 404)
 )
 async def guest_login(
-    payload: schemas.GuestLoginRequest, db: AsyncSession = Depends(get_db)
+    payload: schemas.GuestLoginRequest, db: AsyncSession = Depends(get_db), redis=Depends(get_redis)
 ):
     """임시 로그인 — 닉네임으로 FREE 유저 upsert 후 JWT 발급.
 
@@ -81,7 +84,7 @@ async def guest_login(
     if not user.is_active:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "비활성화된 계정입니다.")
 
-    token = create_access_token(subject=user.id, role=user.role.value)
+    token = await issue_login_token(db, redis, user, payload.platform)
     return schemas.TokenResponse(access_token=token, user=user)
 
 
