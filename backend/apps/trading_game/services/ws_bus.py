@@ -16,7 +16,7 @@ import asyncio
 import contextlib
 import json
 import logging
-from typing import Callable
+from typing import Awaitable, Callable
 
 from apps.trading_game import deps
 from apps.trading_game.services.connection_manager import ConnectionManager
@@ -91,14 +91,17 @@ async def run_subscriber(
     ready: asyncio.Event | None = None,
     max_backoff: float = 30.0,
     extra_channels: dict[str, Callable[[], None]] | None = None,
+    payload_channels: dict[str, Callable[[dict], Awaitable[None]]] | None = None,
 ) -> None:
     """인스턴스당 1개 — broadcast 채널 + user:* 패턴 구독, 끊기면 지수 백오프 재연결.
 
     redis_factory: 호출 시 새 Redis 클라이언트(구독 전용 연결). 기본은 deps.REDIS_URL.
     ready: 구독이 성립되면 set(테스트·기동 동기화용).
     extra_channels: 같은 구독 연결로 받을 추가 채널 → 콜백(예: game:cache:dirty → 로컬 캐시 dirty).
+    payload_channels: 같은 연결로 받을 추가 채널 → JSON 페이로드를 받는 async 핸들러(예: 세션 교체 즉시 끊기).
     """
     extra = dict(extra_channels or {})
+    payload_handlers = dict(payload_channels or {})
     if redis_factory is None:
         import redis.asyncio as aioredis
 
@@ -112,8 +115,8 @@ async def run_subscriber(
             pubsub = redis.pubsub()
             await pubsub.subscribe(BROADCAST_CHANNEL)
             await pubsub.psubscribe(USER_CHANNEL_PATTERN)
-            if extra:
-                await pubsub.subscribe(*extra.keys())
+            if extra or payload_handlers:
+                await pubsub.subscribe(*extra.keys(), *payload_handlers.keys())
             log.info("WS 버스 구독 시작")
             if ready is not None:
                 ready.set()
@@ -123,9 +126,14 @@ async def run_subscriber(
                     continue
                 backoff = 1.0
                 try:
-                    handler = extra.get(msg.get("channel")) if msg.get("type") == "message" else None
+                    channel = msg.get("channel") if msg.get("type") == "message" else None
+                    handler = extra.get(channel) if channel is not None else None
                     if handler is not None:
                         handler()
+                        continue
+                    payload_handler = payload_handlers.get(channel) if channel is not None else None
+                    if payload_handler is not None:
+                        await payload_handler(json.loads(msg["data"]))
                         continue
                     await dispatch(manager, msg)
                 except Exception:

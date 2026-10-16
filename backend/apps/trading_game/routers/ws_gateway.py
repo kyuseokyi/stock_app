@@ -1,6 +1,7 @@
 """클라이언트 실시간 WebSocket — 틱/개인손익/시장심리.
 
 token 선택: 없으면 비로그인 공개 연결(틱·시장심리만), 있으면 기존 검증(잘못된 토큰 4401 — 공개로 강등하지 않음).
+단일 세션: 같은 플랫폼에서 교체된 토큰은 핸드셰이크에서 4401(SESSION_REPLACED), 연결 중 교체되면 버스 이벤트로 즉시 4401 close.
 공개 연결 상한: IP당 GAME_WS_PUBLIC_PER_IP(3)·전체 GAME_WS_PUBLIC_MAX(2000), 초과 시 4429.
 """
 from __future__ import annotations
@@ -16,6 +17,7 @@ from sqlalchemy import func, select
 
 from shared.database import AsyncSessionLocal
 from shared.security import decode_token
+from shared.sessions import SESSION_REPLACED, check_session
 from shared.models import User
 from shared.game_models import GameAccount, GamePosition
 from apps.trading_game.services import account_service, ws_bus
@@ -113,15 +115,29 @@ async def game_stream(ws: WebSocket, token: str | None = Query(None)):
         await ws.accept()  # accept 후 close 해야 4401 코드가 클라이언트에 전달됨
         await ws.close(code=4401)
         return
-    # REST 와 동일하게 유저 존재·활성 검증(비활성/삭제 유저 차단)
+    # REST 와 동일하게 유저 존재·활성 + 단일 세션 검증(같은 플랫폼에서 다시 로그인한 이전 토큰 차단)
     async with AsyncSessionLocal() as db:
         user = await db.get(User, user_id)
+        session_ok = user is not None and user.is_active and await check_session(db, user_id, payload)
     if user is None or not user.is_active:
         await ws.accept()
         await ws.close(code=4401)
         return
-    await manager.connect(user_id, ws)
+    if not session_ok:
+        await ws.accept()
+        await ws.close(code=4401, reason=SESSION_REPLACED)  # 4401 재사용 — 설치된 클라이언트가 재연결을 멈추는 코드
+        return
+    await manager.connect(user_id, ws, platform=payload.get("plt"), sid=payload.get("sid"))
     try:
         await _keepalive(ws)
     finally:
         await manager.disconnect(user_id, ws)
+
+
+async def on_session_replaced(data: dict) -> None:
+    """auth 가 발행한 세션 교체 알림(버스 payload_channels) → 이 인스턴스의 이전 소켓 즉시 닫기."""
+    try:
+        user_id, platform, sid = int(data["user_id"]), str(data["platform"]), str(data["sid"])
+    except (KeyError, TypeError, ValueError):
+        return
+    await manager.close_replaced(user_id, platform, sid)

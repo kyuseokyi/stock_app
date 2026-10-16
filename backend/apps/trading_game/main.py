@@ -31,6 +31,7 @@ from apps.trading_game.services.connection_manager import manager
 from apps.trading_game.services.leader import LeaderElector
 from apps.trading_game.services.tick_listener import broadcast_loop, fanout_worker, pnl_loop, run_listener
 from shared.health import add_health_routes
+from shared.sessions import SESSION_REPLACED_CHANNEL
 
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 LEADER_NAME = "trading_game"
@@ -50,7 +51,9 @@ def singleton_tasks():
 async def lifespan(app: FastAPI):
     stop = asyncio.Event()
     bus = asyncio.create_task(ws_bus.run_subscriber(
-        manager, stop, extra_channels={position_cache.DIRTY_CHANNEL: position_cache.mark_dirty_local},
+        manager, stop,
+        extra_channels={position_cache.DIRTY_CHANNEL: position_cache.mark_dirty_local},
+        payload_channels={SESSION_REPLACED_CHANNEL: ws_gateway.on_session_replaced},
     ))
     fanout = asyncio.create_task(fanout_worker(stop))
     elector = LeaderElector(deps.get_redis(), LEADER_NAME)

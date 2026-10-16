@@ -4,19 +4,26 @@ DB 는 sqlite in-memory, Redis 는 fakeredis.
 """
 from __future__ import annotations
 
+import asyncio
 import base64
 import hashlib
 import json
 
+import fakeredis
 import httpx
 import pytest
 from fastapi import Depends, FastAPI
+from fastapi.testclient import TestClient
 from fakeredis import aioredis as fake_aioredis
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from starlette.websockets import WebSocketDisconnect
 
 from apps.auth.deps import get_redis as auth_get_redis
 from apps.auth.main import app as auth_app
 from apps.auth.social.store import SocialStore, get_social_store
+from apps.trading_game.routers import ws_gateway
+from apps.trading_game.services import ws_bus
+from apps.trading_game.services.connection_manager import ConnectionManager
 from shared import sessions
 from shared.auth import get_current_user
 from shared.database import get_db
@@ -270,3 +277,105 @@ async def test_delete_account_removes_sessions(maker):
     async with maker() as db:
         assert await db.get(UserSession, (9, "web")) is None
         assert await db.get(UserSession, (9, "app")) is None
+
+
+# ── trading_game WS 게이트웨이 ──────────────────────────────────────────────
+class _WS:
+    def __init__(self):
+        self.closed: tuple[int, str] | None = None
+
+    async def accept(self):
+        pass
+
+    async def send_text(self, _t):
+        pass
+
+    async def close(self, code=1000, reason=""):
+        self.closed = (code, reason)
+
+
+async def test_close_replaced_closes_only_stale_same_platform_sockets():
+    m = ConnectionManager()
+    old_web, new_web, app_ws, legacy = _WS(), _WS(), _WS(), _WS()
+    await m.connect(1, old_web, platform="web", sid="old")
+    await m.connect(1, new_web, platform="web", sid="new")
+    await m.connect(1, app_ws, platform="app", sid="a")
+    await m.connect(1, legacy)  # 레거시 토큰(플랫폼 모름)
+    await m.close_replaced(1, "web", "new")
+    assert old_web.closed == (4401, "SESSION_REPLACED")
+    assert new_web.closed is None and app_ws.closed is None and legacy.closed is None
+    assert m.has_user(1)  # 나머지 소켓은 유지
+
+
+async def test_bus_payload_channel_calls_async_handler():
+    server = fakeredis.FakeServer()
+
+    def factory():
+        return fake_aioredis.FakeRedis(server=server, decode_responses=True)
+
+    got: list[dict] = []
+
+    async def handler(data: dict) -> None:
+        got.append(data)
+
+    stop, ready = asyncio.Event(), asyncio.Event()
+    task = asyncio.create_task(ws_bus.run_subscriber(
+        ConnectionManager(), stop, factory, ready=ready,
+        payload_channels={sessions.SESSION_REPLACED_CHANNEL: handler},
+    ))
+    await asyncio.wait_for(ready.wait(), 2)
+    await sessions.publish_session_replaced(factory(), 1, "web", "s2")
+    for _ in range(200):
+        if got:
+            break
+        await asyncio.sleep(0.01)
+    stop.set()
+    await asyncio.wait_for(task, 3)
+    assert got == [{"user_id": 1, "platform": "web", "sid": "s2"}]
+
+
+class _Row:
+    def __init__(self, sid):
+        self.sid = sid
+
+
+class _ActiveUser:
+    is_active = True
+
+
+class _SessionDB:
+    """User 는 활성, UserSession 은 현재 sid='cur' 로 응답하는 가짜 세션."""
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *a):
+        return False
+
+    async def get(self, model, _id):
+        return _Row("cur") if model is UserSession else _ActiveUser()
+
+
+def test_ws_handshake_rejects_replaced_token_with_reason(monkeypatch):
+    monkeypatch.setattr(ws_gateway, "manager", ConnectionManager())
+    monkeypatch.setattr(ws_gateway, "AsyncSessionLocal", lambda: _SessionDB())
+    app = FastAPI()
+    app.include_router(ws_gateway.router)
+    stale = create_access_token(subject=1, role="FREE", sid="old", platform="web")
+    with TestClient(app) as client:
+        with pytest.raises(WebSocketDisconnect) as ei:
+            with client.websocket_connect(f"/ws/game/stream?token={stale}") as ws:
+                ws.receive_text()
+    assert ei.value.code == 4401
+    assert ei.value.reason == "SESSION_REPLACED"
+
+
+async def test_on_session_replaced_closes_old_socket_and_ignores_malformed(monkeypatch):
+    m = ConnectionManager()
+    monkeypatch.setattr(ws_gateway, "manager", m)
+    old = _WS()
+    await m.connect(1, old, platform="web", sid="old")
+    await ws_gateway.on_session_replaced({})  # 잘못된 데이터는 무시(예외 없음)
+    assert old.closed is None
+    await ws_gateway.on_session_replaced({"user_id": 1, "platform": "web", "sid": "new"})
+    assert old.closed == (4401, "SESSION_REPLACED")

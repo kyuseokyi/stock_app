@@ -38,15 +38,20 @@ class ConnectionManager:
         self._conns: dict[int, set[WebSocket]] = {}  # user_id -> sockets
         self._public: dict[WebSocket, str] = {}      # 공개 socket -> ip
         self._public_per_ip: dict[str, int] = {}
+        self._meta: dict[WebSocket, tuple[str | None, str | None]] = {}  # 로그인 socket -> (platform, sid)
         self._lock = asyncio.Lock()
 
-    async def connect(self, user_id: int, ws: WebSocket) -> None:
+    async def connect(
+        self, user_id: int, ws: WebSocket, platform: str | None = None, sid: str | None = None,
+    ) -> None:
         await ws.accept()
         async with self._lock:
             self._conns.setdefault(user_id, set()).add(ws)
+            self._meta[ws] = (platform, sid)
 
     async def disconnect(self, user_id: int, ws: WebSocket) -> None:
         async with self._lock:
+            self._meta.pop(ws, None)
             conns = self._conns.get(user_id)
             if conns:
                 conns.discard(ws)
@@ -134,11 +139,26 @@ class ConnectionManager:
         if tasks:
             await asyncio.gather(*tasks)
 
+    async def close_replaced(self, user_id: int, platform: str, current_sid: str) -> None:
+        """같은 플랫폼 새 로그인 → 그 유저·플랫폼 소켓 중 sid 가 다른(이전) 것만 4401 로 닫는다.
+        방금 붙은 새 소켓(current_sid)·다른 플랫폼·레거시(플랫폼 모름) 소켓은 유지."""
+        async with self._lock:
+            stale = []
+            for ws in self._conns.get(user_id, set()):
+                plt, sid = self._meta.get(ws, (None, None))
+                if plt == platform and sid != current_sid:
+                    stale.append(ws)
+        for ws in stale:
+            await self.disconnect(user_id, ws)
+            with contextlib.suppress(Exception):
+                await asyncio.wait_for(ws.close(code=4401, reason="SESSION_REPLACED"), timeout=SEND_TIMEOUT)
+
     async def close_all(self, code: int = 1001) -> None:
         """종료(SIGTERM) 시 로컬 연결 전부 close — 1001(going away)이면 클라이언트가 다른 인스턴스로 재연결."""
         async with self._lock:
             sockets = [ws for conns in self._conns.values() for ws in conns] + list(self._public)
             self._conns.clear()
+            self._meta.clear()
             self._public.clear()
             self._public_per_ip.clear()
 
