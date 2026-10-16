@@ -38,6 +38,7 @@ export default function GameScreen() {
   const router = useRouter();
   const token = useAuthStore((s) => s.token);
   const userId = useAuthStore((s) => s.user?.id ?? null);
+  const expireSession = useAuthStore((s) => s.expireSession);
   const loggedIn = token !== null;
 
   const status = useTradingGameStore((s) => s.status);
@@ -59,7 +60,6 @@ export default function GameScreen() {
   const refreshRank = useTradingGameStore((s) => s.refreshRank);
   const placeOrder = useTradingGameStore((s) => s.placeOrder);
   const closePosition = useTradingGameStore((s) => s.closePosition);
-  const pushToast = useTradingGameStore((s) => s.pushToast);
 
   const [activeModal, setActiveModal] = useState<ActiveModal>(null);
   const [primeTime, setPrimeTime] = useState(() => isQuizPrimeTime(new Date()));
@@ -118,8 +118,9 @@ export default function GameScreen() {
     return () => clearInterval(t);
   }, []);
 
-  useGameSocket(token, ready, () =>
-    pushToast({ kind: 'error', icon: '🔑', message: '로그인이 만료되었어요. 다시 로그인해 주세요' }),
+  // 4401 → 로그아웃 + 안내(웹과 동일). reason 'SESSION_REPLACED' = 다른 기기 로그인
+  useGameSocket(token, ready, (reason) =>
+    expireSession(token, reason === 'SESSION_REPLACED' ? 'replaced' : 'expired'),
   );
 
   // 시즌 없음/오류 상태의 당겨서 새로고침(시즌만 재조회)

@@ -39,8 +39,13 @@ export type SocialProviders = Record<SocialProvider, boolean>;
 
 /** 게스트(닉네임) 로그인 — 비밀번호 없이 닉네임만으로 발급. POST /api/v1/auth/guest (auth 서비스, 포트 8001) */
 export async function guestLogin(nickname: string): Promise<GuestLoginResult> {
-  const raw = await authApi.post<RawTokenResponse>('/api/v1/auth/guest', { nickname });
+  const raw = await authApi.post<RawTokenResponse>('/api/v1/auth/guest', { nickname, platform: 'app' });
   return { accessToken: raw.access_token, user: toUser(raw.user) };
+}
+
+/** 현재 사용자(세션 확인용) — GET /api/v1/auth/me. 401 은 http 클라이언트가 notifyUnauthorized 로 처리 */
+export async function fetchMe(): Promise<User> {
+  return toUser(await authApi.get<RawUser>('/api/v1/auth/me'));
 }
 
 /** 간편 로그인 공급자 활성 여부 — GET /api/v1/auth/social/providers (키 미설정 공급자는 false) */

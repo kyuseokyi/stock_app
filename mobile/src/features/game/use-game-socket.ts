@@ -14,12 +14,12 @@ const CAPACITY_INITIAL_MS = 5_000; // 4429(공개 연결 상한) 재시도 시�
 /**
  * 게임 실시간 스트림(RN 내장 WebSocket). enabled 이며 앱이 백그라운드가 아닐 때만(iOS inactive 는 연결 유지) 연결한다.
  * - token 이 있으면 로그인 연결, 없으면 공개 연결(틱·시장심리만 수신). token 이 바뀌면 맞는 모드로 재연결.
- * - 끊기면 지수 백오프(1s→30s)로 재연결, 로그인 연결이 4401 이면 재연결하지 않고 onAuthFailed 호출.
+ * - 끊기면 지수 백오프(1s→30s)로 재연결, 로그인 연결이 4401 이면 재연결하지 않고 onAuthFailed(close reason) 호출.
  * - 4429(공개 연결 상한)는 accept 직후 닫히므로 별도 백오프(5s→30s)로 재시도 — 첫 메시지 수신 시 초기화.
  * - 로그인 연결의 재연결 성공 시 놓친 자동청산 등을 반영하려고 계좌/포지션/순위를 다시 불러온다(web 과 동일).
  * - 앱이 background 로 가면 연결을 닫고(effect 정리), 포그라운드 복귀 시 재연결 + 재조회.
  */
-export function useGameSocket(token: string | null, enabled: boolean, onAuthFailed: () => void): void {
+export function useGameSocket(token: string | null, enabled: boolean, onAuthFailed: (reason: string) => void): void {
   const onAuthFailedRef = useRef(onAuthFailed);
   const [appActive, setAppActive] = useState(() => AppState.currentState !== 'background');
 
@@ -77,7 +77,7 @@ export function useGameSocket(token: string | null, enabled: boolean, onAuthFail
         if (stopped) return;
         const action = classifyWsClose(e.code, !!token);
         if (action === 'auth-failed') {
-          onAuthFailedRef.current();
+          onAuthFailedRef.current(e.reason ?? '');
           return;
         }
         if (action === 'capacity') {

@@ -4,6 +4,7 @@
  * 로그인 상태면 Bearer를 자동 부착하고, 401 응답 시 저장된 인증 정보를 정리한다(web client/client.js와 동일 동작).
  */
 import { getAuthToken, notifyUnauthorized } from './auth-token';
+import { reasonFromBody } from './session-end';
 
 export class ApiError extends Error {
   constructor(
@@ -67,7 +68,7 @@ async function request<T>(
       body = await res.text().catch(() => undefined);
     }
     if (res.status === 401) {
-      notifyUnauthorized();
+      notifyUnauthorized(token, reasonFromBody(body));
     }
     throw new ApiError(res.status, `HTTP ${res.status} ${res.statusText}`, body);
   }

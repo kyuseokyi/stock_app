@@ -3,7 +3,10 @@ import { create } from 'zustand';
 
 import { registerUnauthorizedHandler, setAuthToken as setHttpAuthToken } from '@/lib/api/auth-token';
 
-import { deleteAccount as deleteAccountApi, guestLogin, type LoginResult } from './api';
+import { sessionEndMessage, shouldValidate, type SessionEndReason } from '@/lib/api/session-end';
+import { showToast } from '@/ui';
+
+import { deleteAccount as deleteAccountApi, fetchMe, guestLogin, type LoginResult } from './api';
 import type { User } from './types';
 
 const TOKEN_KEY = 'auth_token';
@@ -21,6 +24,10 @@ type AuthState = {
   /** 회원 탈퇴(DELETE /auth/me) 성공 시 로그아웃. 실패는 그대로 throw(ApiError) — 로그인 상태 유지 */
   deleteAccount: () => Promise<void>;
   hydrate: () => Promise<void>;
+  /** 서버가 토큰을 거부(401·WS 4401) — 거부된 토큰이 현재 토큰일 때만 로그아웃 + 안내 1회 */
+  expireSession: (rejectedToken: string | null, reason: SessionEndReason) => void;
+  /** 실행·포그라운드 복귀 시 GET /auth/me 로 세션 확인(force=false 면 60초 이내 생략, 네트워크 오류 무시) */
+  validateSession: (force?: boolean) => Promise<void>;
 };
 
 async function persist(token: string | null, user: User | null): Promise<void> {
@@ -31,6 +38,8 @@ async function persist(token: string | null, user: User | null): Promise<void> {
       : SecureStore.deleteItemAsync(USER_KEY),
   ]);
 }
+
+let lastValidatedAt = 0;
 
 // 게스트(닉네임) 로그인 전역 상태. web client의 store/auth.js와 동일한 의미론(token+user, login/logout).
 // 토큰은 SecureStore에 영속화하고, http 클라이언트가 동기적으로 읽을 수 있도록 메모리 홀더(auth-token.ts)에도 반영한다.
@@ -61,6 +70,28 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   deleteAccount: async () => {
     await deleteAccountApi();
     get().logout();
+  },
+
+  expireSession: (rejectedToken, reason) => {
+    if (rejectedToken === null || rejectedToken !== get().token) return;
+    get().logout();
+    showToast(sessionEndMessage(reason));
+  },
+
+  validateSession: async (force = false) => {
+    const { token } = get();
+    if (!token) return;
+    const now = Date.now();
+    if (!shouldValidate(lastValidatedAt, now, force)) return;
+    lastValidatedAt = now;
+    try {
+      const user = await fetchMe();
+      if (get().token !== token) return;
+      set({ user });
+      persist(token, user).catch(() => {});
+    } catch {
+      // 401 은 http 클라이언트 → notifyUnauthorized → expireSession 이 처리. 네트워크 오류·5xx 는 무시
+    }
   },
 
   hydrate: async () => {
@@ -94,7 +125,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 }));
 
-// http 클라이언트가 401을 받으면 저장된 인증 정보를 정리한다(재로그인 유도) — web client interceptor와 동일 동작.
-registerUnauthorizedHandler(() => {
-  useAuthStore.getState().logout();
+// http 클라이언트가 401 을 받으면 사유별 안내와 함께 로그아웃(web client interceptor 와 동일 동작)
+registerUnauthorizedHandler((rejectedToken, reason) => {
+  useAuthStore.getState().expireSession(rejectedToken, reason);
 });

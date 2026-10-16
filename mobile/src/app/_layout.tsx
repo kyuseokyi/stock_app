@@ -1,6 +1,7 @@
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
+import { AppState } from 'react-native';
 
 import { useAuthStore } from '@/features/auth/store';
 import { AppToaster } from '@/ui';
@@ -8,7 +9,15 @@ import { AppToaster } from '@/ui';
 export default function RootLayout() {
   // 앱 시작 시 1회, SecureStore에 저장된 토큰/유저를 복원한다. 복원 전에는 로그아웃 상태로 렌더링된다.
   useEffect(() => {
-    useAuthStore.getState().hydrate();
+    // 복원 후 세션 확인(실행 시 1회), 이후 포그라운드 복귀마다(60초 간격 제한) — 만료·다른 기기 로그인 반영
+    void useAuthStore
+      .getState()
+      .hydrate()
+      .then(() => useAuthStore.getState().validateSession(true));
+    const sub = AppState.addEventListener('change', (s) => {
+      if (s === 'active') void useAuthStore.getState().validateSession();
+    });
+    return () => sub.remove();
   }, []);
 
   return (
