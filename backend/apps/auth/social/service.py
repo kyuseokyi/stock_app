@@ -92,6 +92,7 @@ async def complete_social_login(
     state: str,
     redirect_uri: str,
     cc: str,
+    client: str = "web",
 ) -> str:
     """공급자 code → 프로필 → 사용자 → 일회용 교환 코드(cc 묶음). 실패는 SocialLoginError."""
     try:
@@ -103,13 +104,13 @@ async def complete_social_login(
     user = await find_or_create_user(db, AuthProvider(provider.name.upper()), profile)
     if not user.is_active:
         raise SocialLoginError("inactive")
-    return await store.issue_exchange_code(user.id, cc)
+    return await store.issue_exchange_code(user.id, cc, client)
 
 
 async def redeem_exchange_code(
     db: AsyncSession, store: SocialStore, code: str, code_verifier: str | None
-) -> User:
-    """교환 코드(1회) + verifier → 활성 사용자. 실패는 ExchangeError.
+) -> tuple[User, str]:
+    """교환 코드(1회) + verifier → (활성 사용자, 로그인 플랫폼). 실패는 ExchangeError.
 
     코드는 GETDEL 로 먼저 소모하므로 verifier 가 틀려도 재시도할 수 없다.
     verifier 불일치는 '없는 코드'와 같은 401 문구(코드 존재 여부를 드러내지 않음).
@@ -122,4 +123,4 @@ async def redeem_exchange_code(
         raise ExchangeError(401, "사용자를 찾을 수 없습니다.")
     if not user.is_active:
         raise ExchangeError(403, "비활성화된 계정입니다.")
-    return user
+    return user, grant.client

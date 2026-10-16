@@ -4,6 +4,8 @@ DB 는 sqlite in-memory, Redis 는 fakeredis.
 """
 from __future__ import annotations
 
+import base64
+import hashlib
 import json
 
 import httpx
@@ -14,6 +16,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from apps.auth.deps import get_redis as auth_get_redis
 from apps.auth.main import app as auth_app
+from apps.auth.social.store import SocialStore, get_social_store
 from shared import sessions
 from shared.auth import get_current_user
 from shared.database import get_db
@@ -218,3 +221,37 @@ async def test_login_succeeds_when_redis_publish_fails(auth_ctx):
     auth_app.dependency_overrides[auth_get_redis] = lambda: Broken()
     r = await c.post("/api/v1/auth/guest", json={"nickname": "주린이"})
     assert r.status_code == 200
+
+
+async def test_grant_keeps_client_and_old_grant_defaults_to_web():
+    r = fake_aioredis.FakeRedis(decode_responses=True)
+    store = SocialStore(r)
+    code = await store.issue_exchange_code(7, "cc", "app")
+    assert (await store.consume_exchange_code(code)).client == "app"
+    # 배포 전 발급된 grant(client 없음) → web
+    await r.set("auth:social:code:old", json.dumps({"user_id": 7, "cc": "cc"}))
+    assert (await store.consume_exchange_code("old")).client == "web"
+
+
+async def test_exchange_uses_grant_client_not_body(maker):
+    verifier = "dBjftJeZ4CVP-mJ0z9-iFGc8Ld2ZRY0kbtiYn3sV1mA"
+    cc = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).rstrip(b"=").decode()
+    await _user(maker, uid=5)
+    store = SocialStore(fake_aioredis.FakeRedis(decode_responses=True))
+    code = await store.issue_exchange_code(5, cc, "app")
+
+    async def _db():
+        async with maker() as s:
+            yield s
+
+    auth_app.dependency_overrides[get_db] = _db
+    auth_app.dependency_overrides[get_social_store] = lambda: store
+    auth_app.dependency_overrides[auth_get_redis] = lambda: fake_aioredis.FakeRedis(decode_responses=True)
+    try:
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=auth_app), base_url="http://t") as c:
+            r = await c.post("/api/v1/auth/social/exchange",
+                             json={"code": code, "code_verifier": verifier, "platform": "web"})
+    finally:
+        auth_app.dependency_overrides.clear()
+    assert r.status_code == 200
+    assert decode_token(r.json()["access_token"])["plt"] == "app"

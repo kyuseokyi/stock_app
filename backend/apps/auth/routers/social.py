@@ -20,9 +20,9 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from shared.database import get_db
-from shared.security import create_access_token
 
 from .. import schemas
+from ..deps import get_redis
 from ..social.config import SocialSettings, get_social_settings
 from ..social.pkce import CHALLENGE_PATTERN
 from ..social.providers import build_provider, get_http_transport
@@ -33,6 +33,7 @@ from ..social.service import (
     redeem_exchange_code,
 )
 from ..social.state import StateError, sign_state, verify_state
+from ..services.session_login import issue_login_token
 from ..social.store import SocialStore, get_social_store
 
 router = APIRouter(prefix="/api/v1/auth/social", tags=["auth-social"])
@@ -144,6 +145,7 @@ async def callback(
             state=state,
             redirect_uri=settings.redirect_uri(provider),
             cc=payload.cc,
+            client=payload.client,
         )
     except SocialLoginError as exc:
         return _redirect(_with_query(return_url, error=exc.code))
@@ -159,11 +161,12 @@ async def exchange(
     payload: schemas.SocialExchangeRequest,
     db: AsyncSession = Depends(get_db),
     store: SocialStore = Depends(get_social_store),
+    redis=Depends(get_redis),
 ):
-    """일회용 교환 코드 + code_verifier → 서비스 JWT(기존 TokenResponse 형식)."""
+    """일회용 교환 코드 + code_verifier → 서비스 JWT. 플랫폼은 서명된 state 에서 온 grant 의 client(요청 바디 무시)."""
     try:
-        user = await redeem_exchange_code(db, store, payload.code, payload.code_verifier)
+        user, client = await redeem_exchange_code(db, store, payload.code, payload.code_verifier)
     except ExchangeError as exc:
         raise HTTPException(exc.status_code, exc.message) from exc
-    token = create_access_token(subject=user.id, role=user.role.value)
+    token = await issue_login_token(db, redis, user, client)
     return schemas.TokenResponse(access_token=token, user=user)

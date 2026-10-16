@@ -21,10 +21,11 @@ _CODE_KEY = "auth:social:code:{}"
 
 @dataclass(frozen=True)
 class ExchangeGrant:
-    """교환 코드에 묶인 사용자와 verifier challenge."""
+    """교환 코드에 묶인 사용자·verifier challenge·로그인 플랫폼(서명된 state 의 client: web|app)."""
 
     user_id: int
     cc: str
+    client: str = "web"
 
 
 class SocialStore:
@@ -36,14 +37,14 @@ class SocialStore:
         ok = await self._redis.set(_NONCE_KEY.format(nonce), "1", nx=True, ex=NONCE_TTL_SECONDS)
         return bool(ok)
 
-    async def issue_exchange_code(self, user_id: int, cc: str) -> str:
+    async def issue_exchange_code(self, user_id: int, cc: str, client: str = "web") -> str:
         code = secrets.token_urlsafe(32)
-        value = json.dumps({"user_id": user_id, "cc": cc})
+        value = json.dumps({"user_id": user_id, "cc": cc, "client": client})
         await self._redis.set(_CODE_KEY.format(code), value, ex=EXCHANGE_CODE_TTL_SECONDS)
         return code
 
     async def consume_exchange_code(self, code: str) -> ExchangeGrant | None:
-        """교환 코드 → (user_id, cc). GETDEL 이라 두 번째 호출부터는 None. 형식이 깨졌으면 None."""
+        """교환 코드 → (user_id, cc, client; client 없는 옛 grant 는 web). GETDEL 이라 두 번째 호출부터는 None. 형식이 깨졌으면 None."""
         raw = await self._redis.getdel(_CODE_KEY.format(code))
         if raw is None:
             return None
@@ -56,7 +57,8 @@ class SocialStore:
         user_id, cc = data.get("user_id"), data.get("cc")
         if not isinstance(user_id, int) or isinstance(user_id, bool) or not isinstance(cc, str):
             return None
-        return ExchangeGrant(user_id=user_id, cc=cc)
+        client = data.get("client")
+        return ExchangeGrant(user_id=user_id, cc=cc, client=client if client in ("web", "app") else "web")
 
 
 _store: SocialStore | None = None

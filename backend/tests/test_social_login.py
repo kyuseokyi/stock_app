@@ -379,7 +379,7 @@ class _BrokenStore(SocialStore):
             raise RedisConnectionError("redis down")
         return await super().use_nonce(nonce)
 
-    async def issue_exchange_code(self, user_id: int, cc: str) -> str:
+    async def issue_exchange_code(self, user_id: int, cc: str, client: str = "web") -> str:
         raise RedisConnectionError("redis down")
 
 

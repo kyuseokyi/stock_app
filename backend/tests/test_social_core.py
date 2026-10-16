@@ -239,7 +239,7 @@ async def test_exchange_code_value_is_json_with_cc(store):
     import json
 
     code = await store.issue_exchange_code(7, CC)
-    assert json.loads(await store._redis.get(f"auth:social:code:{code}")) == {"user_id": 7, "cc": CC}
+    assert json.loads(await store._redis.get(f"auth:social:code:{code}")) == {"user_id": 7, "cc": CC, "client": "web"}
 
 
 @pytest.mark.parametrize("raw", ["42", "not-json", '{"user_id": 1}', '{"cc": "x"}', '{"user_id": "a", "cc": "x"}'])
