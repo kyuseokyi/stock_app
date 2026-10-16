@@ -378,9 +378,55 @@ def test_ws_handshake_rejects_replaced_token_with_reason(monkeypatch):
 async def test_on_session_replaced_closes_old_socket_and_ignores_malformed(monkeypatch):
     m = ConnectionManager()
     monkeypatch.setattr(ws_gateway, "manager", m)
+    monkeypatch.setattr(ws_gateway, "AsyncSessionLocal", lambda: _SessionDB())  # DB 현재 sid = 'cur'
     old = _WS()
     await m.connect(1, old, platform="web", sid="old")
     await ws_gateway.on_session_replaced({})  # 잘못된 데이터는 무시(예외 없음)
     assert old.closed is None
-    await ws_gateway.on_session_replaced({"user_id": 1, "platform": "web", "sid": "new"})
+    await ws_gateway.on_session_replaced({"user_id": 1, "platform": "web", "sid": "cur"})
     assert old.closed == (4401, "SESSION_REPLACED")
+
+
+async def test_on_session_replaced_uses_db_sid_when_events_arrive_out_of_order(monkeypatch):
+    """동시 로그인 A·B 중 B 가 마지막 커밋(DB='cur')인데 A 알림이 늦게 와도 B(현재) 소켓은 유지."""
+    m = ConnectionManager()
+    monkeypatch.setattr(ws_gateway, "manager", m)
+    monkeypatch.setattr(ws_gateway, "AsyncSessionLocal", lambda: _SessionDB())
+    current, stale = _WS(), _WS()
+    await m.connect(1, current, platform="web", sid="cur")
+    await m.connect(1, stale, platform="web", sid="a")
+    await ws_gateway.on_session_replaced({"user_id": 1, "platform": "web", "sid": "a"})
+    assert current.closed is None
+    assert stale.closed == (4401, "SESSION_REPLACED")
+
+
+class _FlipDB(_SessionDB):
+    """첫 UserSession 조회는 토큰 sid('old')와 같고, 이후엔 'cur' — 검증 직후 새 로그인이 끼어든 상황."""
+
+    calls = 0
+
+    async def get(self, model, _id):
+        if model is UserSession:
+            type(self).calls += 1
+            return _Row("old" if type(self).calls == 1 else "cur")
+        return _ActiveUser()
+
+
+def test_ws_rechecks_session_after_register(monkeypatch):
+    _FlipDB.calls = 0
+    monkeypatch.setattr(ws_gateway, "manager", ConnectionManager())
+    monkeypatch.setattr(ws_gateway, "AsyncSessionLocal", lambda: _FlipDB())
+
+    async def _close_now(ws):  # 재확인이 빠지면 대기 대신 1000 으로 닫아 멈추지 않고 실패
+        await ws.close(code=1000)
+
+    monkeypatch.setattr(ws_gateway, "_keepalive", _close_now)
+    app = FastAPI()
+    app.include_router(ws_gateway.router)
+    tok = create_access_token(subject=1, role="FREE", sid="old", platform="web")
+    with TestClient(app) as client:
+        with pytest.raises(WebSocketDisconnect) as ei:
+            with client.websocket_connect(f"/ws/game/stream?token={tok}") as ws:
+                ws.receive_text()
+    assert ei.value.code == 4401
+    assert ei.value.reason == "SESSION_REPLACED"

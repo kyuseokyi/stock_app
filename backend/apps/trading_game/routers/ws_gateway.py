@@ -18,7 +18,7 @@ from sqlalchemy import func, select
 from shared.database import AsyncSessionLocal
 from shared.security import decode_token
 from shared.sessions import SESSION_REPLACED, check_session
-from shared.models import User
+from shared.models import User, UserSession
 from shared.game_models import GameAccount, GamePosition
 from apps.trading_game.services import account_service, ws_bus
 from apps.trading_game.services.connection_manager import (  # noqa: F401 — SENTIMENT_INTERVAL 재노출
@@ -129,6 +129,14 @@ async def game_stream(ws: WebSocket, token: str | None = Query(None)):
         return
     await manager.connect(user_id, ws, platform=payload.get("plt"), sid=payload.get("sid"))
     try:
+        # 검증~등록 사이에 같은 플랫폼 새 로그인 알림이 먼저 지나갔으면 close_replaced 가 이 소켓을 못 찾는다 → 등록 후 재확인
+        if payload.get("sid") is not None:
+            async with AsyncSessionLocal() as db:
+                still_ok = await check_session(db, user_id, payload)
+            if not still_ok:
+                with contextlib.suppress(Exception):
+                    await ws.close(code=4401, reason=SESSION_REPLACED)
+                return
         await _keepalive(ws)
     finally:
         await manager.disconnect(user_id, ws)
@@ -140,4 +148,12 @@ async def on_session_replaced(data: dict) -> None:
         user_id, platform, sid = int(data["user_id"]), str(data["platform"]), str(data["sid"])
     except (KeyError, TypeError, ValueError):
         return
-    await manager.close_replaced(user_id, platform, sid)
+    # 동시 로그인이면 알림 도착 순서가 커밋 순서와 다를 수 있다 → DB 의 현재 sid 기준으로 닫는다(읽기 실패 시 알림 sid)
+    try:
+        async with AsyncSessionLocal() as db:
+            row = await db.get(UserSession, (user_id, platform))
+        current = row.sid if row is not None else ""  # 행이 없으면(탈퇴 등) 그 플랫폼 소켓 모두 이전 것
+    except Exception:
+        log.warning("세션 교체 알림 — 현재 sid 조회 실패, 알림 sid 로 처리", exc_info=True)
+        current = sid
+    await manager.close_replaced(user_id, platform, current)
