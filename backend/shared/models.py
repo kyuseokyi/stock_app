@@ -14,6 +14,7 @@ from datetime import datetime
 
 from sqlalchemy import (
     Boolean,
+    CheckConstraint,
     DateTime,
     Enum as SAEnum,
     ForeignKey,
@@ -118,6 +119,24 @@ class User(Base, TimestampMixin):
     comments: Mapped[list["BlogComment"]] = relationship(
         back_populates="author", cascade="all, delete-orphan"
     )
+
+
+SESSION_PLATFORMS = ("web", "app", "admin")
+
+
+class UserSession(Base, TimestampMixin):
+    """플랫폼(web/app/admin)별 현재 유효 로그인 1개. 새 로그인이 sid 를 덮어써 같은 플랫폼의 이전 토큰을 무효화한다."""
+
+    __tablename__ = "user_sessions"
+    __table_args__ = (
+        CheckConstraint("platform IN ('web', 'app', 'admin')", name="ck_user_sessions_platform"),
+    )
+
+    user_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    platform: Mapped[str] = mapped_column(String(16), primary_key=True)
+    sid: Mapped[str] = mapped_column(String(64), nullable=False)
 
 
 class Board(Base, TimestampMixin):

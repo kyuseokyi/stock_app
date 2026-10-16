@@ -32,7 +32,10 @@ def verify_password(plain: str, hashed: str) -> bool:
 
 
 # --- JWT -------------------------------------------------------------------- #
-def create_access_token(*, subject: str | int, role: str) -> str:
+def create_access_token(
+    *, subject: str | int, role: str, sid: str | None = None, platform: str | None = None
+) -> str:
+    """sid·platform 은 플랫폼별 단일 세션용(shared/sessions.py). 없으면 기존과 같은 토큰(레거시 호환)."""
     now = datetime.now(timezone.utc)
     payload = {
         "sub": str(subject),
@@ -40,6 +43,10 @@ def create_access_token(*, subject: str | int, role: str) -> str:
         "iat": now,
         "exp": now + timedelta(hours=EXPIRE_HOURS),
     }
+    if sid is not None:
+        payload["sid"] = sid
+    if platform is not None:
+        payload["plt"] = platform
     return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
 
 
