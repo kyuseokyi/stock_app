@@ -359,6 +359,11 @@ class _SessionDB:
 def test_ws_handshake_rejects_replaced_token_with_reason(monkeypatch):
     monkeypatch.setattr(ws_gateway, "manager", ConnectionManager())
     monkeypatch.setattr(ws_gateway, "AsyncSessionLocal", lambda: _SessionDB())
+
+    async def _close_now(ws):  # 검증이 빠져 연결되면 대기 대신 1000 으로 바로 닫아 테스트가 멈추지 않고 실패하게
+        await ws.close(code=1000)
+
+    monkeypatch.setattr(ws_gateway, "_keepalive", _close_now)
     app = FastAPI()
     app.include_router(ws_gateway.router)
     stale = create_access_token(subject=1, role="FREE", sid="old", platform="web")
