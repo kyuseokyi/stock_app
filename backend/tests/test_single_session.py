@@ -6,11 +6,15 @@ from __future__ import annotations
 
 import json
 
+import httpx
 import pytest
+from fastapi import Depends, FastAPI
 from fakeredis import aioredis as fake_aioredis
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from shared import sessions
+from shared.auth import get_current_user
+from shared.database import get_db
 from shared.models import Base, User, UserRole, UserSession
 from shared.security import create_access_token, decode_token
 
@@ -99,3 +103,50 @@ async def test_publish_failure_is_swallowed():
             raise ConnectionError("down")
 
     await sessions.publish_session_replaced(Broken(), 1, "web", "s")  # 예외 없이 끝나야 함
+
+
+@pytest.fixture
+async def me_client(maker):
+    """get_current_user 만 거치는 최소 앱 — GET /whoami."""
+    app = FastAPI()
+
+    @app.get("/whoami")
+    async def whoami(user: User = Depends(get_current_user)):
+        return {"id": user.id}
+
+    async def _db():
+        async with maker() as s:
+            yield s
+
+    app.dependency_overrides[get_db] = _db
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://t") as c:
+        yield c
+
+
+def _bearer(token: str) -> dict:
+    return {"Authorization": f"Bearer {token}"}
+
+
+async def test_relogin_same_platform_rejects_old_token(maker, me_client):
+    await _user(maker)
+    async with maker() as db:
+        old = create_access_token(subject=1, role="FREE", sid=await sessions.start_session(db, 1, "web"), platform="web")
+        new = create_access_token(subject=1, role="FREE", sid=await sessions.start_session(db, 1, "web"), platform="web")
+    r_old = await me_client.get("/whoami", headers=_bearer(old))
+    assert r_old.status_code == 401
+    assert r_old.json()["detail"]["code"] == "SESSION_REPLACED"
+    assert (await me_client.get("/whoami", headers=_bearer(new))).status_code == 200
+
+
+async def test_other_platform_token_stays_valid(maker, me_client):
+    await _user(maker)
+    async with maker() as db:
+        app_tok = create_access_token(subject=1, role="FREE", sid=await sessions.start_session(db, 1, "app"), platform="app")
+        await sessions.start_session(db, 1, "web")
+    assert (await me_client.get("/whoami", headers=_bearer(app_tok))).status_code == 200
+
+
+async def test_legacy_token_without_sid_is_allowed(maker, me_client):
+    await _user(maker)
+    legacy = create_access_token(subject=1, role="FREE")
+    assert (await me_client.get("/whoami", headers=_bearer(legacy))).status_code == 200

@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from shared.database import get_db
 from shared.models import User, UserRole
 from shared.security import decode_token
+from shared.sessions import SESSION_REPLACED, SESSION_REPLACED_MESSAGE, check_session
 
 bearer_scheme = HTTPBearer(auto_error=False)
 
@@ -39,6 +40,13 @@ async def get_current_user(
     user = await db.get(User, int(payload.get("sub", 0)))
     if user is None or not user.is_active:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "사용자를 찾을 수 없습니다.")
+    # 같은 플랫폼에서 다시 로그인했으면 이전 토큰 거부 — 클라이언트는 detail.code 로 안내 문구를 구분한다
+    if not await check_session(db, user.id, payload):
+        raise HTTPException(
+            status.HTTP_401_UNAUTHORIZED,
+            {"code": SESSION_REPLACED, "message": SESSION_REPLACED_MESSAGE},
+            headers={"WWW-Authenticate": "Bearer"},
+        )
     return user
 
 
