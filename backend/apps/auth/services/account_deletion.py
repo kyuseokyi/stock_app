@@ -13,7 +13,7 @@ from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from shared.game_models import GameSeason, HallOfFame, WeeklyRankingResult
-from shared.models import AuthProvider, User, UserRole
+from shared.models import AuthProvider, User, UserRole, UserSession
 
 log = logging.getLogger("auth.account_deletion")
 
@@ -70,6 +70,8 @@ async def delete_account(
             update(WeeklyRankingResult).where(WeeklyRankingResult.user_id == uid)
             .values(user_id=None, nickname=ANONYMOUS_NICKNAME)
         )
+        # 운영 PG 는 FK CASCADE 로도 지워지지만, 방언(sqlite 테스트) 무관하게 명시 삭제
+        await db.execute(delete(UserSession).where(UserSession.user_id == uid))
         await db.execute(delete(User).where(User.id == uid))
         await db.commit()
     except Exception:

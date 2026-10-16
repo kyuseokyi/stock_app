@@ -255,3 +255,18 @@ async def test_exchange_uses_grant_client_not_body(maker):
         auth_app.dependency_overrides.clear()
     assert r.status_code == 200
     assert decode_token(r.json()["access_token"])["plt"] == "app"
+
+
+async def test_delete_account_removes_sessions(maker):
+    from apps.auth.services.account_deletion import CONFIRM_PHRASE, delete_account
+
+    await _user(maker, uid=9)
+    async with maker() as db:
+        await sessions.start_session(db, 9, "web")
+        await sessions.start_session(db, 9, "app")
+    async with maker() as db:
+        user = await db.get(User, 9)
+        await delete_account(db, user, confirm=CONFIRM_PHRASE, redis=fake_aioredis.FakeRedis(decode_responses=True))
+    async with maker() as db:
+        assert await db.get(UserSession, (9, "web")) is None
+        assert await db.get(UserSession, (9, "app")) is None
