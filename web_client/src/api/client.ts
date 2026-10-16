@@ -1,5 +1,5 @@
 import axios, { type AxiosError } from 'axios'
-import { TOKEN_KEY, bearerToken, useAuthStore } from '../store/auth'
+import { TOKEN_KEY, bearerToken, reasonFromBody, useAuthStore } from '../store/auth'
 import { API_BASE_URL as baseURL } from '../config'
 
 // 블로그 서비스 base URL (조회 + 인증형 댓글 작성) — 빌드 타임 주입, 폴백/fail-fast 는 ../config
@@ -21,7 +21,7 @@ client.interceptors.response.use(
   (res) => res,
   (err: AxiosError) => {
     if (err.response?.status === 401) {
-      useAuthStore.getState().expireSession(bearerToken(err.config?.headers?.Authorization))
+      useAuthStore.getState().expireSession(bearerToken(err.config?.headers?.Authorization), reasonFromBody(err.response?.data))
     }
     return Promise.reject(err)
   },

@@ -1,6 +1,6 @@
 import axios from 'axios'
 import { AUTH_BASE_URL as authURL } from '../config'
-import type { SocialProvider, SocialProviders, TokenResponse } from '../types/api'
+import type { SocialProvider, SocialProviders, TokenResponse, UserOut } from '../types/api'
 
 // 인증 서비스 base URL (auth 8001) — 빌드 타임 주입, 폴백/fail-fast 는 ../config
 
@@ -11,7 +11,7 @@ const authClient = axios.create({
 
 // 임시 로그인 — 닉네임으로 게스트 계정 발급(개발·테스트용, ENABLE_GUEST_LOGIN 일 때만 노출)
 export const guestLogin = async (nickname: string): Promise<TokenResponse> => {
-  const { data } = await authClient.post<TokenResponse>('/auth/guest', { nickname })
+  const { data } = await authClient.post<TokenResponse>('/auth/guest', { nickname, platform: 'web' })
   return data // { access_token, token_type, user }
 }
 
@@ -34,6 +34,12 @@ export const exchangeSocialCode = async (code: string, codeVerifier: string): Pr
     code,
     code_verifier: codeVerifier,
   })
+  return data
+}
+
+/** 현재 사용자(세션 확인용) — GET /auth/me. authClient 엔 Bearer 인터셉터가 없어 토큰을 직접 넘긴다 */
+export const fetchMe = async (token: string): Promise<UserOut> => {
+  const { data } = await authClient.get<UserOut>('/auth/me', { headers: { Authorization: `Bearer ${token}` } })
   return data
 }
 

@@ -19,12 +19,12 @@ export function buildGameWsUrl(baseUrl: string, token: string | null): string {
 /**
  * 게임 실시간 스트림. enabled 일 때 연결 — token 이 있으면 로그인 연결, 없으면 공개 연결(틱·시장심리만 수신).
  * token 이 바뀌면(로그인/로그아웃) 맞는 모드로 다시 연결한다.
- * 끊기면 지수 백오프로 재연결, 로그인 연결이 4401 이면 재연결하지 않고 onAuthFailed 호출.
+ * 끊기면 지수 백오프로 재연결, 로그인 연결이 4401 이면 재연결하지 않고 onAuthFailed(close reason) 호출.
  * 4429(공개 연결 상한)는 accept 직후 닫히므로 별도 백오프(5초→최대 30초)로 재시도 — 첫 메시지 수신 시 초기화.
  * 로그인 연결 재연결 성공 시 놓친 자동청산 등을 반영하려고 계좌/포지션/순위를 다시 불러온다.
  * 재연결·화면 복귀 시 streamEpoch 를 올려 차트가 끊긴 구간 캔들을 다시 불러오게 한다.
  */
-export function useGameWebSocket(token: string | null, enabled: boolean, onAuthFailed: () => void): void {
+export function useGameWebSocket(token: string | null, enabled: boolean, onAuthFailed: (reason: string) => void): void {
   const onAuthFailedRef = useRef(onAuthFailed)
   onAuthFailedRef.current = onAuthFailed
 
@@ -61,7 +61,7 @@ export function useGameWebSocket(token: string | null, enabled: boolean, onAuthF
         clearInterval(pingTimer)
         if (stopped) return
         if (e.code === AUTH_FAILED && token) {
-          onAuthFailedRef.current()
+          onAuthFailedRef.current(e.reason)
           return
         }
         if (e.code === OVER_CAPACITY) {

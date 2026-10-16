@@ -1,6 +1,6 @@
 import axios from 'axios'
 import { GAME_API_URL } from '../config'
-import { TOKEN_KEY, bearerToken, useAuthStore } from '../store/auth'
+import { TOKEN_KEY, bearerToken, reasonFromBody, useAuthStore } from '../store/auth'
 
 // trading_game(8003) 클라이언트. GAME_API_URL 미설정(운영 빌드)이면 null → 게임 화면이 "준비 중"으로 처리.
 // 401(토큰 만료/무효) → 블로그 client 와 같이 로그아웃(헤더 닉네임이 남지 않게). 안내 토스트는 화면이 띄운다.
@@ -18,7 +18,7 @@ gameClient?.interceptors.response.use(
   (res) => res,
   (err: unknown) => {
     if (axios.isAxiosError(err) && err.response?.status === 401) {
-      useAuthStore.getState().expireSession(bearerToken(err.config?.headers?.Authorization))
+      useAuthStore.getState().expireSession(bearerToken(err.config?.headers?.Authorization), reasonFromBody(err.response?.data))
     }
     return Promise.reject(err)
   },

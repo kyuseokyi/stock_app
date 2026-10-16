@@ -75,8 +75,10 @@ export default function GamePage() {
     return () => clearInterval(t)
   }, [])
 
-  // 4401(토큰 만료/무효) → 로그아웃 + 만료 안내(REST 401 과 같은 경로, 헤더 닉네임도 정리)
-  useGameWebSocket(token, ready, () => expireSession(token))
+  // 4401 → 로그아웃 + 안내(reason 'SESSION_REPLACED' = 다른 기기 로그인, 그 외 만료)
+  useGameWebSocket(token, ready, (reason) =>
+    expireSession(token, reason === 'SESSION_REPLACED' ? 'replaced' : 'expired'),
+  )
 
   if (status === 'unavailable' || status === 'no-season') {
     return (

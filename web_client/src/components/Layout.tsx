@@ -27,6 +27,17 @@ export default function Layout() {
     fetchBoards()
   }, [fetchBoards])
 
+  // 시작·탭 복귀 시 세션 확인 — 블로그처럼 인증 요청이 없는 화면에서도 만료·다른 기기 로그인을 반영
+  useEffect(() => {
+    const validate = useAuthStore.getState().validateSession
+    void validate(true)
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') void validate()
+    }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => document.removeEventListener('visibilitychange', onVisible)
+  }, [])
+
   // 탈퇴 성공(스토어가 이미 로그아웃) → 모달 닫기·홈 이동·토스트
   const handleDeleted = () => {
     setDeleteOpen(false)
