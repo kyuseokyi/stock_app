@@ -139,7 +139,10 @@ export const useTradingGameStore = create<TradingGameState>()((set, get) => {
       if (get().season === null) set({ status: 'loading' })
       try {
         const season = await gameApi.getActiveSeason()
-        set(season ? { status: 'ready', season } : { status: 'no-season', season: null })
+        // 관리자가 퀴즈를 끄면 버튼·배너를 미리 숨기고, 다시 켜면 다음 로드에서 되살린다
+        set(season
+          ? { status: 'ready', season, quizDisabled: season.features?.quiz === false }
+          : { status: 'no-season', season: null })
       } catch {
         if (get().status !== 'ready') set({ status: 'error' }) // 이미 ready 면 현재 상태 유지
       }

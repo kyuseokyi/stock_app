@@ -9,7 +9,8 @@ import type { FeatureFlag, FeatureFlagKey } from '../types/game'
 const FLAG_META: Record<FeatureFlagKey, { title: string; description: string }> = {
   QUIZ: {
     title: '🌙 야간 차트 퀴즈',
-    description: '끄면 유저 퀴즈 API가 "현재 운영하지 않음"을 응답합니다. 서버 재시작 없이 바로 반영됩니다.',
+    description:
+      '끄면 웹·앱 게임 화면에서 퀴즈 버튼과 야간 배너가 사라지고, 퀴즈 API도 "현재 운영하지 않음"을 응답합니다. 서버 재시작 없이 최대 30초 안에 반영됩니다(화면을 열어 둔 유저는 다시 들어올 때).',
   },
   STREAK: {
     title: '🔥 연속 출석(Streak)',

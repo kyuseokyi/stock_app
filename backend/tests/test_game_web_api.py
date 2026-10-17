@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from shared.auth import get_current_user
 from shared.database import get_db
 from shared.models import Base
-from shared.game_models import GameSeason
+from shared.game_models import GameFeatureFlag, GameSeason
 from apps.trading_game.main import app
 
 
@@ -83,6 +83,16 @@ async def test_active_season_returns_public_fields(client, session):
     assert body["status"] == "ACTIVE"
     assert body["start_at"].startswith("2026-10-01")
     assert body["end_at"].startswith("2026-11-01")
+    assert body["features"] == {"quiz": True, "streak": True}  # 플래그 행이 없으면 ON
+
+
+async def test_active_season_reflects_feature_flags(client, session):
+    """관리자가 끈 기능은 시즌 응답에 바로 실려 웹·앱이 버튼·배너를 숨긴다."""
+    await _seed_season(session)
+    session.add(GameFeatureFlag(key="QUIZ", enabled=False))
+    await session.commit()
+    body = (await client.get("/api/game/seasons/active")).json()
+    assert body["features"] == {"quiz": False, "streak": True}
 
 
 async def _seed_hof(db, season, rank: int, nickname: str) -> None:

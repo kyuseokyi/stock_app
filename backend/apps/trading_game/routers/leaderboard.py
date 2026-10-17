@@ -10,22 +10,29 @@ from shared.database import get_db
 from shared.models import User
 from shared.game_models import GameSeason, HallOfFame
 from apps.trading_game import deps
-from apps.trading_game.schemas.game_dtos import SeasonOption
-from apps.trading_game.services import account_service, monthly_service, ranking_service, weekly_service
+from apps.trading_game.schemas.game_dtos import ActiveSeason, GameFeatures
+from apps.trading_game.services import (
+    account_service, feature_flag_service, monthly_service, ranking_service, weekly_service,
+)
 
 router = APIRouter(prefix="/api/game", tags=["trading-game-ranking"])
 
 
-@router.get("/seasons/active", response_model=SeasonOption | None)
+@router.get("/seasons/active", response_model=ActiveSeason | None)
 async def active_season(db: AsyncSession = Depends(get_db)):
-    """현재 ACTIVE 시즌(공개). 없으면 null — 유저 웹/앱 게임 화면 헤더용."""
+    """현재 ACTIVE 시즌(공개) + 기능 on/off. 없으면 null — 유저 웹/앱 게임 화면 헤더용."""
     s = await account_service.get_active_season(db)
     if s is None:
         return None
-    return SeasonOption(
+    redis = deps.get_redis()
+    return ActiveSeason(
         id=s.id, season_number=s.season_number, ticker=s.ticker, stock_name=s.stock_name,
         status=s.status, start_at=s.start_at, end_at=s.end_at,
         period=s.period,
+        features=GameFeatures(
+            quiz=await feature_flag_service.is_enabled(db, redis, "QUIZ"),
+            streak=await feature_flag_service.is_enabled(db, redis, "STREAK"),
+        ),
     )
 
 

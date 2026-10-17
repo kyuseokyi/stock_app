@@ -130,6 +130,19 @@ class SeasonOption(BaseModel):
     period: str = "month"  # month|quarter — 분기 시즌이면 클라이언트가 월간 랭킹 탭을 연다
 
 
+class GameFeatures(BaseModel):
+    """관리자 기능 on/off(게임 설정) — 꺼진 기능은 웹·앱이 버튼·배너를 숨긴다."""
+
+    quiz: bool = True
+    streak: bool = True
+
+
+class ActiveSeason(SeasonOption):
+    """공개 활성 시즌(헤더용) + 기능 on/off. 관리자 시즌 목록(SeasonOption)과 분리."""
+
+    features: GameFeatures = GameFeatures()
+
+
 # ---------------------------------------------------------------- Phase 5b
 class FeatureFlagResponse(BaseModel):
     key: str

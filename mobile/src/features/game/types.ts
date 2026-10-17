@@ -22,6 +22,8 @@ export interface Season {
   end_at: string | null;
   /** 시즌 기간 — quarter 일 때만 월간 랭킹 탭. 구 서버 응답엔 없을 수 있어 optional(없으면 month 취급) */
   period?: SeasonPeriod;
+  /** 관리자 기능 on/off(게임 설정) — 꺼진 기능은 버튼·배너를 숨긴다(구 서버 응답엔 없음 → 켜짐) */
+  features?: { quiz: boolean; streak: boolean };
 }
 
 export type SeasonPeriod = 'month' | 'quarter';
