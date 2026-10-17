@@ -136,7 +136,7 @@ export default function ChartQuizModal({ onClose }: { onClose: () => void }) {
       {phase.kind === 'intro' && (
         <div>
           <ul className="space-y-2 text-sm text-ink">
-            <li>📊 날짜·종목을 가린 차트를 보고 5거래일 뒤 주가 방향을 맞혀요.</li>
+            <li>📊 날짜·종목을 가린 차트를 보고 며칠(3·5·10거래일) 뒤 주가 방향을 맞혀요.</li>
             <li>⏱ 제한 시간은 10초. 시간 안에 고르지 않으면 제출되지 않아요.</li>
             <li>🎁 정답이면 +₩200,000 (보상은 하루 3회까지).</li>
           </ul>
@@ -151,7 +151,7 @@ export default function ChartQuizModal({ onClose }: { onClose: () => void }) {
       {(phase.kind === 'playing' || phase.kind === 'submitting') && (
         <div>
           <div className="mb-3 flex items-center justify-between">
-            <p className="font-semibold text-ink">5거래일 뒤 주가는?</p>
+            <p className="font-semibold text-ink">{phase.quiz.horizon_bars}거래일 뒤 주가는?</p>
             {phase.kind === 'playing' ? (
               <span
                 className={`text-lg font-bold tabular-nums ${secondsLeft <= 3 ? 'text-up' : 'text-ink'}`}
@@ -208,7 +208,7 @@ export default function ChartQuizModal({ onClose }: { onClose: () => void }) {
               {phase.choice !== null && <span className="text-ink-muted"> · 내 선택 {choiceLabel(phase.choice)}</span>}
             </p>
             <p>
-              실제 5일 등락{' '}
+              실제 {phase.quiz?.horizon_bars ?? 5}일 등락{' '}
               <span className={`font-semibold ${pnlClass(phase.result.actual_change)}`}>
                 {formatPct(phase.result.actual_change)}
               </span>
@@ -225,7 +225,7 @@ export default function ChartQuizModal({ onClose }: { onClose: () => void }) {
             <div className="mt-3">
               <QuizMiniChart candles={phase.quiz.chart_snapshot} future={phase.result.future_snapshot} />
               <p className="mt-1 text-xs text-ink-muted">
-                옅은 봉 = 이후 5거래일 · <span style={{ color: QUIZ_MA_COLORS[5] }}>━ 5일선</span>{' '}
+                옅은 봉 = 이후 {phase.quiz.horizon_bars}거래일 · <span style={{ color: QUIZ_MA_COLORS[5] }}>━ 5일선</span>{' '}
                 <span style={{ color: QUIZ_MA_COLORS[20] }}>━ 20일선</span>
               </p>
             </div>

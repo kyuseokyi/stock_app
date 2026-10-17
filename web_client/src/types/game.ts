@@ -305,12 +305,16 @@ export interface RawQuizQuestion {
   id: number
   chart_snapshot: Record<string, unknown>[]
   time_limit_sec: number
+  /** 예측 기간(거래일) — 구 서버는 없음(=5) */
+  horizon_bars?: number
 }
 
 export interface QuizQuestion {
   id: number
   chart_snapshot: QuizCandle[]
   time_limit_sec: number
+  /** "N거래일 뒤" 의 N */
+  horizon_bars: number
 }
 
 export type QuizChoice = 'UP' | 'DOWN'
@@ -356,7 +360,7 @@ export interface RawQuizResult {
   ticker: string
   base_date: string
   streak: Streak | null
-  /** 기준일 다음 5봉(문제와 같은 정규화). 구 서버·이전 생성분은 없음/null */
+  /** 기준일 다음 horizon_bars 봉(문제와 같은 정규화). 구 서버·이전 생성분은 없음/null */
   future_snapshot?: Record<string, unknown>[] | null
   outcome?: string | null
 }
@@ -364,7 +368,7 @@ export interface RawQuizResult {
 export interface QuizResult {
   correct: boolean
   answer: QuizChoice
-  /** 기준일 대비 5거래일 후 등락률(%) */
+  /** 기준일 대비 horizon_bars 거래일 후 등락률(%) */
   actual_change: number
   pattern_type: string
   explanation: string
@@ -374,7 +378,7 @@ export interface QuizResult {
   ticker: string
   base_date: string
   streak: Streak | null
-  /** 정답 공개용 이후 5봉 — 없으면 빈 배열 */
+  /** 정답 공개용 이후 봉 — 없으면 빈 배열 */
   future_snapshot: QuizCandle[]
   /** 패턴 기대 방향 vs 실제 결과 한 줄 — 없으면 null */
   outcome: string | null
