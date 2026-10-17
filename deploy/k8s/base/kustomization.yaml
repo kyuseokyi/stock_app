@@ -41,7 +41,8 @@ configMapGenerator:
       - JWT_ALGORITHM=HS256
       - JWT_EXPIRE_HOURS=12
       - KIS_MODE=prod
-      - KIS_RATE_PER_SEC=8
+      - KIS_RATE_PER_SEC=15
+      - KIS_WORKERS=4
       - STOCK_MASTER_SOURCE=auto
       - CORS_ORIGINS=https://app.example.com,https://admin.example.com
       - AUTH_GUEST_ENABLED=false

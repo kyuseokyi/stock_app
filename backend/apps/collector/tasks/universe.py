@@ -32,9 +32,12 @@ logger = logging.getLogger(__name__)
 
 _LOOKBACK_DAYS = 30
 _LOOKAHEAD_DAYS = 2
-# KIS 국내 시세 상한 20 TPS → 기본 15/s(25% 여유). HTTP 요청마다 센다(종목당 1~2회 + 재시도).
+# KIS 실전(prod) 국내 시세 상한 20 TPS → 기본 15/s(25% 여유). HTTP 요청마다 센다(종목당 1~2회 + 재시도).
+# 모의투자(vps)는 상한이 훨씬 낮아 기존 기본 8 을 그대로 둔다(동작 불변). KIS_RATE_PER_SEC 로 덮어쓴다.
 # 2026-09 대량 순회 연결 실패의 원인은 TPS 가 아니라 CH 클라이언트 FD 누수였다(해결).
-_DEFAULT_RATE = float(os.getenv("KIS_RATE_PER_SEC", "15"))
+_DEFAULT_RATE = float(
+    os.getenv("KIS_RATE_PER_SEC") or ("15" if os.getenv("KIS_MODE", "vps").lower() == "prod" else "8")
+)
 # 병렬 스레드 수 — 응답 대기를 겹쳐 리미터가 병목이 되게 하는 정도면 충분(1 = 기존 순차)
 _DEFAULT_WORKERS = int(os.getenv("KIS_WORKERS", "4"))
 
