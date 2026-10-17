@@ -104,7 +104,10 @@ export interface AcademyQuestionBody {
   is_active: boolean
 }
 
-export type QuizAnswer = 'UP' | 'DOWN'
+/** DIRECTION 은 'UP' | 'DOWN', 4지선다는 보기 code(R_UP, GOLDEN_CROSS …) */
+export type QuizAnswer = string
+
+export type QuizType = 'DIRECTION' | 'RANGE' | 'PATTERN'
 
 export interface QuizSnapshotCandle {
   date: string // YYYY-MM-DD
@@ -128,6 +131,9 @@ export interface QuizAdminItem {
   /** 문제 차트 길이·예측 기간(거래일) — 구 서버는 없음(=60·5) */
   window_bars?: number
   horizon_bars?: number
+  /** 문제 유형·정답 보기 문구 — 구 서버는 없음(=DIRECTION, UP/DOWN) */
+  quiz_type?: QuizType
+  answer_label?: string
 }
 
 export interface QuizAdminList {

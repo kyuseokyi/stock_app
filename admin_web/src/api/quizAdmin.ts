@@ -4,6 +4,7 @@ import type {
   QuizAdminList,
   QuizAdminUpdateBody,
   QuizGenerateResult,
+  QuizType,
 } from '../types/game'
 
 // 차트 퀴즈 관리자 API (trading_game, 백로그 ⑤-2)
@@ -34,8 +35,9 @@ export const deleteQuiz = async (id: number): Promise<void> => {
   await requireGameClient().delete(`${BASE}/${id}`)
 }
 
-export const generateQuizzes = async (count: number): Promise<QuizGenerateResult> => {
-  const { data } = await requireGameClient().post<QuizGenerateResult>(`${BASE}/generate`, { count })
+/** types 생략 = 서버 기본 비율(2지선다 50%·등락폭 구간 25%·신호 맞히기 25%) */
+export const generateQuizzes = async (count: number, types?: QuizType[]): Promise<QuizGenerateResult> => {
+  const { data } = await requireGameClient().post<QuizGenerateResult>(`${BASE}/generate`, { count, types })
   return data
 }
 

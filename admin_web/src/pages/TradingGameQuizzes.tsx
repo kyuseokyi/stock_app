@@ -5,7 +5,7 @@ import { getChartData, searchStocks } from '../api/stockClient'
 import QuizChartPreview from '../components/QuizChartPreview'
 import { gameErrorCode, gameErrorMessage } from '../lib/gameApiError'
 import { showToast } from '../lib/toast'
-import type { QuizAdminDetail, QuizAdminList } from '../types/game'
+import type { QuizAdminDetail, QuizAdminItem, QuizAdminList, QuizType } from '../types/game'
 import type { Candle, Stock } from '../types/stock'
 
 const PAGE_SIZE = 20
@@ -34,7 +34,19 @@ const formatChange = (v: string): string => {
   return `${n > 0 ? '+' : ''}${n.toFixed(2)}%`
 }
 
-const ANSWER_LABEL = { UP: '상승', DOWN: '하락' } as const
+const ANSWER_LABEL: Record<string, string> = { UP: '상승', DOWN: '하락' }
+const TYPE_LABEL: Record<QuizType, string> = { DIRECTION: '2지선다', RANGE: '등락폭 구간', PATTERN: '신호 맞히기' }
+// 일괄 생성 유형 — '' = 서버 기본 비율
+const GENERATE_TYPES: { value: '' | QuizType; label: string }[] = [
+  { value: '', label: '기본 비율' },
+  { value: 'DIRECTION', label: '2지선다만' },
+  { value: 'RANGE', label: '등락폭 구간만' },
+  { value: 'PATTERN', label: '신호 맞히기만' },
+]
+
+const answerText = (q: QuizAdminItem): string => q.answer_label || ANSWER_LABEL[q.answer] || q.answer
+// 색은 실제 등락 방향 — 4지선다의 정답 코드는 UP/DOWN 이 아니다
+const changeColor = (q: QuizAdminItem): string => (Number(q.actual_change) > 0 ? 'text-red-600' : 'text-blue-600')
 
 // ------------------------------------------------------------------ 상세(차트·편집·활성·삭제)
 function QuizDetailPanel({
@@ -146,7 +158,7 @@ function QuizDetailPanel({
             퀴즈 #{quiz.id} · {quiz.ticker} · 기준일 {quiz.base_date}
           </h3>
           <p className="mt-1 text-sm text-slate-500">
-            정답 <strong className={quiz.answer === 'UP' ? 'text-red-600' : 'text-blue-600'}>{ANSWER_LABEL[quiz.answer]}</strong>{' '}
+            {TYPE_LABEL[quiz.quiz_type ?? 'DIRECTION']} · 정답 <strong className={changeColor(quiz)}>{answerText(quiz)}</strong>{' '}
             ({formatChange(quiz.actual_change)}) · 차트 {quiz.window_bars ?? 60}봉 · 예측 {quiz.horizon_bars ?? DEFAULT_HORIZON}일 · 시도 {quiz.attempt_count}회 · 보상 {quiz.reward_cash.toLocaleString()}원
           </p>
         </div>
@@ -348,6 +360,7 @@ function QuizzesPanel() {
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [showCreate, setShowCreate] = useState(false)
   const [genCount, setGenCount] = useState('20')
+  const [genType, setGenType] = useState<'' | QuizType>('')
   const [generating, setGenerating] = useState(false)
 
   const load = useCallback(() => {
@@ -373,7 +386,7 @@ function QuizzesPanel() {
     if (!Number.isInteger(n) || n < 1 || n > 200) return showToast('생성 개수는 1~200 이어야 합니다.', { icon: '⚠️' })
     setGenerating(true)
     try {
-      const r = await generateQuizzes(n)
+      const r = await generateQuizzes(n, genType ? [genType] : undefined)
       showToast(`${r.created}개 생성 (중복 건너뜀 ${r.skipped}개)`, { icon: '✅' })
       if (page === 1) load()
       else setPage(1)
@@ -398,6 +411,18 @@ function QuizzesPanel() {
             onChange={(e) => setGenCount(e.target.value)}
             aria-label="자동 생성 개수"
           />
+          <select
+            className="rounded-lg border border-slate-300 px-2 py-2 text-sm"
+            value={genType}
+            onChange={(e) => setGenType(e.target.value as '' | QuizType)}
+            aria-label="자동 생성 유형"
+          >
+            {GENERATE_TYPES.map((t) => (
+              <option key={t.value} value={t.value}>
+                {t.label}
+              </option>
+            ))}
+          </select>
           <button
             type="button"
             onClick={generate}
@@ -496,8 +521,9 @@ function QuizzesPanel() {
                         <td className="px-3 py-2 text-slate-500">
                           {q.window_bars ?? 60}봉 · {q.horizon_bars ?? DEFAULT_HORIZON}일
                         </td>
-                        <td className={`px-3 py-2 ${q.answer === 'UP' ? 'text-red-600' : 'text-blue-600'}`}>
-                          {ANSWER_LABEL[q.answer]} {formatChange(q.actual_change)}
+                        <td className={`px-3 py-2 ${changeColor(q)}`}>
+                          <span className="mr-1 text-xs text-slate-400">{TYPE_LABEL[q.quiz_type ?? 'DIRECTION']}</span>
+                          {answerText(q)} {formatChange(q.actual_change)}
                         </td>
                         <td className="px-3 py-2 text-right">{q.attempt_count}</td>
                         <td className="px-3 py-2">
