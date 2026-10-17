@@ -7,7 +7,8 @@ ClickHouse daily_prices 에서 종목을 무작위로 골라, 기준일까지 60
 자동 생성(collect_quizzes)은 품질 기준을 추가로 적용한다(B1):
 - 기준일에 신호(이동평균 교차·20일 신고가/신저가·거래량 급증·RSI 과열/과매도)가 나타난 날만
 - |변동률| >= AUTO_MIN_ABS_CHANGE(3%) — 관리자 직접 출제(evaluate_quiz)는 기존 1% 기준 유지
-- 같은 종목은 기준일 간격 >= MIN_GAP_BARS(20거래일) — DB 의 기존 문제와도 비교
+- 같은 종목 문제끼리 공개 구간(차트 + 이후 봉)이 겹치지 않게 — 간격 >= 나중 문제 차트 길이 + 이른 문제 예측 기간
+  (최소 MIN_GAP_BARS). DB 의 기존 문제와도 비교
 - 기준일까지 20일 평균 거래대금 >= MIN_TURNOVER(10억 원)
 - 정답 UP/DOWN 을 반반에 가깝게
 - 차트 길이(40/60/120봉)·예측 기간(3/5/10일)을 종목마다 가중 무작위로(B3-1, 직접 출제는 60봉·5일)
@@ -281,10 +282,29 @@ def _weighted(rng: random.Random, choices: tuple[tuple[int, int], ...]) -> int:
     return rng.choices(values, weights=weights)[0]
 
 
-def _existing_indices(candles: list[dict], dates: list[date]) -> list[int]:
-    """DB 에 이미 있는 기준일 → candles 상 위치(정확히 없으면 그 자리에 들어갈 위치)."""
+# (기준일 위치, 차트 길이, 예측 기간) — 문제가 공개하는 구간은 [idx - window + 1, idx + horizon]
+Span = tuple[int, int, int]
+Existing = date | tuple[date, int, int]  # 날짜만이면 60봉·5일(B3-1 이전 문제)
+
+
+def spans_clear(a: Span, b: Span) -> bool:
+    """같은 종목 두 문제의 공개 구간이 겹치지 않는가 — 한 문제 차트에 다른 문제의 정답 구간이 보이지 않게.
+
+    나중 문제 차트는 과거로, 이른 문제의 이후 봉은 미래로 뻗으므로
+    간격 >= 나중 문제 차트 길이 + 이른 문제 예측 기간(최소 MIN_GAP_BARS).
+    """
+    early, late = (a, b) if a[0] <= b[0] else (b, a)
+    return late[0] - early[0] >= max(MIN_GAP_BARS, late[1] + early[2])
+
+
+def _existing_spans(candles: list[dict], rows: list[Existing]) -> list[Span]:
+    """DB 에 이미 있는 문제 → candles 상 위치(정확히 없으면 그 자리에 들어갈 위치)와 길이."""
     keys = [str(c["date"])[:10] for c in candles]
-    return [bisect.bisect_left(keys, d.isoformat()) for d in dates]
+    out: list[Span] = []
+    for r in rows:
+        d, w, h = (r, WINDOW, HORIZON) if isinstance(r, date) else r
+        out.append((bisect.bisect_left(keys, d.isoformat()), w, h))
+    return out
 
 
 def collect_quizzes(
@@ -293,14 +313,14 @@ def collect_quizzes(
     rng: random.Random,
     fetch_tickers: Callable[[], list[str]],
     fetch_candles: Callable[[str], list[dict]],
-    existing: dict[str, list[date]] | None = None,
+    existing: dict[str, list[Existing]] | None = None,
     window_choices: tuple[tuple[int, int], ...] = WINDOW_CHOICES,
     horizon_choices: tuple[tuple[int, int], ...] = HORIZON_CHOICES,
 ) -> list[dict]:
     """품질 기준(모듈 docstring)을 통과한 퀴즈 최대 count 개(동기 — CH 조회 포함).
 
-    종목을 섞어 차례로 보며 종목당 PER_TICKER_MAX 개까지, 같은 종목 기준일은 서로·기존 문제와
-    MIN_GAP_BARS 이상 떨어지게 고른다. UP/DOWN 은 각각 최대 ceil(count/2) — 한쪽이 모자라면 적게 만든다.
+    종목을 섞어 차례로 보며 종목당 PER_TICKER_MAX 개까지, 같은 종목 문제는 서로·기존 문제와
+    공개 구간이 겹치지 않게(spans_clear) 고른다. UP/DOWN 은 각각 최대 ceil(count/2) — 한쪽이 모자라면 적게 만든다.
     차트 길이·예측 기간은 종목마다 가중 무작위로 한 쌍(조합 전부를 훑으면 판정 비용이 몇 배가 된다).
     """
     existing = existing or {}
@@ -322,19 +342,20 @@ def collect_quizzes(
         horizon = _weighted(rng, horizon_choices)
         candidates = eligible_quizzes(t, candles, window_bars=window_bars, horizon=horizon)
         rng.shuffle(candidates)
-        taken = _existing_indices(candles, existing.get(t, []))
+        taken = _existing_spans(candles, existing.get(t, []))
         for _ in range(PER_TICKER_MAX):
             if len(quizzes) >= count:
                 break
             ok = [
                 (idx, q) for idx, q in candidates
-                if sides[q["answer"]] < side_cap and all(abs(idx - j) >= MIN_GAP_BARS for j in taken)
+                if sides[q["answer"]] < side_cap
+                and all(spans_clear((idx, window_bars, horizon), s) for s in taken)
             ]
             if not ok:
                 break
             # 지금까지 적게 나온 패턴 먼저(신고가·신저가 쏠림 완화) — 같은 횟수면 섞인 순서
             idx, q = min(ok, key=lambda c: patterns[c[1]["pattern_type"]])
-            taken.append(idx)
+            taken.append((idx, window_bars, horizon))
             sides[q["answer"]] += 1
             patterns[q["pattern_type"]] += 1
             quizzes.append(q)
@@ -443,12 +464,14 @@ def assign_types(quizzes: list[dict], *, rng: random.Random, mix: dict[str, floa
     return quizzes
 
 
-async def load_existing(db) -> dict[str, list[date]]:
-    """chart_quiz_pool 의 종목별 기준일(비활성 포함 — 같은 구간 재출제 방지)."""
-    rows = (await db.execute(select(ChartQuiz.ticker, ChartQuiz.base_date))).all()
-    existing: dict[str, list[date]] = {}
-    for ticker, base_date in rows:
-        existing.setdefault(ticker, []).append(base_date)
+async def load_existing(db) -> dict[str, list[Existing]]:
+    """chart_quiz_pool 의 종목별 (기준일, 차트 길이, 예측 기간) — 비활성 포함(같은 구간 재출제 방지)."""
+    rows = (await db.execute(
+        select(ChartQuiz.ticker, ChartQuiz.base_date, ChartQuiz.window_bars, ChartQuiz.horizon_bars)
+    )).all()
+    existing: dict[str, list[Existing]] = {}
+    for ticker, base_date, window_bars, horizon_bars in rows:
+        existing.setdefault(ticker, []).append((base_date, window_bars or WINDOW, horizon_bars or HORIZON))
     return existing
 
 
