@@ -57,23 +57,35 @@ async def _read_latest_price(redis, ticker: str) -> Decimal | None:
     return Decimal(str(price))
 
 
+# 사용자에게 그대로 보이는 문구(웹·앱이 409·503 의 detail 문자열을 그대로 띄운다) —
+# 무엇이 안 되는지와 어떻게 하면 되는지를 한 문장에. 내부 용어(시세 수신·Redis)는 쓰지 않는다.
+MSG_NOT_TRADING_TIME = "지금은 거래 시간이 아니에요. 거래 시간에 다시 시도해 주세요."
+MSG_CLOSE_NOT_TRADING_TIME = "지금은 거래 시간이 아니라 청산할 수 없어요. 거래 시간에 다시 시도해 주세요."
+MSG_PRICE_STALE = "실시간 가격이 잠시 들어오지 않아 주문할 수 없어요. 잠시 후 다시 시도해 주세요."
+MSG_PRICE_UNAVAILABLE = "가격 정보를 불러오지 못했어요. 잠시 후 다시 시도해 주세요."
+
+
+def _in_trading_time() -> bool:
+    return market_clock.in_trading_window(market_clock.now_kst(), market_clock.load_windows())
+
+
 async def _require_fresh_price(redis, ticker: str) -> Decimal:
-    """체결용 신선 가격. 없거나 오래되면 409, Redis 장애면 503."""
+    """체결용 신선 가격. 없거나 오래됐거나 깨졌으면 409, Redis 장애면 503."""
     try:
         latest = await market_clock.read_latest(redis, ticker)
     except RedisError:
-        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "시세 서버에 연결할 수 없습니다.")
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, MSG_PRICE_UNAVAILABLE)
     except ValueError:
-        raise HTTPException(status.HTTP_409_CONFLICT, "시세 데이터가 올바르지 않습니다.")
+        raise HTTPException(status.HTTP_409_CONFLICT, MSG_PRICE_STALE)
     if latest is None:
-        raise HTTPException(status.HTTP_409_CONFLICT, "시세 수신이 중단되었습니다.")
+        raise HTTPException(status.HTTP_409_CONFLICT, MSG_PRICE_STALE)
     try:
         ts = float(latest["ts"])
         price = latest["price"]
     except (KeyError, ValueError, TypeError):
-        raise HTTPException(status.HTTP_409_CONFLICT, "시세 데이터가 올바르지 않습니다.")
+        raise HTTPException(status.HTTP_409_CONFLICT, MSG_PRICE_STALE)
     if not market_clock.is_price_fresh(ts, market_clock.now_epoch(), deps.STALE_SECONDS):
-        raise HTTPException(status.HTTP_409_CONFLICT, "시세 수신이 중단되었습니다.")
+        raise HTTPException(status.HTTP_409_CONFLICT, MSG_PRICE_STALE)
     return Decimal(str(price))
 
 
@@ -164,8 +176,8 @@ async def open_order(
 
     # 이중 게이트: 거래 세션 창 + 최신가 신선도
     redis = deps.get_redis()
-    if not market_clock.in_trading_window(market_clock.now_kst(), market_clock.load_windows()):
-        raise HTTPException(status.HTTP_409_CONFLICT, "지금은 거래 시간이 아닙니다.")
+    if not _in_trading_time():
+        raise HTTPException(status.HTTP_409_CONFLICT, MSG_NOT_TRADING_TIME)
     entry_price = await _require_fresh_price(redis, season.ticker)
 
     account = await account_service.get_or_create_account(db, user.id, season.id)
@@ -205,6 +217,9 @@ async def close_order(
     season = await db.get(GameSeason, account.season_id)
     if season is None:
         raise HTTPException(status.HTTP_409_CONFLICT, "시즌을 찾을 수 없습니다.")
+    # 장 마감 뒤엔 가격이 멈춰 어차피 체결할 수 없다 — '가격 끊김'이 아니라 거래 시간 밖이라고 알린다
+    if not _in_trading_time():
+        raise HTTPException(status.HTTP_409_CONFLICT, MSG_CLOSE_NOT_TRADING_TIME)
     exit_price = await _require_fresh_price(deps.get_redis(), season.ticker)
     trade = await order_engine.close_position(
         db, position_id=pos.id, exit_price=exit_price, reason="MANUAL"
