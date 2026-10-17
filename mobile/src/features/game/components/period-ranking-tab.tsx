@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Text, View } from 'react-native';
 import { StyleSheet } from 'react-native-unistyles';
 
 import { AmountText, Button } from '@/ui';
 
 import { gameErrorMessage } from '../lib/errors';
+import { RANKING_REFRESH_MS, useForegroundInterval } from '../lib/foreground-interval';
 import { PERIOD_TEXT, rankingRuleText, type RankingPeriod } from '../lib/ranking-period';
 import { formatRewardWon, formatWeekRange } from '../lib/weekly';
 import { loadPeriodRanking, type PeriodRankingData } from '../ranking-data';
@@ -21,9 +22,11 @@ export function PeriodRankingTab({ period, seasonId, myUserId }: Props) {
   const [reloadKey, setReloadKey] = useState(0);
   const rewardConfig = useRewardConfig();
   const text = PERIOD_TEXT[period];
+  const epoch = useRef(0); // 조건이 바뀌면 늦게 온 조용한 갱신 응답을 버린다
 
   useEffect(() => {
     let cancelled = false;
+    epoch.current += 1;
     setState({ kind: 'loading' });
     loadPeriodRanking(period, seasonId, myUserId !== null)
       .then((data) => {
@@ -36,6 +39,17 @@ export function PeriodRankingTab({ period, seasonId, myUserId }: Props) {
       cancelled = true;
     };
   }, [period, seasonId, myUserId, reloadKey]);
+
+  // 열려 있는 동안 로딩 표시 없이 갱신(실패하면 기존 목록 유지). 첫 로드 중·오류 화면은 그대로
+  useForegroundInterval(() => {
+    if (state.kind !== 'ok') return;
+    const my = epoch.current;
+    loadPeriodRanking(period, seasonId, myUserId !== null, state.data.last)
+      .then((data) => {
+        if (epoch.current === my) setState({ kind: 'ok', data });
+      })
+      .catch(() => {});
+  }, RANKING_REFRESH_MS);
 
   if (state.kind === 'loading') {
     return (
