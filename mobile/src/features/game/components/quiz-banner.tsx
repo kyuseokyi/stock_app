@@ -7,7 +7,7 @@ export function QuizBanner({ onOpen }: { onOpen: () => void }) {
     <Pressable onPress={onOpen} style={({ pressed }) => [styles.box, pressed && styles.pressed]}>
       <View style={styles.texts}>
         <Text style={styles.title}>🧩 야간 10초 차트 퀴즈 도전!</Text>
-        <Text style={styles.sub}>차트만 보고 5일 뒤 방향을 맞혀 보세요</Text>
+        <Text style={styles.sub}>차트만 보고 며칠 뒤 방향을 맞혀 보세요</Text>
       </View>
       <Text style={styles.chevron}>›</Text>
     </Pressable>

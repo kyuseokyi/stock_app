@@ -297,12 +297,16 @@ export interface RawQuizQuestion {
   id: number;
   chart_snapshot: Record<string, unknown>[];
   time_limit_sec: number;
+  /** 예측 기간(거래일) — 구 서버는 없음(=5) */
+  horizon_bars?: number;
 }
 
 export interface QuizQuestion {
   id: number;
   chart_snapshot: QuizCandle[];
   time_limit_sec: number;
+  /** "N거래일 뒤" 의 N */
+  horizon_bars: number;
 }
 
 export type QuizChoice = 'UP' | 'DOWN';

@@ -249,8 +249,14 @@ export function submitAcademy(answers: Record<number, number>): Promise<AcademyS
 }
 
 export async function getRandomQuiz(): Promise<QuizQuestion> {
-  const data = await client().get<RawQuizQuestion>('/api/game/quiz/random');
-  return { id: data.id, chart_snapshot: toQuizCandles(data.chart_snapshot), time_limit_sec: data.time_limit_sec };
+  // horizons — 이 앱이 "N거래일 뒤" 를 표시할 수 있는 기간(안 보내면 서버는 5일 문제만 낸다)
+  const data = await client().get<RawQuizQuestion>('/api/game/quiz/random', { horizons: '3,5,10' });
+  return {
+    id: data.id,
+    chart_snapshot: toQuizCandles(data.chart_snapshot),
+    time_limit_sec: data.time_limit_sec,
+    horizon_bars: data.horizon_bars ?? 5,
+  };
 }
 
 export async function submitQuiz(quizId: number, choice: QuizChoice): Promise<QuizResult> {

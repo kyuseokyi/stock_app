@@ -41,7 +41,7 @@ export function QuizChart({
         fadeFrom={future.length > 0 ? candles.length : undefined}
       />
       {hasVolume ? (
-        <View style={styles.volume} pointerEvents="none">
+        <View style={[styles.volume, all.length > 80 && styles.dense]} pointerEvents="none">
           {bars.map((h, i) => (
             <View
               key={i}
@@ -61,7 +61,7 @@ export function QuizChart({
         <Text style={{ color: QUIZ_MA_COLORS[5] }}>━ 5일선 </Text>
         <Text style={{ color: QUIZ_MA_COLORS[20] }}>━ 20일선</Text>
         {hasVolume ? ' · 아래 막대 = 거래량' : ''}
-        {future.length > 0 ? ' · 옅은 봉 = 이후 5거래일' : ''}
+        {future.length > 0 ? ` · 옅은 봉 = 이후 ${future.length}거래일` : ''}
       </Text>
     </View>
   );
@@ -69,6 +69,7 @@ export function QuizChart({
 
 const styles = StyleSheet.create((theme) => ({
   volume: { height: VOLUME_H, flexDirection: 'row', alignItems: 'flex-end', gap: 1, marginTop: theme.gap(0.5) },
+  dense: { gap: 0 }, // 120봉 차트 — 막대마다 1px 간격이면 간격이 폭을 다 먹는다
   bar: { flex: 1, borderTopLeftRadius: 1, borderTopRightRadius: 1 },
   legend: { marginTop: theme.gap(0.5), fontSize: 11, color: theme.colors.textSecondary },
 }));

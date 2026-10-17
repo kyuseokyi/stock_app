@@ -135,7 +135,7 @@ export function QuizSheet({ onClose }: { onClose: () => void }) {
       {phase.kind === 'intro' ? (
         <>
           <View style={styles.rules}>
-            <Text style={styles.rule}>📊 날짜·종목을 가린 차트를 보고 5거래일 뒤 주가 방향을 맞혀요.</Text>
+            <Text style={styles.rule}>📊 날짜·종목을 가린 차트를 보고 며칠(3·5·10거래일) 뒤 주가 방향을 맞혀요.</Text>
             <Text style={styles.rule}>⏱ 제한 시간은 10초. 시간 안에 고르지 않으면 제출되지 않아요.</Text>
             <Text style={styles.rule}>🎁 정답이면 +₩200,000 (보상은 하루 3회까지).</Text>
           </View>
@@ -153,7 +153,7 @@ export function QuizSheet({ onClose }: { onClose: () => void }) {
       {phase.kind === 'playing' || phase.kind === 'submitting' ? (
         <>
           <View style={styles.playHead}>
-            <Text style={styles.ask}>5거래일 뒤 주가는?</Text>
+            <Text style={styles.ask}>{phase.quiz.horizon_bars}거래일 뒤 주가는?</Text>
             {phase.kind === 'playing' ? (
               <Text
                 style={[styles.timer, secondsLeft <= 3 && styles.timerUrgent]}
@@ -203,7 +203,7 @@ export function QuizSheet({ onClose }: { onClose: () => void }) {
               {phase.choice !== null ? <Text style={styles.muted}> · 내 선택 {choiceLabel(phase.choice)}</Text> : null}
             </Text>
             <View style={styles.inline}>
-              <Text style={styles.line}>실제 5일 등락</Text>
+              <Text style={styles.line}>실제 {phase.quiz?.horizon_bars ?? 5}일 등락</Text>
               <AmountText value={phase.result.actual_change} kind="pct" size={14} weight="600" />
             </View>
             <Text style={styles.line}>패턴 {phase.result.pattern_type}</Text>
