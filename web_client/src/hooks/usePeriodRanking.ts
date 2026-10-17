@@ -32,11 +32,12 @@ export type PeriodRankingLoad =
   | { kind: 'error'; message: string }
   | { kind: 'ok'; data: PeriodRankingData }
 
-async function fetchWeek(seasonId: number, loggedIn: boolean): Promise<PeriodRankingData> {
+// keepLast 를 주면(조용한 갱신) 지난 기간 Top 3 는 다시 받지 않고 그대로 쓴다 — 확정 결과라 바뀌지 않음
+async function fetchWeek(seasonId: number, loggedIn: boolean, keepLast?: PeriodLastResult | null): Promise<PeriodRankingData> {
   const [board, me, results] = await Promise.all([
     getWeeklyLeaderboard(seasonId),
     loggedIn ? getWeeklyMyRank(seasonId).catch(() => null) : Promise.resolve(null),
-    getWeeklyResults(seasonId, 1).catch(() => []),
+    keepLast === undefined ? getWeeklyResults(seasonId, 1).catch(() => []) : Promise.resolve([]),
   ])
   const last = results[0]
   return {
@@ -46,17 +47,17 @@ async function fetchWeek(seasonId: number, loggedIn: boolean): Promise<PeriodRan
       entries: board.entries.map((e) => ({ rank: e.rank, user_id: e.user_id, nickname: e.nickname, roi: e.weekly_roi })),
     },
     me: me && { rank: me.rank, roi: me.weekly_roi, total: me.total },
-    last: last
+    last: keepLast !== undefined ? keepLast : last
       ? { entries: last.entries.map((e) => ({ rank: e.rank, nickname: e.nickname, roi: e.weekly_roi, reward_amount: e.reward_amount })) }
       : null,
   }
 }
 
-async function fetchMonth(seasonId: number, loggedIn: boolean): Promise<PeriodRankingData> {
+async function fetchMonth(seasonId: number, loggedIn: boolean, keepLast?: PeriodLastResult | null): Promise<PeriodRankingData> {
   const [board, me, results] = await Promise.all([
     getMonthlyLeaderboard(seasonId),
     loggedIn ? getMonthlyMyRank(seasonId).catch(() => null) : Promise.resolve(null),
-    getMonthlyResults(seasonId, 1).catch(() => []),
+    keepLast === undefined ? getMonthlyResults(seasonId, 1).catch(() => []) : Promise.resolve([]),
   ])
   const last = results[0]
   return {
@@ -66,7 +67,7 @@ async function fetchMonth(seasonId: number, loggedIn: boolean): Promise<PeriodRa
       entries: board.entries.map((e) => ({ rank: e.rank, user_id: e.user_id, nickname: e.nickname, roi: e.monthly_roi })),
     },
     me: me && { rank: me.rank, roi: me.monthly_roi, total: me.total },
-    last: last
+    last: keepLast !== undefined ? keepLast : last
       ? { entries: last.entries.map((e) => ({ rank: e.rank, nickname: e.nickname, roi: e.monthly_roi, reward_amount: e.reward_amount })) }
       : null,
   }
@@ -102,7 +103,7 @@ export function usePeriodRanking(period: RankingPeriod, seasonId: number, myUser
     if (state.kind !== 'ok') return // 첫 로드 중·오류 화면은 그대로(다시 시도 버튼)
     const my = epoch.current
     const fetcher = period === 'month' ? fetchMonth : fetchWeek
-    fetcher(seasonId, myUserId !== null)
+    fetcher(seasonId, myUserId !== null, state.data.last)
       .then((data) => {
         if (epoch.current === my) setState({ kind: 'ok', data })
       })
