@@ -159,7 +159,7 @@ async def test_consume_publishes_even_if_recorder_fails(monkeypatch):
         return "H0STCNT0"
 
     class FakeClient:
-        def __init__(self, cfg, ticker, redis_url, tr_id):
+        def __init__(self, cfg, ticker, redis_url, tr_id, status_tr_id=None):
             pass
 
         async def stream(self):
