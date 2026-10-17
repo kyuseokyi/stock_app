@@ -4,8 +4,8 @@ import { ActivityIndicator, Pressable, Text, View, type LayoutChangeEvent } from
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
 
-import { getDailyCandles, getGameCandles } from '../api';
-import { applyTick } from '../lib/candles';
+import { getDailyCandles, getGameCandles, getSessionBar } from '../api';
+import { applyTick, withSessionBar } from '../lib/candles';
 import { CHART_PREFS_KEY, DEFAULT_CHART_PREFS, parseChartPrefs, serializeChartPrefs } from '../lib/chart-prefs';
 import { layoutCandles, niceTicks, priceToY, type Ohlc } from '../lib/chart-layout';
 import { priceLines, type ChartColors } from '../lib/chart-bridge';
@@ -234,7 +234,15 @@ const PREFETCH_DELAY_MS = 1500; // 첫 화면을 그린 뒤 나머지 단위를 
 const CHART_H = 260; // 웹 TradingChart 모바일 폭 높이(h-[260px])와 같게
 
 async function fetchSeries(ticker: string, interval: ChartInterval): Promise<Series> {
-  if (interval === 'day') return { kind: 'day', ticker, interval, rows: await getDailyCandles(ticker) };
+  if (interval === 'day') {
+    // 오늘 봉은 분봉으로 만든 서버 값으로(일봉은 20:30 수집 전엔 오늘 행이 없음) — 재조회해도 틱 병합 봉이 사라지지 않게.
+    // 당일 봉 조회 실패는 무시(일봉만 표시)
+    const [rows, session] = await Promise.all([getDailyCandles(ticker), getSessionBar().catch(() => null)]);
+    return {
+      kind: 'day', ticker, interval,
+      rows: session && session.ticker === ticker ? withSessionBar(rows, session.bar) : rows,
+    };
+  }
   return { kind: 'min', ticker, interval, rows: await getGameCandles(interval) };
 }
 
