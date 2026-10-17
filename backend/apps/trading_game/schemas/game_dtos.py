@@ -256,6 +256,10 @@ class QuizSubmitResponse(BaseModel):
     ticker: str  # 제출 후 공개
     base_date: date
     streak: StreakResponse | None
+    # B2 — 기준일 다음 5봉(문제 차트와 같은 정규화, 날짜 없음). 이전 생성분은 None
+    future_snapshot: list[dict] | None = None
+    # B2 — 패턴 기대 방향과 실제 결과를 잇는 한 줄. 알 수 없는 패턴이면 None
+    outcome: str | None = None
 
 
 # ---------------------------------------------------------------- 관리자 퀴즈·아카데미 편집(백로그 ⑤-2)

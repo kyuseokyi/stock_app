@@ -47,12 +47,16 @@ class SubmitResult:
 _PRICE_KEYS = ("open", "high", "low", "close")
 
 
-def masked_snapshot(snapshot: list[dict]) -> list[dict]:
-    """출제용 차트 — date 제거, 첫 캔들 종가=100 으로 가격 정규화(거래량 유지). 원본은 변경하지 않는다."""
+def masked_snapshot(snapshot: list[dict], *, base: list[dict] | None = None) -> list[dict]:
+    """출제용 차트 — date 제거, 첫 캔들 종가=100 으로 가격 정규화(거래량 유지). 원본은 변경하지 않는다.
+
+    base 를 주면 base 첫 종가로 정규화한다 — 이후 봉(future_snapshot)을 문제 차트와 같은 눈금으로 잇는다.
+    """
     items = [{k: v for k, v in c.items() if k != "date"} for c in snapshot]
-    if not items:
+    ref = base if base is not None else snapshot
+    if not items or not ref:
         return items
-    first_close = items[0].get("close") or 0
+    first_close = ref[0].get("close") or 0
     if not first_close:
         return items
     for c in items:

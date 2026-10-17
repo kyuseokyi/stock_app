@@ -10,7 +10,10 @@ from sqlalchemy import select
 
 from shared.game_models import ChartQuiz
 from scripts import generate_chart_quiz as gen
-from tests.test_quest_quiz_streak import maker  # noqa: F401 — 픽스처 재사용
+from apps.trading_game.services import quiz_insight, quiz_service
+from tests.test_quest_quiz_streak import (  # noqa: F401 — 픽스처 재사용
+    _seed_season, _seed_user, api, fake_redis, maker,
+)
 
 
 def rich_candles(n: int = 400, *, seed: int = 1, start: date = date(2024, 1, 1), volume: float = 1_000_000) -> list[dict]:
@@ -189,3 +192,61 @@ async def test_generate_keeps_gap_from_db_rows(maker):  # noqa: F811
     keys = [c["date"] for c in candles]
     idxs = sorted(keys.index(d.isoformat()) for d in rows)
     assert all(b - a >= gen.MIN_GAP_BARS for a, b in zip(idxs, idxs[1:]))
+
+
+# ---------------------------------------------------------------- B2: 이후 봉 공개·결과 한 줄
+def test_evaluate_quiz_stores_future_window():
+    candles = _flat([100.0] * 64 + [103.0])
+    q = gen.evaluate_quiz("005930", candles, 59)
+    assert q["future_snapshot"] == candles[60:65] and len(q["future_snapshot"]) == gen.HORIZON
+
+
+def test_masked_future_uses_question_scale():
+    question = [{"date": "d", "open": 50, "high": 50, "low": 50, "close": 50, "volume": 1}]
+    future = [{"date": "e", "open": 55, "high": 60, "low": 54, "close": 55, "volume": 9}]
+    out = quiz_service.masked_snapshot(future, base=question)
+    assert out == [{"open": 110.0, "high": 120.0, "low": 108.0, "close": 110.0, "volume": 9}]
+    assert future[0]["date"] == "e"  # 원본 불변
+
+
+@pytest.mark.parametrize("pattern, answer, change, expected", [
+    ("골든크로스", "UP", Decimal("6.81"), "📈 골든크로스 신호대로 +6.8% 올랐어요"),
+    ("20일 신저가", "DOWN", Decimal("-4.2"), "📉 20일 신저가 신호대로 -4.2% 내렸어요"),
+    ("RSI 과매수", "UP", Decimal("3.5"), "🔄 RSI 과매수 신호와 반대로 +3.5% 올랐어요 — 신호는 확률일 뿐이에요"),
+])
+def test_outcome_text_direction(pattern, answer, change, expected):
+    assert quiz_insight.outcome_text(pattern, answer, change) == expected
+
+
+def test_outcome_text_neutral_and_unknown():
+    assert quiz_insight.outcome_text("거래량 급증", "DOWN", Decimal("-5")).startswith("📊 거래량 급증 뒤 5거래일 동안 -5.0% 내렸어요")
+    assert quiz_insight.outcome_text("관리자가 바꾼 라벨", "UP", Decimal("3")) is None
+
+
+def test_every_signal_label_has_direction():
+    assert {label for label, _ in gen.SIGNALS.values()} <= set(quiz_insight.PATTERN_DIRECTION)
+
+
+async def test_router_submit_returns_future_and_outcome(api, maker, fake_redis):  # noqa: F811
+    client, set_user = api
+    candles = _flat([100.0] * 64 + [103.0])
+    async with maker() as db:
+        user = await _seed_user(db)
+        await _seed_season(db)
+        db.add(ChartQuiz(**gen.evaluate_quiz("005930", candles, 59)))
+        db.add(ChartQuiz(  # B2 이전 생성분 — future_snapshot 없음
+            ticker="000660", base_date=date(2025, 1, 1), pattern_type="옛 라벨", chart_snapshot=candles[:60],
+            answer="UP", actual_change=Decimal("3.00"), explanation="-",
+        ))
+        await db.commit()
+    set_user(user)
+    seen = {}
+    for _ in range(2):
+        q = (await client.get("/api/game/quiz/random")).json()
+        body = (await client.post(f"/api/game/quiz/{q['id']}/submit", json={"choice": "UP"})).json()
+        seen[body["ticker"]] = body
+    new, old = seen["005930"], seen["000660"]
+    assert [c["close"] for c in new["future_snapshot"]] == [100.0, 100.0, 100.0, 100.0, 103.0]
+    assert all("date" not in c for c in new["future_snapshot"])
+    assert new["outcome"] is not None and "+3.0% 올랐어요" in new["outcome"]
+    assert old["future_snapshot"] is None and old["outcome"] is None

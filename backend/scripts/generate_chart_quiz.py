@@ -179,6 +179,7 @@ def evaluate_quiz(
         "base_date": date.fromisoformat(str(candles[base_idx]["date"])[:10]),
         "pattern_type": pattern,
         "chart_snapshot": window,
+        "future_snapshot": candles[base_idx + 1:base_idx + HORIZON + 1],  # 제출 후 공개용 정답 구간
         "answer": "UP" if change > 0 else "DOWN",
         "actual_change": Decimal(f"{change:.2f}"),
         "explanation": explanation,

@@ -15,7 +15,7 @@ from apps.trading_game.schemas.game_dtos import (
     StreakRewardDTO,
 )
 from apps.trading_game.services import (
-    feature_flag_service, position_cache, quiz_service, streak_reward_service, streak_service,
+    feature_flag_service, position_cache, quiz_insight, quiz_service, streak_reward_service, streak_service,
 )
 
 router = APIRouter(prefix="/api/game", tags=["trading-game-quiz"])
@@ -113,6 +113,11 @@ async def submit_quiz(
         pattern_type=quiz.pattern_type, explanation=quiz.explanation,
         rewarded=res.rewarded, reward_cash=quiz.reward_cash if res.rewarded else 0,
         timed_out=res.timed_out, ticker=quiz.ticker, base_date=quiz.base_date, streak=streak,
+        future_snapshot=(
+            quiz_service.masked_snapshot(quiz.future_snapshot, base=quiz.chart_snapshot)
+            if quiz.future_snapshot else None
+        ),
+        outcome=quiz_insight.outcome_text(quiz.pattern_type, quiz.answer, quiz.actual_change),
     )
 
 
