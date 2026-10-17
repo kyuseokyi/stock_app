@@ -110,10 +110,11 @@ async def delete_quiz(db: AsyncSession, quiz_id: int) -> None:
 
 
 async def generate_quizzes(db: AsyncSession, count: int, *, rng: random.Random | None = None) -> tuple[int, int]:
-    """기존 생성기 규칙으로 count 개 시도 → (created, skipped_duplicate)."""
+    """자동 생성 규칙(신호·3%·간격·거래대금)으로 count 개 시도 → (created, skipped_duplicate)."""
+    existing = await gen.load_existing(db)
     quizzes = await asyncio.to_thread(
         gen.collect_quizzes, count, rng=rng or random.Random(),
-        fetch_tickers=gen._fetch_tickers, fetch_candles=gen._fetch_candles,
+        fetch_tickers=gen._fetch_tickers, fetch_candles=gen._fetch_candles, existing=existing,
     )
     return await gen.insert_quizzes(db, quizzes)
 

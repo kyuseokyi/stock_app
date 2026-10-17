@@ -1,9 +1,15 @@
 """야간 차트 퀴즈 자동 생성 (Phase 5b, 멱등).
 
-ClickHouse daily_prices 에서 종목·기준일을 무작위로 골라 기준일까지 60봉을 문제로,
-이후 5봉 종가 변동률로 정답(UP/DOWN)을 정한다. |변동률| < 1% 인 애매한 구간은 버린다.
-해설은 기준일 RSI(14)·5/20일 이동평균 상태로 만든 규칙 기반 템플릿.
+ClickHouse daily_prices 에서 종목을 무작위로 골라, 기준일까지 60봉을 문제로·이후 5봉 종가 변동률로
+정답(UP/DOWN)을 정한다. 해설은 기준일 RSI(14)·5/20일 이동평균 상태로 만든 규칙 기반 템플릿.
 (ticker, base_date) 가 이미 있으면 건너뛰므로 재실행해도 중복이 생기지 않는다.
+
+자동 생성(collect_quizzes)은 품질 기준을 추가로 적용한다(B1):
+- 기준일에 신호(이동평균 교차·20일 신고가/신저가·거래량 급증·RSI 과열/과매도)가 나타난 날만
+- |변동률| >= AUTO_MIN_ABS_CHANGE(3%) — 관리자 직접 출제(evaluate_quiz)는 기존 1% 기준 유지
+- 같은 종목은 기준일 간격 >= MIN_GAP_BARS(20거래일) — DB 의 기존 문제와도 비교
+- 기준일까지 20일 평균 거래대금 >= MIN_TURNOVER(10억 원)
+- 정답 UP/DOWN 을 반반에 가깝게
 
 실행:
     cd backend
@@ -15,6 +21,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import bisect
 import random
 from datetime import date, timedelta
 from decimal import Decimal
@@ -32,6 +39,25 @@ MIN_ABS_CHANGE = 1.0
 LOOKBACK_DAYS = 3 * 365
 MAX_DAILY_MOVE = 0.30  # KRX 가격제한폭
 
+# 자동 생성 품질 기준(B1)
+AUTO_MIN_ABS_CHANGE = 3.0
+MIN_GAP_BARS = 20
+MIN_TURNOVER = 1_000_000_000  # 20일 평균 거래대금(종가×거래량, 원)
+SIGNAL_LOOKBACK = 20
+VOLUME_SURGE_RATIO = 2.0
+MAX_TICKER_FETCHES = 400  # 한 번 실행에서 CH 일봉 조회 상한(종목 수)
+
+# 신호 → (pattern_type, 해설 한 줄). 우선순위 순서(앞이 먼저 채택)
+SIGNALS: dict[str, tuple[str, str]] = {
+    "GOLDEN_CROSS": ("골든크로스", "5일선이 20일선을 막 상향 돌파했습니다. 단기 상승 전환 신호로 자주 해석됩니다."),
+    "DEAD_CROSS": ("데드크로스", "5일선이 20일선을 막 하향 돌파했습니다. 단기 하락 전환 신호로 자주 해석됩니다."),
+    "BREAKOUT_HIGH": ("20일 신고가", "종가가 직전 20일 최고 종가를 넘어섰습니다. 추세 돌파로 보기도, 단기 고점으로 보기도 합니다."),
+    "BREAKDOWN_LOW": ("20일 신저가", "종가가 직전 20일 최저 종가 아래로 내려갔습니다. 하락 지속 신호일 수도, 투매 뒤 반등 자리일 수도 있습니다."),
+    "VOLUME_SURGE": ("거래량 급증", "거래량이 직전 20일 평균의 2배를 넘었습니다. 큰 손의 매매가 몰린 날입니다."),
+    "RSI_OVERBOUGHT": ("RSI 과매수", "RSI(14)가 70 이상입니다. 과열로 되돌림이 나오기 쉬운 구간입니다."),
+    "RSI_OVERSOLD": ("RSI 과매도", "RSI(14)가 30 이하입니다. 기술적 반등이 나올 수 있는 구간입니다."),
+}
+
 
 def _valid_series(closes: list[float]) -> bool:
     """종가열이 퀴즈로 쓸 만한지 검사한다.
@@ -48,8 +74,48 @@ def _avg(xs: list[float]) -> float:
     return sum(xs) / len(xs)
 
 
-def build_explanation(closes: list[float]) -> tuple[str, str]:
-    """기준일까지 종가 → (pattern_type, 해설 마크다운)."""
+def detect_signal(candles: list[dict]) -> str | None:
+    """candles 마지막 봉(기준일)에 나타난 신호 코드(SIGNALS 키) 또는 None.
+
+    기준일까지의 봉만 받는다(미래 봉을 넘기지 말 것). 거래량 평균·신고가/신저가는 기준일을 뺀
+    직전 SIGNAL_LOOKBACK 봉과 비교한다.
+    """
+    if len(candles) < SIGNAL_LOOKBACK + 1:
+        return None
+    closes = [float(c["close"]) for c in candles]
+    if max(closes[-15:]) == min(closes[-15:]):  # 거래정지 등 무변동 — RSI 가 100/0 으로 튀는 가짜 신호
+        return None
+    if indicators.golden_cross_within(closes, within=1):
+        return "GOLDEN_CROSS"
+    if indicators.golden_cross_within([-c for c in closes], within=1):  # 부호 반전 = 데드크로스
+        return "DEAD_CROSS"
+    prior = closes[-SIGNAL_LOOKBACK - 1:-1]
+    if closes[-1] > max(prior):
+        return "BREAKOUT_HIGH"
+    if closes[-1] < min(prior):
+        return "BREAKDOWN_LOW"
+    volumes = [float(c.get("volume") or 0) for c in candles]
+    avg_vol = _avg(volumes[-SIGNAL_LOOKBACK - 1:-1])
+    if avg_vol > 0 and volumes[-1] >= avg_vol * VOLUME_SURGE_RATIO:
+        return "VOLUME_SURGE"
+    rsi = rsi_service.wilder_rsi(closes)
+    if rsi is not None and rsi >= 70:
+        return "RSI_OVERBOUGHT"
+    if rsi is not None and rsi <= 30:
+        return "RSI_OVERSOLD"
+    return None
+
+
+def avg_turnover(candles: list[dict]) -> float:
+    """마지막 SIGNAL_LOOKBACK 봉의 평균 거래대금(종가×거래량). 거래량 결측은 0."""
+    recent = candles[-SIGNAL_LOOKBACK:]
+    if not recent:
+        return 0.0
+    return _avg([float(c["close"]) * float(c.get("volume") or 0) for c in recent])
+
+
+def build_explanation(closes: list[float], signal: str | None = None) -> tuple[str, str]:
+    """기준일까지 종가 → (pattern_type, 해설 마크다운). signal 이 있으면 그 신호를 패턴으로 쓴다."""
     ma5, ma20 = _avg(closes[-5:]), _avg(closes[-20:])
     rsi = rsi_service.wilder_rsi(closes)
     if indicators.golden_cross_within(closes):
@@ -68,8 +134,13 @@ def build_explanation(closes: list[float]) -> tuple[str, str]:
         rsi_text, rsi_desc = f"{rsi:.1f}", "과매도 구간 — 기술적 반등이 나올 수 있는 자리입니다."
     else:
         rsi_text, rsi_desc = f"{rsi:.1f}", "중립 구간입니다."
+    signal_line = ""
+    if signal in SIGNALS and SIGNALS[signal][0] != pattern:
+        pattern, signal_desc = SIGNALS[signal]
+        signal_line = f"- 신호: {signal_desc}\n"
     md = (
         f"### {pattern}\n"
+        f"{signal_line}"
         f"- 5일선 {ma5:,.0f} / 20일선 {ma20:,.0f}: {ma_desc}\n"
         f"- RSI(14) {rsi_text}: {rsi_desc}\n\n"
         "> 패턴은 확률일 뿐 확정이 아닙니다. 손절 원칙과 함께 활용하세요."
@@ -77,11 +148,18 @@ def build_explanation(closes: list[float]) -> tuple[str, str]:
     return pattern, md
 
 
-def evaluate_quiz(ticker: str, candles: list[dict], base_idx: int) -> dict | str:
+def evaluate_quiz(
+    ticker: str,
+    candles: list[dict],
+    base_idx: int,
+    *,
+    min_abs_change: float = MIN_ABS_CHANGE,
+    signal: str | None = None,
+) -> dict | str:
     """candles[base_idx] 를 기준일로 퀴즈 1개(dict). 조건 미달이면 사유 코드(str):
 
     INSUFFICIENT_DATA(기준일까지 WINDOW봉·이후 HORIZON봉 부족) | INVALID_SERIES(종가 0 이하·가격제한폭 초과)
-    | TOO_FLAT(|등락| < MIN_ABS_CHANGE%). 관리자 직접 출제가 사유를 그대로 응답한다.
+    | TOO_FLAT(|등락| < min_abs_change%). 관리자 직접 출제가 사유를 그대로 응답한다.
     """
     if base_idx < WINDOW - 1 or base_idx + HORIZON >= len(candles):
         return "INSUFFICIENT_DATA"
@@ -92,9 +170,9 @@ def evaluate_quiz(ticker: str, candles: list[dict], base_idx: int) -> dict | str
     base_close = float(candles[base_idx]["close"])
     future_close = float(candles[base_idx + HORIZON]["close"])
     change = round((future_close - base_close) / base_close * 100, 2)
-    if abs(change) < MIN_ABS_CHANGE:
+    if abs(change) < min_abs_change:
         return "TOO_FLAT"
-    pattern, explanation = build_explanation([float(c["close"]) for c in window])
+    pattern, explanation = build_explanation([float(c["close"]) for c in window], signal)
     return {
         "ticker": ticker,
         "base_date": date.fromisoformat(str(candles[base_idx]["date"])[:10]),
@@ -150,38 +228,86 @@ async def insert_quizzes(db, quizzes: list[dict]) -> tuple[int, int]:
     return created, skipped
 
 
+PER_TICKER_MAX = 2  # 한 번 실행에서 같은 종목 최대 문제 수(종목 다양성)
+
+
+def eligible_quizzes(ticker: str, candles: list[dict]) -> list[tuple[int, dict]]:
+    """자동 생성 기준을 통과하는 (base_idx, 퀴즈) 전부 — 거래대금·신호·3% 등락·시계열 유효성."""
+    out: list[tuple[int, dict]] = []
+    for idx in range(WINDOW - 1, len(candles) - HORIZON):
+        base, future = float(candles[idx]["close"]), float(candles[idx + HORIZON]["close"])
+        if base <= 0 or abs(future / base - 1) * 100 < AUTO_MIN_ABS_CHANGE:  # 싼 검사 먼저(정확한 판정은 evaluate_quiz)
+            continue
+        window = candles[idx - WINDOW + 1:idx + 1]  # 기준일까지만 — 신호 판정에 미래 봉을 쓰지 않는다
+        if avg_turnover(window) < MIN_TURNOVER:
+            continue
+        signal = detect_signal(window)
+        if signal is None:
+            continue
+        q = evaluate_quiz(ticker, candles, idx, min_abs_change=AUTO_MIN_ABS_CHANGE, signal=signal)
+        if isinstance(q, dict):
+            out.append((idx, q))
+    return out
+
+
+def _existing_indices(candles: list[dict], dates: list[date]) -> list[int]:
+    """DB 에 이미 있는 기준일 → candles 상 위치(정확히 없으면 그 자리에 들어갈 위치)."""
+    keys = [str(c["date"])[:10] for c in candles]
+    return [bisect.bisect_left(keys, d.isoformat()) for d in dates]
+
+
 def collect_quizzes(
     count: int,
     *,
     rng: random.Random,
     fetch_tickers: Callable[[], list[str]],
     fetch_candles: Callable[[str], list[dict]],
+    existing: dict[str, list[date]] | None = None,
 ) -> list[dict]:
-    """무작위 종목·기준일로 퀴즈 후보 최대 count 개(동기 — CH 조회 포함, 실행 내 중복 제거)."""
-    tickers = fetch_tickers()
-    cache: dict[str, list[dict]] = {}
+    """품질 기준(모듈 docstring)을 통과한 퀴즈 최대 count 개(동기 — CH 조회 포함).
+
+    종목을 섞어 차례로 보며 종목당 PER_TICKER_MAX 개까지, 같은 종목 기준일은 서로·기존 문제와
+    MIN_GAP_BARS 이상 떨어지게 고른다. UP/DOWN 은 각각 최대 ceil(count/2) — 한쪽이 모자라면 적게 만든다.
+    """
+    existing = existing or {}
+    tickers = list(fetch_tickers())
+    rng.shuffle(tickers)
+    side_cap = (count + 1) // 2
+    sides = {"UP": 0, "DOWN": 0}
     quizzes: list[dict] = []
-    seen: set[tuple[str, date]] = set()
-    empty_tickers: set[str] = set()
-    tries = 0
-    while tickers and len(quizzes) < count and tries < count * 20:
-        tries += 1
-        t = rng.choice(tickers)
-        if t not in cache:
-            cache[t] = fetch_candles(t)
-        candles = cache[t]
+    empty_tickers = 0
+    for t in tickers[:MAX_TICKER_FETCHES]:
+        if len(quizzes) >= count:
+            break
+        candles = fetch_candles(t)
         if not candles:
-            empty_tickers.add(t)
-        if len(candles) < WINDOW + HORIZON:
+            empty_tickers += 1
             continue
-        q = make_quiz(t, candles, rng.randint(WINDOW - 1, len(candles) - HORIZON - 1))
-        if q is None or (t, q["base_date"]) in seen:
-            continue
-        seen.add((t, q["base_date"]))
-        quizzes.append(q)
+        candidates = eligible_quizzes(t, candles)
+        rng.shuffle(candidates)
+        taken = _existing_indices(candles, existing.get(t, []))
+        picked = 0
+        for idx, q in candidates:
+            if picked >= PER_TICKER_MAX or len(quizzes) >= count:
+                break
+            if sides[q["answer"]] >= side_cap or any(abs(idx - j) < MIN_GAP_BARS for j in taken):
+                continue
+            taken.append(idx)
+            sides[q["answer"]] += 1
+            quizzes.append(q)
+            picked += 1
     if empty_tickers:
-        print(f"[generate_chart_quiz] 캔들 없음(CH 장애/미수집 가능) 종목 수={len(empty_tickers)}")
+        print(f"[generate_chart_quiz] 캔들 없음(CH 장애/미수집 가능) 종목 수={empty_tickers}")
     return quizzes
+
+
+async def load_existing(db) -> dict[str, list[date]]:
+    """chart_quiz_pool 의 종목별 기준일(비활성 포함 — 같은 구간 재출제 방지)."""
+    rows = (await db.execute(select(ChartQuiz.ticker, ChartQuiz.base_date))).all()
+    existing: dict[str, list[date]] = {}
+    for ticker, base_date in rows:
+        existing.setdefault(ticker, []).append(base_date)
+    return existing
 
 
 async def generate(
@@ -192,7 +318,11 @@ async def generate(
     fetch_candles: Callable[[str], list[dict]] = _fetch_candles,
     session_factory=AsyncSessionLocal,
 ) -> tuple[int, int]:
-    quizzes = collect_quizzes(count, rng=rng, fetch_tickers=fetch_tickers, fetch_candles=fetch_candles)
+    async with session_factory() as db:
+        existing = await load_existing(db)
+    quizzes = collect_quizzes(
+        count, rng=rng, fetch_tickers=fetch_tickers, fetch_candles=fetch_candles, existing=existing
+    )
     async with session_factory() as db:
         return await insert_quizzes(db, quizzes)
 

@@ -370,9 +370,11 @@ def _candles(closes: list[float], start=date(2026, 1, 1)) -> list[dict]:
 
 
 async def test_router_admin_quiz_generate(api, maker, monkeypatch):
+    from tests.test_quiz_quality import rich_candles
+
     client = await _admin_client(api, maker)
-    candles = _candles([100.0 + (i % 7) * 3 for i in range(120)])
-    monkeypatch.setattr(gen, "_fetch_tickers", lambda: ["005930"])
+    candles = rich_candles(500, seed=10)
+    monkeypatch.setattr(gen, "_fetch_tickers", lambda: ["005930", "000660"])
     monkeypatch.setattr(gen, "_fetch_candles", lambda t, start=None, end=None: candles)
     r = await client.post("/api/game/admin/quizzes/generate", json={"count": 3})
     assert r.status_code == 200, r.text
@@ -384,11 +386,17 @@ async def test_router_admin_quiz_generate(api, maker, monkeypatch):
 
 
 def test_collect_quizzes_matches_generate_rules():
-    candles = _candles([100.0 + (i % 7) * 3 for i in range(66)])  # 유효 base_idx 59, 60
     import random
+
+    from tests.test_quiz_quality import rich_candles
+
+    candles = rich_candles(500, seed=10)
     quizzes = gen.collect_quizzes(5, rng=random.Random(0), fetch_tickers=lambda: ["005930"],
                                   fetch_candles=lambda t: candles)
-    assert len({q["base_date"] for q in quizzes}) == len(quizzes) == 2
+    assert len({q["base_date"] for q in quizzes}) == len(quizzes) == gen.PER_TICKER_MAX  # 종목당 상한
+    flat = _candles([100.0] * 66)  # 무신호·저유동성 → 후보 없음
+    assert gen.collect_quizzes(5, rng=random.Random(0), fetch_tickers=lambda: ["005930"],
+                               fetch_candles=lambda t: flat) == []
 
 
 async def test_router_admin_quiz_forbidden_for_player(api, maker):

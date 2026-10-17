@@ -1117,25 +1117,25 @@ def test_make_quiz_answer_window_and_filters():
 
 
 async def test_generate_inserts_and_is_idempotent(maker):
-    closes = [100.0 + (i % 7) * 3 for i in range(120)]  # 5봉 뒤 항상 2.5% 이상 차이
-    candles = _candles(closes)
+    from tests.test_quiz_quality import rich_candles
+
+    data = {t: rich_candles(500, seed=i + 10) for i, t in enumerate(["005930", "000660", "035420"])}
 
     def tickers():
-        return ["005930"]
+        return list(data)
 
     def fetch(ticker):
-        return candles
+        return data[ticker]
 
     created, skipped = await gen.generate(5, rng=random.Random(0), fetch_tickers=tickers,
                                           fetch_candles=fetch, session_factory=maker)
     assert created == 5 and skipped == 0
-    created2, skipped2 = await gen.generate(5, rng=random.Random(0), fetch_tickers=tickers,
-                                            fetch_candles=fetch, session_factory=maker)
-    assert created2 == 0 and skipped2 == 5
+    # 재실행: 기존 문제와 겹치는 구간은 후보에서 빠지므로 (ticker, base_date) 중복 행이 생기지 않는다
+    await gen.generate(5, rng=random.Random(0), fetch_tickers=tickers, fetch_candles=fetch, session_factory=maker)
     async with maker() as db:
         rows = (await db.execute(select(ChartQuiz))).scalars().all()
-    assert len(rows) == 5
-    assert all(r.answer in ("UP", "DOWN") and abs(r.actual_change) >= Decimal("1") for r in rows)
+    assert len({(r.ticker, r.base_date) for r in rows}) == len(rows) >= 5
+    assert all(r.answer in ("UP", "DOWN") and abs(r.actual_change) >= Decimal("3") for r in rows)
 
 
 def test_make_quiz_skips_zero_close_and_extreme_moves():
@@ -1162,12 +1162,13 @@ def test_make_quiz_boundary_one_percent_and_down():
 
 
 async def test_generate_dedups_within_run(maker):
-    closes = [100.0 + (i % 7) * 3 for i in range(66)]  # 유효 base_idx 는 59, 60 둘뿐
-    candles = _candles(closes)
+    from tests.test_quiz_quality import rich_candles
+
+    candles = rich_candles(500, seed=10)
     created, skipped = await gen.generate(
         2, rng=random.Random(0), fetch_tickers=lambda: ["005930"],
         fetch_candles=lambda t: candles, session_factory=maker)
-    assert created == 2 and skipped == 0
+    assert created == 2 and skipped == 0  # 실행 내 후보끼리도 20거래일 이상 떨어져 중복 삽입이 없다
 
 
 # ---------------------------------------------------------------- 주문 패널 개선(비중 세분화·손절/익절)
