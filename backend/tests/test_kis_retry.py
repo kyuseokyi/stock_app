@@ -83,3 +83,49 @@ def test_5xx_then_success_retries():
     c = _make_client([_Resp(status_code=503), _Resp(status_code=200, body=body)])
     assert c._request_with_retry("get", "http://x", "TR", {}) == body
     assert c._session.calls == 2  # 5xx 1회 재시도 후 성공
+
+
+# ---------------------------------------------------------------- 공유 레이트리미터(병렬 수집)
+class _CountLimiter:
+    def __init__(self):
+        self.n = 0
+
+    def acquire(self):
+        self.n += 1
+
+
+def test_limiter_acquired_per_http_attempt_including_retries():
+    body = {"rt_cd": "0", "output2": []}
+    c = _make_client([_Resp(status_code=503), requests.ConnectionError("x"), _Resp(status_code=200, body=body)])
+    c._limiter = _CountLimiter()
+    assert c._request_with_retry("get", "http://x", "TR", {}) == body
+    assert c._limiter.n == 3 == c._session.calls
+
+
+def test_rate_limiter_spaces_calls_across_threads(monkeypatch):
+    """여러 스레드가 동시에 acquire 해도 슬롯이 겹치지 않게 간격을 예약한다."""
+    import threading
+
+    from apps.collector import rate_limit
+
+    now = {"t": 100.0}
+    slept: list[float] = []
+    monkeypatch.setattr(rate_limit.time, "monotonic", lambda: now["t"])
+    monkeypatch.setattr(rate_limit.time, "sleep", lambda s: slept.append(round(s, 6)))
+    lim = rate_limit.RateLimiter(10)  # 0.1초 간격
+    threads = [threading.Thread(target=lim.acquire) for _ in range(5)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    # 같은 시각에 5개 → 0, 0.1, 0.2, 0.3, 0.4 대기(첫 호출은 즉시)
+    assert sorted(slept) == [0.1, 0.2, 0.3, 0.4]
+
+
+def test_rate_limiter_disabled_when_rate_zero(monkeypatch):
+    from apps.collector import rate_limit
+
+    monkeypatch.setattr(rate_limit.time, "sleep", lambda s: pytest.fail("대기하면 안 됨"))
+    lim = rate_limit.RateLimiter(0)
+    lim.acquire()
+    lim.acquire()

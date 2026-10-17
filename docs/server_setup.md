@@ -263,7 +263,9 @@ KIS 시세 상한은 **20 TPS**. 우리는 8/s(=40%)로 도는데도 대량 순�
 2. **적응형 쿨다운**: 연결계열(`KISConnectionError`) 연속 실패가 임계치(기본 5) 이상이면 `60→120→…→600초`로 쉬었다 재개(성공 시 리셋). 4xx·rt_cd 논리오류는 대상 아님(즉시 격리).
 3. **연결계열 2차 재시도**: 1차에서 연결계열로 실패한 종목만 쿨다운 후 한 번 더 시도(논리오류는 재시도 안 함).
 
-튜닝 env(선택, `.env.production`): `KIS_RATE_PER_SEC`(기본 8), `KIS_COOLDOWN_THRESHOLD`(5), `KIS_COOLDOWN_BASE_SEC`(60), `KIS_COOLDOWN_MAX_SEC`(600).
+튜닝 env(선택, `.env.production`): `KIS_RATE_PER_SEC`(기본 prod 15 / vps 8, HTTP 요청마다), `KIS_WORKERS`(병렬 스레드, 기본 4 · `1`=순차), `KIS_COOLDOWN_THRESHOLD`(5), `KIS_COOLDOWN_BASE_SEC`(60), `KIS_COOLDOWN_MAX_SEC`(600).
+
+**병렬 수집(2026-10-17)**: 스레드 `KIS_WORKERS`개가 종목을 나눠 수집하고, 레이트리미터 하나를 공유해 전체 초당 호출을 `KIS_RATE_PER_SEC` 이하로 지킨다. 연속 연결실패 카운터·쿨다운도 공유 — 쿨다운 중엔 모든 스레드가 멈춘다. 종료 로그에 소요 초가 찍힌다(`전종목 작업 종료: … N초`). 문제가 보이면 `KIS_WORKERS=1`(기존 순차)로 즉시 되돌릴 수 있다.
 
 **⚠️ 검증 순서(중요)**: 전종목 재시도 전 **20종목 프로브**부터.
 ```bash

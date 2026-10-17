@@ -63,7 +63,7 @@ uv run celery -A apps.collector.celery_app beat   --loglevel=info   # 스케줄�
 # 예) 워커 없이 즉시 실행:
 uv run python -c "from apps.collector.tasks.universe import collect_all_daily; print(collect_all_daily(source='mst'))"
 # 종목 마스터 소스: STOCK_MASTER_SOURCE=mst(전종목·.mst) | fallback(대형주 20) | auto(기본: mst→실패시 fallback)
-# KIS 초당 호출 제한: KIS_RATE_PER_SEC(기본 8)
+# KIS 초당 호출 제한: KIS_RATE_PER_SEC(HTTP 요청마다, 기본 prod 15 / vps 8), 병렬 스레드: KIS_WORKERS(기본 4)
 
 # 트레이딩 게임 실시간 시세 수집 데몬 (Phase 2) — ACTIVE 시즌 종목 틱을 Redis stock:tick:{ticker} 로 발행
 # (Celery 아님. 단일 롱커넥션 상주 프로세스. ACTIVE 시즌이 있어야 함: python -m scripts.seed_trading_game)
@@ -357,7 +357,8 @@ uv run pytest tests/test_universe_cooldown.py    # 특정 파일
 | `KIS_MODE` | collector | `vps` | KIS 접속 모드 — `vps`(모의투자) \| `prod`(실서버) |
 | `KIS_APP_KEY` / `KIS_APP_SECRET` | collector | (빈값) | KIS OpenAPI 앱키/시크릿 (비우면 Mock 수집 폴백) |
 | `STOCK_MASTER_SOURCE` | collector | `auto` | 전종목 마스터 소스 — `mst`(.mst 전종목) \| `fallback`(대형주 20) \| `auto`(mst→실패시 fallback) |
-| `KIS_RATE_PER_SEC` | collector | `8` | 전종목 수집 시 KIS 초당 호출 상한(실전 ~20 한도 내 보수적) |
+| `KIS_RATE_PER_SEC` | collector | `15`(prod) / `8`(vps) | 전종목 수집 KIS 초당 호출 상한 — 모든 스레드 공유, HTTP 요청(J 폴백·재시도 포함)마다 셈(실전 한도 ~20) |
+| `KIS_WORKERS` | collector | `4` | 전종목 수집·백필 병렬 스레드 수(`1`=기존 순차) |
 | `KIS_COOLDOWN_THRESHOLD` | collector | `5` | 연속 연결실패 몇 회에서 적응형 쿨다운 시작 |
 | `KIS_COOLDOWN_BASE_SEC` / `KIS_COOLDOWN_MAX_SEC` | collector | `60` / `600` | 쿨다운 시작·상한(초). 연속실패 지속 시 2배씩 에스컬레이트 |
 | `KIS_ACCOUNT_NO` | collector | (빈값) | 계좌번호(시세조회만이면 생략 가능) |

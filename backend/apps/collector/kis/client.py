@@ -48,8 +48,10 @@ class KISConnectionError(RuntimeError):
 
 
 class KISClient:
-    def __init__(self, config: KISConfig | None = None):
+    def __init__(self, config: KISConfig | None = None, limiter=None):
+        """limiter: 여러 클라이언트(스레드)가 공유하는 RateLimiter — HTTP 요청(재시도 포함)마다 acquire."""
         self.cfg = config or get_kis_config()
+        self._limiter = limiter
         if not self.cfg.is_configured:
             raise RuntimeError("KIS 자격증명(KIS_APP_KEY/SECRET)이 설정되지 않았습니다.")
         self._redis = redis.from_url(
@@ -67,6 +69,10 @@ class KISClient:
         )
         self._session.mount("https://", _adapter)
         self._session.mount("http://", _adapter)
+
+    def close(self) -> None:
+        """커넥션 풀 반환(병렬 수집에서 스레드별 클라이언트를 정리할 때)."""
+        self._session.close()
 
     # --- 토큰 ---
     def _issue_token(self) -> str:
@@ -180,7 +186,10 @@ class KISClient:
 
     def _request_with_retry(self, method: str, url: str, tr_id: str, params: dict) -> dict:
         last_exc: Exception | None = None
+        limiter = getattr(self, "_limiter", None)
         for attempt in range(_MAX_RETRIES):
+            if limiter is not None:
+                limiter.acquire()  # 재시도도 KIS 호출 — 초당 상한에 포함
             try:
                 resp = self._session.request(
                     method, url, headers=self._headers(tr_id), params=params, timeout=_TIMEOUT

@@ -44,7 +44,7 @@ def test_collect_pass_classifies_and_escalates(det_cooldown):
 
     targets = [("CONN1", "a"), ("CONN2", "b"), ("CONN3", "c"),
                ("CONN4", "d"), ("CONN5", "e"), ("OK", "f"), ("LOGIC", "g")]
-    ok, inserted, failed = universe._collect_pass(targets, collect_one, None, _Limiter(), "T")
+    ok, inserted, failed = universe._collect_pass(targets, collect_one, lambda: None, "T")
 
     assert ok == 1 and inserted == 1
     retryable = [f for f in failed if f["retryable"]]
@@ -66,7 +66,7 @@ def test_collect_pass_resets_on_success(det_cooldown):
         raise KISConnectionError("conn")
 
     targets = [("C1", ""), ("C2", ""), ("OK", ""), ("C3", ""), ("C4", "")]
-    ok, _, failed = universe._collect_pass(targets, collect_one, None, _Limiter(), "T")
+    ok, _, failed = universe._collect_pass(targets, collect_one, lambda: None, "T")
     assert ok == 1
     assert len(failed) == 4
     assert sleeps == []                            # 연속 실패가 3에 도달 못 함
@@ -75,7 +75,7 @@ def test_collect_pass_resets_on_success(det_cooldown):
 def test_run_universe_retries_only_connection_failures(monkeypatch):
     tickers = [SimpleNamespace(ticker=f"00{i}", name=f"n{i}") for i in range(4)]
     monkeypatch.setattr(universe, "load_domestic_tickers", lambda source: tickers)
-    monkeypatch.setattr(universe, "KISClient", lambda: object())
+    monkeypatch.setattr(universe, "KISClient", lambda limiter=None: object())
     monkeypatch.setattr(universe, "RateLimiter", lambda r: _Limiter())
     monkeypatch.setattr(universe.time, "sleep", lambda s: None)
 
@@ -89,10 +89,115 @@ def test_run_universe_retries_only_connection_failures(monkeypatch):
             raise KISConnectionError("[Errno 24]")     # 1차만 실패 → 2차 회복
         return 1
 
-    res = universe._run_universe(collect_one, None, None, None)
+    res = universe._run_universe(collect_one, None, None, None, workers=1)
     assert res["total"] == 4
     assert res["ok"] == 3                 # 000,001 1차 + 002 2차 회복
     assert res["retried_ok"] == 1
     assert res["failed_count"] == 1       # 003 만 최종 실패
     assert res["failed_sample"][0]["ticker"] == "003"
     assert res["inserted"] == 3
+
+
+# ---------------------------------------------------------------- 병렬 수집(KIS_WORKERS)
+import threading  # noqa: E402
+import time as _time  # noqa: E402
+
+
+def test_collect_pass_parallel_processes_all_with_bounded_concurrency():
+    lock = threading.Lock()
+    live = {"now": 0, "max": 0}
+
+    def collect_one(ticker, client):
+        with lock:
+            live["now"] += 1
+            live["max"] = max(live["max"], live["now"])
+        _time.sleep(0.005)
+        with lock:
+            live["now"] -= 1
+        return 2
+
+    targets = [(f"{i:06d}", "") for i in range(60)]
+    ok, inserted, failed = universe._collect_pass(targets, collect_one, lambda: None, "P", workers=4)
+    assert (ok, inserted, failed) == (60, 120, [])
+    assert 2 <= live["max"] <= 4
+
+
+def test_collect_pass_parallel_cooldown_pauses_all_threads(monkeypatch):
+    """쿨다운 중에는 다른 스레드도 새 종목을 시작하지 않는다."""
+    monkeypatch.setattr(universe, "_COOLDOWN_THRESHOLD", 2)
+    monkeypatch.setattr(universe, "_COOLDOWN_BASE_SEC", 0.3)
+    monkeypatch.setattr(universe, "_COOLDOWN_MAX_SEC", 0.3)
+    starts: list[tuple[float, str]] = []
+    lock = threading.Lock()
+    window = {}
+
+    real_sleep = _time.sleep
+
+    def fake_cool(self, n, sleep_for):  # 쿨다운 구간을 기록
+        window["from"] = _time.monotonic()
+        try:
+            real_sleep(sleep_for)
+        finally:
+            window["to"] = _time.monotonic()
+            self._open.set()
+
+    monkeypatch.setattr(universe._Cooldown, "cool_down", fake_cool)
+
+    def collect_one(ticker, client):
+        with lock:
+            starts.append((_time.monotonic(), ticker))
+        if ticker in ("F0", "F1"):
+            raise KISConnectionError("conn")
+        real_sleep(0.01)
+        return 1
+
+    targets = [("F0", ""), ("F1", "")] + [(f"OK{i}", "") for i in range(30)]
+    ok, _, failed = universe._collect_pass(targets, collect_one, lambda: None, "P", workers=4)
+    assert ok == 30 and len(failed) == 2 and all(f["retryable"] for f in failed)
+    assert "from" in window
+    during = [t for t, _ in starts if window["from"] + 0.02 < t < window["to"] - 0.02]
+    assert during == []
+
+
+def test_cooldown_escalates_and_does_not_overlap(monkeypatch):
+    monkeypatch.setattr(universe, "_COOLDOWN_THRESHOLD", 2)
+    monkeypatch.setattr(universe, "_COOLDOWN_BASE_SEC", 10)
+    monkeypatch.setattr(universe, "_COOLDOWN_MAX_SEC", 30)
+    g = universe._Cooldown("T")
+    assert g.connection_failure() == (1, 0.0)
+    assert g.connection_failure() == (2, 10)
+    assert g.connection_failure() == (3, 0.0)  # 쿨다운 진행 중(게이트 닫힘) — 겹쳐 시작하지 않음
+    g._open.set()
+    assert g.connection_failure() == (4, 20)
+    g._open.set()
+    assert g.connection_failure() == (5, 30)   # 상한
+    g._open.set()
+    g.success()
+    assert g.connection_failure() == (1, 0.0) and g.cooldown == 10
+
+
+def test_run_universe_shares_limiter_and_closes_clients(monkeypatch):
+    tickers = [SimpleNamespace(ticker=f"{i:06d}", name="") for i in range(20)]
+    monkeypatch.setattr(universe, "load_domestic_tickers", lambda source: tickers)
+    made = []
+
+    class FakeClient:
+        def __init__(self, limiter=None):
+            self.limiter = limiter
+            self.closed = False
+            made.append(self)
+
+        def close(self):
+            self.closed = True
+
+    monkeypatch.setattr(universe, "KISClient", FakeClient)
+
+    def collect_one(ticker, client):
+        _time.sleep(0.002)
+        return 1
+
+    res = universe._run_universe(collect_one, None, None, 50, workers=3)
+    assert res["ok"] == 20 and res["failed_count"] == 0 and "elapsed_sec" in res
+    assert 1 <= len(made) <= 3
+    assert len({id(c.limiter) for c in made}) == 1 and made[0].limiter is not None
+    assert all(c.closed for c in made)

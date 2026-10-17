@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, ScrollView, Text, View } from 'react-native';
 import { StyleSheet } from 'react-native-unistyles';
 
@@ -6,6 +6,7 @@ import { AmountText, Button, Chip } from '@/ui';
 
 import { getHallOfFame, getLeaderboard } from '../api';
 import { gameErrorMessage } from '../lib/errors';
+import { RANKING_REFRESH_MS, useForegroundInterval } from '../lib/foreground-interval';
 import { rankingTabs, type RankingTab } from '../lib/ranking-period';
 import type { HallOfFameRow, LeaderboardRow, SeasonPeriod } from '../types';
 import { PeriodRankingTab } from './period-ranking-tab';
@@ -37,16 +38,19 @@ function groupBySeason(rows: HallOfFameRow[]): { seasonId: number; seasonNumber:
   return groups;
 }
 
-/** 랭킹 시트 — 주간 / (분기 시즌) 월간 / 시즌 Top 100 / 명예의 전당(MBTI). 공개 API 라 비로그인도 열람. 열릴 때·탭 전환 시 활성 탭만 로드 */
+/** 랭킹 시트 — 주간 / (분기 시즌) 월간 / 시즌 Top 100 / 명예의 전당(MBTI). 공개 API 라 비로그인도 열람. 열릴 때·탭 전환 시 활성 탭만 로드,
+ * 열려 있는 동안 주간·월간·시즌 탭은 15초마다 조용히 갱신(앱이 포그라운드일 때만) */
 export function LeaderboardSheet({ seasonId, seasonPeriod, myUserId, onClose }: Props) {
   const [tab, setTab] = useState<Tab>('weekly');
   const [board, setBoard] = useState<Load<LeaderboardRow[]>>({ kind: 'loading' });
   const [hof, setHof] = useState<Load<HallOfFameRow[]>>({ kind: 'loading' });
   const [reloadKey, setReloadKey] = useState(0);
+  const epoch = useRef(0); // 탭·시즌이 바뀌면 늦게 온 조용한 갱신 응답을 버린다
 
   useEffect(() => {
     if (tab === 'weekly' || tab === 'monthly') return; // 주간·월간 탭은 자체 로드(PeriodRankingTab)
     let cancelled = false;
+    epoch.current += 1;
     if (tab === 'season') {
       setBoard({ kind: 'loading' });
       getLeaderboard(seasonId)
@@ -70,6 +74,21 @@ export function LeaderboardSheet({ seasonId, seasonPeriod, myUserId, onClose }: 
       cancelled = true;
     };
   }, [tab, seasonId, reloadKey]);
+
+  // 시즌 Top 100 은 열려 있는 동안 로딩 표시 없이 갱신(실패하면 기존 목록 유지). 명예의 전당은 바뀌지 않아 제외
+  useForegroundInterval(
+    () => {
+      if (board.kind !== 'ok') return;
+      const my = epoch.current;
+      getLeaderboard(seasonId)
+        .then((data) => {
+          if (epoch.current === my) setBoard({ kind: 'ok', data });
+        })
+        .catch(() => {});
+    },
+    RANKING_REFRESH_MS,
+    tab === 'season',
+  );
 
   const current = tab === 'season' ? board : hof;
   const selfLoading = tab === 'weekly' || tab === 'monthly'; // 자체 로드 탭은 아래 공통 로딩/오류 표시 제외

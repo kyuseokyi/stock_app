@@ -133,14 +133,14 @@ def _collect(count, *, tickers=("A", "B", "C", "D"), existing=None, seed=0):
 def test_collect_gap_per_ticker_and_limits():
     quizzes, data = _collect(8)
     assert len(quizzes) == 8
-    by_ticker: dict[str, list[int]] = {}
+    by_ticker: dict[str, list[tuple[int, int, int]]] = {}
     for q in quizzes:
         keys = [c["date"] for c in data[q["ticker"]]]
-        by_ticker.setdefault(q["ticker"], []).append(keys.index(q["base_date"].isoformat()))
-    for idxs in by_ticker.values():
-        assert len(idxs) <= gen.PER_TICKER_MAX
-        idxs.sort()
-        assert all(b - a >= gen.MIN_GAP_BARS for a, b in zip(idxs, idxs[1:]))
+        span = (keys.index(q["base_date"].isoformat()), q["window_bars"], q["horizon_bars"])
+        by_ticker.setdefault(q["ticker"], []).append(span)
+    for spans in by_ticker.values():
+        assert len(spans) <= gen.PER_TICKER_MAX
+        assert all(gen.spans_clear(a, b) for i, a in enumerate(spans) for b in spans[i + 1:])
 
 
 def test_collect_balances_answers():
@@ -167,6 +167,35 @@ def test_collect_respects_existing_quizzes():
     assert quizzes == []
 
 
+def test_spans_clear_boundaries():
+    """간격 >= 나중 문제 차트 길이 + 이른 문제 예측 기간(최소 MIN_GAP_BARS), 순서 무관."""
+    assert gen.spans_clear((100, 60, 5), (165, 60, 5))       # 60 + 5 = 65 정확히
+    assert not gen.spans_clear((100, 60, 5), (164, 60, 5))
+    assert not gen.spans_clear((224, 120, 5), (100, 60, 5))  # 120봉 차트가 앞 문제 이후 봉 마지막 날을 품음
+    assert gen.spans_clear((225, 120, 5), (100, 60, 5))      # 120 + 5 = 125 정확히
+    assert gen.spans_clear((100, 60, 5), (225, 120, 5))      # 순서 무관
+    assert gen.spans_clear((100, 60, 10), (230, 120, 3))     # 120 + 10 = 130
+    assert not gen.spans_clear((100, 60, 10), (229, 120, 3))
+    assert gen.spans_clear((100, 120, 10), (150, 40, 3))     # 40 + 10 = 50 — 나중 문제 길이 기준
+    assert not gen.spans_clear((100, 10, 3), (110, 5, 3))    # 최소 MIN_GAP_BARS(20)
+
+
+def test_collect_respects_existing_window_and_horizon():
+    """기존 문제의 길이를 반영 — 120봉·10일 기존 문제 근처 후보는 고르지 않는다."""
+    _, data = _collect(1, tickers=("A",))
+    keys = [c["date"] for c in data["A"]]
+    base = date.fromisoformat(keys[300])
+    quizzes, _ = _collect(5, tickers=("A",), existing={"A": [(base, 120, 10)]})
+    for q in quizzes:
+        idx = keys.index(q["base_date"].isoformat())
+        assert gen.spans_clear((idx, q["window_bars"], q["horizon_bars"]), (300, 120, 10))
+
+
+def test_existing_plain_dates_default_to_60_and_5():
+    candles = [{"date": f"2026-01-{d:02d}"} for d in range(1, 31)]
+    assert gen._existing_spans(candles, [date(2026, 1, 5), (date(2026, 1, 10), 120, 3)]) == [(4, 60, 5), (9, 120, 3)]
+
+
 def test_collect_bounded_fetches(monkeypatch):
     monkeypatch.setattr(gen, "MAX_TICKER_FETCHES", 3)
     calls: list[str] = []
@@ -185,13 +214,14 @@ async def test_generate_keeps_gap_from_db_rows(maker):  # noqa: F811
     kw = dict(fetch_tickers=lambda: ["005930"], fetch_candles=lambda t: candles, session_factory=maker)
     created, _ = await gen.generate(2, rng=random.Random(0), **kw)
     assert created == 2
-    await gen.generate(2, rng=random.Random(1), **kw)  # 두 번째 실행도 기존 문제와 20거래일 이상 떨어져야 한다
+    await gen.generate(2, rng=random.Random(1), **kw)
     async with maker() as db:
-        rows = (await db.execute(select(ChartQuiz.base_date))).scalars().all()
+        rows = (await db.execute(select(ChartQuiz.base_date, ChartQuiz.window_bars, ChartQuiz.horizon_bars))).all()
     assert len(rows) >= 3
     keys = [c["date"] for c in candles]
-    idxs = sorted(keys.index(d.isoformat()) for d in rows)
-    assert all(b - a >= gen.MIN_GAP_BARS for a, b in zip(idxs, idxs[1:]))
+    spans = [(keys.index(d.isoformat()), w, h) for d, w, h in rows]
+    # 두 번째 실행도 기존 문제와 공개 구간(차트 + 이후 봉)이 겹치지 않아야 한다
+    assert all(gen.spans_clear(a, b) for i, a in enumerate(spans) for b in spans[i + 1:])
 
 
 # ---------------------------------------------------------------- B2: 이후 봉 공개·결과 한 줄
