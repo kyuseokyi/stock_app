@@ -128,3 +128,62 @@ async def test_candles_clickhouse_timeout_503(anon, maker, monkeypatch):
     monkeypatch.setattr(q, "fetch_candles", lambda t, i: time.sleep(0.3) or [])
     res = await anon.get("/api/game/candles", params={"interval": "5m"})
     assert res.status_code == 503
+
+
+# ---------------------------------------------------------------- 당일 봉(일봉 차트의 오늘 봉)
+def test_build_session_sql_latest_day_aggregate():
+    sql = q.build_session_sql("db")
+    assert "db.game_minute_bars FINAL" in sql
+    assert "argMin(open, ts)" in sql and "argMax(close, ts)" in sql and "sum(volume)" in sql
+    assert "SELECT max(toDate(ts))" in sql and "GROUP BY d" in sql
+
+
+def test_fetch_session_bar_converts_and_empty():
+    class C:
+        def __init__(self, rows):
+            self.rows = rows
+
+        def query(self, sql, parameters):
+            assert parameters == {"t": "005930"}
+            return type("R", (), {"result_rows": self.rows})()
+
+    assert q.fetch_session_bar("005930", client=C([("2026-10-16", 1, 3, 0.5, 2, 7)]), db="x") == {
+        "date": "2026-10-16", "open": 1.0, "high": 3.0, "low": 0.5, "close": 2.0, "volume": 7,
+    }
+    assert q.fetch_session_bar("005930", client=C([]), db="x") is None
+
+
+async def test_session_bar_returns_active_season_bar(anon, maker, monkeypatch):
+    async with maker() as db:
+        await _seed_season(db)
+    bar = {"date": "2026-10-16", "open": 1.0, "high": 2.0, "low": 0.5, "close": 1.5, "volume": 10}
+    monkeypatch.setattr(q, "fetch_session_bar", lambda t: bar if t == "005930" else None)
+    res = await anon.get("/api/game/candles/session")
+    assert res.status_code == 200
+    assert res.json() == {"ticker": "005930", "bar": bar}
+
+
+async def test_session_bar_none_and_no_season(anon, maker, monkeypatch):
+    monkeypatch.setattr(q, "fetch_session_bar", lambda t: pytest.fail("조회하면 안 됨"))
+    assert (await anon.get("/api/game/candles/session")).json() == {"ticker": None, "bar": None}
+    async with maker() as db:
+        await _seed_season(db)
+    monkeypatch.setattr(q, "fetch_session_bar", lambda t: None)
+    assert (await anon.get("/api/game/candles/session")).json() == {"ticker": "005930", "bar": None}
+
+
+async def test_session_bar_missing_table_and_failure(anon, maker, monkeypatch):
+    async with maker() as db:
+        await _seed_season(db)
+
+    def missing(t):
+        raise RuntimeError("Code: 60. DB::Exception: (UNKNOWN_TABLE)")
+
+    monkeypatch.setattr(q, "fetch_session_bar", missing)
+    assert (await anon.get("/api/game/candles/session")).json() == {"ticker": "005930", "bar": None}
+
+    def boom(t):
+        raise ConnectionError("CH down")
+
+    monkeypatch.setattr(q, "fetch_session_bar", boom)
+    assert (await anon.get("/api/game/candles/session")).status_code == 503

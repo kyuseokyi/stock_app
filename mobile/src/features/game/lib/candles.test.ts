@@ -1,4 +1,4 @@
-import { applyTick, mergeTick } from './candles';
+import { applyTick, mergeTick, withSessionBar } from './candles';
 import type { DailyCandle } from '../types';
 
 const c = (date: string, o: number, h: number, l: number, cl: number): DailyCandle => ({
@@ -43,5 +43,33 @@ describe('applyTick', () => {
   test('새 날 → 뒤에 추가', () => {
     const out = applyTick([c('2026-10-12', 1, 1, 1, 1)], '2026-10-13', 7);
     expect(out.map((x) => x.date)).toEqual(['2026-10-12', '2026-10-13']);
+  });
+});
+
+describe('withSessionBar', () => {
+  const rows = [c('2026-10-15', 1, 2, 1, 2), c('2026-10-16', 2, 3, 1, 2)];
+
+  it('마지막 일봉보다 나중 날짜면 뒤에 붙인다(원본 불변)', () => {
+    const bar = c('2026-10-17', 2, 5, 1, 4);
+    const out = withSessionBar(rows, bar);
+    expect(out).toEqual([...rows, bar]);
+    expect(rows).toHaveLength(2);
+  });
+
+  it('같은 날짜 일봉이 이미 있으면(수집 완료) 일봉 그대로', () => {
+    expect(withSessionBar(rows, c('2026-10-16', 9, 9, 9, 9))).toBe(rows);
+  });
+
+  it('이전 날짜·없음·빈 일봉·비정상 값이면 그대로', () => {
+    expect(withSessionBar(rows, c('2026-10-14', 1, 1, 1, 1))).toBe(rows);
+    expect(withSessionBar(rows, null)).toBe(rows);
+    expect(withSessionBar([], c('2026-10-17', 1, 1, 1, 1))).toEqual([]);
+    expect(withSessionBar(rows, c('2026-10-17', NaN, 1, 1, 1))).toBe(rows);
+  });
+
+  it('붙인 오늘 봉에 틱이 이어서 병합된다', () => {
+    const out = applyTick(withSessionBar(rows, c('2026-10-17', 2, 5, 1, 4)), '2026-10-17', 6);
+    expect(out[out.length - 1]).toEqual(c('2026-10-17', 2, 6, 1, 6));
+    expect(out).toHaveLength(3);
   });
 });

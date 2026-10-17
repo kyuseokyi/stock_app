@@ -22,3 +22,15 @@ async def candles(
         return await candles_service.get_candles(db, interval)
     except candles_service.CandlesUnavailable:
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "분봉 데이터를 불러올 수 없어요.")
+
+
+@router.get("/candles/session")
+async def session_bar(db: AsyncSession = Depends(get_db)):
+    """분봉으로 만든 최근 거래일 하루 봉 {ticker, bar:{date,open,high,low,close,volume}|null}.
+
+    일봉은 20:30 수집 후에야 오늘 행이 생긴다 — 클라이언트가 일봉 마지막 날짜보다 나중이면 이어 붙인다.
+    """
+    try:
+        return await candles_service.get_session_bar(db)
+    except candles_service.CandlesUnavailable:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "오늘 봉을 불러올 수 없어요.")

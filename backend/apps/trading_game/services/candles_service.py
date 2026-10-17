@@ -46,3 +46,22 @@ async def get_candles(db: AsyncSession, interval: str, fetch: Fetch | None = Non
         log.warning("분봉 조회 실패: ticker=%s interval=%s err=%s", season.ticker, interval, e)
         raise CandlesUnavailable(str(e)) from e
     return {"interval": interval, "ticker": season.ticker, "candles": candles}
+
+
+async def get_session_bar(db: AsyncSession, fetch: Callable[[str], dict | None] | None = None) -> dict:
+    """{"ticker","bar"} — 분봉으로 만든 최근 거래일 하루 봉(일봉 차트의 오늘 봉). 없으면 bar=None."""
+    season = await account_service.get_active_season(db)
+    if season is None:
+        return {"ticker": None, "bar": None}
+    fetch = fetch or minute_candles_query.fetch_session_bar
+    loop = asyncio.get_running_loop()
+    try:
+        bar = await asyncio.wait_for(
+            loop.run_in_executor(_CH_EXECUTOR, fetch, season.ticker), timeout=QUERY_TIMEOUT_SEC,
+        )
+    except Exception as e:  # noqa: BLE001
+        if _is_missing_table(e):
+            return {"ticker": season.ticker, "bar": None}
+        log.warning("당일 봉 조회 실패: ticker=%s err=%s", season.ticker, e)
+        raise CandlesUnavailable(str(e)) from e
+    return {"ticker": season.ticker, "bar": bar}

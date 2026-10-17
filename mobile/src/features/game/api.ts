@@ -295,6 +295,21 @@ export async function getGameCandles(interval: IntradayInterval): Promise<Intrad
   return normalizeIntradayCandles(await client().get<unknown>('/api/game/candles', { interval }));
 }
 
+type RawSessionBar = { ticker?: string | null; bar?: Record<string, unknown> | null };
+
+/** 분봉으로 만든 활성 시즌 종목의 최근 거래일 하루 봉(일봉 차트 오늘 봉). 없으면 bar: null, 오류는 throw */
+export async function getSessionBar(): Promise<{ ticker: string; bar: DailyCandle | null }> {
+  const data = await client().get<RawSessionBar>('/api/game/candles/session');
+  const b = data?.bar;
+  return {
+    ticker: data?.ticker ?? '',
+    bar:
+      b && typeof b.date === 'string'
+        ? { date: b.date, open: toNum(b.open), high: toNum(b.high), low: toNum(b.low), close: toNum(b.close) }
+        : null,
+  };
+}
+
 // ---------------------------------------------------------------- 일봉(stock_api GraphQL)
 
 const DAILY_QUERY = `query GameDailyCandles($symbol: String!, $startDate: String!, $endDate: String!) {

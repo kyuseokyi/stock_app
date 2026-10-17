@@ -12,6 +12,17 @@ export function mergeTick(last: DailyCandle | null, today: string, price: number
   return { date: today, open: price, high: price, low: price, close: price }
 }
 
+/**
+ * 분봉으로 만든 최근 거래일 봉(bar)을 일봉 끝에 잇는다(원본 불변).
+ * 일봉은 20:30 수집 후에야 오늘 행이 생긴다 — bar 가 마지막 일봉보다 나중 날짜일 때만 붙이고,
+ * 같은 날짜 일봉이 이미 있으면(수집 완료) 그 공식 값을 쓴다.
+ */
+export function withSessionBar(rows: DailyCandle[], bar: DailyCandle | null): DailyCandle[] {
+  if (!bar || rows.length === 0) return rows
+  if (![bar.open, bar.high, bar.low, bar.close].every(Number.isFinite)) return rows
+  return bar.date > rows[rows.length - 1].date ? [...rows, bar] : rows
+}
+
 const KST_OFFSET_MS = 9 * 3_600_000
 const DAY_MS = 86_400_000
 const MINUTES: Record<IntradayInterval, number> = { '1m': 1, '5m': 5, '15m': 15, '60m': 60 }
