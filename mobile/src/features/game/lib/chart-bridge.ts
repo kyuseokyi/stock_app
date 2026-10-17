@@ -37,6 +37,19 @@ export interface ChartLine {
   width: 1 | 2;
   dashed: boolean;
   title: string;
+  /**
+   * 자동 범위(가격축)에 넣을지 — 'always'=항상(진입가), 'day'=일봉에서만(지지·저항: 분봉은 변동폭이 작아 캔들이 납작해짐),
+   * 없음=넣지 않음(손절·익절은 멀 수 있음). lightweight-charts 4 의 가격선은 자동 범위에 들어가지 않는다.
+   */
+  fit?: 'always' | 'day';
+}
+
+/** 자동 범위에 넣을 가격 — 페이지(chart-page.ts autoscaleInfoProvider)의 같은 규칙 */
+export function fitPrices(lines: ChartLine[], mode: ChartMode): number[] {
+  return lines
+    .filter((l) => l.fit === 'always' || (l.fit === 'day' && mode === 'day'))
+    .map((l) => l.price)
+    .filter(Number.isFinite);
 }
 /** 첫 화면 구간 — 논리 인덱스 범위, 'fit' = 전체 맞춤, null = 데이터 없음 */
 export type VisibleRange = { from: number; to: number } | 'fit' | null;
@@ -137,10 +150,10 @@ export function priceLines(
 ): ChartLine[] {
   const out: ChartLine[] = [];
   if (coach?.support_price != null) {
-    out.push({ price: coach.support_price, color: SUPPORT_COLOR, width: 1, dashed: true, title: '지지' });
+    out.push({ price: coach.support_price, color: SUPPORT_COLOR, width: 1, dashed: true, title: '지지', fit: 'day' });
   }
   if (coach?.resistance_price != null) {
-    out.push({ price: coach.resistance_price, color: RESIST_COLOR, width: 1, dashed: true, title: '저항' });
+    out.push({ price: coach.resistance_price, color: RESIST_COLOR, width: 1, dashed: true, title: '저항', fit: 'day' });
   }
   if (position) {
     out.push({
@@ -149,6 +162,7 @@ export function priceLines(
       width: 2,
       dashed: false,
       title: '진입',
+      fit: 'always',
     });
     if (position.stop_loss_price != null) {
       out.push({ price: position.stop_loss_price, color: colors.muted, width: 1, dashed: true, title: '손절' });

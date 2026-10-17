@@ -102,6 +102,7 @@ const PAGE_SCRIPT = String.raw`
     series = chart.addCandlestickSeries({
       upColor: colors.up, downColor: colors.down, borderUpColor: colors.up, borderDownColor: colors.down,
       wickUpColor: colors.up, wickDownColor: colors.down,
+      autoscaleInfoProvider: widenRange,
     });
     var base = { lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false };
     ind = {
@@ -124,6 +125,24 @@ const PAGE_SCRIPT = String.raw`
     ['ma5', 'ma20', 'ma60'].forEach(function (k) { ind[k].applyOptions({ visible: vis.ma }); });
     ['bbUpper', 'bbMiddle', 'bbLower'].forEach(function (k) { ind[k].applyOptions({ visible: vis.bb }); });
     band.setVisible(vis.bb);
+  }
+
+  // 가격선은 자동 범위에 들어가지 않아 범위 밖 지지·저항이 사라진다 — fit 규칙(chart-bridge fitPrices 와 동일)으로 넓힘
+  function widenRange(original) {
+    var r = original();
+    if (!r || !r.priceRange) return r;
+    var prices = lineSpecs
+      .filter(function (s) { return s.fit === 'always' || (s.fit === 'day' && mode === 'day'); })
+      .map(function (s) { return s.price; })
+      .filter(function (p) { return typeof p === 'number' && isFinite(p); });
+    if (prices.length === 0) return r;
+    return {
+      priceRange: {
+        minValue: Math.min.apply(null, [r.priceRange.minValue].concat(prices)),
+        maxValue: Math.max.apply(null, [r.priceRange.maxValue].concat(prices)),
+      },
+      margins: r.margins,
+    };
   }
 
   function applyLines() {

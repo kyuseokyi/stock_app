@@ -2,6 +2,7 @@ import {
   initialRange,
   lastIndicatorValues,
   loadMessage,
+  fitPrices,
   priceLines,
   tickMessage,
   toBars,
@@ -92,4 +93,19 @@ it('toInjectScript 는 window.__chart 호출 + true;', () => {
   expect(toInjectScript({ type: 'vis', ma: true, bb: false })).toBe(
     'window.__chart&&window.__chart({"type":"vis","ma":true,"bb":false});true;',
   );
+});
+
+describe('fitPrices', () => {
+  const colors = { up: 'U', down: 'D', muted: 'M' };
+  const coach = { support_price: 100, resistance_price: 200 } as Coach;
+  const position = { side: 'LONG', entry_price: 150, stop_loss_price: 50, take_profit_price: 400 } as unknown as Position;
+  const lines = priceLines(coach, position, colors);
+
+  it('일봉은 지지·저항·진입, 분봉은 진입만(손절·익절은 항상 제외)', () => {
+    expect(fitPrices(lines, 'day')).toEqual([100, 200, 150]);
+    expect(fitPrices(lines, 'min')).toEqual([150]);
+  });
+  it('가격선이 없으면 빈 배열', () => {
+    expect(fitPrices([], 'day')).toEqual([]);
+  });
 });
