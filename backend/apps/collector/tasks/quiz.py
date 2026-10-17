@@ -1,8 +1,10 @@
 """차트 퀴즈 풀 정기 보충 Celery 태스크(매일 21:00 — 일봉 수집 20:30·정산 20:40 이후).
 
 아직 어떤 사용자도 시도하지 않은 문제 수가 QUIZ_POOL_MIN_UNSEEN(기본 100) 미만일 때만
-QUIZ_POOL_BATCH(기본 50)개를 생성한다. 생성 로직은 `scripts.generate_chart_quiz.generate` 를
-그대로 재사용한다(수동 CLI `uv run python -m scripts.generate_chart_quiz` 도 유지).
+QUIZ_POOL_BATCH(기본 200)개를 생성한다. 이 '미시도 재고'는 어느 사용자의 남은 문제 수보다도 작거나 같으므로
+(남은 문제 = 미시도 + 남이 본 것 중 내가 안 본 것) 가장 많이 푼 사용자보다 먼저 보충이 걸린다.
+생성 로직은 `scripts.generate_chart_quiz.generate` 를 그대로 재사용한다
+(수동 CLI `uv run python -m scripts.generate_chart_quiz` 도 유지).
 """
 from __future__ import annotations
 
@@ -23,7 +25,7 @@ from scripts import generate_chart_quiz as gen
 log = logging.getLogger("collector.quiz_task")
 
 DEFAULT_MIN_UNSEEN = 100
-DEFAULT_BATCH = 50
+DEFAULT_BATCH = 200  # 자동 생성 품질 기준(신호·3%·간격)이 엄격해져도 하룻밤에 넉넉히 채우도록
 
 GenerateFn = Callable[..., Awaitable[tuple[int, int]]]
 

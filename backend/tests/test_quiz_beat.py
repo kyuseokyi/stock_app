@@ -84,10 +84,10 @@ async def test_refill_generates_when_pool_empty(maker):
 @pytest.mark.parametrize(
     ("min_raw", "batch_raw", "expected"),
     [
-        (None, None, (100, 50)),
+        (None, None, (100, 200)),
         ("30", "10", (30, 10)),
-        ("abc", "", (100, 50)),
-        ("-1", "0", (100, 50)),
+        ("abc", "", (100, 200)),
+        ("-1", "0", (100, 200)),
     ],
 )
 def test_pool_settings_from_env(monkeypatch, min_raw, batch_raw, expected):
