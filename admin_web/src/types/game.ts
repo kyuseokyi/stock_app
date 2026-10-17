@@ -125,6 +125,9 @@ export interface QuizAdminItem {
   is_active: boolean
   attempt_count: number
   created_at: string | null
+  /** 문제 차트 길이·예측 기간(거래일) — 구 서버는 없음(=60·5) */
+  window_bars?: number
+  horizon_bars?: number
 }
 
 export interface QuizAdminList {
@@ -137,7 +140,8 @@ export interface QuizAdminList {
 export interface QuizAdminDetail extends QuizAdminItem {
   explanation: string
   reward_cash: number
-  chart_snapshot: QuizSnapshotCandle[] // 기준일까지 60봉
+  chart_snapshot: QuizSnapshotCandle[] // 기준일까지 window_bars 봉
+  future_snapshot?: QuizSnapshotCandle[] | null // 이후 horizon_bars 봉 — B2 이전 생성분은 null
 }
 
 export interface QuizAdminUpdateBody {

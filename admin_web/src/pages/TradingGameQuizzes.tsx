@@ -9,7 +9,7 @@ import type { QuizAdminDetail, QuizAdminList } from '../types/game'
 import type { Candle, Stock } from '../types/stock'
 
 const PAGE_SIZE = 20
-const FUTURE_CANDLES = 5
+const DEFAULT_HORIZON = 5
 
 type ActiveFilter = 'all' | 'active' | 'inactive'
 
@@ -64,10 +64,15 @@ function QuizDetailPanel({
         setQuiz(q)
         setPatternType(q.pattern_type)
         setExplanation(q.explanation)
-        // 이후 5거래일은 스냅샷에 없으므로 stock_api 일봉으로 보충(실패 시 문제 구간만)
-        getChartData(q.ticker, addDays(q.base_date, 1), addDays(q.base_date, 14))
+        // 이후 봉은 저장된 future_snapshot 우선. B2 이전 생성분은 stock_api 일봉으로 보충(실패 시 문제 구간만)
+        if (q.future_snapshot && q.future_snapshot.length > 0) {
+          setFuture(q.future_snapshot)
+          return
+        }
+        const horizon = q.horizon_bars ?? DEFAULT_HORIZON
+        getChartData(q.ticker, addDays(q.base_date, 1), addDays(q.base_date, horizon * 2 + 10))
           .then((chart) => {
-            if (!cancelled) setFuture(chart.candles.filter((c) => c.date > q.base_date).slice(0, FUTURE_CANDLES))
+            if (!cancelled) setFuture(chart.candles.filter((c) => c.date > q.base_date).slice(0, horizon))
           })
           .catch(() => {
             if (!cancelled) setFutureFailed(true)
@@ -142,7 +147,7 @@ function QuizDetailPanel({
           </h3>
           <p className="mt-1 text-sm text-slate-500">
             정답 <strong className={quiz.answer === 'UP' ? 'text-red-600' : 'text-blue-600'}>{ANSWER_LABEL[quiz.answer]}</strong>{' '}
-            ({formatChange(quiz.actual_change)}) · 시도 {quiz.attempt_count}회 · 보상 {quiz.reward_cash.toLocaleString()}원
+            ({formatChange(quiz.actual_change)}) · 차트 {quiz.window_bars ?? 60}봉 · 예측 {quiz.horizon_bars ?? DEFAULT_HORIZON}일 · 시도 {quiz.attempt_count}회 · 보상 {quiz.reward_cash.toLocaleString()}원
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -177,9 +182,14 @@ function QuizDetailPanel({
         </div>
       </div>
 
-      <QuizChartPreview snapshot={quiz.chart_snapshot} future={future} baseDate={quiz.base_date} />
+      <QuizChartPreview
+        snapshot={quiz.chart_snapshot}
+        future={future}
+        baseDate={quiz.base_date}
+        horizon={quiz.horizon_bars ?? DEFAULT_HORIZON}
+      />
       {futureFailed && (
-        <p className="text-xs text-slate-400">이후 5거래일 일봉을 불러오지 못해 문제 구간만 표시합니다(stock_api 확인).</p>
+        <p className="text-xs text-slate-400">이후 {quiz.horizon_bars ?? DEFAULT_HORIZON}거래일 일봉을 불러오지 못해 문제 구간만 표시합니다(stock_api 확인).</p>
       )}
 
       <label className="block">
@@ -464,6 +474,7 @@ function QuizzesPanel() {
                       <th className="px-3 py-2">종목</th>
                       <th className="px-3 py-2">기준일</th>
                       <th className="px-3 py-2">패턴</th>
+                      <th className="px-3 py-2">차트·예측</th>
                       <th className="px-3 py-2">정답</th>
                       <th className="px-3 py-2 text-right">시도</th>
                       <th className="px-3 py-2">상태</th>
@@ -482,6 +493,9 @@ function QuizzesPanel() {
                         <td className="px-3 py-2">{q.ticker}</td>
                         <td className="px-3 py-2">{q.base_date}</td>
                         <td className="px-3 py-2">{q.pattern_type}</td>
+                        <td className="px-3 py-2 text-slate-500">
+                          {q.window_bars ?? 60}봉 · {q.horizon_bars ?? DEFAULT_HORIZON}일
+                        </td>
                         <td className={`px-3 py-2 ${q.answer === 'UP' ? 'text-red-600' : 'text-blue-600'}`}>
                           {ANSWER_LABEL[q.answer]} {formatChange(q.actual_change)}
                         </td>
