@@ -6,6 +6,7 @@
 - broadcast_loop(GAME_WS_TICK_INTERVAL_SEC=0.25): 새 틱이 있으면 최신 1개만 전체 전송.
 - pnl_loop(GAME_WS_PNL_INTERVAL_SEC=1.0): 새 가격이 있으면 캐시+최신가로 ROI → 랭킹 ZADD + 개인손익 push.
 - fan-out 큐(256, oldest-drop)는 자동청산 넛지 전달용.
+- 장운영 상태(stock:status:{ticker}, VI·거래정지·서킷브레이크·사이드카)는 바뀔 때만 오므로 그대로 전체 중계.
 """
 from __future__ import annotations
 
@@ -22,7 +23,8 @@ import redis.asyncio as aioredis
 from shared.database import AsyncSessionLocal
 from apps.trading_game import deps
 from apps.trading_game.services import (
-    account_service, liquidation_service, nudge_engine, position_cache, pricing, ranking_service, weekly_ranking,
+    account_service, liquidation_service, market_status, nudge_engine, position_cache, pricing, ranking_service,
+    weekly_ranking,
 )
 from apps.trading_game.services import ws_bus
 
@@ -234,6 +236,13 @@ async def _handle_tick(raw: str) -> None:
         position_cache.mark_dirty()  # 청산됐든(상태 변경) 이미 닫혔든(캐시 오래됨) 재적재
 
 
+async def _relay_status(data: str) -> None:
+    """장운영 상태 변경(market_status.save_event 발행 payload)을 전체(로그인+공개) 접속자에게."""
+    payload = json.loads(data)
+    if payload.get("type") == "market_status":
+        await ws_bus.publish_all(payload)
+
+
 async def run_listener(redis_url: str, stop: asyncio.Event) -> None:
     """ACTIVE 시즌 종목을 구독. 끊김 시 지수 백오프 재연결."""
     backoff = 1
@@ -251,8 +260,9 @@ async def run_listener(redis_url: str, stop: asyncio.Event) -> None:
             redis = aioredis.from_url(redis_url, decode_responses=True)
             pubsub = redis.pubsub()
             try:
-                await pubsub.subscribe(f"stock:tick:{season.ticker}")
-                log.info("구독 시작 stock:tick:%s", season.ticker)
+                status_channel = market_status.status_key(season.ticker)
+                await pubsub.subscribe(f"stock:tick:{season.ticker}", status_channel)
+                log.info("구독 시작 stock:tick:%s + %s", season.ticker, status_channel)
                 async for msg in pubsub.listen():
                     if stop.is_set():
                         break
@@ -260,9 +270,12 @@ async def run_listener(redis_url: str, stop: asyncio.Event) -> None:
                         continue
                     backoff = 1  # 실제 데이터 수신 성공 → 백오프 리셋
                     try:
-                        await _handle_tick(msg["data"])
+                        if msg.get("channel") == status_channel:
+                            await _relay_status(msg["data"])
+                        else:
+                            await _handle_tick(msg["data"])
                     except Exception:
-                        log.exception("틱 처리 실패 — skip")
+                        log.exception("틱/장운영 상태 처리 실패 — skip")
             finally:
                 await pubsub.aclose()
                 await redis.aclose()

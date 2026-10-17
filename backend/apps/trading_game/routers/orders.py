@@ -20,7 +20,7 @@ from apps.trading_game.schemas.game_dtos import (
     AccountResponse, NudgeDTO, OrderRequest, OrderResultResponse, PositionResponse,
 )
 from apps.trading_game.services import (
-    account_service, academy_service, market_clock, nudge_engine, order_engine, position_cache, pricing,
+    account_service, academy_service, market_clock, market_status, nudge_engine, order_engine, position_cache, pricing,
     quest_service, ranking_service, rsi_service, streak_service,
 )
 
@@ -67,6 +67,17 @@ MSG_PRICE_UNAVAILABLE = "가격 정보를 불러오지 못했어요. 잠시 후 
 
 def _in_trading_time() -> bool:
     return market_clock.in_trading_window(market_clock.now_kst(), market_clock.load_windows())
+
+
+async def _require_market_open(redis, ticker: str) -> None:
+    """VI·거래정지·서킷브레이크·시장임시정지면 409(이유 안내). 조회 실패는 통과(fail-open).
+
+    VI 직후 몇 초는 마지막 가격이 아직 '신선' 해 가격 검사만으로는 멈춘 가격에 체결될 수 있다 — 먼저 막는다.
+    사이드카는 일반 체결이 계속되므로 막지 않는다.
+    """
+    st = await market_status.read_status(redis, ticker, market_clock.now_epoch())
+    if st["blocking"]:
+        raise HTTPException(status.HTTP_409_CONFLICT, st["message"])
 
 
 async def _require_fresh_price(redis, ticker: str) -> Decimal:
@@ -178,6 +189,7 @@ async def open_order(
     redis = deps.get_redis()
     if not _in_trading_time():
         raise HTTPException(status.HTTP_409_CONFLICT, MSG_NOT_TRADING_TIME)
+    await _require_market_open(redis, season.ticker)
     entry_price = await _require_fresh_price(redis, season.ticker)
 
     account = await account_service.get_or_create_account(db, user.id, season.id)
@@ -220,6 +232,7 @@ async def close_order(
     # 장 마감 뒤엔 가격이 멈춰 어차피 체결할 수 없다 — '가격 끊김'이 아니라 거래 시간 밖이라고 알린다
     if not _in_trading_time():
         raise HTTPException(status.HTTP_409_CONFLICT, MSG_CLOSE_NOT_TRADING_TIME)
+    await _require_market_open(deps.get_redis(), season.ticker)
     exit_price = await _require_fresh_price(deps.get_redis(), season.ticker)
     trade = await order_engine.close_position(
         db, position_id=pos.id, exit_price=exit_price, reason="MANUAL"

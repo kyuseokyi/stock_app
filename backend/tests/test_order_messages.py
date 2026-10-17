@@ -74,3 +74,72 @@ async def test_fresh_price_returned(monkeypatch):
     monkeypatch.setattr(market_clock, "now_epoch", lambda: 1000.0)
     price = await orders_router._require_fresh_price(_Redis(json.dumps({"price": 123.5, "ts": 995})), "005930")
     assert str(price) == "123.5"
+
+
+# ---------------------------------------------------------------- 장운영 상태(VI·거래정지·서킷브레이크·사이드카)
+from apps.trading_game.services import market_status as ms  # noqa: E402
+
+
+async def _set_status(redis, **ev):
+    base = {"trht_yn": "N", "vi_cls_code": "N", "ovtm_vi_cls_code": "N", "mkop_cls_code": "", "iscd_stat_cls_code": "00"}
+    base.update(ev)
+    await ms.save_event(redis, "005930", base, market_clock.now_epoch())
+
+
+async def test_vi_blocks_open_and_close_with_reason(api, maker, order_env, fake_redis):
+    client, set_user = api
+    async with maker() as db:
+        season = await _seed_season(db)
+        set_user(await _seed_user(db))
+    r = await client.post("/api/game/orders", json=_order(season.id))
+    assert r.status_code == 201, r.text
+    await _set_status(fake_redis, vi_cls_code="Y")
+    res = await client.post("/api/game/orders", json=_order(season.id))
+    assert res.status_code == 409 and res.json()["detail"] == ms.MESSAGES[ms.VI]
+    res = await client.post(f"/api/game/positions/{r.json()['id']}/close")
+    assert res.status_code == 409 and "VI" in res.json()["detail"]
+    await _set_status(fake_redis, vi_cls_code="N")
+    assert (await client.post(f"/api/game/positions/{r.json()['id']}/close")).status_code == 200
+
+
+async def test_halt_and_circuit_breaker_block_sidecar_does_not(api, maker, order_env, fake_redis):
+    client, set_user = api
+    async with maker() as db:
+        season = await _seed_season(db)
+        set_user(await _seed_user(db))
+    await _set_status(fake_redis, trht_yn="Y", tr_susp_reas_cntt="불성실공시")
+    res = await client.post("/api/game/orders", json=_order(season.id))
+    assert res.status_code == 409 and "거래가 정지" in res.json()["detail"] and "불성실공시" in res.json()["detail"]
+    await _set_status(fake_redis, trht_yn="N", mkop_cls_code="174")
+    res = await client.post("/api/game/orders", json=_order(season.id))
+    assert res.status_code == 409 and res.json()["detail"] == ms.MESSAGES[ms.CIRCUIT_BREAKER]
+    await _set_status(fake_redis, mkop_cls_code="175")
+    await _set_status(fake_redis, mkop_cls_code="387")  # 사이드카 — 안내만
+    assert (await client.post("/api/game/orders", json=_order(season.id))).status_code == 201
+
+
+async def test_market_status_endpoint(api, maker, fake_redis):
+    client, _ = api
+    body = (await client.get("/api/game/market-status")).json()
+    assert body["ticker"] is None and body["state"] == "NORMAL" and body["blocking"] is False
+    async with maker() as db:
+        await _seed_season(db)
+    assert (await client.get("/api/game/market-status")).json()["state"] == "NORMAL"
+    await _set_status(fake_redis, vi_cls_code="Y")
+    body = (await client.get("/api/game/market-status")).json()
+    assert body["ticker"] == "005930" and body["state"] == "VI" and body["blocking"] and body["since"]
+
+
+async def test_listener_relays_status_to_everyone(monkeypatch):
+    from apps.trading_game.services import tick_listener, ws_bus
+
+    sent = []
+
+    async def fake_publish_all(msg, redis=None):
+        sent.append(msg)
+
+    monkeypatch.setattr(ws_bus, "publish_all", fake_publish_all)
+    payload = {"type": "market_status", "ticker": "005930", "state": "VI", "message": "m", "blocking": True, "since": None}
+    await tick_listener._relay_status(json.dumps(payload))
+    await tick_listener._relay_status(json.dumps({"type": "other"}))
+    assert sent == [payload]
