@@ -35,7 +35,7 @@ function rewardLine(r: QuizResult): string | null {
 }
 
 /**
- * 야간 10초 차트 퀴즈 — intro → loading → playing → submitting → result (오류 시 error). (web ChartQuizModal 과 동일 규칙)
+ * 야간 차트 퀴즈 — intro → loading → playing → submitting → result (오류 시 error). (web ChartQuizModal 과 동일 규칙)
  * 판정은 서버 시각 기준(2지선다 10초·4지선다 15초 + 유예 3초). 카운트다운은 연출이며 0초가 되면 제출하지 않고 로컬 시간 초과 처리.
  */
 export function QuizSheet({ onClose }: { onClose: () => void }) {
