@@ -76,6 +76,13 @@ export function parseGameMessage(raw: string): GameWsMessage | null {
   }
 }
 
+/** 장운영 상태 재조회 주기 — 서버는 해제 이벤트를 놓쳐도 최대 지속 시간이 지나면 정상으로 보지만 그 전환은 발행되지 않는다 */
+export const MARKET_STATUS_POLL_MS = 20_000
+
+/** 배너가 떠 있는 동안(정상이 아닐 때)만 재조회 — 평상시엔 요청하지 않는다 */
+export const shouldPollMarketStatus = (status: MarketStatus | null): boolean =>
+  status !== null && status.state !== 'NORMAL'
+
 const MARKET_STATES = new Set(['NORMAL', 'HALTED', 'CIRCUIT_BREAKER', 'MARKET_PAUSED', 'VI', 'SIDECAR'])
 
 /** REST·WS 공용 정규화 — 모르는 state 는 null(무시: 서버가 상태를 늘려도 화면이 깨지지 않게) */

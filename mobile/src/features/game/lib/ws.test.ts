@@ -1,4 +1,4 @@
-import { buildGameWsUrl, classifyWsClose, parseGameMessage, toMarketStatus } from './ws';
+import { buildGameWsUrl, classifyWsClose, parseGameMessage, shouldPollMarketStatus, toMarketStatus } from './ws';
 
 describe('parseGameMessage', () => {
   test('tick — Decimal 문자열 가격을 number 로', () => {
@@ -115,5 +115,15 @@ describe('market_status', () => {
     const { type: _t, ...rest } = base;
     expect(toMarketStatus({ ...rest, state: 'SIDECAR', blocking: false })).toMatchObject({ state: 'SIDECAR', blocking: false });
     expect(toMarketStatus(null)).toBeNull();
+  });
+});
+
+describe('shouldPollMarketStatus', () => {
+  const st = (state: 'NORMAL' | 'VI' | 'SIDECAR') => ({ ticker: '005930', state, message: '', blocking: state === 'VI', since: null });
+  it('배너가 떠 있을 때(정상이 아닐 때)만 재조회', () => {
+    expect(shouldPollMarketStatus(null)).toBe(false);
+    expect(shouldPollMarketStatus(st('NORMAL'))).toBe(false);
+    expect(shouldPollMarketStatus(st('VI'))).toBe(true);
+    expect(shouldPollMarketStatus(st('SIDECAR'))).toBe(true);
   });
 });

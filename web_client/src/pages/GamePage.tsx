@@ -7,6 +7,8 @@ import ActivePositionCard from '../components/game/ActivePositionCard'
 import ChartQuizModal from '../components/game/ChartQuizModal'
 import CoachBanner from '../components/game/CoachBanner'
 import MarketStatusBanner from '../components/game/MarketStatusBanner'
+import { useVisibleInterval } from '../hooks/useVisibleInterval'
+import { MARKET_STATUS_POLL_MS, shouldPollMarketStatus } from '../lib/gameWs'
 import GameHeader from '../components/game/GameHeader'
 import GameRulesModal from '../components/game/GameRulesModal'
 import LeaderboardModal from '../components/game/LeaderboardModal'
@@ -56,6 +58,8 @@ export default function GamePage() {
   useEffect(() => {
     if (ready) void loadMarketStatus()
   }, [ready, season?.ticker, streamEpoch, loadMarketStatus])
+  // 배너가 떠 있는 동안만 재조회 — 해제 이벤트를 놓쳐 서버가 시간 초과로 정상 처리한 경우에도 배너가 내려가게
+  useVisibleInterval(() => void loadMarketStatus(), MARKET_STATUS_POLL_MS, ready && shouldPollMarketStatus(marketStatus))
 
   // 로그인 상태가 바뀌면 개인 데이터 로드/초기화
   useEffect(() => {

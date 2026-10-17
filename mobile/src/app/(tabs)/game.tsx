@@ -9,6 +9,8 @@ import { AcademySheet } from '@/features/game/components/academy-sheet';
 import { DailyChart } from '@/features/game/components/candle-chart';
 import { CoachBanner } from '@/features/game/components/coach-banner';
 import { MarketStatusBanner } from '@/features/game/components/market-status-banner';
+import { useForegroundInterval } from '@/features/game/lib/foreground-interval';
+import { MARKET_STATUS_POLL_MS, shouldPollMarketStatus } from '@/features/game/lib/ws';
 import { GameHeader } from '@/features/game/components/game-header';
 import { GameToaster } from '@/features/game/components/game-toaster';
 import { LeaderboardSheet } from '@/features/game/components/leaderboard-sheet';
@@ -77,6 +79,12 @@ export default function GameScreen() {
   useEffect(() => {
     if (ready && focused) void loadMarketStatus();
   }, [ready, focused, seasonTicker, streamEpoch, loadMarketStatus]);
+  // 배너가 떠 있는 동안만 재조회 — 해제 이벤트를 놓쳐 서버가 시간 초과로 정상 처리한 경우에도 배너가 내려가게
+  useForegroundInterval(
+    () => void loadMarketStatus(),
+    MARKET_STATUS_POLL_MS,
+    ready && focused && shouldPollMarketStatus(marketStatus),
+  );
 
   useEffect(() => {
     void loadSeason();
