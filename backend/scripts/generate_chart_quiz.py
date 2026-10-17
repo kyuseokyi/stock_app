@@ -22,6 +22,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import bisect
+import collections
 import random
 from datetime import date, timedelta
 from decimal import Decimal
@@ -274,6 +275,7 @@ def collect_quizzes(
     rng.shuffle(tickers)
     side_cap = (count + 1) // 2
     sides = {"UP": 0, "DOWN": 0}
+    patterns: collections.Counter[str] = collections.Counter()
     quizzes: list[dict] = []
     empty_tickers = 0
     for t in tickers[:MAX_TICKER_FETCHES]:
@@ -286,16 +288,21 @@ def collect_quizzes(
         candidates = eligible_quizzes(t, candles)
         rng.shuffle(candidates)
         taken = _existing_indices(candles, existing.get(t, []))
-        picked = 0
-        for idx, q in candidates:
-            if picked >= PER_TICKER_MAX or len(quizzes) >= count:
+        for _ in range(PER_TICKER_MAX):
+            if len(quizzes) >= count:
                 break
-            if sides[q["answer"]] >= side_cap or any(abs(idx - j) < MIN_GAP_BARS for j in taken):
-                continue
+            ok = [
+                (idx, q) for idx, q in candidates
+                if sides[q["answer"]] < side_cap and all(abs(idx - j) >= MIN_GAP_BARS for j in taken)
+            ]
+            if not ok:
+                break
+            # 지금까지 적게 나온 패턴 먼저(신고가·신저가 쏠림 완화) — 같은 횟수면 섞인 순서
+            idx, q = min(ok, key=lambda c: patterns[c[1]["pattern_type"]])
             taken.append(idx)
             sides[q["answer"]] += 1
+            patterns[q["pattern_type"]] += 1
             quizzes.append(q)
-            picked += 1
     if empty_tickers:
         print(f"[generate_chart_quiz] 캔들 없음(CH 장애/미수집 가능) 종목 수={empty_tickers}")
     return quizzes

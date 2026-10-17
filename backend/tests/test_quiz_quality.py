@@ -146,6 +146,15 @@ def test_collect_balances_answers():
     assert ups == 4 and len(quizzes) - ups == 4
 
 
+def test_collect_spreads_patterns():
+    """적게 나온 패턴을 먼저 고른다 — 한 패턴이 몰리지 않는다."""
+    import collections
+
+    quizzes, _ = _collect(12, tickers=tuple("ABCDEFGH"))
+    counts = collections.Counter(q["pattern_type"] for q in quizzes)
+    assert len(quizzes) == 12 and len(counts) >= 4 and max(counts.values()) <= 4
+
+
 def test_collect_respects_existing_quizzes():
     _, data = _collect(1, tickers=("A",))
     candidates = gen.eligible_quizzes("A", data["A"])
