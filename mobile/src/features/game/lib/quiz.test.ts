@@ -1,4 +1,4 @@
-import { isQuizPrimeTime, quizSecondsLeft, volumeHeights } from './quiz';
+import { isQuizPrimeTime, quizChoiceText, quizQuestionText, quizSecondsLeft, volumeHeights } from './quiz';
 
 describe('isQuizPrimeTime (KST)', () => {
   test('평일 15:29 → false, 15:30 → true', () => {
@@ -37,5 +37,28 @@ describe('volumeHeights', () => {
   test('거래량이 전부 없거나 0 이면 모두 0', () => {
     expect(volumeHeights([undefined, 0], 40)).toEqual([0, 0]);
     expect(volumeHeights([], 40)).toEqual([]);
+  });
+});
+
+describe('quizQuestionText', () => {
+  test('유형·예측 기간별 문구', () => {
+    expect(quizQuestionText({ quiz_type: 'DIRECTION', horizon_bars: 3 })).toBe('3거래일 뒤 주가는?');
+    expect(quizQuestionText({ quiz_type: 'RANGE', horizon_bars: 10 })).toBe('10거래일 뒤 등락률은?');
+    expect(quizQuestionText({ quiz_type: 'PATTERN', horizon_bars: 5 })).toBe('마지막 봉에 나타난 신호는?');
+  });
+});
+
+describe('quizChoiceText', () => {
+  const choices = [
+    { code: 'GOLDEN_CROSS', label: '골든크로스' },
+    { code: 'VOLUME_SURGE', label: '거래량 급증' },
+  ];
+  test('2지선다 코드 → 상승/하락', () => {
+    expect(quizChoiceText([], 'UP')).toBe('📈 상승');
+    expect(quizChoiceText([], 'DOWN')).toBe('📉 하락');
+  });
+  test('4지선다 코드 → 보기 label, 모르는 코드는 그대로', () => {
+    expect(quizChoiceText(choices, 'VOLUME_SURGE')).toBe('거래량 급증');
+    expect(quizChoiceText(choices, 'R_UP')).toBe('R_UP');
   });
 });

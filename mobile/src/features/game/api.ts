@@ -33,7 +33,9 @@ import type {
   QuestList,
   QuizCandle,
   QuizChoice,
+  QuizOption,
   QuizQuestion,
+  QuizType,
   QuizResult,
   RawAccount,
   RawClaimResult,
@@ -116,6 +118,11 @@ const toQuizCandles = (raw: Record<string, unknown>[]): QuizCandle[] => {
   }
   return out;
 };
+
+const toQuizOptions = (raw: RawQuizQuestion['choices']): QuizOption[] =>
+  (Array.isArray(raw) ? raw : []).flatMap((c) =>
+    typeof c?.code === 'string' && typeof c?.label === 'string' ? [{ code: c.code, label: c.label }] : [],
+  );
 
 const toQuizResult = ({ future_snapshot, outcome, ...r }: RawQuizResult): QuizResult => ({
   ...r,
@@ -249,13 +256,21 @@ export function submitAcademy(answers: Record<number, number>): Promise<AcademyS
 }
 
 export async function getRandomQuiz(): Promise<QuizQuestion> {
-  // horizons — 이 앱이 "N거래일 뒤" 를 표시할 수 있는 기간(안 보내면 서버는 5일 문제만 낸다)
-  const data = await client().get<RawQuizQuestion>('/api/game/quiz/random', { horizons: '3,5,10' });
+  // horizons·types — 이 앱이 표시할 수 있는 예측 기간·4지선다 유형(안 보내면 서버는 5일 2지선다만 낸다)
+  const data = await client().get<RawQuizQuestion>('/api/game/quiz/random', {
+    horizons: '3,5,10',
+    types: 'RANGE,PATTERN',
+  });
+  const choices = toQuizOptions(data.choices);
+  const known = data.quiz_type === 'RANGE' || data.quiz_type === 'PATTERN';
   return {
     id: data.id,
     chart_snapshot: toQuizCandles(data.chart_snapshot),
     time_limit_sec: data.time_limit_sec,
     horizon_bars: data.horizon_bars ?? 5,
+    // 보기가 비면 그릴 수 없으므로 2지선다로 — 서버가 422 로 거절해 오답 처리되지 않는다
+    quiz_type: known && choices.length > 0 ? (data.quiz_type as QuizType) : 'DIRECTION',
+    choices: known ? choices : [],
   };
 }
 

@@ -6,7 +6,7 @@ import { AmountText, Button, formatWon } from '@/ui';
 
 import { getRandomQuiz, submitQuiz } from '../api';
 import { apiErrorCode, gameErrorMessage } from '../lib/errors';
-import { quizSecondsLeft } from '../lib/quiz';
+import { quizChoiceText, quizQuestionText, quizSecondsLeft } from '../lib/quiz';
 import { currentPrivateGen, useTradingGameStore } from '../store';
 import type { QuizChoice, QuizQuestion, QuizResult } from '../types';
 import { QuizChart } from './quiz-chart';
@@ -25,7 +25,7 @@ type Phase =
   | { kind: 'error'; message: string; retryable: boolean }
   | { kind: 'exhausted' };
 
-const choiceLabel = (c: QuizChoice): string => (c === 'UP' ? '📈 상승' : '📉 하락');
+const NO_OPTIONS: QuizQuestion['choices'] = [];
 
 function rewardLine(r: QuizResult): string | null {
   if (r.rewarded) return `+${formatWon(r.reward_cash)} 지급`;
@@ -36,7 +36,7 @@ function rewardLine(r: QuizResult): string | null {
 
 /**
  * 야간 10초 차트 퀴즈 — intro → loading → playing → submitting → result (오류 시 error). (web ChartQuizModal 과 동일 규칙)
- * 판정은 서버 시각 기준(10초 + 유예 3초). 카운트다운은 연출이며 0초가 되면 제출하지 않고 로컬 시간 초과 처리.
+ * 판정은 서버 시각 기준(2지선다 10초·4지선다 15초 + 유예 3초). 카운트다운은 연출이며 0초가 되면 제출하지 않고 로컬 시간 초과 처리.
  */
 export function QuizSheet({ onClose }: { onClose: () => void }) {
   const markQuizDisabled = useTradingGameStore((s) => s.markQuizDisabled);
@@ -131,12 +131,12 @@ export function QuizSheet({ onClose }: { onClose: () => void }) {
   );
 
   return (
-    <Sheet title="🧩 야간 10초 차트 퀴즈" onClose={onClose}>
+    <Sheet title="🧩 야간 차트 퀴즈" onClose={onClose}>
       {phase.kind === 'intro' ? (
         <>
           <View style={styles.rules}>
-            <Text style={styles.rule}>📊 날짜·종목을 가린 차트를 보고 며칠(3·5·10거래일) 뒤 주가 방향을 맞혀요.</Text>
-            <Text style={styles.rule}>⏱ 제한 시간은 10초. 시간 안에 고르지 않으면 제출되지 않아요.</Text>
+            <Text style={styles.rule}>📊 날짜·종목을 가린 차트를 보고 며칠(3·5·10거래일) 뒤 주가 방향·등락폭이나 차트 신호를 맞혀요.</Text>
+            <Text style={styles.rule}>⏱ 제한 시간은 10초(보기 4개 문제는 15초). 시간 안에 고르지 않으면 제출되지 않아요.</Text>
             <Text style={styles.rule}>🎁 정답이면 +₩200,000 (보상은 하루 3회까지).</Text>
           </View>
           <Button label="시작" onPress={() => void start()} />
@@ -153,7 +153,7 @@ export function QuizSheet({ onClose }: { onClose: () => void }) {
       {phase.kind === 'playing' || phase.kind === 'submitting' ? (
         <>
           <View style={styles.playHead}>
-            <Text style={styles.ask}>{phase.quiz.horizon_bars}거래일 뒤 주가는?</Text>
+            <Text style={styles.ask}>{quizQuestionText(phase.quiz)}</Text>
             {phase.kind === 'playing' ? (
               <Text
                 style={[styles.timer, secondsLeft <= 3 && styles.timerUrgent]}
@@ -167,20 +167,34 @@ export function QuizSheet({ onClose }: { onClose: () => void }) {
           <View style={styles.chartFrame}>
             <QuizChart candles={phase.quiz.chart_snapshot} height={200} />
           </View>
-          <View style={styles.footer}>
-            <Pressable
-              disabled={phase.kind !== 'playing'}
-              onPress={() => void choose('UP')}
-              style={[styles.pick, styles.up, phase.kind !== 'playing' && styles.disabled]}>
-              <Text style={[styles.pickLabel, styles.upText]}>오를까? 📈</Text>
-            </Pressable>
-            <Pressable
-              disabled={phase.kind !== 'playing'}
-              onPress={() => void choose('DOWN')}
-              style={[styles.pick, styles.down, phase.kind !== 'playing' && styles.disabled]}>
-              <Text style={[styles.pickLabel, styles.downText]}>내릴까? 📉</Text>
-            </Pressable>
-          </View>
+          {phase.quiz.choices.length > 0 ? (
+            <View style={styles.options}>
+              {phase.quiz.choices.map((c) => (
+                <Pressable
+                  key={c.code}
+                  disabled={phase.kind !== 'playing'}
+                  onPress={() => void choose(c.code)}
+                  style={[styles.option, phase.kind !== 'playing' && styles.disabled]}>
+                  <Text style={styles.optionLabel}>{c.label}</Text>
+                </Pressable>
+              ))}
+            </View>
+          ) : (
+            <View style={styles.footer}>
+              <Pressable
+                disabled={phase.kind !== 'playing'}
+                onPress={() => void choose('UP')}
+                style={[styles.pick, styles.up, phase.kind !== 'playing' && styles.disabled]}>
+                <Text style={[styles.pickLabel, styles.upText]}>오를까? 📈</Text>
+              </Pressable>
+              <Pressable
+                disabled={phase.kind !== 'playing'}
+                onPress={() => void choose('DOWN')}
+                style={[styles.pick, styles.down, phase.kind !== 'playing' && styles.disabled]}>
+                <Text style={[styles.pickLabel, styles.downText]}>내릴까? 📉</Text>
+              </Pressable>
+            </View>
+          )}
         </>
       ) : null}
 
@@ -199,8 +213,10 @@ export function QuizSheet({ onClose }: { onClose: () => void }) {
           </Text>
           <View style={styles.lines}>
             <Text style={styles.line}>
-              정답 {choiceLabel(phase.result.answer)}
-              {phase.choice !== null ? <Text style={styles.muted}> · 내 선택 {choiceLabel(phase.choice)}</Text> : null}
+              정답 {quizChoiceText(phase.quiz?.choices ?? NO_OPTIONS, phase.result.answer)}
+              {phase.choice !== null ? (
+                <Text style={styles.muted}> · 내 선택 {quizChoiceText(phase.quiz?.choices ?? NO_OPTIONS, phase.choice)}</Text>
+              ) : null}
             </Text>
             <View style={styles.inline}>
               <Text style={styles.line}>실제 {phase.quiz?.horizon_bars ?? 5}일 등락</Text>
@@ -284,6 +300,19 @@ const styles = StyleSheet.create((theme) => ({
   downText: { color: theme.colors.down },
   disabled: { opacity: 0.4 },
   pickLabel: { fontSize: 16, fontWeight: '700' },
+  // 4지선다 2×2 — 보기 문구가 길어도(−5% ~ 0%, 20일 신고가) 두 줄까지 들어가게
+  options: { flexDirection: 'row', flexWrap: 'wrap', gap: theme.gap(1.5), alignSelf: 'stretch' },
+  option: {
+    flexBasis: '45%',
+    flexGrow: 1,
+    minHeight: 56,
+    paddingHorizontal: theme.gap(1),
+    borderRadius: theme.radius.button,
+    backgroundColor: theme.colors.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  optionLabel: { fontSize: 15, fontWeight: '700', color: theme.colors.text, textAlign: 'center' },
   headline: {
     paddingVertical: theme.gap(1.5),
     textAlign: 'center',

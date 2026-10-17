@@ -299,6 +299,10 @@ export interface RawQuizQuestion {
   time_limit_sec: number;
   /** 예측 기간(거래일) — 구 서버는 없음(=5) */
   horizon_bars?: number;
+  /** 문제 유형 — 구 서버는 없음(=DIRECTION) */
+  quiz_type?: string;
+  /** 4지선다 보기 — DIRECTION 은 null */
+  choices?: { code: unknown; label: unknown }[] | null;
 }
 
 export interface QuizQuestion {
@@ -307,9 +311,21 @@ export interface QuizQuestion {
   time_limit_sec: number;
   /** "N거래일 뒤" 의 N */
   horizon_bars: number;
+  /** DIRECTION(오를까/내릴까) | RANGE(등락폭 구간) | PATTERN(신호 맞히기) */
+  quiz_type: QuizType;
+  /** 4지선다 보기(출제 순서) — DIRECTION 은 빈 배열 */
+  choices: QuizOption[];
 }
 
-export type QuizChoice = 'UP' | 'DOWN';
+export type QuizType = 'DIRECTION' | 'RANGE' | 'PATTERN';
+
+export interface QuizOption {
+  code: string;
+  label: string;
+}
+
+/** DIRECTION 은 'UP' | 'DOWN', 4지선다는 보기의 code */
+export type QuizChoice = string;
 
 /** 연속 출석 마일스톤 보상(StreakRewardDTO — amount 는 정수 원) */
 export interface StreakReward {
