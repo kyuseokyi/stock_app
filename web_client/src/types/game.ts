@@ -356,6 +356,9 @@ export interface RawQuizResult {
   ticker: string
   base_date: string
   streak: Streak | null
+  /** 기준일 다음 5봉(문제와 같은 정규화). 구 서버·이전 생성분은 없음/null */
+  future_snapshot?: Record<string, unknown>[] | null
+  outcome?: string | null
 }
 
 export interface QuizResult {
@@ -371,6 +374,10 @@ export interface QuizResult {
   ticker: string
   base_date: string
   streak: Streak | null
+  /** 정답 공개용 이후 5봉 — 없으면 빈 배열 */
+  future_snapshot: QuizCandle[]
+  /** 패턴 기대 방향 vs 실제 결과 한 줄 — 없으면 null */
+  outcome: string | null
 }
 
 export interface WeeklyEntry {

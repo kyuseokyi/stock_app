@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import Button from '../ui/Button'
 import Modal from '../ui/Modal'
-import QuizMiniChart from './QuizMiniChart'
+import QuizExplanation from './QuizExplanation'
+import QuizMiniChart, { QUIZ_MA_COLORS } from './QuizMiniChart'
 import { getRandomQuiz, submitQuiz } from '../../api/game'
 import { formatKrw, formatPct, pnlClass } from '../../lib/format'
 import { apiErrorCode, gameErrorMessage } from '../../lib/gameErrors'
@@ -17,7 +18,7 @@ type Phase =
   | { kind: 'loading' }
   | { kind: 'playing'; quiz: QuizQuestion; startedAt: number }
   | { kind: 'submitting'; quiz: QuizQuestion; choice: QuizChoice }
-  | { kind: 'result'; result: QuizResult | null; choice: QuizChoice | null }
+  | { kind: 'result'; result: QuizResult | null; choice: QuizChoice | null; quiz: QuizQuestion | null }
   | { kind: 'error'; message: string; retryable: boolean }
   | { kind: 'exhausted' }
 
@@ -61,7 +62,7 @@ export default function ChartQuizModal({ onClose }: { onClose: () => void }) {
 
   // 0초 도달(미선택) → 서버에 제출하지 않고 로컬 시간 초과. playing 에서만 전환(submitting 중엔 무시)
   useEffect(() => {
-    if (phase.kind === 'playing' && secondsLeft === 0) setPhase({ kind: 'result', result: null, choice: null })
+    if (phase.kind === 'playing' && secondsLeft === 0) setPhase({ kind: 'result', result: null, choice: null, quiz: phase.quiz })
   }, [phase, secondsLeft])
 
   const handleError = (err: unknown) => {
@@ -109,7 +110,7 @@ export default function ChartQuizModal({ onClose }: { onClose: () => void }) {
       const result = await submitQuiz(quiz.id, choice)
       if (result.streak) setStreak(result.streak, gen)
       if (result.rewarded && gen === currentPrivateGen()) void refreshTrading() // 보상 → 헤더 자본금 반영
-      if (aliveRef.current) setPhase({ kind: 'result', result, choice })
+      if (aliveRef.current) setPhase({ kind: 'result', result, choice, quiz })
       else if (result.rewarded && gen === currentPrivateGen()) {
         // 제출 중 모달이 닫힌 경우 — 결과 화면이 없으므로 토스트로 보상 알림
         pushToast({ kind: 'nudge', icon: '🎁', message: `퀴즈 정답! +${formatKrw(result.reward_cash)} 지급됐어요` })
@@ -163,6 +164,10 @@ export default function ChartQuizModal({ onClose }: { onClose: () => void }) {
             )}
           </div>
           <QuizMiniChart candles={phase.quiz.chart_snapshot} />
+          <p className="mt-1 text-xs text-ink-muted">
+            <span style={{ color: QUIZ_MA_COLORS[5] }}>━ 5일선</span>{' '}
+            <span style={{ color: QUIZ_MA_COLORS[20] }}>━ 20일선</span> · 아래 막대 = 거래량
+          </p>
           <div className="mt-4 grid grid-cols-2 gap-3">
             <button
               type="button"
@@ -213,7 +218,19 @@ export default function ChartQuizModal({ onClose }: { onClose: () => void }) {
               <p className={phase.result.rewarded ? 'font-semibold text-up' : 'text-ink-muted'}>{rewardLine(phase.result)}</p>
             )}
           </div>
-          <p className="mt-3 whitespace-pre-line rounded-field bg-surface p-3 text-sm text-ink">{phase.result.explanation}</p>
+          {phase.result.outcome !== null && (
+            <p className="mt-3 rounded-field bg-canvas px-3 py-2 text-sm font-medium text-ink">{phase.result.outcome}</p>
+          )}
+          {phase.result.future_snapshot.length > 0 && phase.quiz !== null && (
+            <div className="mt-3">
+              <QuizMiniChart candles={phase.quiz.chart_snapshot} future={phase.result.future_snapshot} />
+              <p className="mt-1 text-xs text-ink-muted">
+                옅은 봉 = 이후 5거래일 · <span style={{ color: QUIZ_MA_COLORS[5] }}>━ 5일선</span>{' '}
+                <span style={{ color: QUIZ_MA_COLORS[20] }}>━ 20일선</span>
+              </p>
+            </div>
+          )}
+          <QuizExplanation markdown={phase.result.explanation} />
           <p className="mt-2 text-xs text-ink-muted">
             종목 {phase.result.ticker} · 기준일 {phase.result.base_date}
           </p>
