@@ -1,4 +1,4 @@
-import { buildGameWsUrl, classifyWsClose, parseGameMessage } from './ws';
+import { buildGameWsUrl, classifyWsClose, parseGameMessage, toMarketStatus } from './ws';
 
 describe('parseGameMessage', () => {
   test('tick — Decimal 문자열 가격을 number 로', () => {
@@ -90,5 +90,30 @@ describe('classifyWsClose', () => {
   test('그 외 — 일반 재시도', () => {
     expect(classifyWsClose(1006, true)).toBe('retry');
     expect(classifyWsClose(1000, false)).toBe('retry');
+  });
+});
+
+describe('market_status', () => {
+  const base = { type: 'market_status', ticker: '005930', state: 'VI', message: '변동성 완화장치(VI)가 발동됐어요.', blocking: true, since: '2026-10-16T10:00:00+09:00' };
+
+  it('정상 형식은 그대로', () => {
+    expect(parseGameMessage(JSON.stringify(base))).toEqual(base);
+  });
+
+  it('모르는 state·형식 오류는 무시(null)', () => {
+    expect(parseGameMessage(JSON.stringify({ ...base, state: 'NEW_THING' }))).toBeNull();
+    expect(parseGameMessage(JSON.stringify({ ...base, state: 1 }))).toBeNull();
+  });
+
+  it('blocking 은 true 일 때만, 빈 since·ticker 는 null', () => {
+    expect(parseGameMessage(JSON.stringify({ ...base, blocking: 'yes', since: '', ticker: '' }))).toEqual({
+      ...base, blocking: false, since: null, ticker: null,
+    });
+  });
+
+  it('REST 응답도 같은 정규화', () => {
+    const { type: _t, ...rest } = base;
+    expect(toMarketStatus({ ...rest, state: 'SIDECAR', blocking: false })).toMatchObject({ state: 'SIDECAR', blocking: false });
+    expect(toMarketStatus(null)).toBeNull();
   });
 });

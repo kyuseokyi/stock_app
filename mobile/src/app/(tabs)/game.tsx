@@ -8,6 +8,7 @@ import { useAuthStore } from '@/features/auth/store';
 import { AcademySheet } from '@/features/game/components/academy-sheet';
 import { DailyChart } from '@/features/game/components/candle-chart';
 import { CoachBanner } from '@/features/game/components/coach-banner';
+import { MarketStatusBanner } from '@/features/game/components/market-status-banner';
 import { GameHeader } from '@/features/game/components/game-header';
 import { GameToaster } from '@/features/game/components/game-toaster';
 import { LeaderboardSheet } from '@/features/game/components/leaderboard-sheet';
@@ -60,6 +61,9 @@ export default function GameScreen() {
   const refreshRank = useTradingGameStore((s) => s.refreshRank);
   const placeOrder = useTradingGameStore((s) => s.placeOrder);
   const closePosition = useTradingGameStore((s) => s.closePosition);
+  const marketStatus = useTradingGameStore((s) => s.marketStatus);
+  const loadMarketStatus = useTradingGameStore((s) => s.loadMarketStatus);
+  const streamEpoch = useTradingGameStore((s) => s.streamEpoch);
 
   const [activeModal, setActiveModal] = useState<ActiveModal>(null);
   const [primeTime, setPrimeTime] = useState(() => isQuizPrimeTime(new Date()));
@@ -67,6 +71,12 @@ export default function GameScreen() {
   const [loginPrompt, setLoginPrompt] = useState(false);
   const ready = status === 'ready';
   const focused = useIsFocused();
+
+  // 장운영 상태 배너 초기값 — 화면을 열 때·WS 재연결/앱 복귀(streamEpoch) 때. 이후 변화는 WS market_status
+  const seasonTicker = season?.ticker;
+  useEffect(() => {
+    if (ready && focused) void loadMarketStatus();
+  }, [ready, focused, seasonTicker, streamEpoch, loadMarketStatus]);
 
   useEffect(() => {
     void loadSeason();
@@ -232,6 +242,7 @@ export default function GameScreen() {
           onOpenRules={() => setActiveModal('rules')}
         />
         {/* 차트를 위로 — 아래 고정 주문 바와 한 화면에 들어오게. 코치·심리·안내는 차트 아래 */}
+        <MarketStatusBanner status={marketStatus} />
         <DailyChart ticker={season.ticker} lastPrice={lastPrice} coach={coach} position={position} />
         {position ? (
           <PositionCard position={position} lastPrice={lastPrice} closing={closing} onClose={() => void closePosition()} />

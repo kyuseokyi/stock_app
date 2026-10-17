@@ -10,7 +10,9 @@ import { kstDateString } from './lib/format';
 import { normalizeIntradayCandles } from './lib/intraday';
 import { normalizeRewardConfig } from './lib/ranking-period';
 import { normalizeGameRules } from './lib/rules';
+import { toMarketStatus } from './lib/ws';
 import type {
+  MarketStatus,
   AcademyQuiz,
   AcademySubmitResult,
   Account,
@@ -296,6 +298,14 @@ export async function getGameCandles(interval: IntradayInterval): Promise<Intrad
 }
 
 type RawSessionBar = { ticker?: string | null; bar?: Record<string, unknown> | null };
+
+/** 공개 — 장운영 상태(VI·거래정지·서킷브레이크·사이드카). 형식이 틀리면 null, 오류는 throw */
+export async function getMarketStatus(): Promise<MarketStatus | null> {
+  const st = toMarketStatus(await client().get<unknown>('/api/game/market-status'));
+  if (!st) return null;
+  const { type: _type, ...rest } = st;
+  return rest;
+}
 
 /** 분봉으로 만든 활성 시즌 종목의 최근 거래일 하루 봉(일봉 차트 오늘 봉). 없으면 bar: null, 오류는 throw */
 export async function getSessionBar(): Promise<{ ticker: string; bar: DailyCandle | null }> {

@@ -8,6 +8,7 @@ import type {
   Coach,
   GameWsMessage,
   Leverage,
+  MarketStatus,
   MyRank,
   Nudge,
   Position,
@@ -71,6 +72,10 @@ interface TradingGameState extends PrivateState {
   /** 실시간 스트림이 끊겼다 이어진 횟수(WS 재연결·화면 복귀) — 차트가 구독해 놓친 캔들을 다시 불러온다 */
   streamEpoch: number;
   bumpStreamEpoch: () => void;
+  /** 장운영 상태(VI·거래정지·서킷브레이크·사이드카) — 공개 정보라 로그아웃해도 유지 */
+  marketStatus: MarketStatus | null;
+  /** 화면을 열 때·재연결/복귀 때 배너 초기값. 실패는 조용히(이전 값 유지) */
+  loadMarketStatus: () => Promise<void>;
   pushToast: (t: Omit<GameToast, 'id'>) => void;
   dismissToast: (id: number) => void;
 }
@@ -142,6 +147,18 @@ export const useTradingGameStore = create<TradingGameState>()((set, get) => {
     toasts: [],
     quizDisabled: false,
     streamEpoch: 0,
+    marketStatus: null,
+
+    loadMarketStatus: async () => {
+      if (!gameApi.isGameConfigured()) return;
+      try {
+        const st = await gameApi.getMarketStatus();
+        const season = get().season;
+        if (st && (!season || st.ticker === null || st.ticker === season.ticker)) set({ marketStatus: st });
+      } catch {
+        // 배너는 보조 정보 — 실패해도 주문 자체는 서버가 막는다
+      }
+    },
 
     loadSeason: async () => {
       if (!gameApi.isGameConfigured()) {
@@ -297,6 +314,12 @@ export const useTradingGameStore = create<TradingGameState>()((set, get) => {
         case 'coach':
           if (season && msg.coach.season_id === season.id) set({ coach: msg.coach });
           return;
+        case 'market_status': {
+          if (season && msg.ticker !== null && msg.ticker !== season.ticker) return;
+          const { type: _type, ...status } = msg;
+          set({ marketStatus: status });
+          return;
+        }
       }
     },
 

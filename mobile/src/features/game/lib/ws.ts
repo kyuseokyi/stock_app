@@ -1,5 +1,5 @@
 import { toNumOrNull } from './decimal';
-import type { GameWsMessage } from '../types';
+import type { GameWsMessage, MarketStatus, MarketStatusState } from '../types';
 
 // WS 원문(JSON 문자열) → 판별 유니온. 형식이 틀리거나 모르는 type 은 null(무시) — (web lib/gameWs.ts 와 동일)
 // 백엔드에 새 메시지 type 이 추가돼도 기존 클라이언트가 깨지지 않게 한다.
@@ -73,9 +73,26 @@ export function parseGameMessage(raw: string): GameWsMessage | null {
         },
       };
     }
+    case 'market_status':
+      return toMarketStatus(data);
     default:
       return null;
   }
+}
+
+const MARKET_STATES = new Set(['NORMAL', 'HALTED', 'CIRCUIT_BREAKER', 'MARKET_PAUSED', 'VI', 'SIDECAR']);
+
+/** REST·WS 공용 정규화 — 모르는 state 는 null(무시: 서버가 상태를 늘려도 화면이 깨지지 않게). (web lib/gameWs.ts 와 동일) */
+export function toMarketStatus(data: unknown): ({ type: 'market_status' } & MarketStatus) | null {
+  if (!isObj(data) || typeof data.state !== 'string' || !MARKET_STATES.has(data.state)) return null;
+  return {
+    type: 'market_status',
+    ticker: str(data.ticker),
+    state: data.state as MarketStatusState,
+    message: typeof data.message === 'string' ? data.message : '',
+    blocking: data.blocking === true,
+    since: str(data.since),
+  };
 }
 
 // ── 연결 URL·종료 코드 판정(use-game-socket 에서 사용, 순수 함수라 테스트 가능) ──
