@@ -6,7 +6,7 @@ import QuizMiniChart, { QUIZ_MA_COLORS } from './QuizMiniChart'
 import { getRandomQuiz, submitQuiz } from '../../api/game'
 import { formatKrw, formatPct, pnlClass } from '../../lib/format'
 import { apiErrorCode, gameErrorMessage } from '../../lib/gameErrors'
-import { quizSecondsLeft } from '../../lib/quiz'
+import { quizChoiceText, quizQuestionText, quizSecondsLeft } from '../../lib/quiz'
 import { currentPrivateGen, useTradingGameStore } from '../../store/tradingGame'
 import type { QuizChoice, QuizQuestion, QuizResult } from '../../types/game'
 
@@ -22,7 +22,7 @@ type Phase =
   | { kind: 'error'; message: string; retryable: boolean }
   | { kind: 'exhausted' }
 
-const choiceLabel = (c: QuizChoice): string => (c === 'UP' ? '📈 상승' : '📉 하락')
+const NO_OPTIONS: QuizQuestion['choices'] = []
 
 function rewardLine(r: QuizResult): string | null {
   if (r.rewarded) return `+${formatKrw(r.reward_cash)} 지급`
@@ -31,8 +31,8 @@ function rewardLine(r: QuizResult): string | null {
   return null
 }
 
-// 야간 10초 차트 퀴즈 — intro → loading → playing → submitting → result (오류 시 error).
-// 판정은 서버 시각 기준(10초 + 유예 3초). 프론트 카운트다운은 연출이며 0초가 되면 제출하지 않고 시간 초과 처리.
+// 야간 차트 퀴즈 — intro → loading → playing → submitting → result (오류 시 error).
+// 판정은 서버 시각 기준(2지선다 10초·4지선다 15초 + 유예 3초). 프론트 카운트다운은 연출이며 0초가 되면 제출하지 않고 시간 초과 처리.
 export default function ChartQuizModal({ onClose }: { onClose: () => void }) {
   const markQuizDisabled = useTradingGameStore((s) => s.markQuizDisabled)
   const setStreak = useTradingGameStore((s) => s.setStreak)
@@ -132,12 +132,12 @@ export default function ChartQuizModal({ onClose }: { onClose: () => void }) {
   )
 
   return (
-    <Modal title="🧩 야간 10초 차트 퀴즈" onClose={onClose}>
+    <Modal title="🧩 야간 차트 퀴즈" onClose={onClose}>
       {phase.kind === 'intro' && (
         <div>
           <ul className="space-y-2 text-sm text-ink">
-            <li>📊 날짜·종목을 가린 차트를 보고 며칠(3·5·10거래일) 뒤 주가 방향을 맞혀요.</li>
-            <li>⏱ 제한 시간은 10초. 시간 안에 고르지 않으면 제출되지 않아요.</li>
+            <li>📊 날짜·종목을 가린 차트를 보고 며칠(3·5·10거래일) 뒤 주가 방향·등락폭이나 차트 신호를 맞혀요.</li>
+            <li>⏱ 제한 시간은 10초(보기 4개 문제는 15초). 시간 안에 고르지 않으면 제출되지 않아요.</li>
             <li>🎁 정답이면 +₩200,000 (보상은 하루 3회까지).</li>
           </ul>
           <Button full className="mt-5" onClick={() => void start()}>
@@ -151,7 +151,7 @@ export default function ChartQuizModal({ onClose }: { onClose: () => void }) {
       {(phase.kind === 'playing' || phase.kind === 'submitting') && (
         <div>
           <div className="mb-3 flex items-center justify-between">
-            <p className="font-semibold text-ink">{phase.quiz.horizon_bars}거래일 뒤 주가는?</p>
+            <p className="font-semibold text-ink">{quizQuestionText(phase.quiz)}</p>
             {phase.kind === 'playing' ? (
               <span
                 className={`text-lg font-bold tabular-nums ${secondsLeft <= 3 ? 'text-up' : 'text-ink'}`}
@@ -168,24 +168,40 @@ export default function ChartQuizModal({ onClose }: { onClose: () => void }) {
             <span style={{ color: QUIZ_MA_COLORS[5] }}>━ 5일선</span>{' '}
             <span style={{ color: QUIZ_MA_COLORS[20] }}>━ 20일선</span> · 아래 막대 = 거래량
           </p>
-          <div className="mt-4 grid grid-cols-2 gap-3">
-            <button
-              type="button"
-              disabled={phase.kind !== 'playing'}
-              onClick={() => void choose('UP')}
-              className="h-14 rounded-btn bg-up-soft text-base font-bold text-up transition hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              오를까? 📈
-            </button>
-            <button
-              type="button"
-              disabled={phase.kind !== 'playing'}
-              onClick={() => void choose('DOWN')}
-              className="h-14 rounded-btn bg-down-soft text-base font-bold text-down transition hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              내릴까? 📉
-            </button>
-          </div>
+          {phase.quiz.choices.length > 0 ? (
+            <div className="mt-4 grid grid-cols-2 gap-3">
+              {phase.quiz.choices.map((c) => (
+                <button
+                  key={c.code}
+                  type="button"
+                  disabled={phase.kind !== 'playing'}
+                  onClick={() => void choose(c.code)}
+                  className="min-h-14 rounded-btn bg-canvas px-2 py-2 text-sm font-bold text-ink transition hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  {c.label}
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div className="mt-4 grid grid-cols-2 gap-3">
+              <button
+                type="button"
+                disabled={phase.kind !== 'playing'}
+                onClick={() => void choose('UP')}
+                className="h-14 rounded-btn bg-up-soft text-base font-bold text-up transition hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                오를까? 📈
+              </button>
+              <button
+                type="button"
+                disabled={phase.kind !== 'playing'}
+                onClick={() => void choose('DOWN')}
+                className="h-14 rounded-btn bg-down-soft text-base font-bold text-down transition hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                내릴까? 📉
+              </button>
+            </div>
+          )}
         </div>
       )}
 
@@ -204,8 +220,13 @@ export default function ChartQuizModal({ onClose }: { onClose: () => void }) {
           </p>
           <div className="space-y-1.5 text-sm text-ink">
             <p>
-              정답 {choiceLabel(phase.result.answer)}
-              {phase.choice !== null && <span className="text-ink-muted"> · 내 선택 {choiceLabel(phase.choice)}</span>}
+              정답 {quizChoiceText(phase.quiz?.choices ?? NO_OPTIONS, phase.result.answer)}
+              {phase.choice !== null && (
+                <span className="text-ink-muted">
+                  {' '}
+                  · 내 선택 {quizChoiceText(phase.quiz?.choices ?? NO_OPTIONS, phase.choice)}
+                </span>
+              )}
             </p>
             <p>
               실제 {phase.quiz?.horizon_bars ?? 5}일 등락{' '}
