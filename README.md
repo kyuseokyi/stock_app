@@ -73,6 +73,8 @@ MOCK_TICK_STREAM=true uv run python -m apps.collector.run_game_ws   # Mock 모�
 #   H0STCNT0(KRX). 프로브 실패 시 UN 시도 → UN 구독 2회 연속 거부면 H0STCNT0 런타임 폴백.
 #   강제/롤백: GAME_WS_TR_ID=auto(기본)|H0UNCNT0|H0STCNT0|H0NXCNT0
 #   TRADING_WINDOWS(기본 09:00-15:30,16:00-20:00, 분 단위) 밖 틱(NXT 프리마켓 등)은 발행하지 않음
+#   장운영정보(H0STMKO0 — VI·거래정지·서킷브레이크·사이드카)도 구독해 Redis stock:status:{ticker} 저장·발행(실전 KIS_MODE=prod 만,
+#   모의투자 미지원). GAME_WS_MARKET_STATUS=false 로 끔. 주문·청산은 VI·거래정지·서킷브레이크 중 이유와 함께 거부, 웹·앱 배너
 uv run python -m scripts.test_game_ws_sub                           # 다른 터미널: stock:tick:* 수신 확인
 ```
 
