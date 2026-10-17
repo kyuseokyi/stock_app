@@ -24,6 +24,7 @@ from apps.collector.indicators import enrich_with_ma
 from apps.collector.kis.client import KISClient, KISConnectionError
 from apps.collector.kis.fetcher import fetch_domestic_daily, fetch_domestic_daily_range
 from apps.collector.rate_limit import RateLimiter
+from apps.collector.tasks.ohlcv import enrich_overlap_window
 from apps.collector.repositories.clickhouse_ohlcv import upsert_daily_prices
 from apps.collector.stock_master import load_domestic_tickers
 
@@ -216,7 +217,7 @@ def _collect_daily_one(ticker: str, client: KISClient) -> int:
     start = (today - timedelta(days=_LOOKBACK_DAYS)).strftime("%Y%m%d")
     end = (today + timedelta(days=_LOOKAHEAD_DAYS)).strftime("%Y%m%d")
     ohlcv = fetch_domestic_daily(ticker, start, end, client=client)
-    return upsert_daily_prices(ticker, enrich_with_ma(ohlcv))
+    return upsert_daily_prices(ticker, enrich_overlap_window(ticker, ohlcv))
 
 
 @celery_app.task(name="collector.collect_all_daily")

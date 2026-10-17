@@ -33,6 +33,17 @@ def upsert_daily_prices(ticker: str, records: list[dict]) -> int:
     return len(rows)
 
 
+def load_closes_before(ticker: str, before, limit: int) -> list[float]:
+    """before(date) 이전 최근 limit 개 종가(날짜 오름차순) — 겹침창 MA 계산용 앞부분."""
+    client = get_client()
+    result = client.query(
+        f"SELECT close FROM (SELECT date, close FROM {CLICKHOUSE_DB}.daily_prices FINAL "
+        "WHERE ticker = %(t)s AND date < %(d)s ORDER BY date DESC LIMIT %(n)s) ORDER BY date",
+        parameters={"t": ticker, "d": before, "n": int(limit)},
+    )
+    return [float(r[0]) for r in result.result_rows]
+
+
 def count_ticker(ticker: str) -> int:
     """해당 종목의 (중복 제거 후) 적재 행수."""
     client = get_client()
