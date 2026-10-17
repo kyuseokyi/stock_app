@@ -12,7 +12,7 @@ from shared.game_models import GameSeason, HallOfFame
 from apps.trading_game import deps
 from apps.trading_game.schemas.game_dtos import ActiveSeason, GameFeatures
 from apps.trading_game.services import (
-    account_service, feature_flag_service, monthly_service, ranking_service, weekly_service,
+    account_service, board_cache, feature_flag_service, monthly_service, ranking_service, weekly_service,
 )
 
 router = APIRouter(prefix="/api/game", tags=["trading-game-ranking"])
@@ -38,7 +38,11 @@ async def active_season(db: AsyncSession = Depends(get_db)):
 
 @router.get("/seasons/{season_id}/leaderboard")
 async def leaderboard(season_id: int, db: AsyncSession = Depends(get_db)):
-    return await ranking_service.top_leaderboard(deps.get_redis(), db, season_id, limit=100)
+    redis = deps.get_redis()
+    return await board_cache.cached(
+        redis, board_cache.cache_key("season", season_id),
+        lambda: ranking_service.top_leaderboard(redis, db, season_id, limit=100),
+    )
 
 
 @router.get("/seasons/{season_id}/my-rank")
@@ -76,8 +80,12 @@ async def _season_or_404(db: AsyncSession, season_id: int) -> GameSeason:
 @router.get("/seasons/{season_id}/weekly-leaderboard")
 async def weekly_leaderboard(season_id: int, db: AsyncSession = Depends(get_db)):
     """공개 — 이번 주 Top 100(월 09:00 시작, 시즌 경계로 잘림)."""
-    season = await _season_or_404(db, season_id)
-    return await weekly_service.weekly_leaderboard(db, deps.get_redis(), season)
+    redis = deps.get_redis()
+
+    async def build():
+        return await weekly_service.weekly_leaderboard(db, redis, await _season_or_404(db, season_id))
+
+    return await board_cache.cached(redis, board_cache.cache_key("week", season_id), build)
 
 
 @router.get("/seasons/{season_id}/weekly-my-rank")
@@ -117,8 +125,12 @@ async def weekly_reward_ack(
 @router.get("/seasons/{season_id}/monthly-leaderboard")
 async def monthly_leaderboard(season_id: int, db: AsyncSession = Depends(get_db)):
     """공개 — 이번 달 Top 100(1일 09:00 시작, 시즌 경계로 잘림)."""
-    season = await _season_or_404(db, season_id)
-    return await monthly_service.monthly_leaderboard(db, deps.get_redis(), season)
+    redis = deps.get_redis()
+
+    async def build():
+        return await monthly_service.monthly_leaderboard(db, redis, await _season_or_404(db, season_id))
+
+    return await board_cache.cached(redis, board_cache.cache_key("month", season_id), build)
 
 
 @router.get("/seasons/{season_id}/monthly-my-rank")
