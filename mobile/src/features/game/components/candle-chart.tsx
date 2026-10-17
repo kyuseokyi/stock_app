@@ -44,6 +44,8 @@ type CandleChartProps = {
   xLabels?: string[];
   /** 오른쪽 가격축(웹 차트처럼 눈금 값 + 현재가 태그). 게임 차트만 true, 퀴즈 차트는 기존(왼쪽 최고/최저) */
   priceAxis?: boolean;
+  /** 이 순번부터의 캔들을 옅게(퀴즈 정답 공개 후 이후 봉) */
+  fadeFrom?: number;
 };
 
 /** 캔들 + 가격선 렌더러. 폭은 onLayout 으로 측정(측정 전에는 빈 영역). xLabels 를 주면 아래에 시간축 라벨 */
@@ -80,7 +82,16 @@ type CandlePlotProps = Omit<CandleChartProps, 'xLabels'> & {
   onWidth: (w: number) => void;
 };
 
-function CandlePlot({ height, lines = [], overlays = [], showLabels = true, priceAxis = false, layout, onWidth }: CandlePlotProps) {
+function CandlePlot({
+  height,
+  lines = [],
+  overlays = [],
+  showLabels = true,
+  priceAxis = false,
+  fadeFrom,
+  layout,
+  onWidth,
+}: CandlePlotProps) {
   const { theme } = useUnistyles();
   const onLayout = (e: LayoutChangeEvent) => onWidth(e.nativeEvent.layout.width);
   const axisW = priceAxis ? PRICE_AXIS_W : 0;
@@ -115,7 +126,7 @@ function CandlePlot({ height, lines = [], overlays = [], showLabels = true, pric
         ? layout.bars.map((b, i) => {
             const color = b.rising ? theme.colors.up : theme.colors.down;
             return (
-              <View key={i} pointerEvents="none">
+              <View key={i} pointerEvents="none" style={fadeFrom !== undefined && i >= fadeFrom ? styles.faded : null}>
                 <View
                   style={[styles.abs, { left: b.wickLeft, top: b.wickTop, width: 1, height: b.wickHeight, backgroundColor: color }]}
                 />
@@ -527,6 +538,7 @@ const styles = StyleSheet.create((theme) => ({
   abs: { position: 'absolute' },
   segment: { height: 1 },
   faint: { opacity: 0.55 },
+  faded: { opacity: 0.35 },
   legend: {
     position: 'absolute',
     top: 0,

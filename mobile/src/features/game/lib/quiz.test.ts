@@ -1,4 +1,4 @@
-import { isQuizPrimeTime, quizSecondsLeft } from './quiz';
+import { isQuizPrimeTime, quizSecondsLeft, volumeHeights } from './quiz';
 
 describe('isQuizPrimeTime (KST)', () => {
   test('평일 15:29 → false, 15:30 → true', () => {
@@ -27,5 +27,15 @@ describe('quizSecondsLeft', () => {
   });
   test('초과는 0', () => {
     expect(quizSecondsLeft(0, 10, 99999)).toBe(0);
+  });
+});
+
+describe('volumeHeights', () => {
+  test('최대 거래량 = 최대 높이, 결측은 0', () => {
+    expect(volumeHeights([50, 100, undefined, 25], 40)).toEqual([20, 40, 0, 10]);
+  });
+  test('거래량이 전부 없거나 0 이면 모두 0', () => {
+    expect(volumeHeights([undefined, 0], 40)).toEqual([0, 0]);
+    expect(volumeHeights([], 40)).toEqual([]);
   });
 });

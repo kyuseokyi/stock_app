@@ -117,7 +117,12 @@ const toQuizCandles = (raw: Record<string, unknown>[]): QuizCandle[] => {
   return out;
 };
 
-const toQuizResult = (r: RawQuizResult): QuizResult => ({ ...r, actual_change: toNum(r.actual_change) });
+const toQuizResult = ({ future_snapshot, outcome, ...r }: RawQuizResult): QuizResult => ({
+  ...r,
+  actual_change: toNum(r.actual_change),
+  future_snapshot: Array.isArray(future_snapshot) ? toQuizCandles(future_snapshot) : [],
+  outcome: typeof outcome === 'string' && outcome !== '' ? outcome : null,
+});
 
 /** 공개 — 활성 시즌 없으면 null */
 export function getActiveSeason(): Promise<Season | null> {

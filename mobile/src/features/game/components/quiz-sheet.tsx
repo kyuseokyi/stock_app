@@ -9,7 +9,8 @@ import { apiErrorCode, gameErrorMessage } from '../lib/errors';
 import { quizSecondsLeft } from '../lib/quiz';
 import { currentPrivateGen, useTradingGameStore } from '../store';
 import type { QuizChoice, QuizQuestion, QuizResult } from '../types';
-import { CandleChart } from './candle-chart';
+import { QuizChart } from './quiz-chart';
+import { QuizExplanation } from './quiz-explanation';
 import { Sheet } from './sheet';
 
 const TICK_MS = 200;
@@ -20,7 +21,7 @@ type Phase =
   | { kind: 'loading' }
   | { kind: 'playing'; quiz: QuizQuestion; startedAt: number }
   | { kind: 'submitting'; quiz: QuizQuestion; choice: QuizChoice }
-  | { kind: 'result'; result: QuizResult | null; choice: QuizChoice | null }
+  | { kind: 'result'; result: QuizResult | null; choice: QuizChoice | null; quiz: QuizQuestion | null }
   | { kind: 'error'; message: string; retryable: boolean }
   | { kind: 'exhausted' };
 
@@ -66,7 +67,7 @@ export function QuizSheet({ onClose }: { onClose: () => void }) {
 
   // 0초 도달(미선택) → 서버에 제출하지 않고 로컬 시간 초과. playing 에서만 전환(submitting 중엔 무시)
   useEffect(() => {
-    if (phase.kind === 'playing' && secondsLeft === 0) setPhase({ kind: 'result', result: null, choice: null });
+    if (phase.kind === 'playing' && secondsLeft === 0) setPhase({ kind: 'result', result: null, choice: null, quiz: phase.quiz });
   }, [phase, secondsLeft]);
 
   const handleError = (err: unknown) => {
@@ -110,7 +111,7 @@ export function QuizSheet({ onClose }: { onClose: () => void }) {
       const result = await submitQuiz(quiz.id, choice);
       if (result.streak) setStreak(result.streak, gen);
       if (result.rewarded && gen === currentPrivateGen()) void refreshTrading(); // 보상 → 헤더 자본금 반영
-      if (aliveRef.current) setPhase({ kind: 'result', result, choice });
+      if (aliveRef.current) setPhase({ kind: 'result', result, choice, quiz });
     } catch (err) {
       handleError(err);
     } finally {
@@ -164,7 +165,7 @@ export function QuizSheet({ onClose }: { onClose: () => void }) {
             )}
           </View>
           <View style={styles.chartFrame}>
-            <CandleChart candles={phase.quiz.chart_snapshot} height={200} showLabels={false} />
+            <QuizChart candles={phase.quiz.chart_snapshot} height={200} />
           </View>
           <View style={styles.footer}>
             <Pressable
@@ -210,7 +211,13 @@ export function QuizSheet({ onClose }: { onClose: () => void }) {
               <Text style={phase.result.rewarded ? styles.rewarded : styles.muted}>{rewardLine(phase.result)}</Text>
             ) : null}
           </View>
-          <Text style={styles.explain}>{phase.result.explanation}</Text>
+          {phase.result.outcome !== null ? <Text style={styles.outcome}>{phase.result.outcome}</Text> : null}
+          {phase.result.future_snapshot.length > 0 && phase.quiz !== null ? (
+            <View style={styles.chartFrame}>
+              <QuizChart candles={phase.quiz.chart_snapshot} future={phase.result.future_snapshot} height={180} />
+            </View>
+          ) : null}
+          <QuizExplanation markdown={phase.result.explanation} />
           <Text style={styles.meta}>
             종목 {phase.result.ticker} · 기준일 {phase.result.base_date}
           </Text>
@@ -289,13 +296,14 @@ const styles = StyleSheet.create((theme) => ({
   line: { fontSize: 14, color: theme.colors.text },
   inline: { flexDirection: 'row', alignItems: 'center', gap: theme.gap(0.75) },
   rewarded: { fontSize: 14, fontWeight: '600', color: theme.colors.up },
-  explain: {
+  outcome: {
     fontSize: 14,
-    lineHeight: 21,
+    fontWeight: '600',
     color: theme.colors.text,
-    backgroundColor: theme.colors.surface,
+    backgroundColor: theme.colors.background,
     borderRadius: theme.radius.input,
-    padding: theme.gap(1.5),
+    paddingVertical: theme.gap(1),
+    paddingHorizontal: theme.gap(1.5),
     overflow: 'hidden',
   },
   meta: { fontSize: 12, color: theme.colors.textSecondary },

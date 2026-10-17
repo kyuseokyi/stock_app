@@ -16,3 +16,10 @@ export function quizSecondsLeft(startedAtMs: number, limitSec: number, nowMs: nu
   const remainMs = startedAtMs + limitSec * 1000 - nowMs;
   return remainMs <= 0 ? 0 : Math.ceil(remainMs / 1000);
 }
+
+/** 거래량 → 막대 높이(px). 최대 거래량 = maxHeight, 결측(undefined)·0 은 0. 최대가 0 이면 모두 0 */
+export function volumeHeights(volumes: (number | undefined)[], maxHeight: number): number[] {
+  const max = Math.max(0, ...volumes.map((v) => v ?? 0));
+  if (max <= 0) return volumes.map(() => 0);
+  return volumes.map((v) => ((v ?? 0) / max) * maxHeight);
+}
