@@ -70,14 +70,24 @@ def _as_utc(dt: datetime) -> datetime:
     return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)  # sqlite 는 naive 로 돌려줌
 
 
-async def serve_random(db: AsyncSession, user_id: int, *, now: datetime | None = None) -> ChartQuiz:
+LEGACY_HORIZONS = frozenset({5})  # 예측 기간을 모르는 구버전 클라이언트("5거래일 뒤" 고정 문구)
+SUPPORTED_HORIZONS = frozenset({3, 5, 10})
+
+
+async def serve_random(
+    db: AsyncSession, user_id: int, *, now: datetime | None = None, horizons: frozenset[int] = LEGACY_HORIZONS
+) -> ChartQuiz:
+    """미시도 활성 문제 중 무작위 1개. horizons 밖의 예측 기간 문제는 내지 않는다(구버전 앱 보호)."""
     now = now or datetime.now(timezone.utc)
     attempted = select(UserQuizAttempt.quiz_id).where(UserQuizAttempt.user_id == user_id)
     for _ in range(_SERVE_RETRIES):
         quiz = (
             await db.execute(
                 select(ChartQuiz)
-                .where(ChartQuiz.is_active.is_(True), ChartQuiz.id.not_in(attempted))
+                .where(
+                    ChartQuiz.is_active.is_(True), ChartQuiz.id.not_in(attempted),
+                    ChartQuiz.horizon_bars.in_(sorted(horizons)),
+                )
                 .order_by(func.random())
                 .limit(1)
             )

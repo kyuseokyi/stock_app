@@ -1046,8 +1046,8 @@ async def test_router_quiz_flow(api, maker, fake_redis):
     r = await client.get("/api/game/quiz/random")
     assert r.status_code == 200, r.text
     data = r.json()
-    assert set(data) == {"id", "chart_snapshot", "time_limit_sec"}
-    assert data["time_limit_sec"] == 10
+    assert set(data) == {"id", "chart_snapshot", "time_limit_sec", "horizon_bars"}  # 종목·날짜·정답 없음
+    assert data["time_limit_sec"] == 10 and data["horizon_bars"] == 5
     assert all("date" not in c for c in data["chart_snapshot"])
     assert data["chart_snapshot"][0]["close"] == 100
 

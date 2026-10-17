@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from shared.auth import get_current_user
@@ -66,19 +66,28 @@ async def _require_quiz_enabled(db: AsyncSession) -> None:
         )
 
 
+def _parse_horizons(raw: str | None) -> frozenset[int]:
+    """?horizons=3,5,10 — 클라이언트가 표시할 수 있는 예측 기간. 없거나 알 수 없는 값뿐이면 구버전(5일만)."""
+    if not raw:
+        return quiz_service.LEGACY_HORIZONS
+    picked = frozenset(int(p) for p in raw.split(",") if p.strip().isdigit()) & quiz_service.SUPPORTED_HORIZONS
+    return picked or quiz_service.LEGACY_HORIZONS
+
+
 @router.get("/quiz/random", response_model=QuizQuestionResponse)
 async def random_quiz(
+    horizons: str | None = Query(None, max_length=50),
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     await _require_quiz_enabled(db)
     try:
-        quiz = await quiz_service.serve_random(db, user.id)
+        quiz = await quiz_service.serve_random(db, user.id, horizons=_parse_horizons(horizons))
     except quiz_service.QuizError as e:
         raise HTTPException(_ERROR_STATUS.get(e.code, status.HTTP_400_BAD_REQUEST), detail={"code": e.code, "message": str(e)})
     return QuizQuestionResponse(
         id=quiz.id, chart_snapshot=quiz_service.masked_snapshot(quiz.chart_snapshot),
-        time_limit_sec=quiz_service.QUIZ_TIME_LIMIT_SECONDS,
+        time_limit_sec=quiz_service.QUIZ_TIME_LIMIT_SECONDS, horizon_bars=quiz.horizon_bars,
     )
 
 
@@ -117,7 +126,8 @@ async def submit_quiz(
             quiz_service.masked_snapshot(quiz.future_snapshot, base=quiz.chart_snapshot)
             if quiz.future_snapshot else None
         ),
-        outcome=quiz_insight.outcome_text(quiz.pattern_type, quiz.answer, quiz.actual_change),
+        outcome=quiz_insight.outcome_text(quiz.pattern_type, quiz.answer, quiz.actual_change, quiz.horizon_bars),
+        horizon_bars=quiz.horizon_bars,
     )
 
 

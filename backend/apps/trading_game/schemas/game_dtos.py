@@ -238,6 +238,7 @@ class QuizQuestionResponse(BaseModel):
     id: int
     chart_snapshot: list[dict]
     time_limit_sec: int
+    horizon_bars: int = 5  # B3-1 — "N거래일 뒤" 의 N
 
 
 class QuizSubmitRequest(BaseModel):
@@ -260,6 +261,7 @@ class QuizSubmitResponse(BaseModel):
     future_snapshot: list[dict] | None = None
     # B2 — 패턴 기대 방향과 실제 결과를 잇는 한 줄. 알 수 없는 패턴이면 None
     outcome: str | None = None
+    horizon_bars: int = 5  # B3-1
 
 
 # ---------------------------------------------------------------- 관리자 퀴즈·아카데미 편집(백로그 ⑤-2)
@@ -308,6 +310,8 @@ class QuizAdminItem(BaseModel):
     is_active: bool
     attempt_count: int
     created_at: datetime | None
+    window_bars: int = 60  # B3-1
+    horizon_bars: int = 5
 
 
 class QuizAdminListResponse(BaseModel):
@@ -318,11 +322,12 @@ class QuizAdminListResponse(BaseModel):
 
 
 class QuizAdminDetail(QuizAdminItem):
-    """원본 chart_snapshot(날짜 포함, 기준일까지 60봉)·정답·해설."""
+    """원본 chart_snapshot(날짜 포함, 기준일까지 window_bars봉)·정답·해설."""
 
     explanation: str
     reward_cash: int
     chart_snapshot: list[dict]
+    future_snapshot: list[dict] | None = None  # 원본 이후 horizon_bars봉(날짜 포함). B2 이전 생성분은 None
 
 
 class QuizAdminUpdate(BaseModel):

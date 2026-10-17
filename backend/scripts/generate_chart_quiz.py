@@ -10,6 +10,7 @@ ClickHouse daily_prices 에서 종목을 무작위로 골라, 기준일까지 60
 - 같은 종목은 기준일 간격 >= MIN_GAP_BARS(20거래일) — DB 의 기존 문제와도 비교
 - 기준일까지 20일 평균 거래대금 >= MIN_TURNOVER(10억 원)
 - 정답 UP/DOWN 을 반반에 가깝게
+- 차트 길이(40/60/120봉)·예측 기간(3/5/10일)을 종목마다 가중 무작위로(B3-1, 직접 출제는 60봉·5일)
 
 실행:
     cd backend
@@ -47,6 +48,11 @@ MIN_TURNOVER = 1_000_000_000  # 20일 평균 거래대금(종가×거래량, 원
 SIGNAL_LOOKBACK = 20
 VOLUME_SURGE_RATIO = 2.0
 MAX_TICKER_FETCHES = 400  # 한 번 실행에서 CH 일봉 조회 상한(종목 수)
+
+# 자동 생성 차트 길이·예측 기간(B3-1) — (값, 가중치). 종목마다 한 쌍을 뽑는다.
+# 5일 비중을 높게 — 구버전 클라이언트는 5일 문제만 받는다(quiz_service.serve_random)
+WINDOW_CHOICES: tuple[tuple[int, int], ...] = ((40, 1), (60, 2), (120, 1))
+HORIZON_CHOICES: tuple[tuple[int, int], ...] = ((3, 1), (5, 3), (10, 1))
 
 # 신호 → (pattern_type, 해설 한 줄). 우선순위 순서(앞이 먼저 채택)
 SIGNALS: dict[str, tuple[str, str]] = {
@@ -156,20 +162,22 @@ def evaluate_quiz(
     *,
     min_abs_change: float = MIN_ABS_CHANGE,
     signal: str | None = None,
+    window_bars: int = WINDOW,
+    horizon: int = HORIZON,
 ) -> dict | str:
     """candles[base_idx] 를 기준일로 퀴즈 1개(dict). 조건 미달이면 사유 코드(str):
 
-    INSUFFICIENT_DATA(기준일까지 WINDOW봉·이후 HORIZON봉 부족) | INVALID_SERIES(종가 0 이하·가격제한폭 초과)
-    | TOO_FLAT(|등락| < min_abs_change%). 관리자 직접 출제가 사유를 그대로 응답한다.
+    INSUFFICIENT_DATA(기준일까지 window_bars봉·이후 horizon봉 부족) | INVALID_SERIES(종가 0 이하·가격제한폭 초과)
+    | TOO_FLAT(|등락| < min_abs_change%). 관리자 직접 출제가 사유를 그대로 응답한다(기본 60봉·5일).
     """
-    if base_idx < WINDOW - 1 or base_idx + HORIZON >= len(candles):
+    if base_idx < window_bars - 1 or base_idx + horizon >= len(candles):
         return "INSUFFICIENT_DATA"
-    window = candles[base_idx - WINDOW + 1:base_idx + 1]
-    span = candles[base_idx - WINDOW + 1:base_idx + HORIZON + 1]
+    window = candles[base_idx - window_bars + 1:base_idx + 1]
+    span = candles[base_idx - window_bars + 1:base_idx + horizon + 1]
     if not _valid_series([float(c["close"]) for c in span]):
         return "INVALID_SERIES"
     base_close = float(candles[base_idx]["close"])
-    future_close = float(candles[base_idx + HORIZON]["close"])
+    future_close = float(candles[base_idx + horizon]["close"])
     change = round((future_close - base_close) / base_close * 100, 2)
     if abs(change) < min_abs_change:
         return "TOO_FLAT"
@@ -179,7 +187,9 @@ def evaluate_quiz(
         "base_date": date.fromisoformat(str(candles[base_idx]["date"])[:10]),
         "pattern_type": pattern,
         "chart_snapshot": window,
-        "future_snapshot": candles[base_idx + 1:base_idx + HORIZON + 1],  # 제출 후 공개용 정답 구간
+        "future_snapshot": candles[base_idx + 1:base_idx + horizon + 1],  # 제출 후 공개용 정답 구간
+        "window_bars": window_bars,
+        "horizon_bars": horizon,
         "answer": "UP" if change > 0 else "DOWN",
         "actual_change": Decimal(f"{change:.2f}"),
         "explanation": explanation,
@@ -233,23 +243,33 @@ async def insert_quizzes(db, quizzes: list[dict]) -> tuple[int, int]:
 PER_TICKER_MAX = 2  # 한 번 실행에서 같은 종목 최대 문제 수(종목 다양성)
 
 
-def eligible_quizzes(ticker: str, candles: list[dict]) -> list[tuple[int, dict]]:
+def eligible_quizzes(
+    ticker: str, candles: list[dict], *, window_bars: int = WINDOW, horizon: int = HORIZON
+) -> list[tuple[int, dict]]:
     """자동 생성 기준을 통과하는 (base_idx, 퀴즈) 전부 — 거래대금·신호·3% 등락·시계열 유효성."""
     out: list[tuple[int, dict]] = []
-    for idx in range(WINDOW - 1, len(candles) - HORIZON):
-        base, future = float(candles[idx]["close"]), float(candles[idx + HORIZON]["close"])
+    for idx in range(window_bars - 1, len(candles) - horizon):
+        base, future = float(candles[idx]["close"]), float(candles[idx + horizon]["close"])
         if base <= 0 or abs(future / base - 1) * 100 < AUTO_MIN_ABS_CHANGE:  # 싼 검사 먼저(정확한 판정은 evaluate_quiz)
             continue
-        window = candles[idx - WINDOW + 1:idx + 1]  # 기준일까지만 — 신호 판정에 미래 봉을 쓰지 않는다
+        window = candles[idx - window_bars + 1:idx + 1]  # 기준일까지만 — 신호 판정에 미래 봉을 쓰지 않는다
         if avg_turnover(window) < MIN_TURNOVER:
             continue
         signal = detect_signal(window)
         if signal is None:
             continue
-        q = evaluate_quiz(ticker, candles, idx, min_abs_change=AUTO_MIN_ABS_CHANGE, signal=signal)
+        q = evaluate_quiz(
+            ticker, candles, idx, min_abs_change=AUTO_MIN_ABS_CHANGE, signal=signal,
+            window_bars=window_bars, horizon=horizon,
+        )
         if isinstance(q, dict):
             out.append((idx, q))
     return out
+
+
+def _weighted(rng: random.Random, choices: tuple[tuple[int, int], ...]) -> int:
+    values, weights = zip(*choices)
+    return rng.choices(values, weights=weights)[0]
 
 
 def _existing_indices(candles: list[dict], dates: list[date]) -> list[int]:
@@ -265,11 +285,14 @@ def collect_quizzes(
     fetch_tickers: Callable[[], list[str]],
     fetch_candles: Callable[[str], list[dict]],
     existing: dict[str, list[date]] | None = None,
+    window_choices: tuple[tuple[int, int], ...] = WINDOW_CHOICES,
+    horizon_choices: tuple[tuple[int, int], ...] = HORIZON_CHOICES,
 ) -> list[dict]:
     """품질 기준(모듈 docstring)을 통과한 퀴즈 최대 count 개(동기 — CH 조회 포함).
 
     종목을 섞어 차례로 보며 종목당 PER_TICKER_MAX 개까지, 같은 종목 기준일은 서로·기존 문제와
     MIN_GAP_BARS 이상 떨어지게 고른다. UP/DOWN 은 각각 최대 ceil(count/2) — 한쪽이 모자라면 적게 만든다.
+    차트 길이·예측 기간은 종목마다 가중 무작위로 한 쌍(조합 전부를 훑으면 판정 비용이 몇 배가 된다).
     """
     existing = existing or {}
     tickers = list(fetch_tickers())
@@ -286,7 +309,9 @@ def collect_quizzes(
         if not candles:
             empty_tickers += 1
             continue
-        candidates = eligible_quizzes(t, candles)
+        window_bars = _weighted(rng, window_choices)
+        horizon = _weighted(rng, horizon_choices)
+        candidates = eligible_quizzes(t, candles, window_bars=window_bars, horizon=horizon)
         rng.shuffle(candidates)
         taken = _existing_indices(candles, existing.get(t, []))
         for _ in range(PER_TICKER_MAX):

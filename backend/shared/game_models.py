@@ -309,6 +309,9 @@ class ChartQuiz(Base):
     chart_snapshot: Mapped[list] = mapped_column(JSON, nullable=False)  # OHLCV dict 배열(기준일까지)
     # 기준일 다음 HORIZON 봉(정답 구간) — 제출 후 공개. B2 이전 생성분은 NULL
     future_snapshot: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    # B3-1 — 문제 차트 길이·예측 기간(거래일). 이전 생성분은 60·5
+    window_bars: Mapped[int] = mapped_column(Integer, nullable=False, default=60, server_default="60")
+    horizon_bars: Mapped[int] = mapped_column(Integer, nullable=False, default=5, server_default="5")
     answer: Mapped[str] = mapped_column(String(10), nullable=False)  # 'UP' / 'DOWN'
     actual_change: Mapped[Decimal] = mapped_column(Numeric(6, 2), nullable=False)
     explanation: Mapped[str] = mapped_column(Text, nullable=False)

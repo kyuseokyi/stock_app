@@ -38,7 +38,7 @@ def _item_fields(r: QuizWithAttempts) -> dict:
     return dict(
         id=q.id, ticker=q.ticker, base_date=q.base_date, pattern_type=q.pattern_type, answer=q.answer,
         actual_change=q.actual_change, is_active=q.is_active, attempt_count=r.attempt_count,
-        created_at=q.created_at,
+        created_at=q.created_at, window_bars=q.window_bars, horizon_bars=q.horizon_bars,
     )
 
 
@@ -46,6 +46,7 @@ def _detail(r: QuizWithAttempts) -> QuizAdminDetail:
     q = r.quiz
     return QuizAdminDetail(
         **_item_fields(r), explanation=q.explanation, reward_cash=q.reward_cash, chart_snapshot=q.chart_snapshot,
+        future_snapshot=q.future_snapshot,
     )
 
 

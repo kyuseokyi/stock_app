@@ -250,3 +250,58 @@ async def test_router_submit_returns_future_and_outcome(api, maker, fake_redis):
     assert all("date" not in c for c in new["future_snapshot"])
     assert new["outcome"] is not None and "+3.0% 올랐어요" in new["outcome"]
     assert old["future_snapshot"] is None and old["outcome"] is None
+
+
+# ---------------------------------------------------------------- B3-1: 차트 길이·예측 기간
+@pytest.mark.parametrize("window_bars, horizon", [(40, 3), (120, 10)])
+def test_evaluate_quiz_custom_window_horizon(window_bars, horizon):
+    closes = [100.0] * (window_bars + horizon - 1) + [104.0]
+    candles = _flat(closes)
+    base_idx = window_bars - 1
+    q = gen.evaluate_quiz("005930", candles, base_idx, window_bars=window_bars, horizon=horizon)
+    assert len(q["chart_snapshot"]) == window_bars and len(q["future_snapshot"]) == horizon
+    assert (q["window_bars"], q["horizon_bars"]) == (window_bars, horizon)
+    assert q["actual_change"] == Decimal("4.00")  # 기준일 → horizon 봉 뒤 종가
+    assert gen.evaluate_quiz("005930", candles[:-1], base_idx, window_bars=window_bars, horizon=horizon) \
+        == "INSUFFICIENT_DATA"
+
+
+def test_collect_varies_window_horizon():
+    quizzes, _ = _collect(12, tickers=tuple("ABCDEFGH"))
+    combos = {(q["window_bars"], q["horizon_bars"]) for q in quizzes}
+    assert len(combos) >= 2
+    for q in quizzes:
+        assert len(q["chart_snapshot"]) == q["window_bars"] and len(q["future_snapshot"]) == q["horizon_bars"]
+
+
+def test_collect_pinned_choices():
+    rng = random.Random(0)
+    data = {t: rich_candles(400, seed=i + 1) for i, t in enumerate("ABC")}
+    quizzes = gen.collect_quizzes(4, rng=rng, fetch_tickers=lambda: list(data), fetch_candles=data.__getitem__,
+                                  window_choices=((40, 1),), horizon_choices=((10, 1),))
+    assert quizzes and all((q["window_bars"], q["horizon_bars"]) == (40, 10) for q in quizzes)
+
+
+def test_outcome_text_uses_horizon():
+    assert "뒤 10거래일 동안" in quiz_insight.outcome_text("거래량 급증", "UP", Decimal("4"), 10)
+
+
+async def test_router_horizon_gate(api, maker, fake_redis):  # noqa: F811
+    """horizons 를 안 보내는 구버전 클라이언트는 5일 문제만, 보내면 그 기간까지 받는다."""
+    client, set_user = api
+    async with maker() as db:
+        user = await _seed_user(db)
+        await _seed_season(db)
+        for i, h in enumerate((3, 5, 10)):
+            closes = [100.0] * (60 + h - 1) + [104.0]
+            db.add(ChartQuiz(**gen.evaluate_quiz(f"00000{i}", _flat(closes), 59, horizon=h)))
+        await db.commit()
+    set_user(user)
+    legacy = (await client.get("/api/game/quiz/random")).json()
+    assert legacy["horizon_bars"] == 5
+    assert (await client.get("/api/game/quiz/random")).status_code == 404  # 남은 3·10일 문제는 구버전에 안 나감
+    assert (await client.get("/api/game/quiz/random?horizons=abc")).status_code == 404  # 알 수 없는 값 = 구버전
+    got = {(await client.get("/api/game/quiz/random?horizons=3,5,10")).json()["horizon_bars"] for _ in range(2)}
+    assert got == {3, 10}
+    body = (await client.post(f"/api/game/quiz/{legacy['id']}/submit", json={"choice": "UP"})).json()
+    assert body["horizon_bars"] == 5 and len(body["future_snapshot"]) == 5

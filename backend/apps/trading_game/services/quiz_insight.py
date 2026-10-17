@@ -21,14 +21,14 @@ PATTERN_DIRECTION: dict[str, str | None] = {
 }
 
 
-def outcome_text(pattern_type: str, answer: str, actual_change: Decimal | float) -> str | None:
+def outcome_text(pattern_type: str, answer: str, actual_change: Decimal | float, horizon: int = 5) -> str | None:
     if pattern_type not in PATTERN_DIRECTION:
         return None
     change = float(actual_change)
     moved = f"{change:+.1f}% {'올랐' if answer == 'UP' else '내렸'}어요"
     expected = PATTERN_DIRECTION[pattern_type]
     if expected is None:
-        return f"📊 {pattern_type} 뒤 5거래일 동안 {moved} — 거래량 신호는 방향보다 '관심이 몰렸다'는 뜻이에요"
+        return f"📊 {pattern_type} 뒤 {horizon}거래일 동안 {moved} — 거래량 신호는 방향보다 '관심이 몰렸다'는 뜻이에요"
     if expected == answer:
         return f"{'📈' if answer == 'UP' else '📉'} {pattern_type} 신호대로 {moved}"
     return f"🔄 {pattern_type} 신호와 반대로 {moved} — 신호는 확률일 뿐이에요"
