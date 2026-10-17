@@ -19,6 +19,7 @@ type Phase =
   | { kind: 'submitting'; quiz: QuizQuestion; choice: QuizChoice }
   | { kind: 'result'; result: QuizResult | null; choice: QuizChoice | null }
   | { kind: 'error'; message: string; retryable: boolean }
+  | { kind: 'exhausted' }
 
 const choiceLabel = (c: QuizChoice): string => (c === 'UP' ? '📈 상승' : '📉 하락')
 
@@ -71,9 +72,9 @@ export default function ChartQuizModal({ onClose }: { onClose: () => void }) {
       if (aliveRef.current) onClose()
       return
     }
-    if (aliveRef.current) {
-      setPhase({ kind: 'error', message: gameErrorMessage(err), retryable: code !== 'NO_QUIZ_AVAILABLE' })
-    }
+    if (!aliveRef.current) return
+    if (code === 'NO_QUIZ_AVAILABLE') setPhase({ kind: 'exhausted' }) // 오류가 아니라 '다 풀었다' 안내
+    else setPhase({ kind: 'error', message: gameErrorMessage(err), retryable: true })
   }
 
   const start = async () => {
@@ -217,6 +218,17 @@ export default function ChartQuizModal({ onClose }: { onClose: () => void }) {
             종목 {phase.result.ticker} · 기준일 {phase.result.base_date}
           </p>
           {footer}
+        </div>
+      )}
+
+      {phase.kind === 'exhausted' && (
+        <div className="py-6 text-center">
+          <p className="text-4xl" aria-hidden="true">🎉</p>
+          <p className="mt-3 font-semibold text-ink">준비된 문제를 모두 풀었어요</p>
+          <p className="mt-1 text-sm text-ink-muted">매일 밤 9시에 새 문제가 올라와요. 내일 다시 도전해 보세요!</p>
+          <Button full className="mt-5" variant="secondary" onClick={onClose}>
+            닫기
+          </Button>
         </div>
       )}
 

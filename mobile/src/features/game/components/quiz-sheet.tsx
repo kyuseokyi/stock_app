@@ -21,7 +21,8 @@ type Phase =
   | { kind: 'playing'; quiz: QuizQuestion; startedAt: number }
   | { kind: 'submitting'; quiz: QuizQuestion; choice: QuizChoice }
   | { kind: 'result'; result: QuizResult | null; choice: QuizChoice | null }
-  | { kind: 'error'; message: string; retryable: boolean };
+  | { kind: 'error'; message: string; retryable: boolean }
+  | { kind: 'exhausted' };
 
 const choiceLabel = (c: QuizChoice): string => (c === 'UP' ? '📈 상승' : '📉 하락');
 
@@ -76,9 +77,9 @@ export function QuizSheet({ onClose }: { onClose: () => void }) {
       if (aliveRef.current) onClose();
       return;
     }
-    if (aliveRef.current) {
-      setPhase({ kind: 'error', message: gameErrorMessage(err), retryable: code !== 'NO_QUIZ_AVAILABLE' });
-    }
+    if (!aliveRef.current) return;
+    if (code === 'NO_QUIZ_AVAILABLE') setPhase({ kind: 'exhausted' }); // 오류가 아니라 '다 풀었다' 안내
+    else setPhase({ kind: 'error', message: gameErrorMessage(err), retryable: true });
   };
 
   const start = async () => {
@@ -217,6 +218,19 @@ export function QuizSheet({ onClose }: { onClose: () => void }) {
         </>
       ) : null}
 
+      {phase.kind === 'exhausted' ? (
+        <View style={styles.state}>
+          <Text style={styles.emoji}>🎉</Text>
+          <Text style={styles.ask}>준비된 문제를 모두 풀었어요</Text>
+          <Text style={[styles.muted, styles.center]}>매일 밤 9시에 새 문제가 올라와요. 내일 다시 도전해 보세요!</Text>
+          <View style={styles.footer}>
+            <View style={styles.flex}>
+              <Button label="닫기" variant="secondary" onPress={onClose} />
+            </View>
+          </View>
+        </View>
+      ) : null}
+
       {phase.kind === 'error' ? (
         <View style={styles.state}>
           <Text style={styles.line}>{phase.message}</Text>
@@ -242,6 +256,7 @@ const styles = StyleSheet.create((theme) => ({
   rule: { fontSize: 14, lineHeight: 21, color: theme.colors.text },
   state: { paddingVertical: theme.gap(4), alignItems: 'center', gap: theme.gap(1.5) },
   muted: { fontSize: 14, color: theme.colors.textSecondary },
+  emoji: { fontSize: 40 },
   center: { textAlign: 'center' },
   playHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   ask: { fontSize: 16, fontWeight: '600', color: theme.colors.text },
