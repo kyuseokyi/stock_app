@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
 import {
-  CrosshairMode, LineStyle, TickMarkType, createChart, type IChartApi, type IPriceLine, type ISeriesApi,
+  CrosshairMode, LineStyle, TickMarkType, createChart, type AutoscaleInfo, type IChartApi, type IPriceLine, type ISeriesApi,
   type LineData, type Time, type UTCTimestamp,
 } from 'lightweight-charts'
 import { getGameCandles, getSessionBar } from '../../api/game'
 import { getDailyCandles } from '../../api/stock'
 import { useGameRules } from '../../hooks/useGameRules'
 import { BandFill } from '../../lib/bandFill'
+import { widenRange } from '../../lib/autoscale'
 import { bucketStartSec, mergeTick, mergeTickIntraday, withSessionBar } from '../../lib/candles'
 import { loadChartPrefs, saveChartPrefs } from '../../lib/chartPrefs'
 import { MA_PERIODS, bollinger, sma, type MaPeriod } from '../../lib/indicators'
@@ -163,6 +164,8 @@ export default function TradingChart({ ticker, lastPrice, coach, position }: Tra
   const lastCandleRef = useRef<DailyCandle | null>(null)
   const lastIntradayRef = useRef<IntradayCandle | null>(null)
   const linesRef = useRef<IPriceLine[]>([])
+  // 자동 범위에 넣을 가격선(일봉=지지·저항·진입, 분봉=진입). 손절·익절은 멀 수 있어 캔들이 눌리지 않게 제외
+  const fitPricesRef = useRef<number[]>([])
   const indRef = useRef<IndicatorSeries | null>(null)
   const reloadRef = useRef<(() => void) | null>(null) // 현재 차트의 캔들 재로드(스트림 재개 시)
   const barsRef = useRef<{ time: Time; close: number }[]>([]) // 지표 계산용 시각·종가
@@ -208,6 +211,7 @@ export default function TradingChart({ ticker, lastPrice, coach, position }: Tra
     })
     const series = chart.addCandlestickSeries({
       upColor: UP, downColor: DOWN, borderUpColor: UP, borderDownColor: DOWN, wickUpColor: UP, wickDownColor: DOWN,
+      autoscaleInfoProvider: (original: () => AutoscaleInfo | null) => widenRange(original(), fitPricesRef.current),
     })
     seriesRef.current = series
     const ind = addIndicatorSeries(chart)
@@ -369,6 +373,9 @@ export default function TradingChart({ ticker, lastPrice, coach, position }: Tra
     const series = seriesRef.current
     if (!series || !loaded) return
     for (const l of linesRef.current) series.removePriceLine(l)
+    // 분봉은 하루 변동폭이 작아 멀리 있는 지지·저항까지 넓히면 캔들이 납작해진다 — 일봉에서만 넣는다
+    const levels = interval === 'day' ? [support, resistance] : []
+    fitPricesRef.current = [...levels, entry].filter((p): p is number => p !== null)
     const lines: IPriceLine[] = []
     if (support !== null) {
       lines.push(series.createPriceLine({
@@ -397,7 +404,7 @@ export default function TradingChart({ ticker, lastPrice, coach, position }: Tra
       }))
     }
     linesRef.current = lines
-  }, [support, resistance, entry, side, stopLoss, takeProfit, loaded])
+  }, [support, resistance, entry, side, stopLoss, takeProfit, loaded, interval])
 
   return (
     <div>
