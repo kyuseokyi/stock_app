@@ -312,7 +312,13 @@ class ChartQuiz(Base):
     # B3-1 — 문제 차트 길이·예측 기간(거래일). 이전 생성분은 60·5
     window_bars: Mapped[int] = mapped_column(Integer, nullable=False, default=60, server_default="60")
     horizon_bars: Mapped[int] = mapped_column(Integer, nullable=False, default=5, server_default="5")
-    answer: Mapped[str] = mapped_column(String(10), nullable=False)  # 'UP' / 'DOWN'
+    # B3-2 — DIRECTION(오를까/내릴까) | RANGE(등락폭 구간) | PATTERN(신호 맞히기). 이전 생성분은 DIRECTION
+    quiz_type: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="DIRECTION", server_default="DIRECTION"
+    )
+    # 4지선다 선택지 [{code, label}](출제 순서대로). DIRECTION 은 NULL
+    choices: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    answer: Mapped[str] = mapped_column(String(20), nullable=False)  # DIRECTION 'UP'/'DOWN', 그 외 choices 의 code
     actual_change: Mapped[Decimal] = mapped_column(Numeric(6, 2), nullable=False)
     explanation: Mapped[str] = mapped_column(Text, nullable=False)
     reward_cash: Mapped[int] = mapped_column(
@@ -357,7 +363,7 @@ class UserQuizAttempt(Base):
         Integer, ForeignKey("chart_quiz_pool.id", ondelete="CASCADE"), primary_key=True
     )
     served_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    choice: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    choice: Mapped[str | None] = mapped_column(String(20), nullable=True)  # 퀴즈 answer 와 같은 코드 체계
     is_correct: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     rewarded: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default="false"

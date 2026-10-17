@@ -305,3 +305,132 @@ async def test_router_horizon_gate(api, maker, fake_redis):  # noqa: F811
     assert got == {3, 10}
     body = (await client.post(f"/api/game/quiz/{legacy['id']}/submit", json={"choice": "UP"})).json()
     assert body["horizon_bars"] == 5 and len(body["future_snapshot"]) == 5
+
+
+# ---------------------------------------------------------------- B3-2: 문제 유형(등락폭 구간·신호 맞히기)
+from datetime import datetime, timezone  # noqa: E402
+
+from tests.test_quest_quiz_streak import _redis, session  # noqa: E402,F401
+
+
+def test_detect_signals_lists_all_and_keeps_first():
+    candles = rich_candles(400, seed=3)
+    for i in range(gen.SIGNAL_LOOKBACK + 1, 400):
+        window = candles[:i + 1]
+        signals = gen.detect_signals(window)
+        assert gen.detect_signal(window) == (signals[0] if signals else None)
+        assert signals == [s for s in gen.SIGNALS if s in signals]  # 우선순위 순서
+
+
+@pytest.mark.parametrize("change, code", [
+    (Decimal("-5.00"), "R_BIG_DOWN"), (Decimal("-4.99"), "R_DOWN"), (Decimal("-3"), "R_DOWN"),
+    (Decimal("3"), "R_UP"), (Decimal("4.99"), "R_UP"), (Decimal("5.00"), "R_BIG_UP"), (Decimal("12.3"), "R_BIG_UP"),
+])
+def test_range_bucket_edges(change, code):
+    assert gen.range_bucket(change) == code
+
+
+def test_mix_for():
+    assert gen.mix_for(None) == gen.TYPE_MIX
+    assert gen.mix_for(["DIRECTION"]) == {}
+    assert gen.mix_for(["PATTERN"]) == {"PATTERN": 1.0}
+    assert gen.mix_for(["DIRECTION", "RANGE"]) == {"RANGE": 0.5}
+
+
+def _typed(count=40, seed=0, mix=None):
+    quizzes, _ = _collect(count, tickers=tuple("ABCDEFGHIJKLMNOPQRST"), seed=seed)
+    return gen.assign_types(quizzes, rng=random.Random(seed), mix=mix)
+
+
+def test_assign_types_mix_and_validity():
+    quizzes = _typed()
+    kinds = collections_counter(q["quiz_type"] for q in quizzes)
+    assert kinds["PATTERN"] >= 5 and kinds["RANGE"] >= 5 and kinds["DIRECTION"] >= len(quizzes) // 2 - 2
+    for q in quizzes:
+        if q["quiz_type"] == "DIRECTION":
+            assert q["choices"] is None and q["answer"] in ("UP", "DOWN")
+            continue
+        codes = [c["code"] for c in q["choices"]]
+        assert len(codes) == 4 and len(set(codes)) == 4 and q["answer"] in codes
+        if q["quiz_type"] == "RANGE":
+            assert codes == [c["code"] for c in gen.RANGE_CHOICES]
+            assert q["answer"] == gen.range_bucket(q["actual_change"])
+        else:
+            assert q["answer"] == q["_signals"][0] and set(codes) <= set(gen.VISIBLE_SIGNALS)
+            # 오답 보기는 기준일에 실제로 나타나지 않은 신호만 — 여러 신호가 겹친 날 오답이 사실이 되지 않게
+            assert not (set(codes) - {q["answer"]}) & set(q["_signals"])
+            assert {c["label"] for c in q["choices"]} == {gen.SIGNALS[c][0] for c in codes}
+
+
+def test_assign_types_range_buckets_capped():
+    quizzes = _typed(mix={"RANGE": 0.5})
+    ranges = [q["answer"] for q in quizzes if q["quiz_type"] == "RANGE"]
+    cap = -(-round(len(quizzes) * 0.5) // 4)
+    assert ranges and max(collections_counter(ranges).values()) <= cap
+
+
+def test_assign_types_pattern_order_shuffled():
+    """정답 보기 위치가 한 자리에 고정되지 않는다."""
+    quizzes = _typed(count=60, mix={"PATTERN": 1.0})
+    positions = {[c["code"] for c in q["choices"]].index(q["answer"]) for q in quizzes if q["quiz_type"] == "PATTERN"}
+    assert len(positions) >= 3
+
+
+def collections_counter(it):
+    import collections
+
+    return collections.Counter(it)
+
+
+async def test_generate_strips_helper_keys(maker):  # noqa: F811
+    data = {t: rich_candles(500, seed=i + 10) for i, t in enumerate("ABCDEFGH")}
+    created, _ = await gen.generate(12, rng=random.Random(0), fetch_tickers=lambda: list(data),
+                                    fetch_candles=data.__getitem__, session_factory=maker)
+    async with maker() as db:
+        rows = (await db.execute(select(ChartQuiz))).scalars().all()
+    assert created == len(rows) == 12
+    assert {r.quiz_type for r in rows} >= {"DIRECTION"}
+    assert all(r.answer in quiz_service.choice_codes(r) for r in rows)
+
+
+def _choice_quiz(ticker="111111", quiz_type="RANGE") -> ChartQuiz:
+    candles = _flat([100.0] * 64 + [104.0])
+    q = gen.evaluate_quiz(ticker, candles, 59)
+    if quiz_type == "RANGE":
+        gen._to_range(q)
+    return ChartQuiz(**q)
+
+
+async def test_submit_invalid_choice_does_not_consume(session):  # noqa: F811
+    user = await _seed_user(session)
+    session.add(_choice_quiz())
+    await session.commit()
+    t0 = datetime(2026, 10, 13, 12, 0, tzinfo=timezone.utc)
+    q = await quiz_service.serve_random(session, user.id, now=t0, types=quiz_service.SUPPORTED_TYPES)
+    assert quiz_service.time_limit_seconds(q) == 15
+    for bad in ("UP", "R_NOPE"):  # 4지선다에 2지선다 코드·없는 코드
+        with pytest.raises(quiz_service.QuizError) as e:
+            await quiz_service.submit(session, user.id, q.id, bad, redis=_redis(), now=t0)
+        assert e.value.code == "INVALID_CHOICE"
+    # 14초 — 2지선다라면 시간 초과(10+3)지만 4지선다는 15초라 정상 채점
+    res = await quiz_service.submit(session, user.id, q.id, "R_UP", redis=_redis(), now=t0 + timedelta(seconds=14))
+    assert res.timed_out is False and res.correct is True
+
+
+async def test_router_type_gate_and_choices(api, maker, fake_redis):  # noqa: F811
+    client, set_user = api
+    async with maker() as db:
+        user = await _seed_user(db)
+        await _seed_season(db)
+        db.add(_choice_quiz())
+        await db.commit()
+    set_user(user)
+    assert (await client.get("/api/game/quiz/random")).status_code == 404  # 구버전 = DIRECTION 만
+    q = (await client.get("/api/game/quiz/random?types=RANGE,PATTERN")).json()
+    assert q["quiz_type"] == "RANGE" and q["time_limit_sec"] == 15
+    assert [c["code"] for c in q["choices"]] == [c["code"] for c in gen.RANGE_CHOICES]
+    assert (await client.post(f"/api/game/quiz/{q['id']}/submit", json={"choice": "DOWN"})).status_code == 422
+    body = (await client.post(f"/api/game/quiz/{q['id']}/submit", json={"choice": "R_UP"})).json()
+    assert body["correct"] is True and body["answer"] == "R_UP" and body["answer_label"] == "0% ~ +5%"
+    # 결과 한 줄은 정답 코드(R_UP)가 아니라 실제 방향으로 — 역배열(하락 기대)과 반대로 올랐다
+    assert body["quiz_type"] == "RANGE" and body["outcome"] == "🔄 역배열 신호와 반대로 +4.0% 올랐어요 — 신호는 확률일 뿐이에요"

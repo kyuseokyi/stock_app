@@ -81,36 +81,44 @@ def _avg(xs: list[float]) -> float:
     return sum(xs) / len(xs)
 
 
-def detect_signal(candles: list[dict]) -> str | None:
-    """candles 마지막 봉(기준일)에 나타난 신호 코드(SIGNALS 키) 또는 None.
+def detect_signals(candles: list[dict]) -> list[str]:
+    """candles 마지막 봉(기준일)에 나타난 신호 코드 전부(SIGNALS 우선순위 순서). 없으면 [].
 
     기준일까지의 봉만 받는다(미래 봉을 넘기지 말 것). 거래량 평균·신고가/신저가는 기준일을 뺀
-    직전 SIGNAL_LOOKBACK 봉과 비교한다.
+    직전 SIGNAL_LOOKBACK 봉과 비교한다. 한 봉에 신호가 여럿일 수 있다(예: 신고가 + 거래량 급증) —
+    PATTERN 문제의 오답 보기는 여기 없는 신호에서만 고른다.
     """
     if len(candles) < SIGNAL_LOOKBACK + 1:
-        return None
+        return []
     closes = [float(c["close"]) for c in candles]
     if max(closes[-15:]) == min(closes[-15:]):  # 거래정지 등 무변동 — RSI 가 100/0 으로 튀는 가짜 신호
-        return None
+        return []
+    found: set[str] = set()
     if indicators.golden_cross_within(closes, within=1):
-        return "GOLDEN_CROSS"
+        found.add("GOLDEN_CROSS")
     if indicators.golden_cross_within([-c for c in closes], within=1):  # 부호 반전 = 데드크로스
-        return "DEAD_CROSS"
+        found.add("DEAD_CROSS")
     prior = closes[-SIGNAL_LOOKBACK - 1:-1]
     if closes[-1] > max(prior):
-        return "BREAKOUT_HIGH"
+        found.add("BREAKOUT_HIGH")
     if closes[-1] < min(prior):
-        return "BREAKDOWN_LOW"
+        found.add("BREAKDOWN_LOW")
     volumes = [float(c.get("volume") or 0) for c in candles]
     avg_vol = _avg(volumes[-SIGNAL_LOOKBACK - 1:-1])
     if avg_vol > 0 and volumes[-1] >= avg_vol * VOLUME_SURGE_RATIO:
-        return "VOLUME_SURGE"
+        found.add("VOLUME_SURGE")
     rsi = rsi_service.wilder_rsi(closes)
     if rsi is not None and rsi >= 70:
-        return "RSI_OVERBOUGHT"
+        found.add("RSI_OVERBOUGHT")
     if rsi is not None and rsi <= 30:
-        return "RSI_OVERSOLD"
-    return None
+        found.add("RSI_OVERSOLD")
+    return [code for code in SIGNALS if code in found]
+
+
+def detect_signal(candles: list[dict]) -> str | None:
+    """candles 마지막 봉(기준일)의 대표 신호 코드(우선순위 첫 번째) 또는 None."""
+    signals = detect_signals(candles)
+    return signals[0] if signals else None
 
 
 def avg_turnover(candles: list[dict]) -> float:
@@ -234,7 +242,7 @@ async def insert_quizzes(db, quizzes: list[dict]) -> tuple[int, int]:
         if exists is not None:
             skipped += 1
             continue
-        db.add(ChartQuiz(**q))
+        db.add(ChartQuiz(**{k: v for k, v in q.items() if not k.startswith("_")}))  # _ 키 = 생성 중간값
         created += 1
     await db.commit()
     return created, skipped
@@ -255,14 +263,15 @@ def eligible_quizzes(
         window = candles[idx - window_bars + 1:idx + 1]  # 기준일까지만 — 신호 판정에 미래 봉을 쓰지 않는다
         if avg_turnover(window) < MIN_TURNOVER:
             continue
-        signal = detect_signal(window)
-        if signal is None:
+        signals = detect_signals(window)
+        if not signals:
             continue
         q = evaluate_quiz(
-            ticker, candles, idx, min_abs_change=AUTO_MIN_ABS_CHANGE, signal=signal,
+            ticker, candles, idx, min_abs_change=AUTO_MIN_ABS_CHANGE, signal=signals[0],
             window_bars=window_bars, horizon=horizon,
         )
         if isinstance(q, dict):
+            q["_signals"] = signals  # 유형 배정(assign_types)용 — insert 전에 제거된다
             out.append((idx, q))
     return out
 
@@ -334,6 +343,106 @@ def collect_quizzes(
     return quizzes
 
 
+# ---------------------------------------------------------------- 문제 유형(B3-2)
+# 기본 비율 — 나머지는 DIRECTION. 구버전 클라이언트는 DIRECTION 만 받는다(quiz_service.serve_random)
+TYPE_MIX: dict[str, float] = {"RANGE": 0.25, "PATTERN": 0.25}
+QUIZ_TYPES = ("DIRECTION", "RANGE", "PATTERN")
+# 차트(캔들·5/20일선·거래량)에서 보이는 신호만 PATTERN 에 쓴다 — RSI 는 화면에 없어 맞힐 근거가 없다
+VISIBLE_SIGNALS = ("GOLDEN_CROSS", "DEAD_CROSS", "BREAKOUT_HIGH", "BREAKDOWN_LOW", "VOLUME_SURGE")
+PATTERN_CHOICES = 4
+RANGE_EDGE = 5.0
+# 등락폭 구간 — 자연 순서로 보여 준다(순서가 정답을 드러내지 않음). ±5.00 은 '이하'/'이상' 쪽
+RANGE_CHOICES: tuple[dict, ...] = (
+    {"code": "R_BIG_DOWN", "label": "−5% 이하"},
+    {"code": "R_DOWN", "label": "−5% ~ 0%"},
+    {"code": "R_UP", "label": "0% ~ +5%"},
+    {"code": "R_BIG_UP", "label": "+5% 이상"},
+)
+
+
+def range_bucket(change: Decimal | float) -> str:
+    """저장된(반올림된) 등락률 → RANGE 정답 코드. 사용자가 보는 '실제 N일 등락' 과 같은 숫자로 판정."""
+    c = float(change)
+    if c <= -RANGE_EDGE:
+        return "R_BIG_DOWN"
+    if c < 0:
+        return "R_DOWN"
+    if c < RANGE_EDGE:
+        return "R_UP"
+    return "R_BIG_UP"
+
+
+def _pattern_distractors(q: dict) -> list[str]:
+    return [s for s in VISIBLE_SIGNALS if s not in q.get("_signals", [])]
+
+
+def _to_pattern(q: dict, rng: random.Random) -> None:
+    answer = q["_signals"][0]
+    codes = [answer, *rng.sample(_pattern_distractors(q), PATTERN_CHOICES - 1)]
+    rng.shuffle(codes)
+    q.update(quiz_type="PATTERN", answer=answer, choices=[{"code": c, "label": SIGNALS[c][0]} for c in codes])
+
+
+def _to_range(q: dict) -> None:
+    q.update(quiz_type="RANGE", answer=range_bucket(q["actual_change"]), choices=[dict(c) for c in RANGE_CHOICES])
+
+
+def mix_for(types: list[str] | None) -> dict[str, float]:
+    """관리자가 고른 유형 → 비율. None 이면 TYPE_MIX, DIRECTION 만이면 {}, 그 외는 고른 유형끼리 같은 몫."""
+    if types is None:
+        return dict(TYPE_MIX)
+    picked = [t for t in QUIZ_TYPES if t in types]
+    share = 1 / len(picked) if picked else 0
+    return {t: share for t in picked if t != "DIRECTION"}
+
+
+def assign_types(quizzes: list[dict], *, rng: random.Random, mix: dict[str, float] | None = None) -> list[dict]:
+    """collect_quizzes 결과 일부를 RANGE·PATTERN 으로 바꾼다(제자리 변경, 나머지는 DIRECTION).
+
+    PATTERN — 대표 신호가 VISIBLE_SIGNALS 이고 기준일에 없는 신호로 오답 3개를 채울 수 있는 문제만,
+    적게 나온 신호부터. RANGE — 4개 구간이 고르게(구간당 최대 ceil(n/4)). 조건이 안 맞으면 DIRECTION 으로 남는다.
+    """
+    mix = TYPE_MIX if mix is None else mix
+    n = len(quizzes)
+    order = list(range(n))
+    rng.shuffle(order)
+    used: set[int] = set()
+
+    want = round(n * mix.get("PATTERN", 0))
+    per_signal: collections.Counter[str] = collections.Counter()
+    pattern_ok = [
+        i for i in order
+        if quizzes[i].get("_signals") and quizzes[i]["_signals"][0] in VISIBLE_SIGNALS
+        and len(_pattern_distractors(quizzes[i])) >= PATTERN_CHOICES - 1
+    ]
+    while want > 0 and pattern_ok:
+        i = min(pattern_ok, key=lambda j: per_signal[quizzes[j]["_signals"][0]])
+        pattern_ok.remove(i)
+        per_signal[quizzes[i]["_signals"][0]] += 1
+        _to_pattern(quizzes[i], rng)
+        used.add(i)
+        want -= 1
+
+    want = round(n * mix.get("RANGE", 0))
+    cap = -(-want // len(RANGE_CHOICES))
+    per_bucket: collections.Counter[str] = collections.Counter()
+    for i in order:
+        if want <= 0:
+            break
+        bucket = range_bucket(quizzes[i]["actual_change"])
+        if i in used or per_bucket[bucket] >= cap:
+            continue
+        per_bucket[bucket] += 1
+        _to_range(quizzes[i])
+        used.add(i)
+        want -= 1
+
+    for i, q in enumerate(quizzes):
+        if i not in used:
+            q.update(quiz_type="DIRECTION", choices=None)
+    return quizzes
+
+
 async def load_existing(db) -> dict[str, list[date]]:
     """chart_quiz_pool 의 종목별 기준일(비활성 포함 — 같은 구간 재출제 방지)."""
     rows = (await db.execute(select(ChartQuiz.ticker, ChartQuiz.base_date))).all()
@@ -356,6 +465,7 @@ async def generate(
     quizzes = collect_quizzes(
         count, rng=rng, fetch_tickers=fetch_tickers, fetch_candles=fetch_candles, existing=existing
     )
+    assign_types(quizzes, rng=rng)
     async with session_factory() as db:
         return await insert_quizzes(db, quizzes)
 

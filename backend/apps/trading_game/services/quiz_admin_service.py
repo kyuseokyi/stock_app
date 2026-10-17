@@ -109,13 +109,20 @@ async def delete_quiz(db: AsyncSession, quiz_id: int) -> None:
     await db.commit()
 
 
-async def generate_quizzes(db: AsyncSession, count: int, *, rng: random.Random | None = None) -> tuple[int, int]:
-    """자동 생성 규칙(신호·3%·간격·거래대금)으로 count 개 시도 → (created, skipped_duplicate)."""
+async def generate_quizzes(
+    db: AsyncSession, count: int, *, rng: random.Random | None = None, types: list[str] | None = None
+) -> tuple[int, int]:
+    """자동 생성 규칙(신호·3%·간격·거래대금)으로 count 개 시도 → (created, skipped_duplicate).
+
+    types — 만들 문제 유형(None 이면 기본 비율 gen.TYPE_MIX). 조건이 안 맞는 문제는 DIRECTION 으로 남는다.
+    """
+    rng = rng or random.Random()
     existing = await gen.load_existing(db)
     quizzes = await asyncio.to_thread(
-        gen.collect_quizzes, count, rng=rng or random.Random(),
+        gen.collect_quizzes, count, rng=rng,
         fetch_tickers=gen._fetch_tickers, fetch_candles=gen._fetch_candles, existing=existing,
     )
+    gen.assign_types(quizzes, rng=rng, mix=gen.mix_for(types))
     return await gen.insert_quizzes(db, quizzes)
 
 

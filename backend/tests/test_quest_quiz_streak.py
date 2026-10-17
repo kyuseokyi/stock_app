@@ -1046,7 +1046,8 @@ async def test_router_quiz_flow(api, maker, fake_redis):
     r = await client.get("/api/game/quiz/random")
     assert r.status_code == 200, r.text
     data = r.json()
-    assert set(data) == {"id", "chart_snapshot", "time_limit_sec", "horizon_bars"}  # 종목·날짜·정답 없음
+    # 종목·날짜·정답 없음
+    assert set(data) == {"id", "chart_snapshot", "time_limit_sec", "horizon_bars", "quiz_type", "choices"}
     assert data["time_limit_sec"] == 10 and data["horizon_bars"] == 5
     assert all("date" not in c for c in data["chart_snapshot"])
     assert data["chart_snapshot"][0]["close"] == 100
@@ -1135,7 +1136,9 @@ async def test_generate_inserts_and_is_idempotent(maker):
     async with maker() as db:
         rows = (await db.execute(select(ChartQuiz))).scalars().all()
     assert len({(r.ticker, r.base_date) for r in rows}) == len(rows) >= 5
-    assert all(r.answer in ("UP", "DOWN") and abs(r.actual_change) >= Decimal("3") for r in rows)
+    assert all(abs(r.actual_change) >= Decimal("3") for r in rows)
+    # 정답 코드는 유형별 보기 안에 있다(DIRECTION 은 UP/DOWN)
+    assert all(r.answer in quiz_service.choice_codes(r) for r in rows)
 
 
 def test_make_quiz_skips_zero_close_and_extreme_moves():

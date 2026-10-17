@@ -26,6 +26,7 @@ _ERROR_STATUS = {
     "NO_QUIZ_AVAILABLE": status.HTTP_404_NOT_FOUND,
     "QUIZ_NOT_SERVED": status.HTTP_409_CONFLICT,
     "ALREADY_SUBMITTED": status.HTTP_409_CONFLICT,
+    "INVALID_CHOICE": status.HTTP_422_UNPROCESSABLE_CONTENT,
 }
 
 _REWARD_ERROR_STATUS = {
@@ -74,20 +75,30 @@ def _parse_horizons(raw: str | None) -> frozenset[int]:
     return picked or quiz_service.LEGACY_HORIZONS
 
 
+def _parse_types(raw: str | None) -> frozenset[str]:
+    """?types=RANGE,PATTERN — 클라이언트가 그릴 수 있는 4지선다 유형. DIRECTION 은 항상 포함."""
+    picked = frozenset(p.strip().upper() for p in (raw or "").split(",")) & quiz_service.SUPPORTED_TYPES
+    return quiz_service.LEGACY_TYPES | picked
+
+
 @router.get("/quiz/random", response_model=QuizQuestionResponse)
 async def random_quiz(
     horizons: str | None = Query(None, max_length=50),
+    types: str | None = Query(None, max_length=50),
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     await _require_quiz_enabled(db)
     try:
-        quiz = await quiz_service.serve_random(db, user.id, horizons=_parse_horizons(horizons))
+        quiz = await quiz_service.serve_random(
+            db, user.id, horizons=_parse_horizons(horizons), types=_parse_types(types)
+        )
     except quiz_service.QuizError as e:
         raise HTTPException(_ERROR_STATUS.get(e.code, status.HTTP_400_BAD_REQUEST), detail={"code": e.code, "message": str(e)})
     return QuizQuestionResponse(
         id=quiz.id, chart_snapshot=quiz_service.masked_snapshot(quiz.chart_snapshot),
-        time_limit_sec=quiz_service.QUIZ_TIME_LIMIT_SECONDS, horizon_bars=quiz.horizon_bars,
+        time_limit_sec=quiz_service.time_limit_seconds(quiz), horizon_bars=quiz.horizon_bars,
+        quiz_type=quiz.quiz_type, choices=quiz.choices,
     )
 
 
@@ -126,8 +137,11 @@ async def submit_quiz(
             quiz_service.masked_snapshot(quiz.future_snapshot, base=quiz.chart_snapshot)
             if quiz.future_snapshot else None
         ),
-        outcome=quiz_insight.outcome_text(quiz.pattern_type, quiz.answer, quiz.actual_change, quiz.horizon_bars),
-        horizon_bars=quiz.horizon_bars,
+        # 결과 한 줄은 실제 방향 기준 — 4지선다의 answer 는 UP/DOWN 이 아니다
+        outcome=quiz_insight.outcome_text(
+            quiz.pattern_type, "UP" if quiz.actual_change > 0 else "DOWN", quiz.actual_change, quiz.horizon_bars,
+        ),
+        horizon_bars=quiz.horizon_bars, quiz_type=quiz.quiz_type, answer_label=quiz_service.answer_label(quiz),
     )
 
 

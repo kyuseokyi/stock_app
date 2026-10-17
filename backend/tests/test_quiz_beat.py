@@ -74,6 +74,26 @@ async def test_refill_generates_when_stock_low(maker):
     assert "rng" in kwargs
 
 
+async def test_refill_when_legacy_stock_low(maker):
+    """전체 미시도 재고가 넉넉해도 구버전 앱용(DIRECTION·5일) 재고가 모자라면 보충한다."""
+    async with maker() as db:
+        for i in range(4):
+            db.add(ChartQuiz(
+                ticker=f"9{i:05d}", base_date=date(2026, 1, 1), pattern_type="정배열", chart_snapshot=[],
+                answer="R_UP", actual_change=Decimal("3.50"), explanation="-", quiz_type="RANGE",
+            ))
+        db.add(ChartQuiz(
+            ticker="800000", base_date=date(2026, 1, 1), pattern_type="정배열", chart_snapshot=[],
+            answer="UP", actual_change=Decimal("3.50"), explanation="-", horizon_bars=10,
+        ))
+        await db.commit()
+        assert await quiz_task.count_unseen(db) == 5
+        assert await quiz_task.count_unseen(db, legacy_only=True) == 0
+    gen = AsyncMock(return_value=(3, 0))
+    result = await quiz_task.refill_quiz_pool(maker, generate_fn=gen, min_unseen=2, batch=5)
+    assert result == {"generated": 3, "skipped_reason": None}
+
+
 async def test_refill_generates_when_pool_empty(maker):
     gen = AsyncMock(return_value=(0, 0))
     result = await quiz_task.refill_quiz_pool(maker, generate_fn=gen, min_unseen=100, batch=50)

@@ -1,6 +1,6 @@
 """야간 차트 패턴 퀴즈 (Phase 5b) — 출제·채점·보상.
 
-출제 시 served_at 을 기록하고 제출 시 서버가 제한시간(10초 + 여유 3초)을 판정한다.
+출제 시 served_at 을 기록하고 제출 시 서버가 제한시간(2지선다 10초·4지선다 15초 + 여유 3초)을 판정한다.
 정답 보상은 KST 하루 3회까지, 활성 시즌 계좌로 reward_service.grant_cash.
 제출은 계좌 행 잠금(SELECT ... FOR UPDATE, PG)으로 유저별 직렬화되고 제출 기록·보상·수령 표시가
 한 트랜잭션으로 커밋되므로, 동시 제출에도 일일 보상 한도가 유지된다.
@@ -22,14 +22,15 @@ from apps.trading_game.services import account_service, coach_service, reward_se
 
 log = logging.getLogger("trading_game.quiz")
 
-QUIZ_TIME_LIMIT_SECONDS = 10
+QUIZ_TIME_LIMIT_SECONDS = 10  # DIRECTION(2지선다)
+CHOICE_QUIZ_TIME_LIMIT_SECONDS = 15  # RANGE·PATTERN(4지선다) — 보기를 읽을 시간
 QUIZ_GRACE_SECONDS = 3
 DAILY_REWARD_LIMIT = 3
 _SERVE_RETRIES = 3
 
 
 class QuizError(Exception):
-    """code: NO_QUIZ_AVAILABLE | QUIZ_NOT_SERVED | ALREADY_SUBMITTED"""
+    """code: NO_QUIZ_AVAILABLE | QUIZ_NOT_SERVED | ALREADY_SUBMITTED | INVALID_CHOICE"""
 
     def __init__(self, code: str, message: str) -> None:
         super().__init__(message)
@@ -72,12 +73,39 @@ def _as_utc(dt: datetime) -> datetime:
 
 LEGACY_HORIZONS = frozenset({5})  # 예측 기간을 모르는 구버전 클라이언트("5거래일 뒤" 고정 문구)
 SUPPORTED_HORIZONS = frozenset({3, 5, 10})
+LEGACY_TYPES = frozenset({"DIRECTION"})  # 4지선다를 모르는 구버전 클라이언트(오를까/내릴까 버튼 고정)
+SUPPORTED_TYPES = frozenset({"DIRECTION", "RANGE", "PATTERN"})
+_DIRECTION_CODES = frozenset({"UP", "DOWN"})
+
+
+def time_limit_seconds(quiz: ChartQuiz) -> int:
+    """출제 응답과 제출 시간 판정이 함께 쓰는 문제별 제한시간."""
+    return QUIZ_TIME_LIMIT_SECONDS if quiz.quiz_type == "DIRECTION" else CHOICE_QUIZ_TIME_LIMIT_SECONDS
+
+
+def choice_codes(quiz: ChartQuiz) -> frozenset[str]:
+    """이 문제에 제출할 수 있는 선택 코드."""
+    if quiz.quiz_type == "DIRECTION":
+        return _DIRECTION_CODES
+    return frozenset(c["code"] for c in quiz.choices or [])
+
+
+def answer_label(quiz: ChartQuiz) -> str:
+    """정답 코드 → 보기 문구(DIRECTION 은 상승/하락)."""
+    if quiz.quiz_type == "DIRECTION":
+        return "상승" if quiz.answer == "UP" else "하락"
+    return next((c["label"] for c in quiz.choices or [] if c["code"] == quiz.answer), quiz.answer)
 
 
 async def serve_random(
-    db: AsyncSession, user_id: int, *, now: datetime | None = None, horizons: frozenset[int] = LEGACY_HORIZONS
+    db: AsyncSession,
+    user_id: int,
+    *,
+    now: datetime | None = None,
+    horizons: frozenset[int] = LEGACY_HORIZONS,
+    types: frozenset[str] = LEGACY_TYPES,
 ) -> ChartQuiz:
-    """미시도 활성 문제 중 무작위 1개. horizons 밖의 예측 기간 문제는 내지 않는다(구버전 앱 보호)."""
+    """미시도 활성 문제 중 무작위 1개. 클라이언트가 표시할 수 없는 예측 기간·유형은 내지 않는다(구버전 앱 보호)."""
     now = now or datetime.now(timezone.utc)
     attempted = select(UserQuizAttempt.quiz_id).where(UserQuizAttempt.user_id == user_id)
     for _ in range(_SERVE_RETRIES):
@@ -87,6 +115,7 @@ async def serve_random(
                 .where(
                     ChartQuiz.is_active.is_(True), ChartQuiz.id.not_in(attempted),
                     ChartQuiz.horizon_bars.in_(sorted(horizons)),
+                    ChartQuiz.quiz_type.in_(sorted(types)),
                 )
                 .order_by(func.random())
                 .limit(1)
@@ -120,12 +149,15 @@ async def submit(
     attempt = await db.get(UserQuizAttempt, (user_id, quiz_id))
     if attempt is None:
         raise QuizError("QUIZ_NOT_SERVED", "출제되지 않은 퀴즈입니다.")
+    quiz = await db.get(ChartQuiz, quiz_id)
+    # 시도 기록을 쓰기 전에 — 잘못된 코드가 기회를 소모하지 않는다(이전 Literal 검증처럼 제출 여부보다 먼저 422)
+    if choice not in choice_codes(quiz):
+        raise QuizError("INVALID_CHOICE", "이 문제의 선택지가 아닙니다.")
     if attempt.submitted_at is not None:
         raise QuizError("ALREADY_SUBMITTED", "이미 제출한 퀴즈입니다.")
-    quiz = await db.get(ChartQuiz, quiz_id)
 
     elapsed = (now - _as_utc(attempt.served_at)).total_seconds()
-    timed_out = elapsed > QUIZ_TIME_LIMIT_SECONDS + QUIZ_GRACE_SECONDS
+    timed_out = elapsed > time_limit_seconds(quiz) + QUIZ_GRACE_SECONDS
     correct = (not timed_out) and choice == quiz.answer
 
     account: GameAccount | None = None

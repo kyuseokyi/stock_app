@@ -239,10 +239,18 @@ class QuizQuestionResponse(BaseModel):
     chart_snapshot: list[dict]
     time_limit_sec: int
     horizon_bars: int = 5  # B3-1 — "N거래일 뒤" 의 N
+    quiz_type: str = "DIRECTION"  # B3-2 — DIRECTION | RANGE | PATTERN
+    choices: list["QuizChoiceDTO"] | None = None  # 4지선다 보기(출제 순서). DIRECTION 은 None(오를까/내릴까)
+
+
+class QuizChoiceDTO(BaseModel):
+    code: str
+    label: str
 
 
 class QuizSubmitRequest(BaseModel):
-    choice: Literal["UP", "DOWN"]
+    # DIRECTION 은 UP/DOWN, 4지선다는 그 문제 choices 의 code — 서버가 문제별로 검증(INVALID_CHOICE 422)
+    choice: str = Field(min_length=1, max_length=20)
 
 
 class QuizSubmitResponse(BaseModel):
@@ -262,6 +270,8 @@ class QuizSubmitResponse(BaseModel):
     # B2 — 패턴 기대 방향과 실제 결과를 잇는 한 줄. 알 수 없는 패턴이면 None
     outcome: str | None = None
     horizon_bars: int = 5  # B3-1
+    quiz_type: str = "DIRECTION"  # B3-2
+    answer_label: str | None = None  # B3-2 — 정답 보기 문구(DIRECTION 은 상승/하락)
 
 
 # ---------------------------------------------------------------- 관리자 퀴즈·아카데미 편집(백로그 ⑤-2)
@@ -312,6 +322,8 @@ class QuizAdminItem(BaseModel):
     created_at: datetime | None
     window_bars: int = 60  # B3-1
     horizon_bars: int = 5
+    quiz_type: str = "DIRECTION"  # B3-2
+    answer_label: str = ""  # 정답 코드의 보기 문구
 
 
 class QuizAdminListResponse(BaseModel):
@@ -340,8 +352,12 @@ class QuizAdminUpdate(BaseModel):
     is_active: bool | None = None
 
 
+QuizType = Literal["DIRECTION", "RANGE", "PATTERN"]
+
+
 class QuizGenerateRequest(BaseModel):
     count: int = Field(ge=1, le=200)
+    types: list[QuizType] | None = Field(default=None, min_length=1)  # None = 기본 비율(B3-2)
 
 
 class QuizGenerateResponse(BaseModel):

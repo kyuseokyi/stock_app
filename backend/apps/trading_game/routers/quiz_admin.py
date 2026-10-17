@@ -13,7 +13,7 @@ from apps.trading_game.schemas.game_dtos import (
     QuizAdminDetail, QuizAdminItem, QuizAdminListResponse, QuizAdminUpdate, QuizCreateRequest,
     QuizGenerateRequest, QuizGenerateResponse,
 )
-from apps.trading_game.services import quiz_admin_service
+from apps.trading_game.services import quiz_admin_service, quiz_service
 from apps.trading_game.services.quiz_admin_service import QuizAdminError, QuizWithAttempts
 
 log = logging.getLogger("trading_game.quiz_admin")
@@ -39,6 +39,7 @@ def _item_fields(r: QuizWithAttempts) -> dict:
         id=q.id, ticker=q.ticker, base_date=q.base_date, pattern_type=q.pattern_type, answer=q.answer,
         actual_change=q.actual_change, is_active=q.is_active, attempt_count=r.attempt_count,
         created_at=q.created_at, window_bars=q.window_bars, horizon_bars=q.horizon_bars,
+        quiz_type=q.quiz_type, answer_label=quiz_service.answer_label(q),
     )
 
 
@@ -84,7 +85,7 @@ async def generate_quizzes(
     admin: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    created, skipped = await quiz_admin_service.generate_quizzes(db, body.count)
+    created, skipped = await quiz_admin_service.generate_quizzes(db, body.count, types=body.types)
     log.info("퀴즈 일괄 생성 count=%s created=%s skipped=%s admin=%s", body.count, created, skipped, admin.id)
     return QuizGenerateResponse(created=created, skipped=skipped)
 
