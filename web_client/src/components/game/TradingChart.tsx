@@ -3,11 +3,11 @@ import {
   CrosshairMode, LineStyle, TickMarkType, createChart, type IChartApi, type IPriceLine, type ISeriesApi,
   type LineData, type Time, type UTCTimestamp,
 } from 'lightweight-charts'
-import { getGameCandles } from '../../api/game'
+import { getGameCandles, getSessionBar } from '../../api/game'
 import { getDailyCandles } from '../../api/stock'
 import { useGameRules } from '../../hooks/useGameRules'
 import { BandFill } from '../../lib/bandFill'
-import { bucketStartSec, mergeTick, mergeTickIntraday } from '../../lib/candles'
+import { bucketStartSec, mergeTick, mergeTickIntraday, withSessionBar } from '../../lib/candles'
 import { loadChartPrefs, saveChartPrefs } from '../../lib/chartPrefs'
 import { MA_PERIODS, bollinger, sma, type MaPeriod } from '../../lib/indicators'
 import { kstDateString } from '../../lib/format'
@@ -146,7 +146,12 @@ const cacheKey = (ticker: string, interval: ChartInterval) => `${ticker}|${inter
 const PREFETCH_DELAY_MS = 1500 // 첫 화면을 그린 뒤 나머지 단위를 미리 받기 시작
 
 async function fetchRows(ticker: string, interval: ChartInterval): Promise<CandleRows> {
-  if (interval === 'day') return getDailyCandles(ticker)
+  if (interval === 'day') {
+    // 오늘 봉은 분봉으로 만든 서버 값으로(일봉은 20:30 수집 전엔 오늘 행이 없음) — 재조회해도 틱 병합 봉이 사라지지 않게.
+    // 당일 봉 조회 실패는 무시(일봉만 표시)
+    const [rows, session] = await Promise.all([getDailyCandles(ticker), getSessionBar().catch(() => null)])
+    return session && session.ticker === ticker ? withSessionBar(rows, session.bar) : rows
+  }
   const res = await getGameCandles(interval)
   // 다른 종목(시즌 전환 직후 등) 분봉이면 섞지 않고 빈 상태로
   return res.ticker && res.ticker !== ticker ? [] : sortUnique(res.candles)

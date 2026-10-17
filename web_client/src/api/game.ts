@@ -8,7 +8,7 @@ import type {
   RawQuestList, RawQuizQuestion, RawQuizResult, RawStreakClaimResult, Season, Streak, StreakClaimResult,
   WeeklyBoard, WeeklyMyRank, WeeklyResultWeek, WeeklyReward,
   MonthlyBoard, MonthlyMyRank, MonthlyResultMonth, RewardConfig, GameRules,
-  IntradayCandle, IntradayCandles, IntradayInterval,
+  DailyCandle, IntradayCandle, IntradayCandles, IntradayInterval,
 } from '../types/game'
 
 // trading_game REST. Decimal 문자열은 여기서 number 로 변환해 UI 는 number 만 다룬다.
@@ -207,6 +207,18 @@ export async function getGameCandles(interval: IntradayInterval): Promise<Intrad
     }))
     .filter((c) => Number.isFinite(c.t))
   return { interval: data?.interval ?? interval, ticker: data?.ticker ?? '', candles: rows }
+}
+
+/** 공개 — 분봉으로 만든 활성 시즌 종목의 최근 거래일 하루 봉(일봉 차트 오늘 봉). 없으면 bar: null */
+export async function getSessionBar(): Promise<{ ticker: string; bar: DailyCandle | null }> {
+  const { data } = await client().get<{ ticker: string | null; bar: DailyCandle | null }>('/api/game/candles/session')
+  const b = data?.bar
+  return {
+    ticker: data?.ticker ?? '',
+    bar: b && typeof b.date === 'string'
+      ? { date: b.date, open: toNum(b.open), high: toNum(b.high), low: toNum(b.low), close: toNum(b.close) }
+      : null,
+  }
 }
 
 /** 미확인 주간·월간 보상(period_type 으로 구분) */
