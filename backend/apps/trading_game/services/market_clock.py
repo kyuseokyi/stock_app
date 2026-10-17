@@ -2,6 +2,7 @@
 
 거래시간을 코드에 하드코딩하지 않고 설정 데이터(TRADING_WINDOWS)로 둔다.
 기본 = KRX 정규장(09:00-15:30) + 애프터마켓(16:00-20:00). NXT 프리마켓 제외.
+거래일(주말·공휴일·대체공휴일·KRX 연말 휴장 제외)은 market_calendar 가 판정한다.
 """
 from __future__ import annotations
 
@@ -9,6 +10,8 @@ import json
 import os
 import time as _time
 from datetime import datetime, time, timedelta, timezone
+
+from apps.trading_game.services import market_calendar
 
 KST = timezone(timedelta(hours=9))
 DEFAULT_WINDOWS = "09:00-15:30,16:00-20:00"
@@ -31,6 +34,9 @@ def load_windows() -> list[tuple[time, time]]:
 
 
 def in_trading_window(now_kst: datetime, windows: list[tuple[time, time]]) -> bool:
+    """거래일이고 거래 시간 창 안인가(now_kst 는 KST 시각)."""
+    if not market_calendar.is_trading_day(now_kst.date()):
+        return False
     t = now_kst.timetz().replace(tzinfo=None)
     return any(start <= t <= end for start, end in windows)
 

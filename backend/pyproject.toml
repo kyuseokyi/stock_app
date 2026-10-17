@@ -12,6 +12,7 @@ dependencies = [
     "clickhouse-connect>=1.4.1",
     "fastapi>=0.139.0",
     "greenlet>=3.5.3",
+    "holidays>=0.106",
     "httpx>=0.28.1",
     "pandas>=2.3.2,<3.0",
     "pandas-ta>=0.4.71b0",
