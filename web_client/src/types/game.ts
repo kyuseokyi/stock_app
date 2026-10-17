@@ -183,8 +183,21 @@ export interface IntradayCandles {
 }
 
 /** WS /ws/game/stream 서버→클라 메시지(파싱·정규화 후) */
+/** 장운영 상태(GET /api/game/market-status · WS market_status) — VI·거래정지·서킷브레이크·사이드카 */
+export type MarketStatusState = 'NORMAL' | 'HALTED' | 'CIRCUIT_BREAKER' | 'MARKET_PAUSED' | 'VI' | 'SIDECAR'
+export interface MarketStatus {
+  ticker: string | null
+  state: MarketStatusState
+  /** 서버가 만든 사용자 문구(배너에 그대로) */
+  message: string
+  /** true 면 지금 주문·청산이 막힘(사이드카는 false — 안내만) */
+  blocking: boolean
+  since: string | null
+}
+
 export type GameWsMessage =
   | { type: 'tick'; ticker: string; price: number }
+  | ({ type: 'market_status' } & MarketStatus)
   | { type: 'position_pnl'; position_id: string; roi_pct: number; pnl_amount: number }
   | ({ type: 'sentiment' } & Sentiment)
   | { type: 'nudge'; position_id: string; nudge: Nudge }

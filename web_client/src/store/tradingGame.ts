@@ -4,7 +4,7 @@ import { gameClient } from '../api/gameClient'
 import { formatWon } from '../lib/format'
 import { orderErrorMessage } from '../lib/gameErrors'
 import type {
-  Account, Coach, GameWsMessage, Leverage, MyRank, Nudge, OrderOptions, Position, Ratio, Season, Sentiment, Side,
+  Account, Coach, GameWsMessage, Leverage, MarketStatus, MyRank, Nudge, OrderOptions, Position, Ratio, Season, Sentiment, Side,
   Streak, WeeklyReward,
 } from '../types/game'
 
@@ -39,6 +39,10 @@ interface TradingGameState extends PrivateState {
   toasts: GameToast[]
   /** 퀴즈 API 가 503 FEATURE_DISABLED 를 준 뒤 이 세션 동안 퀴즈 진입점 숨김(로그아웃해도 유지 — 서버 전역 플래그) */
   quizDisabled: boolean
+  /** 장운영 상태(VI·거래정지·서킷브레이크·사이드카) — 공개 정보라 로그아웃해도 유지 */
+  marketStatus: MarketStatus | null
+  /** 화면을 열 때·재연결 때 배너 초기값. 실패는 조용히(이전 값 유지) */
+  loadMarketStatus: () => Promise<void>
   loadSeason: () => Promise<void>
   loadPrivate: () => Promise<void>
   refreshTrading: () => Promise<void>
@@ -128,7 +132,19 @@ export const useTradingGameStore = create<TradingGameState>()((set, get) => {
     closing: false,
     toasts: [],
     quizDisabled: false,
+    marketStatus: null,
     streamEpoch: 0,
+
+    loadMarketStatus: async () => {
+      if (!gameClient) return
+      try {
+        const st = await gameApi.getMarketStatus()
+        const season = get().season
+        if (st && (!season || st.ticker === null || st.ticker === season.ticker)) set({ marketStatus: st })
+      } catch {
+        // 배너는 보조 정보 — 실패해도 주문 자체는 서버가 막는다
+      }
+    },
 
     loadSeason: async () => {
       if (!gameClient) {
@@ -286,6 +302,12 @@ export const useTradingGameStore = create<TradingGameState>()((set, get) => {
         case 'coach':
           if (season && msg.coach.season_id === season.id) set({ coach: msg.coach })
           return
+        case 'market_status': {
+          if (season && msg.ticker !== null && msg.ticker !== season.ticker) return
+          const { type: _type, ...status } = msg
+          set({ marketStatus: status })
+          return
+        }
       }
     },
 

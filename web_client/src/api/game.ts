@@ -1,6 +1,7 @@
 import type { AxiosInstance } from 'axios'
 import { gameClient } from './gameClient'
 import { toNum, toNumOrNull } from '../lib/decimal'
+import { toMarketStatus } from '../lib/gameWs'
 import type {
   AcademyQuiz, AcademySubmitResult, Account, ClaimResult, Coach, HallOfFameRow, LeaderboardRow, MyRank,
   OrderRequest, OrderResult, Position, Quest, QuestList, QuizCandle, QuizChoice, QuizOption, QuizQuestion, QuizResult, QuizType,
@@ -8,7 +9,7 @@ import type {
   RawQuestList, RawQuizQuestion, RawQuizResult, RawStreakClaimResult, Season, Streak, StreakClaimResult,
   WeeklyBoard, WeeklyMyRank, WeeklyResultWeek, WeeklyReward,
   MonthlyBoard, MonthlyMyRank, MonthlyResultMonth, RewardConfig, GameRules,
-  DailyCandle, IntradayCandle, IntradayCandles, IntradayInterval,
+  DailyCandle, IntradayCandle, MarketStatus, IntradayCandles, IntradayInterval,
 } from '../types/game'
 
 // trading_game REST. Decimal 문자열은 여기서 number 로 변환해 UI 는 number 만 다룬다.
@@ -207,6 +208,15 @@ export async function getGameCandles(interval: IntradayInterval): Promise<Intrad
     }))
     .filter((c) => Number.isFinite(c.t))
   return { interval: data?.interval ?? interval, ticker: data?.ticker ?? '', candles: rows }
+}
+
+/** 공개 — 장운영 상태(VI·거래정지·서킷브레이크·사이드카). 형식이 틀리면 null */
+export async function getMarketStatus(): Promise<MarketStatus | null> {
+  const { data } = await client().get<unknown>('/api/game/market-status')
+  const st = toMarketStatus(data)
+  if (!st) return null
+  const { type: _type, ...rest } = st
+  return rest
 }
 
 /** 공개 — 분봉으로 만든 활성 시즌 종목의 최근 거래일 하루 봉(일봉 차트 오늘 봉). 없으면 bar: null */

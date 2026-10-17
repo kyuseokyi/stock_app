@@ -6,6 +6,7 @@ import AcademyModal from '../components/game/AcademyModal'
 import ActivePositionCard from '../components/game/ActivePositionCard'
 import ChartQuizModal from '../components/game/ChartQuizModal'
 import CoachBanner from '../components/game/CoachBanner'
+import MarketStatusBanner from '../components/game/MarketStatusBanner'
 import GameHeader from '../components/game/GameHeader'
 import GameRulesModal from '../components/game/GameRulesModal'
 import LeaderboardModal from '../components/game/LeaderboardModal'
@@ -39,6 +40,7 @@ export default function GamePage() {
   const {
     status, season, account, position, myRank, coach, academyUnlocked, streak, quizDisabled, lastPrice, sentiment,
     submitting, closing, loadSeason, loadPrivate, resetPrivate, refreshRank, placeOrder, closePosition,
+    marketStatus, loadMarketStatus, streamEpoch,
   } = useTradingGameStore()
   const [loginOpen, setLoginOpen] = useState(false)
   const [activeModal, setActiveModal] = useState<ActiveModal>(null)
@@ -49,6 +51,11 @@ export default function GamePage() {
   useEffect(() => {
     loadSeason()
   }, [loadSeason])
+
+  // 장운영 상태 배너 초기값 — 화면을 열 때·WS 재연결/화면 복귀(streamEpoch) 때. 이후 변화는 WS market_status
+  useEffect(() => {
+    if (ready) void loadMarketStatus()
+  }, [ready, season?.ticker, streamEpoch, loadMarketStatus])
 
   // 로그인 상태가 바뀌면 개인 데이터 로드/초기화
   useEffect(() => {
@@ -138,6 +145,7 @@ export default function GamePage() {
       <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-start lg:gap-4">
         <div className="space-y-3 sm:space-y-4">
           {/* 차트를 위로 — 모바일에서 차트와 하단 주문 바가 한 화면에 들어오게. 코치·심리·안내는 차트 아래 */}
+          <MarketStatusBanner status={marketStatus} />
           <TradingChart ticker={season.ticker} lastPrice={lastPrice} coach={coach} position={position} />
           {position && (
             <ActivePositionCard position={position} lastPrice={lastPrice} closing={closing} onClose={() => closePosition()} />
