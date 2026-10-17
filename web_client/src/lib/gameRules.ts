@@ -16,9 +16,9 @@ export const entryRoiText = (feePct: number): string => `${MINUS}${feeText(feePc
 /** -80 → '−80%' */
 export const marginCallText = (roiPct: number): string => `${MINUS}${trimNum(Math.abs(roiPct))}%`
 
-/** [["09:00","15:30"],["16:00","20:00"]] → '09:00~15:30 · 16:00~20:00' */
+/** [["09:00","15:30"],["16:00","20:00"]] → '평일 09:00~15:30 · 16:00~20:00 (공휴일·대체공휴일·연말 휴장 제외)' — 서버 거래일 달력과 같은 기준 */
 export const tradingWindowsText = (windows: [string, string][]): string =>
-  windows.map(([s, e]) => `${s}~${e}`).join(' · ')
+  `평일 ${windows.map(([s, e]) => `${s}~${e}`).join(' · ')} (공휴일·대체공휴일·연말 휴장 제외)`
 
 /** 배율 L 에서 자동 청산까지의 주가 변동 % = |margin_call| / L (예: −80 / 2 = 40) */
 export const liquidationMovePct = (marginCallRoiPct: number, leverage: number): number =>

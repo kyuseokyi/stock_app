@@ -68,7 +68,9 @@ export const orderRulesHint = (rules: Pick<GameRules, 'fee_roundtrip_pct'> | nul
 
 /** 거래 시간 — "09:00~15:30 · 16:00~20:00" (없으면 '—') */
 export const tradingWindowsText = (windows: [string, string][]): string =>
-  windows.length === 0 ? '—' : windows.map(([s, e]) => `${s}~${e}`).join(' · ');
+  windows.length === 0
+    ? '—'
+    : `평일 ${windows.map(([s, e]) => `${s}~${e}`).join(' · ')} (공휴일·대체공휴일·연말 휴장 제외)`; // 서버 거래일 달력과 같은 기준
 
 /** 배율 표기 — [1,2,5] → "1배·2배·5배" */
 export const leveragesText = (leverages: number[]): string => leverages.map((l) => `${l}배`).join('·');
