@@ -32,5 +32,10 @@ class TickPublisher:
         results = await pipe.execute()
         return int(results[0])  # 수신 구독자 수
 
+    @property
+    def redis(self):
+        """같은 연결로 장운영 상태(market_status)를 저장·발행한다."""
+        return self._redis
+
     async def close(self) -> None:
         await self._redis.aclose()

@@ -151,3 +151,40 @@ async def test_krx_rejects_after_fallback_still_invalidate_key(harness):
     assert await agen.__anext__() == "0|H0STCNT0|001|a^b"
     assert harness["invalidated"] == 2
     await agen.aclose()
+
+
+# ---------------------------------------------------------------- 장운영정보(H0STMKO0) 추가 구독
+def _ack_tr(tr_id: str, rt_cd: str) -> str:
+    return json.dumps({"header": {"tr_id": tr_id}, "body": {"rt_cd": rt_cd, "msg1": "m"}})
+
+
+async def test_status_subscription_sent_after_tick_subscription(harness):
+    harness["script"] = [_FakeWS([_ack_tr("H0UNCNT0", "0"), _ack_tr("H0STMKO0", "0"), "0|H0STMKO0|001|x"])]
+    c = KISWebSocketClient(_Cfg(), "005930", "redis://x", tr_id="H0UNCNT0", status_tr_id="H0STMKO0")
+    agen = c.stream()
+    assert await agen.__anext__() == "0|H0STMKO0|001|x"  # 데이터 프레임은 TR 무관하게 소비자에게
+    sent = [json.loads(m)["body"]["input"]["tr_id"] for m in harness["sessions"][0].sent]
+    assert sent == ["H0UNCNT0", "H0STMKO0"]
+    await agen.aclose()
+
+
+async def test_status_reject_does_not_touch_tick_subscription_or_key(harness):
+    """장운영정보 구독 거부 — 체결은 계속, 키 재발급·KRX 전환 없음, 그 구독만 끔."""
+    harness["script"] = [_FakeWS([
+        _ack_tr("H0UNCNT0", "0"), _ack_tr("H0STMKO0", "1"), _ack_tr("H0STMKO0", "1"), "0|H0UNCNT0|001|a^b",
+    ])]
+    c = KISWebSocketClient(_Cfg(), "005930", "redis://x", tr_id="H0UNCNT0", status_tr_id="H0STMKO0")
+    agen = c.stream()
+    assert await agen.__anext__() == "0|H0UNCNT0|001|a^b"
+    assert c.tr_id == "H0UNCNT0" and c.status_tr_id is None
+    assert harness["invalidated"] == 0 and len(harness["sessions"]) == 1
+    await agen.aclose()
+
+
+async def test_without_status_tr_only_tick_subscribed(harness):
+    harness["script"] = [_FakeWS([_ack("0"), "0|H0UNCNT0|001|a^b"])]
+    c = KISWebSocketClient(_Cfg(), "005930", "redis://x", tr_id="H0UNCNT0")
+    agen = c.stream()
+    await agen.__anext__()
+    assert len(harness["sessions"][0].sent) == 1
+    await agen.aclose()

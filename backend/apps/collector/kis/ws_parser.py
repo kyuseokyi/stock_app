@@ -70,3 +70,59 @@ def parse_message(raw: str) -> list[dict] | None:
         return [_record_to_tick(fields[i * per:(i + 1) * per]) for i in range(count)]
     except (ValueError, IndexError):
         return None
+
+
+# ---------------------------------------------------------------- 장운영정보(VI·거래정지·서킷브레이크·사이드카)
+# H0STMKO0(KRX)·H0UNMKO0(통합)·H0NXMKO0(NXT). 공식 명세(KIS 포털 [실시간-049]) 필드 순서:
+# 종목코드, 거래정지여부, 거래정지사유, 장운영구분코드, 예상장운영구분코드, 임의연장구분코드,
+# 동시호가배분처리구분코드, 종목상태구분코드, VI적용구분코드, 시간외단일가VI적용구분코드, 거래소구분코드(11개).
+# 통합 TR 문서는 종목코드를 빼고 10개로 적고 있어, 개수로 판별한다(10개면 종목코드 없음).
+STATUS_TR_IDS = frozenset({"H0STMKO0", "H0UNMKO0", "H0NXMKO0"})
+_STATUS_KEYS = (
+    "trht_yn", "tr_susp_reas_cntt", "mkop_cls_code", "antc_mkop_cls_code", "mrkt_trtm_cls_code",
+    "divi_app_cls_code", "iscd_stat_cls_code", "vi_cls_code", "ovtm_vi_cls_code", "exch_cls_code",
+)
+
+
+def frame_tr_id(raw: str | None) -> str | None:
+    """데이터 프레임(`flag|tr_id|건수|payload`)의 tr_id. 제어 프레임(JSON)·깨진 값은 None."""
+    if not raw:
+        return None
+    raw = raw.strip()
+    if raw.startswith("{"):
+        return None
+    parts = raw.split("|", 3)
+    return parts[1] if len(parts) == 4 else None
+
+
+def parse_status_message(raw: str, ticker: str | None = None) -> list[dict] | None:
+    """장운영정보 데이터 프레임 → [{ticker, trht_yn, mkop_cls_code, vi_cls_code, ...}]. 그 외는 None.
+
+    ticker: 구독 종목(종목코드 필드가 없는 10필드 형식일 때 채운다). 11필드면 첫 필드가 종목코드여야 한다.
+    """
+    if frame_tr_id(raw) not in STATUS_TR_IDS:
+        return None
+    _flag, _tr, count_str, payload = raw.strip().split("|", 3)
+    try:
+        count = int(count_str)
+    except ValueError:
+        return None
+    fields = payload.split("^")
+    if count <= 0 or len(fields) % count != 0:
+        return None
+    per = len(fields) // count
+    if per not in (len(_STATUS_KEYS), len(_STATUS_KEYS) + 1):
+        return None
+    out: list[dict] = []
+    for i in range(count):
+        rec = fields[i * per:(i + 1) * per]
+        if per == len(_STATUS_KEYS) + 1:
+            code, rec = rec[0].strip(), rec[1:]
+            if ticker and code and code != ticker:
+                return None  # 필드 순서가 예상과 다르면 잘못 읽느니 버린다
+        else:
+            code = ticker or ""
+        item = {"ticker": code}
+        item.update({k: v.strip() for k, v in zip(_STATUS_KEYS, rec)})
+        out.append(item)
+    return out

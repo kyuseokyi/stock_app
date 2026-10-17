@@ -6,6 +6,10 @@ approval_key 를 발급(캐싱)하고, 체결 TR(기본 H0UNCNT0 통합 KRX+NXT)
 구독 거부(rt_cd!=0) 처리:
 - 1회차는 approval_key 무효로 보고 캐시 무효화 후 재연결(기존 동작).
 - UN(H0UNCNT0) 구독이 새 키로도 연속 거부되면(NXT 미상장 등) KRX(H0STCNT0)로 전환한다.
+
+장운영정보(status_tr_id, 예: H0STMKO0 — VI·거래정지·서킷브레이크·사이드카)를 같은 연결에 추가 구독할 수 있다.
+응답 프레임은 header.tr_id 로 구분 — 장운영정보 구독 거부는 로그만 남기고 그 구독만 끈다
+(체결 구독 거부로 오인해 키 재발급·KRX 전환이 일어나지 않게). tr_id 가 없는 응답은 체결 응답으로 본다.
 """
 from __future__ import annotations
 
@@ -86,10 +90,14 @@ class KISWebSocketClient:
         ticker: str,
         redis_url: str | None = None,
         tr_id: str = TR_UNIFIED,
+        status_tr_id: str | None = None,
     ):
         self.cfg = cfg
         self.ticker = ticker
         self.tr_id = tr_id
+        self.status_tr_id = status_tr_id
+        # 장운영정보 응답으로 볼 tr_id — 구독을 끈 뒤 늦게 온 거부 응답도 체결 거부로 오인하지 않게 유지
+        self._status_ack_trs = {status_tr_id} if status_tr_id else set()
         self._unified_rejects = 0
         self.redis_url = redis_url or os.getenv("REDIS_URL", "redis://localhost:6379/0")
 
@@ -102,6 +110,9 @@ class KISWebSocketClient:
                 async with websockets.connect(self.cfg.ws_url, ping_interval=None) as ws:
                     await ws.send(_subscribe_frame(approval_key, self.ticker, self.tr_id))
                     log.info("KIS WS 구독: %s tr_id=%s", self.ticker, self.tr_id)
+                    if self.status_tr_id:
+                        await ws.send(_subscribe_frame(approval_key, self.ticker, self.status_tr_id))
+                        log.info("KIS WS 장운영정보 구독: %s tr_id=%s", self.ticker, self.status_tr_id)
                     async for raw in ws:
                         if isinstance(raw, bytes):
                             raw = raw.decode("utf-8", "ignore")
@@ -111,9 +122,17 @@ class KISWebSocketClient:
                                 await ws.send(raw)  # pong
                                 continue
                             try:
-                                rt_cd = json.loads(raw).get("body", {}).get("rt_cd")
+                                frame = json.loads(raw)
+                                rt_cd = frame.get("body", {}).get("rt_cd")
+                                ack_tr = (frame.get("header") or {}).get("tr_id")
                             except (ValueError, AttributeError):
-                                rt_cd = None
+                                rt_cd, ack_tr = None, None
+                            if ack_tr in self._status_ack_trs:
+                                if rt_cd is not None and rt_cd != "0":
+                                    # 장운영정보만 끈다 — 체결 구독·approval_key 에는 영향 없음
+                                    log.warning("KIS WS 장운영정보 구독 거부 → 끔: %s", raw[:200])
+                                    self.status_tr_id = None
+                                continue
                             if rt_cd is not None and rt_cd != "0":
                                 if self._on_subscribe_rejected(raw):
                                     # 방금 UN→KRX 전환: 키는 새 것이므로 무효화 없이 재구독

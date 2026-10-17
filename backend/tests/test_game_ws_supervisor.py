@@ -86,7 +86,7 @@ async def test_consume_real_uses_selected_tr(monkeypatch):
         return "H0STCNT0"
 
     class FakeClient:
-        def __init__(self, cfg, ticker, redis_url, tr_id):
+        def __init__(self, cfg, ticker, redis_url, tr_id, status_tr_id=None):
             made.update(ticker=ticker, tr_id=tr_id)
 
         async def stream(self):
@@ -130,7 +130,7 @@ async def test_consume_real_drops_out_of_window_ticks(monkeypatch):
         return "H0UNCNT0"
 
     class FakeClient:
-        def __init__(self, cfg, ticker, redis_url, tr_id):
+        def __init__(self, cfg, ticker, redis_url, tr_id, status_tr_id=None):
             pass
 
         async def stream(self):
@@ -149,3 +149,70 @@ async def test_consume_real_drops_out_of_window_ticks(monkeypatch):
     monkeypatch.setattr(run_game_ws, "_in_window", lambda now, w: False)
     await run_game_ws._consume(False, object(), "005930", 0, "redis://x", Pub())
     assert published == []
+
+
+# ---------------------------------------------------------------- 장운영정보(H0STMKO0) 라우팅
+def _status_frame(ticker="005930", trht="N", mkop="112", vi="Y", ovtm="N", stat="00"):
+    # 공식 명세 순서: 종목코드, 거래정지여부, 사유, 장운영구분, 예상장운영구분, 임의연장, 동시호가배분, 종목상태, VI, 시간외VI, 거래소
+    return "0|H0STMKO0|001|" + "^".join([ticker, trht, "", mkop, "", "", "", stat, vi, ovtm, "K"])
+
+
+async def test_consume_routes_status_frames_even_out_of_window(monkeypatch):
+    from fakeredis import aioredis as fake_aioredis
+
+    from apps.trading_game.services import market_status
+
+    made = {}
+
+    async def fake_select(ticker):
+        return "H0UNCNT0"
+
+    class FakeClient:
+        def __init__(self, cfg, ticker, redis_url, tr_id, status_tr_id=None):
+            made["status_tr_id"] = status_tr_id
+
+        async def stream(self):
+            yield _status_frame(vi="Y")
+
+    redis = fake_aioredis.FakeRedis(decode_responses=True)
+
+    class Pub:
+        def __init__(self):
+            self.redis = redis
+            self.ticks = []
+
+        async def publish(self, tick):
+            self.ticks.append(tick)
+
+    class Cfg:
+        mode = "prod"
+
+    monkeypatch.setattr(run_game_ws, "select_tr_id", fake_select)
+    monkeypatch.setattr(run_game_ws, "KISWebSocketClient", FakeClient)
+    monkeypatch.setattr(run_game_ws, "_in_window", lambda now, w: False)  # 거래창 밖이어도 상태는 반영
+    pub = Pub()
+    await run_game_ws._consume(False, Cfg(), "005930", 0, "redis://x", pub)
+    assert made["status_tr_id"] == "H0STMKO0" and pub.ticks == []
+    import time as _t
+    assert (await market_status.read_status(redis, "005930", _t.time()))["state"] == "VI"
+
+
+def test_status_tr_only_in_prod_and_switchable(monkeypatch):
+    class Prod:
+        mode = "prod"
+
+    class Vps:
+        mode = "vps"
+
+    assert run_game_ws._status_tr_id(Prod()) == "H0STMKO0"
+    assert run_game_ws._status_tr_id(Vps()) is None  # 모의투자 미지원
+    monkeypatch.setenv("GAME_WS_MARKET_STATUS", "false")
+    assert run_game_ws._status_tr_id(Prod()) is None
+
+
+async def test_bad_status_frame_does_not_break_stream(monkeypatch, caplog):
+    class Pub:
+        redis = None  # 쓰이면 예외 — 해석 실패라 쓰이지 않아야 한다
+
+    await run_game_ws._handle_status(Pub(), "005930", "0|H0STMKO0|001|a^b^c")
+    assert "해석 실패" in caplog.text

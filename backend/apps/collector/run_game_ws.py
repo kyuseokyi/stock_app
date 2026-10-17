@@ -17,6 +17,10 @@ ClickHouse game_minute_bars 에 저장한다(game_ws/minute_bars — 별도 태�
 - UN 은 NXT 프리마켓·KRX 마감~애프터마켓 사이 체결도 보내므로, TRADING_WINDOWS(분 단위) 밖 틱은
   발행하지 않는다(tick_listener 의 틱별 자동청산·랭킹이 거래창 밖에서 돌지 않게).
 
+장운영정보(H0STMKO0 — VI·거래정지·서킷브레이크·사이드카)를 같은 연결에 추가 구독해 Redis
+stock:status:{ticker} 에 저장·발행한다(market_status). 실전(prod)만 지원(모의투자 미지원),
+GAME_WS_MARKET_STATUS=false 로 끌 수 있다. 상태 처리 실패는 틱 발행에 영향 없음.
+
 실행:
     uv run python -m apps.collector.run_game_ws
     MOCK_TICK_STREAM=true uv run python -m apps.collector.run_game_ws
@@ -27,6 +31,7 @@ import asyncio
 import logging
 import os
 import signal
+import time as _time
 from collections.abc import Awaitable, Callable
 from datetime import datetime, time, timedelta, timezone
 
@@ -41,8 +46,8 @@ from apps.collector.game_ws.mock_stream import mock_ticks
 from apps.collector.game_ws.publisher import TickPublisher
 from apps.collector.game_ws.tr_select import select_tr_id
 from apps.collector.kis.ws_client import KISWebSocketClient
-from apps.collector.kis.ws_parser import parse_message
-from apps.trading_game.services import market_clock
+from apps.collector.kis.ws_parser import STATUS_TR_IDS, frame_tr_id, parse_message, parse_status_message
+from apps.trading_game.services import market_clock, market_status
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("run_game_ws")
@@ -104,9 +109,12 @@ async def _consume(use_mock, cfg, ticker, base_price, redis_url, publisher, reco
             _record(recorder, tick)
     else:
         tr_id = await select_tr_id(ticker)
-        client = KISWebSocketClient(cfg, ticker, redis_url, tr_id=tr_id)
+        client = KISWebSocketClient(cfg, ticker, redis_url, tr_id=tr_id, status_tr_id=_status_tr_id(cfg))
         windows = market_clock.load_windows()
         async for raw in client.stream():
+            if frame_tr_id(raw) in STATUS_TR_IDS:  # 장운영정보 — 거래창과 무관하게 반영
+                await _handle_status(publisher, ticker, raw)
+                continue
             parsed = parse_message(raw)
             if not parsed:
                 continue
@@ -116,6 +124,30 @@ async def _consume(use_mock, cfg, ticker, base_price, redis_url, publisher, reco
                 payload = _payload_from_parsed(t)
                 await publisher.publish(payload)
                 _record(recorder, payload)
+
+
+STATUS_TR_ID = "H0STMKO0"  # 국내주식 장운영정보(KRX) — 공식 코드표가 있는 TR, NXT 미상장 종목도 수신
+
+
+def _status_tr_id(cfg) -> str | None:
+    """장운영정보 구독 TR — 실전만(모의투자 미지원), GAME_WS_MARKET_STATUS=false 면 끔."""
+    if os.getenv("GAME_WS_MARKET_STATUS", "true").lower() == "false" or getattr(cfg, "mode", None) != "prod":
+        return None
+    return STATUS_TR_ID
+
+
+async def _handle_status(publisher, ticker: str, raw: str) -> None:
+    """장운영정보 프레임 → 상태 저장·변경 시 발행. 실패해도 틱 수신은 계속."""
+    try:
+        events = parse_status_message(raw, ticker) or []
+        if not events:
+            log.warning("장운영정보 해석 실패(필드 수·종목 불일치): %s", raw[:200])
+        for ev in events:
+            changed = await market_status.save_event(publisher.redis, ticker, ev, _time.time())
+            log.info("장운영정보 %s trht=%s mkop=%s vi=%s → %s", ticker, ev.get("trht_yn"),
+                     ev.get("mkop_cls_code"), ev.get("vi_cls_code"), changed["state"] if changed else "변화 없음")
+    except Exception:  # noqa: BLE001
+        log.exception("장운영정보 처리 실패(무시)")
 
 
 def _should_record_bars(use_mock: bool, mock_opt_in: str | None) -> bool:
