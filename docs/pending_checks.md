@@ -24,6 +24,12 @@
 - [ ] **공모주**: `stock_events` 의 `subscr_dt`·`list_dt` 날짜 형식이 파싱됐는지, 상장 전 종목은 제목이 종목코드로 나옴 — `payload` 에 회사명 필드가 있으면 제목에 쓰도록 수정
 - [ ] **FRED**: 키 발급 후 첫 수집 로그 `FRED 수집: ok=9 …`, 캘린더는 CPI·고용보고서·PCE 발표일만(금리·국채는 매 영업일이라 제외)
 
+### CANSLIM 스크리너(프로젝트 2 배포 후)
+- [ ] 20:30 파이프라인 끝 로그 `CANSLIM 계산: {'date': …, 'rows': ~2,600, 'pass5': …}` → 웹 `/screener` 목록·상세가 뜨는지(넓은 화면 스플릿·좁은 화면 펼침)
+- [ ] 한 번 `collector.backfill_canslim` 실행(60거래일) → 상세의 점수 추이 그래프
+- [ ] 상식 점검: RS 상위가 실제 주도주인지, 시장 방향(M)이 실제 KOSPI·KOSDAQ 흐름과 맞는지
+- [ ] 재무 형식 확인 뒤 `.env.production` 에 `FUNDAMENTALS_Q_CUMULATIVE=true|false` → worker 재시작 → C 가 '준비 중'에서 판정으로 바뀌는지
+
 ## 2. 브라우저·기기로 아직 확인하지 않은 화면
 ### web_client (`app.haezean.com/game`)
 - [ ] 연속 출석 보상 모달(🔥 칩 → 보상 받기 → 자본금 증가)

@@ -82,6 +82,7 @@
 - [ ] 정배열/역배열·매물대의 CH 컬럼 영속화(스크리너 성능용)
 
 ### Phase 2 — 스크리너
+- [x] **CANSLIM 스크리너(프로젝트 2)** — 7항목 판정·점수 매일 사전 계산(`canslim_daily`), GraphQL `canslimMarket·canslimScreen·canslimScore`, 웹 `/screener`(시장 방향·필터·목록·차트·점수표·추이). C 는 재무 형식 확인 뒤 `FUNDAMENTALS_Q_CUMULATIVE` 로 켬. 스펙 `docs/superpowers/specs/2026-10-18-canslim-design.md` (2026-10-18). 앱 화면은 다음
 - [ ] `stock_api` 스크리너 리졸버/엔드포인트(필터 조합)
 - [ ] 프리셋(거래량급증/골든크로스/과매도/신고가) + 커스텀 필터(볼린저 σ·정/역배열·매물대·거래량·재무)
 - [ ] 결과 카드 UI + 정렬/편집, 차트 상세(웹 스플릿뷰)

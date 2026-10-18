@@ -365,6 +365,7 @@ uv run pytest tests/test_universe_cooldown.py    # 특정 파일
 | `FRED_API_KEY` | collector | (없음) | 미국 거시 지표(FRED, 무료 발급). 없으면 거시 지표 수집만 건너뜀 |
 | `MACRO_SERIES_EXTRA` | collector | (없음) | 추가 FRED 시리즈(쉼표) |
 | `MARKET_INDEX_EXTRA` | collector | (없음) | 추가 미국 대표 종목(쉼표, 기본 NVDA·MU·AAPL·MSFT·TSLA) |
+| `FUNDAMENTALS_Q_CUMULATIVE` | collector | (없음) | CANSLIM C 켜기 — KIS 분기 EPS 가 누적이면 `true`, 단독이면 `false`. 비우면 C 는 '준비 중' |
 | `KIS_COOLDOWN_THRESHOLD` | collector | `5` | 연속 연결실패 몇 회에서 적응형 쿨다운 시작 |
 | `KIS_COOLDOWN_BASE_SEC` / `KIS_COOLDOWN_MAX_SEC` | collector | `60` / `600` | 쿨다운 시작·상한(초). 연속실패 지속 시 2배씩 에스컬레이트 |
 | `KIS_ACCOUNT_NO` | collector | (빈값) | 계좌번호(시세조회만이면 생략 가능) |
@@ -453,6 +454,14 @@ uv run python -c "from apps.collector.tasks.universe import backfill_all_daily; 
 - 수동 실행: `uv run celery -A apps.collector.celery_app call collector.collect_fundamentals` (같은 방식으로 `collect_market_indices --kwargs '{"region":"US"}'`·`collect_investor_daily`·`collect_ipo_events`·`collect_macro_series`).
 - 테마 보정 API(관리자 JWT, stock_api): `GET/POST /api/v1/admin/themes`, `PATCH /api/v1/admin/themes/{id}`(이름·설명·숨김), `GET/POST /api/v1/admin/themes/{id}/stocks`, `DELETE /api/v1/admin/themes/{id}/stocks/{ticker}`(제외 표시). KIS 테마 동기화는 `source=kis` 연결만 바꿔 관리자 보정이 유지된다.
 - 네이버 증권 크롤링은 하지 않는다(`robots.txt` 전체 거부) — 로드맵 "추후 확인".
+
+### 🔎 CANSLIM 스크리너 (스크리너 프로젝트 2)
+설계 `docs/superpowers/specs/2026-10-18-canslim-design.md`. 웹 `/screener`(메뉴 "스크리너", 비로그인 공개).
+- **계산**: `collector.compute_canslim` — 20:30 일일 파이프라인 마지막 단계(일봉 → 국내 지수 → 투자자 → CANSLIM)와 토 10:40(재무 수집 뒤). 보통주 전체의 7항목 판정·0~100 점수를 CH `canslim_daily`·`canslim_market` 에 저장(같은 날 재계산은 멱등).
+- **처음 한 번**: 점수 추이용 60거래일 채우기 — `uv run celery -A apps.collector.celery_app call collector.backfill_canslim` (과거 날짜도 실적은 최신값 사용).
+- **API(stock_api GraphQL)**: `canslimMarket`, `canslimScreen(market, minPass, required, sort, liquidOnly, limit, offset)`, `canslimScore(ticker)`.
+- **C(분기 실적)**: KIS 분기 EPS 형식 확인 뒤 `FUNDAMENTALS_Q_CUMULATIVE` 를 설정해야 켜진다(그 전엔 '준비 중'). A·I·M 은 재무·투자자·지수 데이터가 쌓인 뒤 "데이터 부족"이 풀린다.
+- 기준값(25%·85%·RS 80 등)·가중치는 `apps/collector/canslim/rules.py` 상수.
 
 ## 🔔 알림 아키텍처
 - **웹(SSE)**: 블로그 서비스의 `GET /api/v1/notifications/stream` 에 EventSource 로 연결 → 새 글 작성 시 Redis pub/sub 로 즉시 토스트 알림.

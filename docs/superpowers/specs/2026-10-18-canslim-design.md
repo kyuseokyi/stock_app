@@ -1,6 +1,7 @@
 # CANSLIM 분석 (스크리너 프로젝트 2) — 설계
 
-> 상태: 검토 대기 · 작성 2026-10-18
+> 상태: 구현 완료(dev) · 작성 2026-10-18 · 계획 `docs/superpowers/plans/2026-10-18-canslim.md`
+> 구현 메모: 점수표 `key` 는 소문자(c a n s l i m), 근거 문구(`display`)는 서버가 만든다. 페이지 제목(`index.html`)은 앱 전체가 "StockApp — 커뮤니티" 고정인 기존 동작 그대로.
 > 선행: 프로젝트 1 시장 데이터 수집 기반(`2026-10-18-market-data-foundation-design.md`, main 반영·배포 2026-10-18)
 > 기획 원본: `docs/screener_plan.md`(일반 스크리너) — 이 문서는 그중 윌리엄 오닐 CANSLIM 하나를 구체화한다.
 
