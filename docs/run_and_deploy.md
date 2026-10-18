@@ -9,6 +9,7 @@
 > - SSH 터널(cloudflared·Termius): [`cloudflare_termius_guide.md`](./cloudflare_termius_guide.md)
 > - DB 접속(DataGrip/DBeaver, 개발서버 터널 포함): [`db_access.md`](./db_access.md)
 > - 아키텍처 제약: [`claude_system_context.md`](./claude_system_context.md)
+> - dev → main 머지(일직선 이력): [`git_workflow.md`](./git_workflow.md)
 
 ---
 
@@ -87,8 +88,9 @@ GitHub Actions self-hosted 러너(미니PC)에서 동작. **대상별로 두 워
 
 ### 2. 자동 배포 (경로 기반 push)
 `dev`에서 작업 → `main` 병합 → push. **변경된 경로에 해당하는 워크플로만** 실행된다(둘 다 바뀌면 둘 다).
+머지 방법·거부될 때·되돌리기 상세: [`git_workflow.md`](./git_workflow.md)
 ```bash
-git checkout main && git merge dev && git push origin main
+git fetch . dev:main && git push origin main   # dev 에서 실행(일직선 fast-forward 머지)
 # backend/** 변경 → Deploy Server / web_client·admin_web/** 변경 → Deploy Web
 ```
 > 워크플로 파일(`.github/**`)만 바꾼 push는 어느 필터에도 안 걸려 배포를 트리거하지 않는다(수동으로 실행·테스트).
