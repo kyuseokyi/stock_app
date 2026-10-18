@@ -107,6 +107,15 @@ export default function ProfileScreen() {
         </Card>
 
         <View style={styles.group}>
+          <ListRow
+            title="내 펀드 수익"
+            subtitle="fund.ivyro.net 펀드 현황"
+            left={<Text style={styles.emoji}>💰</Text>}
+            onPress={() => router.push('/fund')}
+          />
+        </View>
+
+        <View style={styles.group}>
           <ListRow title="Streak 출석" subtitle="준비 중" left={<Text style={styles.emoji}>🔥</Text>} disabled />
           <ListRow title="Trading MBTI" subtitle="준비 중" left={<Text style={styles.emoji}>🧬</Text>} disabled />
           <ListRow title="아카데미 (5x 해금)" subtitle="준비 중" left={<Text style={styles.emoji}>🎓</Text>} disabled />

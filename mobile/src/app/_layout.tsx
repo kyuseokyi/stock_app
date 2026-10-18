@@ -26,6 +26,8 @@ export default function RootLayout() {
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="blog/[id]" options={{ headerShown: true, title: '글 상세' }} />
+        <Stack.Screen name="fund/index" options={{ headerShown: true, title: '내 펀드 수익' }} />
+        <Stack.Screen name="fund/[id]" options={{ headerShown: true, title: '펀드 리포트' }} />
       </Stack>
       <AppToaster />
     </>
