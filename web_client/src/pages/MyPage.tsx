@@ -50,6 +50,10 @@ export default function MyPage() {
           <span>🎮 트레이딩 게임</span>
           <span className="text-ink-muted">›</span>
         </Link>
+        <Link to="/me/funds" className="flex items-center justify-between border-t border-line px-5 py-4 text-ink hover:bg-line">
+          <span>💰 내 펀드 수익</span>
+          <span className="text-ink-muted">›</span>
+        </Link>
       </div>
 
       <div className="mt-6 flex gap-2">

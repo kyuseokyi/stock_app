@@ -10,6 +10,8 @@ import PostDetailPage from './pages/PostDetailPage'
 
 const GamePage = lazy(() => import('./pages/GamePage'))
 const ScreenerPage = lazy(() => import('./pages/ScreenerPage'))
+const FundListPage = lazy(() => import('./pages/FundListPage'))
+const FundReportPage = lazy(() => import('./pages/FundReportPage'))
 
 export default function App() {
   return (
@@ -19,6 +21,16 @@ export default function App() {
         <Route index element={<HomePage />} />
         <Route path="community" element={<CommunityPage />} />
         <Route path="me" element={<MyPage />} />
+        <Route path="me/funds" element={
+          <Suspense fallback={<p className="py-16 text-center text-ink-muted">불러오는 중…</p>}>
+            <FundListPage />
+          </Suspense>
+        } />
+        <Route path="me/funds/:id" element={
+          <Suspense fallback={<p className="py-16 text-center text-ink-muted">불러오는 중…</p>}>
+            <FundReportPage />
+          </Suspense>
+        } />
         <Route path="boards/:boardId" element={<PostListPage />} />
         <Route path="posts/:id" element={<PostDetailPage />} />
         <Route path="game" element={
