@@ -2,7 +2,7 @@
 export * from './types';
 export { cellText, Grid, tokenize, type Cell } from './grid';
 export { findMissing, parseFundReport } from './parse';
-export { normalizeFundUrl } from './url';
+export { isFundUrl, normalizeFundUrl } from './url';
 export * from './funds';
 export { djb2 } from './hash';
 export * from './refresh';

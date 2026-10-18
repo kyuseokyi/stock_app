@@ -45,7 +45,8 @@ export default function FundReportScreen() {
     const name = defaultName(entry.report);
     void loadFunds()
       .then((l) => saveFunds(renameFund(l, fund.id, name)))
-      .then(() => setFund({ ...fund, name }));
+      .then(() => setFund({ ...fund, name }))
+      .catch(() => {}); // 이름 저장 실패는 다음에 열 때 다시 시도된다
   }, [fund, entry]);
 
   if (!user) return <Redirect href="/profile" />;

@@ -4,9 +4,15 @@
 import { fundError } from './types';
 
 const FUND_URL_RE = /^https:\/\/fund\.ivyro\.net\/dataroom\/om_data\/[^/?#\s]+\.htm$/;
+const MAX_URL = 200;
+
+/** 다듬은(trim) 주소가 등록 가능한 펀드 현황 주소인지 */
+export function isFundUrl(url: string): boolean {
+  return url.length <= MAX_URL && FUND_URL_RE.test(url);
+}
 
 export function normalizeFundUrl(input: string): string {
   const url = input.trim();
-  if (!FUND_URL_RE.test(url)) throw fundError('input', 'fund.ivyro.net 펀드 현황 주소만 등록할 수 있어요.');
+  if (!isFundUrl(url)) throw fundError('input', 'fund.ivyro.net 펀드 현황 주소만 등록할 수 있어요.');
   return url;
 }

@@ -1,5 +1,5 @@
 import { isFundError } from './types';
-import { normalizeFundUrl } from './url';
+import { isFundUrl, normalizeFundUrl } from './url';
 
 const OK = 'https://fund.ivyro.net/dataroom/om_data/om_v3_0000001_TEST.htm';
 
@@ -19,6 +19,7 @@ describe('normalizeFundUrl', () => {
     ['확장자', 'https://fund.ivyro.net/dataroom/om_data/a.html'],
     ['스킴 없음', 'fund.ivyro.net/dataroom/om_data/a.htm'],
     ['빈 값', ''],
+    ['너무 긴 주소', `https://fund.ivyro.net/dataroom/om_data/${'a'.repeat(200)}.htm`],
   ])('%s 는 input 오류', (_label, url) => {
     expect.assertions(1);
     try {
@@ -26,5 +27,14 @@ describe('normalizeFundUrl', () => {
     } catch (e) {
       expect(isFundError(e, 'input')).toBe(true);
     }
+  });
+});
+
+describe('isFundUrl', () => {
+  it('펀드 주소만 true', () => {
+    expect(isFundUrl(OK)).toBe(true);
+    expect(isFundUrl('javascript:alert(1)')).toBe(false);
+    expect(isFundUrl('https://evil.com/x.htm')).toBe(false);
+    expect(isFundUrl(`https://fund.ivyro.net/dataroom/om_data/${'a'.repeat(200)}.htm`)).toBe(false);
   });
 });

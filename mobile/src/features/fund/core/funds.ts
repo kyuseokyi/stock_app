@@ -1,7 +1,7 @@
 // 기기에 저장하는 펀드 목록 조작(순수 함수). 저장 자체는 플랫폼별 store 가 한다.
 // web_client/src/lib/fundCore 에 같은 파일이 있다 — scripts/check-fund-core-sync.sh
 import { fundError, type FundReport } from './types';
-import { normalizeFundUrl } from './url';
+import { isFundUrl, normalizeFundUrl } from './url';
 
 export type FundEntry = { id: string; name: string; url: string };
 
@@ -37,7 +37,7 @@ export function parseFundList(raw: string | null): FundEntry[] {
     if (!Array.isArray(data)) return [];
     return data.filter((f: unknown): f is FundEntry => {
       const o = f as Partial<FundEntry> | null;
-      return !!o && typeof o.id === 'string' && typeof o.name === 'string' && typeof o.url === 'string';
+      return !!o && typeof o.id === 'string' && typeof o.name === 'string' && typeof o.url === 'string' && isFundUrl(o.url);
     });
   } catch {
     return [];

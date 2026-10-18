@@ -13,6 +13,7 @@ export function useFundReport(fund: FundEntry | null, cache: CachePort): ReportS
   const url = fund?.url ?? null;
   const [state, setState] = useState<ReportState>({ entry: null, refreshing: id !== null, error: null });
   const alive = useRef(true);
+  const currentId = useRef(id); // 펀드가 바뀐 뒤 도착한 이전 펀드의 응답은 버린다
 
   useEffect(() => {
     alive.current = true;
@@ -23,23 +24,30 @@ export function useFundReport(fund: FundEntry | null, cache: CachePort): ReportS
 
   const refresh = useCallback(() => {
     if (id === null || url === null) return;
+    const isCurrent = () => alive.current && currentId.current === id;
     setState((s) => ({ ...s, refreshing: true, error: null }));
     refreshReport({ id, url }, { fetchHtml: (u) => fetchReportHtml(u), cache, now: Date.now })
       .then(({ entry }) => {
-        if (alive.current) setState({ entry, refreshing: false, error: null });
+        if (isCurrent()) setState({ entry, refreshing: false, error: null });
       })
       .catch((e: unknown) => {
-        if (alive.current) {
+        if (isCurrent()) {
           setState((s) => ({ ...s, refreshing: false, error: isFundError(e) ? e.fundCode : 'fetch' }));
         }
       });
   }, [id, url, cache]);
 
   useEffect(() => {
+    if (currentId.current !== id) {
+      currentId.current = id;
+      setState({ entry: null, refreshing: id !== null, error: null });
+    }
     if (id === null) return;
-    void readValidCache(cache, id).then((c) => {
-      if (alive.current && c) setState((s) => (s.entry ? s : { ...s, entry: c }));
-    });
+    void readValidCache(cache, id)
+      .then((c) => {
+        if (alive.current && currentId.current === id && c) setState((s) => (s.entry ? s : { ...s, entry: c }));
+      })
+      .catch(() => {});
     refresh();
   }, [id, cache, refresh]);
 

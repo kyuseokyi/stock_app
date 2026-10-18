@@ -54,11 +54,20 @@ export async function refreshReport(
   const prev = await readValidCache(deps.cache, fund.id);
   if (prev && prev.hash === hash) {
     const entry = { ...prev, fetchedAt: deps.now() };
-    await deps.cache.write(fund.id, entry);
+    await deps.cache.write(fund.id, entry).catch(() => {}); // 캐시 저장 실패는 결과를 막지 않는다
     return { changed: false, entry };
   }
-  const { report, missing } = parseFundReport(html);
+  const { report, missing } = parseOrFormatError(html);
   const entry: CacheEntry = { v: PARSER_VERSION, fetchedAt: deps.now(), hash, report, missing };
-  await deps.cache.write(fund.id, entry);
+  await deps.cache.write(fund.id, entry).catch(() => {});
   return { changed: true, entry };
+}
+
+function parseOrFormatError(html: string): ReturnType<typeof parseFundReport> {
+  try {
+    return parseFundReport(html);
+  } catch (e) {
+    if (isFundError(e)) throw e;
+    throw fundError('format', '원본 형식을 읽지 못했습니다');
+  }
 }

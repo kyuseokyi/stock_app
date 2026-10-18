@@ -68,4 +68,13 @@ describe('parseFundList', () => {
       { id: 'a', name: '', url: url(1) },
     ]);
   });
+
+  it('펀드 주소가 아닌 항목은 걸러낸다', () => {
+    const raw = JSON.stringify([
+      { id: 'a', name: '', url: url(1) },
+      { id: 'b', name: '', url: 'javascript:alert(1)' },
+      { id: 'c', name: '', url: 'https://evil.com/x.htm' },
+    ]);
+    expect(parseFundList(raw)).toEqual([{ id: 'a', name: '', url: url(1) }]);
+  });
 });

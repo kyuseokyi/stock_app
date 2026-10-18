@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 
 import { djb2 } from './hash';
+import * as parseModule from './parse';
 import {
   fetchReportHtml,
   PARSER_VERSION,
@@ -73,6 +74,34 @@ describe('refreshReport', () => {
     await expect(
       refreshReport(FUND, { fetchHtml: async () => '<html></html>', cache, now: () => 1 }),
     ).rejects.toMatchObject({ fundCode: 'format' });
+  });
+});
+
+describe('refreshReport 견고성', () => {
+  afterEach(() => jest.restoreAllMocks());
+
+  it('파서가 예상 못한 오류를 던져도 format 오류', async () => {
+    jest.spyOn(parseModule, 'parseFundReport').mockImplementation(() => {
+      throw new TypeError('x');
+    });
+    await expect(
+      refreshReport(FUND, { fetchHtml: async () => HTML, cache: memoryCache(), now: () => 1 }),
+    ).rejects.toMatchObject({ fundCode: 'format' });
+  });
+
+  it('캐시 저장이 실패해도 가져온 리포트를 돌려준다', async () => {
+    const cache: CachePort = { read: async () => null, write: async () => Promise.reject(new Error('disk')) };
+    const res = await refreshReport(FUND, { fetchHtml: async () => HTML, cache, now: () => 5 });
+    expect(res.changed).toBe(true);
+    expect(res.entry.fetchedAt).toBe(5);
+  });
+
+  it('내용이 같을 때 캐시 저장이 실패해도 돌려준다', async () => {
+    const mem = memoryCache();
+    const first = await refreshReport(FUND, { fetchHtml: async () => HTML, cache: mem, now: () => 1 });
+    const cache: CachePort = { read: mem.read, write: async () => Promise.reject(new Error('disk')) };
+    const res = await refreshReport(FUND, { fetchHtml: async () => HTML, cache, now: () => 9 });
+    expect(res).toEqual({ changed: false, entry: { ...first.entry, fetchedAt: 9 } });
   });
 });
 

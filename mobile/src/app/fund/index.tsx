@@ -25,14 +25,23 @@ export default function FundListScreen() {
   const [name, setName] = useState('');
   const [url, setUrl] = useState('');
   const [error, setError] = useState('');
+  const [loadError, setLoadError] = useState('');
 
   // 리포트 화면에서 기본 이름이 붙을 수 있어 돌아올 때마다 다시 읽는다
   useFocusEffect(
     useCallback(() => {
       let alive = true;
-      void loadFunds().then((l) => {
-        if (alive) setFunds(l);
-      });
+      loadFunds()
+        .then((l) => {
+          if (alive) {
+            setFunds(l);
+            setLoadError('');
+          }
+        })
+        .catch(() => {
+          // funds 를 null 로 둬서 추가가 막힌다 — 빈 목록으로 저장해 기존 목록을 덮지 않도록
+          if (alive) setLoadError('저장된 목록을 읽지 못했어요.');
+        });
       return () => {
         alive = false;
       };
@@ -42,8 +51,9 @@ export default function FundListScreen() {
   if (!user) return <Redirect href="/profile" />;
 
   const handleAdd = async () => {
+    if (funds === null) return; // 저장된 목록을 읽기 전에 추가하면 목록을 덮어쓴다
     try {
-      const next = addFund(funds ?? [], { name, url }, newFundId());
+      const next = addFund(funds, { name, url }, newFundId());
       await saveFunds(next);
       setFunds(next);
       setName('');
@@ -62,7 +72,8 @@ export default function FundListScreen() {
         text: '삭제',
         style: 'destructive',
         onPress: () => {
-          const next = removeFund(funds ?? [], f.id);
+          if (funds === null) return;
+          const next = removeFund(funds, f.id);
           void saveFunds(next).then(() => {
             deleteCache(f.id);
             setFunds(next);
@@ -96,10 +107,12 @@ export default function FundListScreen() {
           style={styles.input}
         />
         {error ? <Text style={styles.error}>{error}</Text> : null}
-        <Button label="추가" onPress={handleAdd} disabled={!url.trim()} />
+        <Button label="추가" onPress={handleAdd} disabled={funds === null || !url.trim()} />
       </Card>
 
-      {funds === null ? (
+      {funds === null && loadError ? (
+        <Text style={styles.error}>{loadError}</Text>
+      ) : funds === null ? (
         <ListState mode="loading" />
       ) : funds.length === 0 ? (
         <ListState

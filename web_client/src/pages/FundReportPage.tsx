@@ -17,6 +17,11 @@ import { useAuthStore } from '../store/auth'
 // 펀드 리포트(/me/funds/:id) — 캐시를 먼저 보여주고 열 때마다 원본을 다시 가져온다.
 export default function FundReportPage() {
   const { id } = useParams()
+  return <FundReportBody key={id} id={id} />
+}
+
+// key={id} 로 :id 가 바뀌면 상태를 새로 만든다(다른 펀드 리포트로 이동)
+function FundReportBody({ id }: { id: string | undefined }) {
   const user = useAuthStore((s) => s.user)
   const [fund, setFund] = useState<FundEntry | null>(() => loadFunds().find((f) => f.id === id) ?? null)
   const { entry, refreshing, error, refresh } = useFundReport(fund, localCache)

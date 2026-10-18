@@ -27,9 +27,13 @@ export const fileCache: CachePort = {
     }
   },
   async write(id, entry) {
-    const f = cacheFile(id);
-    if (!f.exists) f.create();
-    f.write(JSON.stringify(entry));
+    try {
+      const f = cacheFile(id);
+      if (!f.exists) f.create();
+      f.write(JSON.stringify(entry));
+    } catch {
+      // 캐시는 보조 저장 — 실패해도 가져온 리포트는 그대로 보여준다
+    }
   },
 };
 
