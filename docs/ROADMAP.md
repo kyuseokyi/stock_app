@@ -123,6 +123,7 @@
 - [x] **시즌 기간 선택(월간/분기)·월간 랭킹·보상 금액 admin 설정** — 다음 시즌 기간 admin 선택, 분기 시즌 월간 랭킹(매월 1일 08:55 마감·1~3위 보상), 주간·월간·출석 보상 금액 `game_settings`, 정산 종가 주말·휴장 보완 (2026-10-14)
 - [ ] 지인 리그(Private League) — 백엔드(리그 생성·초대코드·리그 랭킹) + UI. 서브페이즈 6 범위에서 제외 · **보류**(사용자 결정 2026-10-13)
 - [ ] 이중추세선 조작 방식 재정의(대기 중)
+- [ ] **네이버 증권 테마·뉴스 크롤링 — 추후 확인**(사용자 결정 2026-10-18). `finance.naver.com/robots.txt` 가 `Disallow: /`(전체 수집 거부)라 보류. 다시 검토할 때 확인: 약관·허용 경로 변경 여부, 차단 위험, 출처 표기. 그 전까지 주달 기능은 공식 경로만(테마=KIS `theme_code.mst`+관리자 보정, 업종=`.mst`/`idxcode.mst`, 뉴스=네이버 검색 Open API, 일정=KIS 예탁원 API) — 기획 `docs/joodal_curation_service_plan.md`
 - [ ] 테스트(pytest / Vitest / Playwright)
 - [x] 퀴즈 생성 정기 스케줄(Celery beat) — `collector.generate_chart_quiz` 매일 21:00 KST, 미시도 재고 < `QUIZ_POOL_MIN_UNSEEN`(100)이면 `QUIZ_POOL_BATCH`(50 → 2026-10-17 200)개 생성 (2026-10-13)
 - [x] **야간 퀴즈 개선 A·B1·B2** (2026-10-17)
