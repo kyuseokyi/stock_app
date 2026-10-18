@@ -7,4 +7,5 @@ export * from './funds';
 export { djb2 } from './hash';
 export * from './refresh';
 export * from './display';
+export * from './view';
 export { useFundReport, type ReportState } from './use-fund-report';
