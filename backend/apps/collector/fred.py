@@ -14,6 +14,9 @@ BASE = "https://api.stlouisfed.org/fred"
 _TIMEOUT = 20
 
 DEFAULT_SERIES = ("CPIAUCSL", "CPILFESL", "PCEPILFE", "UNRATE", "PAYEMS", "FEDFUNDS", "DGS10", "DGS2", "T10Y2Y")
+# 발표 예정일을 캘린더(stock_events)에 넣을 시리즈 — 월 1회 발표만. CPI(근원 CPI 같은 발표),
+# 고용보고서(실업률·비농업 고용 같은 발표), 개인소득·지출(PCE). 금리·국채(H.15)·스프레드는 매 영업일이라 제외.
+CALENDAR_SERIES = frozenset({"CPIAUCSL", "UNRATE", "PCEPILFE"})
 LABELS = {
     "CPIAUCSL": "미국 CPI", "CPILFESL": "미국 근원 CPI", "PCEPILFE": "미국 근원 PCE", "UNRATE": "미국 실업률",
     "PAYEMS": "미국 비농업 고용", "FEDFUNDS": "미국 기준금리(실효)", "DGS10": "미 국채 10년",

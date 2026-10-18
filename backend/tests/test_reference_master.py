@@ -64,6 +64,15 @@ def test_bad_numbers_become_none_and_short_line_skipped():
     assert len(rm.parse_profiles(["짧은줄", _line("KOSPI", "005930", "삼성전자", KOSPI_SAMSUNG)], "KOSPI")) == 1
 
 
+def test_master_stock_name_not_truncated_when_name_fills_field():
+    """긴 ETF 이름이 뒤쪽 필드와 붙어 있어도 마지막 글자가 잘리지 않음(예전 228 고정 자르기 버그)."""
+    from apps.collector.kis import master
+
+    name = "TIGER 엔비디아미국채커버드콜밸런스(합성)"
+    stocks = master.parse_master_lines({"KOSPI": [_line("KOSPI", "123456", name, KOSPI_SAMSUNG)], "KOSDAQ": []})
+    assert [(s.ticker, s.name, s.market) for s in stocks] == [("123456", name, "KOSPI")]
+
+
 def test_parse_sectors_uses_name_after_code():
     lines = ["00027제조" + " " * 36, "11009제조" + " " * 36, "00001종합" + " " * 36]
     assert rm.parse_sectors(lines) == {"0027": "제조", "1009": "제조", "0001": "종합"}

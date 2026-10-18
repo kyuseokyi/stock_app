@@ -18,7 +18,7 @@ log = logging.getLogger(__name__)
 
 BACKFILL_DAYS = 730
 OVERLAP_DAYS = 10
-CHUNK_DAYS = 100
+CHUNK_DAYS = 60  # ≈42거래일 — 응답 행 수 상한(명세 미기재, 연속조회 tr_cont 있음)에 걸리지 않게
 DEFAULT_US_STOCKS = "NVDA,MU,AAPL,MSFT,TSLA"
 
 

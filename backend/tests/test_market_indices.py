@@ -60,8 +60,8 @@ def test_collect_backfills_first_then_overlaps(monkeypatch):
     kospi = [c for c in client.calls if c[1] == "0001"]
     kosdaq = [c for c in client.calls if c[1] == "1001"]
     assert kospi == [("KR", "0001", "20260930", "20261018")]   # 최근 10일 겹침
-    assert kosdaq[0][2] == "20241018" and len(kosdaq) == 8       # 첫 실행 2년(100일 청크)
-    assert out == {"ok": ["KR:0001", "KR:1001"], "failed": [], "inserted": 9}
+    assert kosdaq[0][2] == "20241018" and len(kosdaq) == 13      # 첫 실행 2년(60일 청크)
+    assert out == {"ok": ["KR:0001", "KR:1001"], "failed": [], "inserted": 14}
     assert [r["date"] for r in stored["KR:1001"]] == sorted(r["date"] for r in stored["KR:1001"])
 
 

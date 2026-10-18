@@ -18,6 +18,8 @@ from dataclasses import dataclass
 
 import requests
 
+from apps.collector.kis.reference_master import PART2_LEN
+
 _KOSPI_URL = "https://new.real.download.dws.co.kr/common/master/kospi_code.mst.zip"
 _KOSDAQ_URL = "https://new.real.download.dws.co.kr/common/master/kosdaq_code.mst.zip"
 _TIMEOUT = 30
@@ -39,16 +41,17 @@ def _download_mst_text(url: str) -> list[str]:
     return raw.decode("cp949", errors="replace").splitlines()
 
 
-def _parse_front(line: str) -> tuple[str, str] | None:
+def _parse_front(line: str, tail: int = 227) -> tuple[str, str] | None:
     """마스터 라인 앞부분에서 (단축코드, 한글명) 추출.
 
-    KIS 포맷: 앞부분(가변) + 뒤 228바이트(수치 필드). 앞부분은
-      [0:9]=단축코드, [9:21]=표준코드, [21:]=한글명.
+    KIS 포맷: 앞부분(가변) + 뒤 고정폭 수치 필드(KOSPI 227 / KOSDAQ 221자 — reference_master.PART2_LEN).
+    앞부분은 [0:9]=단축코드, [9:21]=표준코드, [21:]=한글명.
+    (예전엔 둘 다 228 로 잘라 이름이 꽉 찬 긴 ETF 이름의 마지막 글자가 잘렸다 — 2026-10-18 수정)
     ETF/ETN/스팩/우선주 포함(전종목). 필터링이 필요하면 상위에서 처리.
     """
-    if len(line) <= 228:
+    if len(line) <= tail:
         return None
-    front = line[: len(line) - 228]
+    front = line[: len(line) - tail]
     short_code = front[0:9].strip()
     name = front[21:].strip()
     if not short_code or not name:
@@ -61,7 +64,7 @@ def _parse_front(line: str) -> tuple[str, str] | None:
 def _parse_market(lines: list[str], market: str) -> list[MasterStock]:
     out: list[MasterStock] = []
     for line in lines:
-        parsed = _parse_front(line)
+        parsed = _parse_front(line, PART2_LEN[market])
         if parsed:
             out.append(MasterStock(ticker=parsed[0], name=parsed[1], market=market))
     return out

@@ -17,7 +17,8 @@ from apps.collector.kis.client import KRX_MARKET_CODE, KISClient
 from apps.collector.kis.master import MasterStock
 from apps.collector.market_indices import collect_indices, index_specs
 from apps.collector.repositories import clickhouse_market as chm
-from apps.collector.tasks.universe import _run_universe, collect_all_daily
+from apps.collector.rate_limit import RateLimiter
+from apps.collector.tasks.universe import _DEFAULT_RATE, _run_universe, collect_all_daily
 from shared import market_repo
 from shared.database import SyncSessionLocal
 
@@ -30,7 +31,8 @@ RELEASE_AHEAD_DAYS = 60
 
 
 def _kis_client():
-    return KISClient()
+    """단독 태스크용 클라이언트 — 지수 첫 백필은 연속 호출이 많아 같은 초당 상한(_DEFAULT_RATE)을 건다."""
+    return KISClient(limiter=RateLimiter(_DEFAULT_RATE))
 
 
 def _analysis_tickers() -> list[MasterStock]:
@@ -134,9 +136,10 @@ def collect_macro_series(today: date | None = None) -> dict:
             start = (today - timedelta(days=MACRO_BACKFILL_DAYS) if latest is None
                      else latest - timedelta(days=MACRO_OVERLAP_DAYS))
             inserted += chm.upsert_macro(sid, client.observations(sid, start))
-            rel = client.release_of(sid)
-            if rel is not None and rel[0] not in releases:
-                releases[rel[0]] = (rel[1], sid)
+            if sid in fred.CALENDAR_SERIES:  # 금리·스프레드(H.15 등)는 매 영업일 발표라 캘린더에 넣지 않음
+                rel = client.release_of(sid)
+                if rel is not None and rel[0] not in releases:
+                    releases[rel[0]] = (rel[1], sid)
             ok.append(sid)
         except Exception as e:  # noqa: BLE001 — 시리즈 하나 실패가 나머지를 막지 않게
             log.warning("FRED 수집 실패 %s: %s", sid, str(e)[:160])

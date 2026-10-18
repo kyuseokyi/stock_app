@@ -98,6 +98,13 @@ def test_ipo_events_titles(monkeypatch):
         ("신규기업 공모주 청약", "ipo:123450:subscr", "공모주"), ("신규기업 신규 상장", "ipo:123450:listing", "공모주")]
 
 
+def test_standalone_client_has_rate_limiter(monkeypatch):
+    seen = {}
+    monkeypatch.setattr(md, "KISClient", lambda limiter=None: seen.setdefault("limiter", limiter))
+    md._kis_client()
+    assert isinstance(seen["limiter"], md.RateLimiter)  # 지수 첫 백필(연속 호출)도 초당 상한
+
+
 def test_macro_skips_without_key(monkeypatch):
     monkeypatch.delenv("FRED_API_KEY", raising=False)
     assert md.collect_macro_series() == {"skipped": "FRED_API_KEY 없음"}
@@ -106,7 +113,7 @@ def test_macro_skips_without_key(monkeypatch):
 def test_macro_collects_and_isolates(monkeypatch):
     monkeypatch.setenv("FRED_API_KEY", "k")
     monkeypatch.setattr(md.chm, "ensure_market_tables", lambda: None)
-    monkeypatch.setattr(md.fred, "series_ids", lambda: ["CPIAUCSL", "BAD"])
+    monkeypatch.setattr(md.fred, "series_ids", lambda: ["CPIAUCSL", "DGS10", "BAD"])
     starts = {}
     monkeypatch.setattr(md.chm, "latest_macro_date", lambda s: None)
     monkeypatch.setattr(md.chm, "upsert_macro", lambda s, obs: len(obs))
@@ -122,7 +129,8 @@ def test_macro_collects_and_isolates(monkeypatch):
             return [(date(2026, 9, 1), 1.0)]
 
         def release_of(self, sid):
-            return (10, "Consumer Price Index") if sid == "CPIAUCSL" else None
+            assert sid == "CPIAUCSL", "매일 발표(H.15) 시리즈는 발표일을 조회하지 않음"
+            return (10, "Consumer Price Index")
 
         def release_dates(self, rid, start, end):
             return [date(2026, 11, 12)]
@@ -136,8 +144,8 @@ def test_macro_collects_and_isolates(monkeypatch):
     monkeypatch.setattr(md.fred, "FredClient", F)
     monkeypatch.setattr(md, "_save_events", _save)
     out = md.collect_macro_series(today=date(2026, 10, 18))
-    assert out["ok"] == ["CPIAUCSL"] and out["failed"][0]["series_id"] == "BAD"
-    assert out["inserted"] == 1 and out["events"] == 1
+    assert out["ok"] == ["CPIAUCSL", "DGS10"] and out["failed"][0]["series_id"] == "BAD"
+    assert out["inserted"] == 2 and out["events"] == 1
     assert starts["CPIAUCSL"] == date(2024, 10, 18)  # 첫 실행 2년
     assert saved["evs"][0]["title"] == "미국 CPI 발표"
 
