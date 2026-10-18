@@ -30,10 +30,22 @@ KRX_MARKET_CODE = "J"  # UN 빈응답(비-NXT 종목) 폴백용
 TR_DAILY_ITEMCHART = "FHKST03010100"
 TR_TIME_ITEMCHART = "FHKST03010200"  # 주식당일분봉조회
 TR_TIME_DAILYCHART = "FHKST03010230"  # 주식일별분봉조회(과거 거래일, 최대 1년 보관)
+TR_INDEX_DAILY = "FHKUP03500100"  # 국내주식업종기간별시세(일) — 지수
+TR_OVERSEAS_DAILY = "FHKST03030100"  # 해외주식 종목/지수/환율기간별시세 — N:해외지수 X:환율
+TR_INVESTOR = "FHKST01010900"  # 주식현재가 투자자(최근 약 30거래일)
+TR_FIN_RATIO = "FHKST66430300"  # 국내주식 재무비율(0:년 1:분기)
+TR_IPO = "HHKDB669108C0"  # 예탁원정보(공모주청약일정)
 
 _MAX_RETRIES = 5
 _TIMEOUT = 15
 _POOL_SIZE = 4  # 단일 호스트(KIS) 대상 keep-alive 연결 재사용 풀 크기
+
+
+def _as_list(out) -> list:
+    """KIS output 은 목록 또는 단건 dict — 항상 목록으로."""
+    if out is None:
+        return []
+    return out if isinstance(out, list) else [out]
 
 
 class KISConnectionError(RuntimeError):
@@ -183,6 +195,46 @@ class KISClient:
         }
         data = self._request_with_retry("get", url, TR_TIME_DAILYCHART, params)
         return data.get("output2") or []
+
+    # --- 지수·시장지표 ---
+    def get_domestic_index_daily(self, index_code: str, start_yyyymmdd: str, end_yyyymmdd: str) -> list[dict]:
+        """국내 업종 지수 일봉(output2). index_code 예: 0001 KOSPI, 1001 KOSDAQ, 2001 KOSPI200."""
+        url = f"{self.cfg.base_url}/uapi/domestic-stock/v1/quotations/inquire-daily-indexchartprice"
+        params = {
+            "FID_COND_MRKT_DIV_CODE": "U", "FID_INPUT_ISCD": index_code,
+            "FID_INPUT_DATE_1": start_yyyymmdd, "FID_INPUT_DATE_2": end_yyyymmdd, "FID_PERIOD_DIV_CODE": "D",
+        }
+        return _as_list(self._request_with_retry("get", url, TR_INDEX_DAILY, params).get("output2"))
+
+    def get_overseas_daily(self, mrkt: str, symbol: str, start_yyyymmdd: str, end_yyyymmdd: str) -> list[dict]:
+        """해외 지수(N)·환율(X) 일봉(output2). 미국 주식은 다우30·나스닥100·S&P500 편입 종목만(KIS 명세)."""
+        url = f"{self.cfg.base_url}/uapi/overseas-price/v1/quotations/inquire-daily-chartprice"
+        params = {
+            "FID_COND_MRKT_DIV_CODE": mrkt, "FID_INPUT_ISCD": symbol,
+            "FID_INPUT_DATE_1": start_yyyymmdd, "FID_INPUT_DATE_2": end_yyyymmdd, "FID_PERIOD_DIV_CODE": "D",
+        }
+        return _as_list(self._request_with_retry("get", url, TR_OVERSEAS_DAILY, params).get("output2"))
+
+    # --- 투자자별 매매 ---
+    def get_investor_daily(self, ticker: str, market_code: str = DOMESTIC_MARKET_CODE) -> list[dict]:
+        """일자별 개인·외국인·기관 순매수(output). UN 이 비거나 거부되면 상위에서 J 로 폴백."""
+        url = f"{self.cfg.base_url}/uapi/domestic-stock/v1/quotations/inquire-investor"
+        params = {"FID_COND_MRKT_DIV_CODE": market_code, "FID_INPUT_ISCD": ticker}
+        return _as_list(self._request_with_retry("get", url, TR_INVESTOR, params).get("output"))
+
+    # --- 재무 ---
+    def get_financial_ratio(self, ticker: str, period: str) -> list[dict]:
+        """재무비율(output). period: '0' 연간, '1' 분기. 재무는 시세가 아니라 J 고정(공식 예제 — 소문자 키 그대로)."""
+        url = f"{self.cfg.base_url}/uapi/domestic-stock/v1/finance/financial-ratio"
+        params = {"FID_DIV_CLS_CODE": period, "fid_cond_mrkt_div_code": KRX_MARKET_CODE, "fid_input_iscd": ticker}
+        return _as_list(self._request_with_retry("get", url, TR_FIN_RATIO, params).get("output"))
+
+    # --- 예탁원 ---
+    def get_ipo_schedule(self, from_yyyymmdd: str, to_yyyymmdd: str) -> list[dict]:
+        """공모주 청약 일정(output1) — 전체 종목."""
+        url = f"{self.cfg.base_url}/uapi/domestic-stock/v1/ksdinfo/pub-offer"
+        params = {"SHT_CD": "", "CTS": "", "F_DT": from_yyyymmdd, "T_DT": to_yyyymmdd}
+        return _as_list(self._request_with_retry("get", url, TR_IPO, params).get("output1"))
 
     def _request_with_retry(self, method: str, url: str, tr_id: str, params: dict) -> dict:
         last_exc: Exception | None = None
