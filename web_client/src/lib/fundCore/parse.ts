@@ -106,7 +106,7 @@ function noteBlock(g: Grid, b: Cell): NoteBlock {
       if (x.c === 0) continue;
       links.push(...x.links);
       if (!x.links.length && x.text) {
-        const segs = x.segs.map(([t, bold]): Seg => [t.replace(/ /g, ' ').replace(/[ \t]+/g, ' '), bold]);
+        const segs = x.segs.map(([t, bold]): Seg => [t.replace(/\u00a0/g, ' ').replace(/[ \t]+/g, ' '), bold]);
         segs[0][0] = segs[0][0].replace(/^[ ￭]+/, '');
         segs[segs.length - 1][0] = segs[segs.length - 1][0].replace(/\s+$/, '');
         items.push(segs.filter((s) => s[0]));

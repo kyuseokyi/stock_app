@@ -5,6 +5,7 @@ import { Link } from 'react-router-dom'
 export type Section = 'home' | 'community' | 'game' | 'screener' | 'me'
 
 /** 경로 → 섹션. 게시판·글 상세는 커뮤니티로 본다 */
+// eslint-disable-next-line react-refresh/only-export-components -- 내비 섹션 판별 함수를 같은 파일에서 공유(개발 중 Fast Refresh 에만 영향)
 export function sectionOf(pathname: string): Section {
   if (pathname.startsWith('/game')) return 'game'
   if (pathname.startsWith('/screener')) return 'screener'

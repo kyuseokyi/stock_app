@@ -215,6 +215,7 @@ export async function getMarketStatus(): Promise<MarketStatus | null> {
   const { data } = await client().get<unknown>('/api/game/market-status')
   const st = toMarketStatus(data)
   if (!st) return null
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- type 필드를 버리기 위한 구조 분해
   const { type: _type, ...rest } = st
   return rest
 }

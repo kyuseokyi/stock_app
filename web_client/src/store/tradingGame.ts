@@ -304,6 +304,7 @@ export const useTradingGameStore = create<TradingGameState>()((set, get) => {
           return
         case 'market_status': {
           if (season && msg.ticker !== null && msg.ticker !== season.ticker) return
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars -- type 필드를 버리기 위한 구조 분해
           const { type: _type, ...status } = msg
           set({ marketStatus: status })
           return

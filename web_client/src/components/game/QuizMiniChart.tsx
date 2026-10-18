@@ -10,6 +10,7 @@ import { THEME } from '../../lib/themeColors'
 const UP = THEME.up
 const DOWN = THEME.down
 const FUTURE_ALPHA = '66' // 이후 봉 투명도(hex alpha)
+// eslint-disable-next-line react-refresh/only-export-components -- 차트 색 상수를 같은 파일에서 공유(개발 중 Fast Refresh 에만 영향)
 export const QUIZ_MA_COLORS = { 5: '#14b8a6', 20: '#f97316' } as const // TradingChart MA 색과 같음
 const NO_FUTURE: QuizCandle[] = [] // 기본값을 상수로 — 렌더마다 새 배열이면 effect 가 매초(타이머) 차트를 다시 만든다
 

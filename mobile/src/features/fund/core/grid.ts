@@ -25,7 +25,7 @@ export function cellText(segs: Seg[]): string {
   const t = segs
     .map((s) => s[0])
     .join('')
-    .replace(/ /g, ' ');
+    .replace(/\u00a0/g, ' ');
   return t
     .split('\n')
     .map((ln) => ln.replace(/[ \t]+/g, ' ').trim())
