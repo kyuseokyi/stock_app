@@ -1,0 +1,279 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>펀드 리포트 디자인 시안</title>
+<style>
+:root {
+  --canvas:#f7f5ff; --surface:#fff; --fill:#efebfb; --line:#ebe7f7;
+  --ink:#25223a; --muted:#8e8aa6; --brand:#6f8ef0; --brand-soft:#e2ecff;
+  --up:#c93a6c; --up-soft:#fbd6e4; --down:#4f73d9;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --canvas:#1a1826; --surface:#24212f; --fill:#2c2839; --line:#322e40;
+    --ink:#f3f1fa; --muted:#a6a1bd; --brand:#9fb4f7; --brand-soft:#2a3150; --up:#ff7aa2; --up-soft:#3d2230; --down:#8aa4ff; }
+}
+* { box-sizing:border-box; }
+body { margin:0; background:var(--canvas); color:var(--ink);
+  font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Pretendard","Noto Sans KR",sans-serif;
+  font-size:15px; line-height:1.5; letter-spacing:-0.01em; word-break:keep-all; }
+.num { font-variant-numeric:tabular-nums; font-feature-settings:"tnum"; }
+.wrap { max-width:680px; margin:0 auto; padding:16px 16px 56px; }
+.tabs { position:sticky; top:0; z-index:5; display:flex; gap:6px; padding:10px 16px; background:var(--canvas); border-bottom:1px solid var(--line); overflow-x:auto; }
+.tabs a { white-space:nowrap; text-decoration:none; color:var(--muted); font-size:13px; font-weight:600; padding:6px 12px; border-radius:999px; background:var(--surface); }
+.tabs a.on { color:#fff; background:var(--brand); }
+header h1 { margin:8px 0 0; font-size:21px; font-weight:700; }
+header p { margin:2px 0 0; color:var(--muted); font-size:13px; }
+h2 { font-size:14px; font-weight:700; margin:26px 4px 8px; color:var(--muted); }
+.card { background:var(--surface); border-radius:18px; padding:18px; margin-top:10px; }
+.notice { background:var(--up-soft); border-radius:14px; padding:10px 14px; margin-top:12px; font-size:14px; }
+.notice b { color:var(--up); margin-right:6px; }
+.unit { color:var(--muted); font-weight:500; font-size:.85em; margin-left:1px; }
+.up { color:var(--up); } .down { color:var(--down); } .zero { color:var(--muted); }
+.muted { color:var(--muted); }
+.hl { color:var(--up); }
+details > summary { cursor:pointer; list-style:none; }
+details > summary::-webkit-details-marker { display:none; }
+.more { color:var(--muted); font-size:13px; margin-top:8px; }
+.more > summary::before { content:"▸ "; } .more[open] > summary::before { content:"▾ "; }
+a.link { color:var(--brand); font-weight:600; font-size:14px; text-decoration:none; display:inline-block; margin-top:10px; }
+
+/* ── A. 명세서 표 ── */
+.tbl-wrap { overflow-x:auto; background:var(--surface); border-radius:18px; }
+table.stmt { border-collapse:collapse; width:100%; }
+.stmt th, .stmt td { padding:10px 14px; border-top:1px solid var(--line); white-space:nowrap; }
+.stmt thead th { border-top:0; font-size:13px; color:var(--muted); font-weight:600; text-align:right; }
+.stmt thead th:first-child, .stmt tbody th { text-align:left; position:sticky; left:0; background:var(--surface); }
+.stmt tbody th { font-weight:500; color:var(--muted); font-size:14px; }
+.stmt td { text-align:right; font-weight:600; }
+.stmt tr.hero td { font-size:18px; font-weight:800; }
+.stmt tr.group th, .stmt tr.group td { color:var(--ink); font-weight:700; font-size:13px; background:var(--fill); }
+
+/* ── B. 정렬 그리드 카드 ── */
+.kv { display:grid; grid-template-columns:1fr auto; align-items:baseline; } /* 칸 간격 대신 값 칸 안쪽 여백 → 구분선이 끊기지 않음 */
+.kv > * { padding:9px 0; border-top:1px solid var(--line); }
+.kv > .k { color:var(--muted); font-size:14px; }
+.kv > .v { text-align:right; font-weight:600; white-space:nowrap; padding-left:16px; }
+.kv > .head { border-top:0; padding-top:0; }
+.kv > .k.hero-k { color:var(--ink); font-weight:700; font-size:15px; }
+.kv > .v.hero-v { font-size:24px; font-weight:800; letter-spacing:-0.02em; }
+.kv > .sub { border-top:0; padding-top:0; font-size:13px; }
+.b-name { display:flex; justify-content:space-between; align-items:baseline; gap:8px; margin-bottom:10px; }
+.b-name b { font-size:16px; }
+.b-name span { color:var(--muted); font-size:12px; }
+.step-title { grid-column:1 / -1; font-weight:700; font-size:14px; padding-top:14px !important; color:var(--brand); }
+
+/* ── C. 요약 목록 ── */
+.sum { display:grid; grid-template-columns:1fr auto; align-items:center; column-gap:12px; padding:14px 0; border-top:1px solid var(--line); }
+.c-acct:first-child .sum { border-top:0; }
+.sum .nm { font-weight:700; }
+.sum .nm small { display:block; color:var(--muted); font-weight:500; font-size:12px; }
+.sum .val { text-align:right; font-weight:800; font-size:18px; white-space:nowrap; }
+.sum .val small { display:block; font-size:13px; font-weight:600; }
+.c-acct > summary { display:block; }
+.c-acct .kv { margin:0 0 8px; }
+</style>
+</head>
+<body>
+<nav class="tabs" id="tabs"></nav>
+<main class="wrap" id="app"></main>
+<script>
+const DATA = {"title": "(501)홍길동", "investorNo": "501", "investorName": "홍길동", "notice": {"label": "공지사항", "signalsLabel": "시장흐름", "signals": [["단기", "붕괴신호"], ["중기", "하락신호"], ["장기", "하락신호"]], "message": "일봉은 붕괴신호! 주봉은 역배열! 다음주 금리인상 쇼크까지 터지면 7500p도 사정권", "servicesLabel": "지원서비스 안내", "services": ["보유주식 분석", "장기투자 관리안내", "주식투자강의", "특별관리 수익모델 오픈"], "links": [["주간시황 확인", "https://example.com/link/1"], ["Q&A 링크이동", "https://example.com/link/2"]]}, "sections": [{"kind": "accounts", "title": "펀드 현황 (Day-trading System)", "evalDate": "3072년 90월 99일", "group": "", "accounts": [{"name": "총 계", "values": [["입출금 총계", "852,600,000"], ["월간 입출금 총계", "-6,000,000"], ["현재평가금", "132,950,396"], ["누적수익율", "53.3334%"], ["\"모\"펀드 연수익율", "11.5710%"], ["당일 손익금", "741,863"], ["월 손익금", "7,799,528"], ["총 손익금", "902,290,411"], ["초기화/시작일", "3078년 9월 55일"], ["전월말 평가금", "253,802,920"]], "remarks": [], "remarkText": {"title": "Day-trading system 구성과 역활", "lines": ["바이너리웨이브(틱)-조기경보/스켈핑", "바이너리웨이브(6분봉) - 기관추적", "볼린저밴드(7분봉) - 개인본능 역이용", "\"자\"펀드(4) + \"자\"펀드(6) 수익 공유"]}}, {"name": "홍길동(월초700)", "values": [["입출금 총계", "693,400,000"], ["월간 입출금 총계", "-5,000,000"], ["현재평가금", "752,340,496"], ["누적수익율", "15.5881%"], ["연환산수익율", "97.7406%"], ["당일 손익금", "383,414"], ["월 손익금", "4,582,934"], ["총 손익금", "403,720,995"], ["초기화/시작일", "8046년 7월 16일"], ["전월말 평가금", "548,502,250"]], "remarks": [["펀드 정보", "데이 트레이딩"], ["CODE", "263"]], "remarkText": null}], "notes": [{"title": "확인사항", "items": [[["\"입출금 총계\"", true], [" 항목은 원금의 개념과는 다릅니다. 이익금까지 인출되면 (-)로 표시되는, 단순한 은행입출금 기록의 합계 입니다.", false]], [["\"현재평가금\"", true], [" 항목은 데이트레이딩 펀드기준 원금이 됩니다. 매일 정산 되고 다음날 재투자 되기 때문에, 일복리 효과가 발생합니다.", false]], [["\"누적수익율\"", true], [" 과 ", false], ["\"연환산수익율\"", true], ["은 입금이 발생하면 깍이고, 출금이 발생하면 늘어나 보이기 때문에 \"펀드공시\"로 확인해 주세요", false]], [["\"전월말 평가금\"", true], [" 항목은 ", false], ["\"월간 입출금 총계\"", true], ["의 오류를 빨리 찾기 위한 기준점이 됩니다.", false]]], "links": [["펀드공시 이동", "https://example.com/link/3"]]}]}, {"kind": "accounts", "title": "[경제위기 지원서비스] 대출자금 종자돈 만들기 or 세금완충 프로젝트", "evalDate": "9025년 30월 47일", "group": "", "accounts": [{"name": "홍길동", "values": [["입출금 총계", "73,000,000"], ["남은목표금액", "29,079,218"], ["수익측정가치", "93,429,142"], ["누적수익율", "64.4871%"], ["연환산수익율", "12.4777%"], ["누적송금액", "85,671,574"], ["초기화/시작일", "6029년 1월 3일"], ["대출이자율", "70.0000%"]], "remarks": [["경과일수", "644"], ["그룹 구분코드", "11"]], "remarkText": null}], "notes": [{"title": "행정사항", "items": [[["생계유지를 위해 고금리 신용대출을 해야만 하는 경우, 3~1년 내 대출자금을 종자돈으로 만들 수 있게 도와드립니다. (연 970% 목표)", false]], [["펀드가 구축한 안전지대에서 수익을 발생시켜, 매일 원금과 이자를 상환하는 구조입니다. (신용등급 회복은 덤)", false]], [["운용자금의 최대 한도가 정해져 있어, 경제적 여건을 종합적으로 고려하여 우선순위를 부여합니다.", false]]], "links": []}]}, {"kind": "steps", "title": "개인별 목표수익 및 투자관리 확인", "steps": [{"no": "4단계", "name": "기준 설정", "items": [["월 최소 생활비", "7,300,000", false], ["현재운용자금", "768,290,975", false], ["(3)목표 수익율", "80.48%", true]]}, {"no": "1단계", "name": "관리 목표 설정", "items": [["(5)목표 종자돈", "112,429,880", false], ["현재필요 은퇴자금", "9,200,000,000", false]]}, {"no": "5단계", "name": "최종목표 관리", "items": [["은퇴시기", "1021년 1월 5일", false], ["(2)목표 은퇴자금", "2,755,163,847", false]]}], "links": [["펀드현황 보러가기", "https://example.com/link/4"]]}, {"kind": "cert", "title": "예시투자 투자자 사실증명 내용확인", "companyLabel": "회사 정보", "company": ["예시투자", "주소 : 서울시 예시구 예시로 4", "전화: 0608-366-7978 / 대표자: 김대표"], "fields": [["발급 요청자", "***\n(******-*******)"], ["출금 가능금액", "₩699,709,989"], ["발급 / 확인일", "9094년 70월 55일"], ["확인자 (인/서명)", "김대표"]]}]};
+
+// ───── 표시 포맷 (원본 값은 그대로, 화면에서만 통일) ─────
+const NON_MONEY = ['CODE', '그룹 구분코드'];
+const DAY_KEYS = ['경과일수'];
+const isSigned = (k) => /손익|입출금|수익율/.test(k) && !k.includes('목표');
+const isToned = (k) => /손익|수익율/.test(k) && !k.includes('목표');
+const MINUS = '−';
+const RE_INT = /^₩?-?[\d,]+$/, RE_PCT = /^-?\d+(\.\d+)?%$/, RE_DATE = /^(\d{4})년\s*(\d{1,2})월\s*(\d{1,2})일$/;
+const comma = (d) => d.replace(/^0+(?=\d)/, '').replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+const sign = (neg, zero) => (zero ? '' : neg ? MINUS : '+');
+function fmt(key, v) {
+  if (RE_INT.test(v) && NON_MONEY.includes(key)) return { text: v, unit: '', tone: '' };
+  if (RE_INT.test(v) && DAY_KEYS.includes(key)) return { text: comma(v.replace(/\D/g, '')), unit: '일', tone: '' };
+  if (RE_INT.test(v)) {
+    const neg = v.includes('-'), digits = v.replace(/\D/g, ''), zero = /^0+$/.test(digits);
+    return { text: (isSigned(key) ? sign(neg, zero) : neg ? MINUS : '') + comma(digits), unit: '원', tone: isToned(key) ? (zero ? 'zero' : neg ? 'down' : 'up') : '' };
+  }
+  if (RE_PCT.test(v)) {
+    const n = parseFloat(v), zero = Math.abs(n) < 0.005;
+    return { text: (isSigned(key) ? sign(n < 0, zero) : n < 0 ? MINUS : '') + Math.abs(n).toFixed(2), unit: '%', tone: isToned(key) ? (zero ? 'zero' : n < 0 ? 'down' : 'up') : '' };
+  }
+  if (RE_DATE.test(v)) { const [, y, m, d] = v.match(RE_DATE); return { text: `${y}.${m.padStart(2, '0')}.${d.padStart(2, '0')}`, unit: '', tone: '' }; }
+  return { text: v, unit: '', tone: '' };
+}
+function h(tag, cls, kids) {
+  const el = document.createElement(tag);
+  if (cls) el.className = cls;
+  for (const k of [].concat(kids ?? [])) if (k != null && k !== false && k !== '') el.append(k);
+  return el;
+}
+function V(key, v, cls = '', tag = 'span') {
+  const f = fmt(key, v);
+  const el = h(tag, `num ${f.tone} ${cls}`, [f.text, f.unit ? h('span', 'unit', f.unit) : null]);
+  el.title = `원본: ${v}`;
+  return el;
+}
+const safeLink = ([label, href]) => {
+  if (!/^https?:\/\//i.test(href)) return null;
+  const a = h('a', 'link', `${label} →`); a.href = href; a.target = '_blank'; a.rel = 'noopener noreferrer'; return a;
+};
+
+const HERO = ['현재평가금', '수익측정가치'];
+const TOP = ['총 손익금', '누적수익율'];
+const SINCE = '초기화/시작일';
+const pairsOf = (a) => a.values.concat(a.remarks);
+const heroOf = (m) => HERO.find((k) => m.has(k));
+
+function header(app, d) {
+  const first = d.sections.find((s) => s.kind === 'accounts');
+  app.append(h('header', '', [h('h1', '', d.title), h('p', 'num', first?.evalDate ? `기준일 ${fmt('', first.evalDate).text} · 마지막 확인 09:05` : '')]));
+  if (d.notice) app.append(h('div', 'notice', [h('b', '', d.notice.label), d.notice.message]));
+}
+function foldNotes(app, s) {
+  for (const n of s.notes) {
+    const det = h('details', 'card more', h('summary', '', `${n.title} (${n.items.length})`));
+    n.items.forEach((segs) => det.append(h('p', 'muted', segs.map(([t]) => t).join(''))));
+    n.links.map(safeLink).forEach((l) => l && det.append(l));
+    app.append(det);
+  }
+}
+function foldCert(app, s) {
+  const det = h('details', 'card more', h('summary', '', s.title));
+  const kv = h('div', 'kv');
+  s.fields.forEach(([k, v]) => kv.append(h('div', 'k', k), V(k, v, 'v', 'div')));
+  det.append(h('p', '', s.company.join(' ')), kv);
+  app.append(det);
+}
+
+// ───── A. 명세서 표: 계좌 = 열, 항목 = 행 ─────
+function renderA(app, d) {
+  header(app, d);
+  for (const s of d.sections) {
+    if (s.kind === 'accounts') {
+      app.append(h('h2', '', [s.title, s.group ? ` · ${s.group}` : '']));
+      const maps = s.accounts.map((a) => new Map(pairsOf(a)));
+      const keys = [];
+      s.accounts.forEach((a) => pairsOf(a).forEach(([k]) => { if (!keys.includes(k) && !NON_MONEY.includes(k)) keys.push(k); }));
+      keys.sort((x, y) => (HERO.includes(y) - HERO.includes(x)) || (TOP.includes(y) - TOP.includes(x)));
+      const tbl = h('table', 'stmt');
+      tbl.append(h('thead', '', h('tr', '', [h('th', '', '항목'), ...s.accounts.map((a) => h('th', '', a.name))])));
+      const body = h('tbody');
+      keys.forEach((k) => body.append(h('tr', HERO.includes(k) ? 'hero' : '', [h('th', '', k), ...maps.map((m) => (m.has(k) ? V(k, m.get(k), '', 'td') : h('td', 'muted', '–')))])));
+      tbl.append(body);
+      app.append(h('div', 'tbl-wrap', tbl));
+      foldNotes(app, s);
+    } else if (s.kind === 'steps') {
+      app.append(h('h2', '', s.title));
+      const tbl = h('table', 'stmt'), body = h('tbody');
+      s.steps.forEach((st) => {
+        body.append(h('tr', 'group', [h('th', '', `${st.no} · ${st.name}`), h('td')]));
+        st.items.forEach(([k, v, hl]) => body.append(h('tr', '', [h('th', '', k), V(k, v, hl ? 'hl' : '', 'td')])));
+      });
+      tbl.append(body);
+      app.append(h('div', 'tbl-wrap', tbl));
+      s.links.map(safeLink).forEach((l) => l && app.append(l));
+    } else if (s.kind === 'cert') foldCert(app, s);
+  }
+}
+
+// ───── B. 정렬 그리드 카드: 모든 값이 하나의 오른쪽 기준선 ─────
+function kvCard(a) {
+  const m = new Map(pairsOf(a));
+  const hk = heroOf(m);
+  const card = h('div', 'card');
+  card.append(h('div', 'b-name', [h('b', '', a.name), m.has(SINCE) ? h('span', 'num', `${fmt(SINCE, m.get(SINCE)).text} 시작`) : null]));
+  const kv = h('div', 'kv');
+  if (hk) {
+    kv.append(h('div', 'k hero-k head', hk), V(hk, m.get(hk), 'v hero-v head', 'div'));
+    const tops = TOP.filter((k) => m.has(k));
+    if (tops.length) {
+      const sub = h('div', 'v sub');
+      tops.forEach((k, i) => { if (i) sub.append(' · '); sub.append(V(k, m.get(k))); });
+      kv.append(h('div', 'k sub', ''), sub);
+    }
+  }
+  pairsOf(a).filter(([k]) => k !== hk && !TOP.includes(k) && k !== SINCE && !NON_MONEY.includes(k))
+    .forEach(([k, v]) => kv.append(h('div', 'k', k), V(k, v, 'v', 'div')));
+  card.append(kv);
+  return card;
+}
+function renderB(app, d) {
+  header(app, d);
+  for (const s of d.sections) {
+    if (s.kind === 'accounts') {
+      app.append(h('h2', '', [s.title, s.group ? ` · ${s.group}` : '']));
+      s.accounts.forEach((a) => app.append(kvCard(a)));
+      foldNotes(app, s);
+    } else if (s.kind === 'steps') {
+      app.append(h('h2', '', s.title));
+      const card = h('div', 'card'), kv = h('div', 'kv');
+      s.steps.forEach((st) => {
+        kv.append(h('div', 'step-title', `${st.no} · ${st.name}`));
+        st.items.forEach(([k, v, hl]) => kv.append(h('div', 'k', k), V(k, v, `v ${hl ? 'hl' : ''}`, 'div')));
+      });
+      card.append(kv);
+      s.links.map(safeLink).forEach((l) => l && card.append(l));
+      app.append(card);
+    } else if (s.kind === 'cert') foldCert(app, s);
+  }
+}
+
+// ───── C. 요약 목록: 한 줄 요약 + 눌러서 상세 ─────
+function renderC(app, d) {
+  header(app, d);
+  for (const s of d.sections) {
+    if (s.kind === 'accounts') {
+      app.append(h('h2', '', [s.title, s.group ? ` · ${s.group}` : '']));
+      const card = h('div', 'card');
+      s.accounts.forEach((a) => {
+        const m = new Map(pairsOf(a)), hk = heroOf(m);
+        const tk = TOP.find((k) => k.includes('수익율') && m.has(k)) ?? TOP.find((k) => m.has(k));
+        const det = h('details', 'c-acct');
+        det.append(h('summary', '', h('div', 'sum', [
+          h('div', 'nm', [a.name, h('small', 'num', m.has(SINCE) ? `${fmt(SINCE, m.get(SINCE)).text} 시작` : (hk ?? ''))]),
+          h('div', 'val num', [hk ? V(hk, m.get(hk)) : '', tk ? h('small', '', V(tk, m.get(tk))) : null]),
+        ])));
+        const kv = h('div', 'kv');
+        pairsOf(a).filter(([k]) => k !== hk && k !== SINCE).forEach(([k, v]) => kv.append(h('div', 'k', k), V(k, v, 'v', 'div')));
+        det.append(kv);
+        card.append(det);
+      });
+      app.append(card);
+      foldNotes(app, s);
+    } else if (s.kind === 'steps') {
+      app.append(h('h2', '', s.title));
+      const card = h('div', 'card');
+      s.steps.forEach((st) => {
+        const det = h('details', 'c-acct');
+        const key = st.items.find(([, , hl]) => hl) ?? st.items[0];
+        det.append(h('summary', '', h('div', 'sum', [
+          h('div', 'nm', [st.name, h('small', '', st.no)]),
+          h('div', 'val num', key ? [V(key[0], key[1], key[2] ? 'hl' : ''), h('small', 'muted', key[0])] : ''),
+        ])));
+        const kv = h('div', 'kv');
+        st.items.forEach(([k, v, hl]) => kv.append(h('div', 'k', k), V(k, v, `v ${hl ? 'hl' : ''}`, 'div')));
+        det.append(kv);
+        card.append(det);
+      });
+      s.links.map(safeLink).forEach((l) => l && card.append(l));
+      app.append(card);
+    } else if (s.kind === 'cert') foldCert(app, s);
+  }
+}
+
+const VARIANTS = { a: ['A. 명세서 표', renderA], b: ['B. 정렬 그리드 카드', renderB], c: ['C. 요약 목록', renderC] };
+const params = new URLSearchParams(location.search);
+const cur = VARIANTS[params.get('v')] ? params.get('v') : 'a';
+const tabs = document.getElementById('tabs');
+if (params.has('bare')) tabs.remove();
+else Object.entries(VARIANTS).forEach(([k, [label]]) => {
+  const a = h('a', k === cur ? 'on' : '', label); a.href = `?v=${k}`; tabs.append(a);
+});
+VARIANTS[cur][1](document.getElementById('app'), DATA);
+if (params.has('open')) { const first = document.querySelector('details.c-acct'); if (first) first.open = true; }
+</script>
+</body>
+</html>

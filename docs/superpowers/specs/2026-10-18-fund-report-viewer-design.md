@@ -156,3 +156,7 @@ function parseFundReport(html: string): ParseResult;  // 섹션 0개면 fundErro
 - 앱 리포트 화면의 Unistyles 네이티브 전환(C안).
 - 웹·앱 간 목록 동기화(서버 저장).
 - 갱신 푸시 알림.
+
+## 8. 화면 디자인 (2026-10-18 추가)
+
+- B안(정렬 그리드 카드) 채택. 시안 A·B·C와 표시 포맷 규칙: `fund-report-design/README.md`

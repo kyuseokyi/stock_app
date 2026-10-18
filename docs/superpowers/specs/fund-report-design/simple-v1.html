@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>펀드 리포트 심플 샘플</title>
+<style>
+:root {
+  --canvas:#f7f5ff; --surface:#fff; --fill:#efebfb; --line:#ebe7f7;
+  --ink:#25223a; --muted:#8e8aa6; --brand:#6f8ef0; --brand-soft:#e2ecff;
+  --up:#c93a6c; --up-soft:#fbd6e4; --down:#4f73d9;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --canvas:#1a1826; --surface:#24212f; --fill:#2c2839; --line:#322e40;
+    --ink:#f3f1fa; --muted:#a6a1bd; --brand:#9fb4f7; --brand-soft:#2a3150; --up:#ff7aa2; --up-soft:#3d2230; --down:#8aa4ff; }
+}
+* { box-sizing:border-box; }
+body { margin:0; background:var(--canvas); color:var(--ink);
+  font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Pretendard","Noto Sans KR",sans-serif;
+  font-size:15px; line-height:1.5; letter-spacing:-0.01em; word-break:keep-all; }
+.num { font-variant-numeric:tabular-nums; font-feature-settings:"tnum"; }
+.wrap { max-width:640px; margin:0 auto; padding:20px 16px 56px; }
+header h1 { margin:0; font-size:22px; font-weight:700; }
+header p { margin:4px 0 0; color:var(--muted); font-size:13px; }
+
+.card { background:var(--surface); border-radius:20px; padding:20px; margin-top:12px; }
+.label { color:var(--muted); font-size:13px; }
+
+/* 공지 */
+.notice { display:flex; gap:10px; align-items:flex-start; background:var(--up-soft); border-radius:16px; padding:12px 14px; margin-top:12px; font-size:14px; }
+.notice b { color:var(--up); white-space:nowrap; }
+.notice .sig { color:var(--muted); font-size:12px; margin-top:2px; }
+
+/* 섹션·계좌 */
+h2 { font-size:15px; font-weight:700; margin:28px 4px 0; color:var(--muted); }
+.acct-top { display:flex; justify-content:space-between; align-items:baseline; gap:8px; margin-bottom:8px; }
+.acct-name { font-weight:700; }
+.acct-since { color:var(--muted); font-size:12px; white-space:nowrap; }
+.big { font-size:clamp(26px,7vw,32px); font-weight:800; letter-spacing:-0.02em; }
+.big small { font-size:.55em; font-weight:600; color:var(--muted); margin-left:2px; }
+.delta { font-size:14px; font-weight:600; margin-top:2px; }
+
+.rows { margin:14px 0 0; padding:0; list-style:none; }
+.rows li { display:flex; justify-content:space-between; align-items:baseline; gap:12px; padding:9px 0; border-top:1px solid var(--line); }
+.rows li > span:first-child { color:var(--muted); font-size:14px; }
+.rows li > span:last-child { font-weight:600; text-align:right; white-space:nowrap; }
+.unit { color:var(--muted); font-weight:500; font-size:.85em; margin-left:1px; }
+
+.bar { height:6px; background:var(--fill); border-radius:999px; overflow:hidden; margin-top:14px; }
+.bar i { display:block; height:100%; background:var(--brand); border-radius:inherit; }
+.bar-cap { display:flex; justify-content:space-between; font-size:12px; color:var(--muted); margin-top:4px; }
+
+.up { color:var(--up); } .down { color:var(--down); } .zero { color:var(--muted); }
+
+details { margin-top:12px; }
+details > summary { cursor:pointer; list-style:none; color:var(--muted); font-size:13px; padding:2px 0; }
+details > summary::-webkit-details-marker { display:none; }
+details > summary::before { content:"▸ "; }
+details[open] > summary::before { content:"▾ "; }
+.memo { font-size:13px; color:var(--muted); margin:6px 0 0; padding-left:18px; }
+.notes { list-style:none; margin:6px 0 0; padding:0; }
+.notes li { font-size:13px; color:var(--muted); padding:6px 0; border-top:1px solid var(--line); }
+
+/* 단계 */
+.steps { display:grid; gap:12px; }
+@media (min-width:600px) { .steps { grid-template-columns:repeat(3,1fr); } }
+.step { background:var(--fill); border-radius:14px; padding:14px; }
+.step .no { font-size:12px; font-weight:700; color:var(--brand); }
+.step .name { font-weight:700; margin:2px 0 6px; }
+.step .rows { margin-top:6px; }
+.step .rows li { padding:6px 0; }
+.step .hl { color:var(--up); }
+
+a.link { display:inline-block; margin-top:12px; color:var(--brand); font-weight:600; font-size:14px; text-decoration:none; }
+
+/* 포맷 점검표 */
+.check table { width:100%; border-collapse:collapse; font-size:12px; }
+.check th, .check td { text-align:left; padding:6px 4px; border-top:1px solid var(--line); vertical-align:top; }
+.check td:nth-child(2), .check td:nth-child(3), .check th:nth-child(2), .check th:nth-child(3) { text-align:right; white-space:nowrap; }
+.check tr.changed td { background:var(--brand-soft); }
+.check-wrap { overflow-x:auto; }
+</style>
+</head>
+<body>
+<main class="wrap" id="app"></main>
+<script>
+const DATA = {"title": "(501)홍길동", "investorNo": "501", "investorName": "홍길동", "notice": {"label": "공지사항", "signalsLabel": "시장흐름", "signals": [["단기", "붕괴신호"], ["중기", "하락신호"], ["장기", "하락신호"]], "message": "일봉은 붕괴신호! 주봉은 역배열! 다음주 금리인상 쇼크까지 터지면 7500p도 사정권", "servicesLabel": "지원서비스 안내", "services": ["보유주식 분석", "장기투자 관리안내", "주식투자강의", "특별관리 수익모델 오픈"], "links": [["주간시황 확인", "https://example.com/link/1"], ["Q&A 링크이동", "https://example.com/link/2"]]}, "sections": [{"kind": "accounts", "title": "펀드 현황 (Day-trading System)", "evalDate": "3072년 90월 99일", "group": "", "accounts": [{"name": "총 계", "values": [["입출금 총계", "852,600,000"], ["월간 입출금 총계", "-6,000,000"], ["현재평가금", "132,950,396"], ["누적수익율", "53.3334%"], ["\"모\"펀드 연수익율", "11.5710%"], ["당일 손익금", "741,863"], ["월 손익금", "7,799,528"], ["총 손익금", "902,290,411"], ["초기화/시작일", "3078년 9월 55일"], ["전월말 평가금", "253,802,920"]], "remarks": [], "remarkText": {"title": "Day-trading system 구성과 역활", "lines": ["바이너리웨이브(틱)-조기경보/스켈핑", "바이너리웨이브(6분봉) - 기관추적", "볼린저밴드(7분봉) - 개인본능 역이용", "\"자\"펀드(4) + \"자\"펀드(6) 수익 공유"]}}, {"name": "홍길동(월초700)", "values": [["입출금 총계", "693,400,000"], ["월간 입출금 총계", "-5,000,000"], ["현재평가금", "752,340,496"], ["누적수익율", "15.5881%"], ["연환산수익율", "97.7406%"], ["당일 손익금", "383,414"], ["월 손익금", "4,582,934"], ["총 손익금", "403,720,995"], ["초기화/시작일", "8046년 7월 16일"], ["전월말 평가금", "548,502,250"]], "remarks": [["펀드 정보", "데이 트레이딩"], ["CODE", "263"]], "remarkText": null}], "notes": [{"title": "확인사항", "items": [[["\"입출금 총계\"", true], [" 항목은 원금의 개념과는 다릅니다. 이익금까지 인출되면 (-)로 표시되는, 단순한 은행입출금 기록의 합계 입니다.", false]], [["\"현재평가금\"", true], [" 항목은 데이트레이딩 펀드기준 원금이 됩니다. 매일 정산 되고 다음날 재투자 되기 때문에, 일복리 효과가 발생합니다.", false]], [["\"누적수익율\"", true], [" 과 ", false], ["\"연환산수익율\"", true], ["은 입금이 발생하면 깍이고, 출금이 발생하면 늘어나 보이기 때문에 \"펀드공시\"로 확인해 주세요", false]], [["\"전월말 평가금\"", true], [" 항목은 ", false], ["\"월간 입출금 총계\"", true], ["의 오류를 빨리 찾기 위한 기준점이 됩니다.", false]]], "links": [["펀드공시 이동", "https://example.com/link/3"]]}]}, {"kind": "accounts", "title": "[경제위기 지원서비스] 대출자금 종자돈 만들기 or 세금완충 프로젝트", "evalDate": "9025년 30월 47일", "group": "", "accounts": [{"name": "홍길동", "values": [["입출금 총계", "73,000,000"], ["남은목표금액", "29,079,218"], ["수익측정가치", "93,429,142"], ["누적수익율", "64.4871%"], ["연환산수익율", "12.4777%"], ["누적송금액", "85,671,574"], ["초기화/시작일", "6029년 1월 3일"], ["대출이자율", "70.0000%"]], "remarks": [["경과일수", "644"], ["그룹 구분코드", "11"]], "remarkText": null}], "notes": [{"title": "행정사항", "items": [[["생계유지를 위해 고금리 신용대출을 해야만 하는 경우, 3~1년 내 대출자금을 종자돈으로 만들 수 있게 도와드립니다. (연 970% 목표)", false]], [["펀드가 구축한 안전지대에서 수익을 발생시켜, 매일 원금과 이자를 상환하는 구조입니다. (신용등급 회복은 덤)", false]], [["운용자금의 최대 한도가 정해져 있어, 경제적 여건을 종합적으로 고려하여 우선순위를 부여합니다.", false]]], "links": []}]}, {"kind": "steps", "title": "개인별 목표수익 및 투자관리 확인", "steps": [{"no": "4단계", "name": "기준 설정", "items": [["월 최소 생활비", "7,300,000", false], ["현재운용자금", "768,290,975", false], ["(3)목표 수익율", "80.48%", true]]}, {"no": "1단계", "name": "관리 목표 설정", "items": [["(5)목표 종자돈", "112,429,880", false], ["현재필요 은퇴자금", "9,200,000,000", false]]}, {"no": "5단계", "name": "최종목표 관리", "items": [["은퇴시기", "1021년 1월 5일", false], ["(2)목표 은퇴자금", "2,755,163,847", false]]}], "links": [["펀드현황 보러가기", "https://example.com/link/4"]]}, {"kind": "cert", "title": "예시투자 투자자 사실증명 내용확인", "companyLabel": "회사 정보", "company": ["예시투자", "주소 : 서울시 예시구 예시로 4", "전화: 0608-366-7978 / 대표자: 김대표"], "fields": [["발급 요청자", "***\n(******-*******)"], ["출금 가능금액", "₩699,709,989"], ["발급 / 확인일", "9094년 70월 55일"], ["확인자 (인/서명)", "김대표"]]}]};
+
+// ───── 표시 포맷 (원본 값은 그대로 두고 화면에서만 통일) ─────
+const NON_MONEY = ['CODE', '그룹 구분코드'];
+const DAY_KEYS = ['경과일수'];
+const isSigned = (k) => /손익|입출금|수익율/.test(k) && !k.includes('목표'); // +/− 부호(목표값 제외)
+const isToned = (k) => /손익|수익율/.test(k) && !k.includes('목표');        // 상승·하락 색(입출금은 수익이 아니라 색 없음)
+const MINUS = '−';
+const RE_INT = /^₩?-?[\d,]+$/;
+const RE_PCT = /^-?\d+(\.\d+)?%$/;
+const RE_DATE = /^(\d{4})년\s*(\d{1,2})월\s*(\d{1,2})일$/;
+const RAW = [];                                  // 점검표용 [항목, 원본, 표시]
+
+function comma(digits) { return digits.replace(/^0+(?=\d)/, '').replace(/\B(?=(\d{3})+(?!\d))/g, ','); }
+function sign(neg, zero) { return zero ? '' : neg ? MINUS : '+'; }
+
+/** → { text, unit, tone } */
+function fmt(key, v, record = true) {
+  let out;
+  if (RE_INT.test(v) && NON_MONEY.includes(key)) out = { text: v, unit: '', tone: '' };
+  else if (RE_INT.test(v) && DAY_KEYS.includes(key)) out = { text: comma(v.replace(/\D/g, '')), unit: '일', tone: '' };
+  else if (RE_INT.test(v)) {
+    const neg = v.includes('-'), digits = v.replace(/\D/g, ''), zero = /^0+$/.test(digits);
+    const s = isSigned(key) ? sign(neg, zero) : (neg ? MINUS : '');
+    out = { text: s + comma(digits), unit: '원', tone: isToned(key) ? (zero ? 'zero' : neg ? 'down' : 'up') : '' };
+  } else if (RE_PCT.test(v)) {
+    const n = parseFloat(v), zero = Math.abs(n) < 0.005;
+    const s = isSigned(key) ? sign(n < 0, zero) : (n < 0 ? MINUS : '');
+    out = { text: s + Math.abs(n).toFixed(2), unit: '%', tone: isToned(key) ? (zero ? 'zero' : n < 0 ? 'down' : 'up') : '' };
+  } else if (RE_DATE.test(v)) {
+    const [, y, m, d] = v.match(RE_DATE);
+    out = { text: `${y}.${m.padStart(2, '0')}.${d.padStart(2, '0')}`, unit: '', tone: '' };
+  } else out = { text: v, unit: '', tone: '' };
+  if (record) RAW.push([key, v, out.text + out.unit]);
+  return out;
+}
+
+// ───── DOM 도우미 (값은 textContent 로만) ─────
+function h(tag, cls, kids) {
+  const el = document.createElement(tag);
+  if (cls) el.className = cls;
+  for (const k of [].concat(kids ?? [])) if (k != null && k !== false && k !== '') el.append(k);
+  return el;
+}
+function val(key, v, extraCls) {
+  const f = fmt(key, v);
+  const el = h('span', `num ${f.tone} ${extraCls ?? ''}`, [f.text, f.unit ? h('span', 'unit', f.unit) : null]);
+  el.title = `원본: ${v}`;
+  return el;
+}
+function row(k, v, cls) { return h('li', '', [h('span', '', k), val(k, v, cls)]); }
+function safeLink([label, href]) {
+  if (!/^https?:\/\//i.test(href)) return null;
+  const a = h('a', 'link', `${label} →`); a.href = href; a.target = '_blank'; a.rel = 'noopener noreferrer'; return a;
+}
+
+// ───── 화면 ─────
+const HERO = ['현재평가금', '수익측정가치'];
+const TOP = ['총 손익금', '누적수익율'];
+const SINCE = '초기화/시작일';
+const HIDE_IN_ROWS = new Set([...HERO, ...TOP, SINCE, '누적송금액', '남은목표금액']);
+
+function accountCard(a) {
+  const m = new Map(a.values);
+  const heroKey = HERO.find((k) => m.has(k));
+  const card = h('div', 'card');
+  card.append(h('div', 'acct-top', [h('span', 'acct-name', a.name), m.has(SINCE) ? h('span', 'acct-since num', `${fmt(SINCE, m.get(SINCE)).text} 시작`) : null]));
+  if (heroKey) {
+    const f = fmt(heroKey, m.get(heroKey));
+    card.append(h('div', 'label', heroKey), h('div', 'big num', [f.text, h('small', '', f.unit)]));
+    const parts = TOP.filter((k) => m.has(k)).map((k) => val(k, m.get(k)));
+    if (parts.length) card.append(h('div', 'delta', parts.flatMap((p, i) => (i ? [' · ', p] : [p]))));
+  }
+  if (m.has('누적송금액') && m.has('남은목표금액')) {
+    const done = Number(m.get('누적송금액').replace(/\D/g, '')), left = Number(m.get('남은목표금액').replace(/\D/g, ''));
+    if (done + left > 0) {
+      const pct = (done / (done + left)) * 100, fill = h('i');
+      fill.style.width = pct.toFixed(1) + '%';
+      card.append(h('div', 'bar', fill), h('div', 'bar-cap', [
+        h('span', 'num', [`목표 진행 ${pct.toFixed(1)}% · 송금 `, val('누적송금액', m.get('누적송금액'))]),
+        h('span', 'num', ['남은 ', val('남은목표금액', m.get('남은목표금액'))]),
+      ]));
+    }
+  }
+  const rows = a.values.filter(([k]) => !HIDE_IN_ROWS.has(k)).concat(a.remarks);
+  const main = rows.filter(([k]) => !NON_MONEY.includes(k));
+  const extra = rows.filter(([k]) => NON_MONEY.includes(k));
+  card.append(h('ul', 'rows', main.map(([k, v]) => row(k, v))));
+  if (extra.length || a.remarkText) {
+    const d = h('details', '', h('summary', '', '상세'));
+    if (extra.length) d.append(h('ul', 'rows', extra.map(([k, v]) => row(k, v))));
+    if (a.remarkText) d.append(h('div', 'label', a.remarkText.title), h('ol', 'memo', a.remarkText.lines.map((l) => h('li', '', l))));
+    card.append(d);
+  }
+  return card;
+}
+
+function render(d) {
+  const app = document.getElementById('app');
+  const first = d.sections.find((s) => s.kind === 'accounts');
+  app.append(h('header', '', [h('h1', '', d.title), h('p', 'num', first?.evalDate ? `기준일 ${fmt('기준일', first.evalDate, false).text} · 마지막 확인 09:05` : '')]));
+
+  if (d.notice) {
+    const n = d.notice;
+    app.append(h('div', 'notice', [h('b', '', n.label), h('div', '', [n.message, n.signals.length ? h('div', 'sig', n.signals.map(([k, v]) => `${k} ${v}`).join(' · ')) : null])]));
+  }
+
+  for (const s of d.sections) {
+    if (s.kind === 'accounts') {
+      app.append(h('h2', '', [s.title, s.group ? ` · ${s.group}` : '']));
+      s.accounts.forEach((a) => app.append(accountCard(a)));
+      for (const n of s.notes) {
+        const det = h('details', 'card', h('summary', '', `${n.title} (${n.items.length})`));
+        det.append(h('ul', 'notes', n.items.map((segs) => h('li', '', segs.map(([t]) => t).join('')))));
+        n.links.map(safeLink).forEach((l) => l && det.append(l));
+        app.append(det);
+      }
+    } else if (s.kind === 'steps') {
+      app.append(h('h2', '', s.title));
+      const card = h('div', 'card');
+      card.append(h('div', 'steps', s.steps.map((st) => h('div', 'step', [
+        h('div', 'no', st.no), h('div', 'name', st.name),
+        h('ul', 'rows', st.items.map(([k, v, hl]) => row(k, v, hl ? 'hl' : ''))),
+      ]))));
+      s.links.map(safeLink).forEach((l) => l && card.append(l));
+      app.append(card);
+    } else if (s.kind === 'cert') {
+      const det = h('details', 'card', h('summary', '', s.title));
+      det.append(h('div', '', s.company.join(' ')), h('ul', 'rows', s.fields.map(([k, v]) => row(k, v))));
+      app.append(det);
+    }
+  }
+
+  // 포맷 점검표 — 원본 → 화면 표시
+  const changed = RAW.filter(([, r, f]) => r !== f).length;
+  const det = h('details', 'card check', h('summary', '', `포맷 점검표 (전체 ${RAW.length} · 표기가 바뀐 값 ${changed})`));
+  const tbl = h('table', '', h('tr', '', [h('th', '', '항목'), h('th', '', '원본'), h('th', '', '화면')]));
+  RAW.forEach(([k, r, f]) => tbl.append(h('tr', r !== f ? 'changed' : '', [h('td', '', k), h('td', 'num', r), h('td', 'num', f)])));
+  det.append(h('div', 'check-wrap', tbl));
+  if (new URLSearchParams(location.search).has('check')) det.open = true;
+  app.append(det);
+}
+
+render(DATA);
+</script>
+</body>
+</html>
