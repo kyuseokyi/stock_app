@@ -33,31 +33,44 @@ repo 관례(웹·앱이 공용 로직을 복사본으로 보유, 주석에 "… 
 루트 `shared/` 폴더는 `web_client` Docker 빌드 컨텍스트를 깨뜨릴 수 있어 쓰지 않는다.
 
 ```
-mobile/src/features/fund/                 ← 기준(원본) 구현 + jest 테스트
-  lib/parse-report.ts        FlexCel HTML → FundReport JSON (htmlparser2, 순수 함수)
-  lib/parse-report.test.ts   가린 픽스처 2종(새/옛 양식) + convert.py 기대값 교차 검증
-  lib/validate-url.ts        URL 허용 규칙
-  lib/fund-store.ts          목록(SecureStore) + 캐시(expo-file-system)
-  lib/fetch-report.ts        fetch → parse → hash 비교 → 캐시
-  report-web/report-page.ts  template.html 렌더러를 문자열 상수로(CHART_HTML 방식)
+mobile/src/features/fund/
+  core/                      ← 플랫폼 무관 공용 코드(기준). 상대 import 만 사용 → 웹에 파일 그대로 복사
+    types.ts                 FundReport 타입 + 오류(fundError/isFundError, code: format|fetch|input)
+    grid.ts                  FlexCel HTML 토큰화(htmlparser2) + 병합 셀 격자
+    parse.ts                 섹션 추출 + 누락 검증 → parseFundReport
+    url.ts                   URL 허용 규칙
+    funds.ts                 목록 조작(추가·삭제·이름) 순수 함수, 상한(10개·이름 20자)
+    hash.ts                  djb2
+    refresh.ts               fetchReportHtml(10초 타임아웃) + refreshReport(캐시 포트 주입)
+    display.ts               기준일·마지막 확인 시각 표시
+    use-fund-report.ts       React 훅(캐시 먼저 → 항상 다시 가져오기)
+    index.ts
+    *.test.ts                jest(복사 대상 아님)
+  __fixtures__/              가린 원본 HTML 2종 + convert.py 기대 JSON
+  fund-store.ts              목록(SecureStore) + 캐시(expo-file-system) 포트
+  report-colors.ts           Unistyles 테마 → WebView CSS 변수
+  report-web/report-page.ts  template.html 렌더러를 DOM 생성 방식 문자열로(CHART_HTML 방식)
   components/report-view.tsx WebView + JSON 주입(toInjectScript 패턴)
-  __fixtures__/              가린 원본 HTML + 기대 JSON
-mobile/src/app/fund/index.tsx   펀드 목록·추가·이름 변경·삭제
-mobile/src/app/fund/[id].tsx    리포트 보기
+mobile/src/app/fund/index.tsx   펀드 목록·추가·삭제
+mobile/src/app/fund/[id].tsx    리포트 보기(헤더 새로고침 버튼)
+mobile/src/app/_layout.tsx      스택 화면 2개 등록
 mobile/src/app/(tabs)/profile.tsx  '내 펀드 수익' 메뉴 1줄 추가
 
 web_client/src/
-  lib/fundReport.ts          parse-report.ts 복사본("mobile … 와 동일" 주석)
+  lib/fundCore/              mobile core 복사본(테스트 제외, 내용 동일)
   lib/fundStore.ts           localStorage 버전
+  components/fund/FundReportView.tsx  template 화면을 React+Tailwind 로 이식
   pages/FundListPage.tsx     /me/funds
-  pages/FundReportPage.tsx   /me/funds/:id (template 화면을 React+Tailwind 로 이식)
+  pages/FundReportPage.tsx   /me/funds/:id
   pages/MyPage.tsx           메뉴 1줄 추가
-  App.tsx                    라우트 2개 추가
+  App.tsx                    라우트 2개 추가(lazy)
 
-scripts/check-fund-parser-sync.sh  두 파서 복사본(import 줄·헤더 주석 제외) diff 검사
+scripts/fund/mask_fixture.py       실제 원본 → 가린 픽스처
+scripts/check-fund-core-sync.sh    core 복사본 동일 여부 검사(--write 로 복사)
 ```
 
-기존 코드 변경은 메뉴 1줄·라우트 추가로 한정한다(회귀 방지).
+기존 코드 변경은 메뉴 1줄·라우트·스택 등록으로 한정한다(회귀 방지).
+이름 변경 UI 는 두지 않는다(삭제 후 다시 추가). 이름을 비우면 첫 조회 때 기본 이름이 저장된다.
 
 ### 파서 인터페이스
 
@@ -66,7 +79,7 @@ type ParseResult = {
   report: FundReport;   // convert.py 의 JSON 과 같은 구조(title, investorNo, sections[])
   missing: string[];    // 원본 셀에 있으나 결과에 없는 숫자·단어(누락 검증)
 };
-function parseFundReport(html: string): ParseResult;  // 섹션 0개면 FundFormatError throw
+function parseFundReport(html: string): ParseResult;  // 섹션 0개면 fundError('format') throw
 ```
 
 동작은 `convert.py` 와 동일하다: 병합 셀 격자 복원 → "■" 섹션 분할 → notice / accounts / steps / cert 추출,
@@ -82,7 +95,9 @@ function parseFundReport(html: string): ParseResult;  // 섹션 0개면 FundForm
 | 캐시 `{v, fetchedAt, hash, report}` | `expo-file-system` 앱 문서 폴더, 펀드별 파일 | `localStorage` 펀드별 키 |
 
 - SecureStore 는 iOS 에서 값 1개가 약 2KB 를 넘으면 거부될 수 있어 캐시는 파일에 둔다.
-- 신규 의존성: mobile `htmlparser2`, `expo-file-system` / web `htmlparser2`.
+  목록도 같은 이유로 최대 10개·이름 20자로 제한한다.
+- 신규 의존성: mobile `htmlparser2@9.1.0`, `expo-file-system` / web `htmlparser2@9.1.0`.
+  (12.x 는 ESM 전용이라 jest-expo 가 변환하지 못함 → CJS 를 함께 주는 9.x 고정)
 - 펀드 삭제 시 캐시도 삭제한다. `v`(파서 버전)가 다르면 캐시를 버린다.
 - 웹 `localStorage` 접근은 try/catch 로 감싼다(사생활 보호 모드 등).
 
@@ -100,13 +115,15 @@ function parseFundReport(html: string): ParseResult;  // 섹션 0개면 FundForm
 
 - 영업일·갱신 시각 계산은 하지 않는다(매번 가져와도 HTML 1장).
 - 화면 상단에 원본의 "최종평가일"을 기준일로 크게, 마지막 확인 시각을 작게 표시.
-- 수동 새로고침: 앱 당겨서 새로고침, 웹 새로고침 버튼.
+- 수동 새로고침: 앱은 화면 헤더 오른쪽 새로고침 아이콘, 웹은 새로고침 버튼.
+  (WebView 의 당겨서 새로고침은 iOS 전용이라 쓰지 않는다)
 
 ## 5. 오류 처리
 
 ### URL 검증(저장 시)
 - 앞뒤 공백 제거 후 검사.
-- `https:` 만, 호스트 정확히 `fund.ivyro.net`, 경로 `^/dataroom/om_data/[^/]+\.htm$`.
+- 정규식 하나로 검사(RN 의 `URL` 구현은 hostname 등이 불완전):
+  `^https://fund\.ivyro\.net/dataroom/om_data/[^/?#\s]+\.htm$` — https 만, 호스트 정확히 일치, 쿼리·해시 불가.
 - 중복 URL 거부. 실패 시 "fund.ivyro.net 펀드 현황 주소만 등록할 수 있어요".
 - 이름은 선택. 비우면 첫 조회 때 원본 제목의 투자자 번호로 기본 이름 생성.
 
@@ -115,7 +132,7 @@ function parseFundReport(html: string): ParseResult;  // 섹션 0개면 FundForm
 | 상황 | 처리 |
 |---|---|
 | 네트워크 오류 / 10초 타임아웃 / 200 아님 | 캐시 있으면 캐시+배너, 없으면 오류 화면+다시 시도 |
-| 섹션 0개(`FundFormatError`) | "원본 형식이 바뀌어 읽을 수 없어요" + 원본 열기 |
+| 섹션 0개(`fundCode: 'format'`) | "원본 형식이 바뀌어 읽을 수 없어요" + 원본 열기 |
 | `missing` 비어 있지 않음 | 화면은 표시 + "일부 항목이 빠졌을 수 있어요" 배너 + 원본 열기 |
 
 ### 보안
@@ -131,7 +148,7 @@ function parseFundReport(html: string): ParseResult;  // 섹션 0개면 FundForm
   - 픽스처 가리기: 숫자·이름을 가짜 값으로 바꾸되 글자 수와 형식(쉼표, 원, %)은 유지. 실제 원본은 커밋하지 않는다.
   - `validate-url`: http, 유사 호스트, 다른 경로, 공백, 중복.
   - `fetch-report`: fetch·저장소 mock — 캐시 표시, 변경 반영, 실패 시 캐시 유지, 버전 불일치 캐시 폐기.
-- **web**: 테스트 러너 없음 → `check-fund-parser-sync.sh` + `npm run build`(tsc) + 브라우저 수동 확인.
+- **web**: 테스트 러너 없음 → `check-fund-core-sync.sh` + `npm run build`(tsc) + 브라우저 수동 확인.
 - **수동**: dev 빌드에서 실제 URL 등록 → 웹·앱, 데스크톱·375px·다크 모드 확인.
 
 ## 7. 범위 밖(추후)
