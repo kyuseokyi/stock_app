@@ -133,6 +133,9 @@ def init_clickhouse() -> None:
     client.command(DAILY_PRICES_DDL)
     client.command(FUNDAMENTALS_DDL)
     client.command(game_minute_bars_ddl())
+    from apps.collector.repositories.clickhouse_market import ensure_market_tables  # 순환 import 방지
+
+    ensure_market_tables(client)
     tables = client.query(
         f"SELECT name FROM system.tables WHERE database = '{CLICKHOUSE_DB}'"
     ).result_rows
