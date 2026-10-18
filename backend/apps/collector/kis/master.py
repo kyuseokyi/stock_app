@@ -67,8 +67,24 @@ def _parse_market(lines: list[str], market: str) -> list[MasterStock]:
     return out
 
 
+_IDXCODE_URL = "https://new.real.download.dws.co.kr/common/master/idxcode.mst.zip"
+_THEME_URL = "https://new.real.download.dws.co.kr/common/master/theme_code.mst.zip"
+
+
+def download_master_lines() -> dict[str, list[str]]:
+    """시장별 .mst 원문 줄 — 종목 목록과 프로필 파싱(reference_master)이 같은 다운로드를 공유한다."""
+    return {"KOSPI": _download_mst_text(_KOSPI_URL), "KOSDAQ": _download_mst_text(_KOSDAQ_URL)}
+
+
+def download_reference_lines() -> dict[str, list[str]]:
+    """업종(idxcode)·테마(theme_code) 마스터 원문 줄."""
+    return {"idxcode": _download_mst_text(_IDXCODE_URL), "theme": _download_mst_text(_THEME_URL)}
+
+
+def parse_master_lines(lines: dict[str, list[str]]) -> list[MasterStock]:
+    return _parse_market(lines["KOSPI"], "KOSPI") + _parse_market(lines["KOSDAQ"], "KOSDAQ")
+
+
 def download_and_parse_master() -> list[MasterStock]:
     """KOSPI+KOSDAQ 전종목 마스터를 받아 파싱해 반환."""
-    kospi = _parse_market(_download_mst_text(_KOSPI_URL), "KOSPI")
-    kosdaq = _parse_market(_download_mst_text(_KOSDAQ_URL), "KOSDAQ")
-    return kospi + kosdaq
+    return parse_master_lines(download_master_lines())
