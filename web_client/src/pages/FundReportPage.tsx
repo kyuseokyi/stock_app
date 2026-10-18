@@ -7,6 +7,7 @@ import {
   displayName,
   evalDateOf,
   formatChecked,
+  formatValue,
   renameFund,
   useFundReport,
   type FundEntry,
@@ -46,9 +47,9 @@ function FundReportBody({ id }: { id: string | undefined }) {
     )
   }
 
-  const evalDate = entry ? evalDateOf(entry.report) : ''
+  const evalDate = entry ? formatValue('', evalDateOf(entry.report)).text : '' // YYYY.MM.DD
   return (
-    <div>
+    <div className="mx-auto max-w-[680px]">
       <div className="mb-4 flex items-start justify-between gap-3">
         <div className="min-w-0">
           <Link to="/me/funds" className="text-sm text-ink-muted">
