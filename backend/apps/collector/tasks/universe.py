@@ -148,9 +148,10 @@ def _collect_pass(targets, collect_one, get_client, label: str, workers: int = 1
     return state["ok"], state["inserted"], failed
 
 
-def _run_universe(collect_one, limit, source, rate_per_sec, workers: int | None = None) -> dict:
-    """공통 루프: 마스터 로드 → 병렬 수집(공유 레이트리밋) → 실패격리 → (연결계열) 2차 재시도 → 집계."""
-    tickers = load_domestic_tickers(source)
+def _run_universe(collect_one, limit, source, rate_per_sec, workers: int | None = None, tickers=None) -> dict:
+    """공통 루프: 마스터 로드(또는 주어진 tickers) → 병렬 수집(공유 레이트리밋) → 실패격리 → 2차 재시도 → 집계."""
+    if tickers is None:
+        tickers = load_domestic_tickers(source)
     if limit:
         tickers = tickers[: int(limit)]
     rate = rate_per_sec if rate_per_sec is not None else _DEFAULT_RATE

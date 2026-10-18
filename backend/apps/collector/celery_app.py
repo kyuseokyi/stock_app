@@ -31,6 +31,7 @@ celery_app = Celery(
         "apps.collector.tasks.settle_season",
         "apps.collector.tasks.quiz",
         "apps.collector.tasks.weekly_close",
+        "apps.collector.tasks.market_data",
     ],
 )
 
@@ -48,9 +49,30 @@ celery_app.conf.update(
 # → 전종목 일봉 수집을 매일 20:30(Asia/Seoul)에 실행.
 celery_app.conf.beat_schedule = {
     "collect-all-daily": {
-        "task": "collector.collect_all_daily",
+        # 전종목 일봉 → 국내 지수 → 투자자별 순매수(한 작업에서 차례로 — KIS 호출이 겹치지 않게).
+        # 마스터 소스는 STOCK_MASTER_SOURCE(기본 auto: .mst→실패시 fallback), 동기화 때 종목 프로필·업종·테마도 갱신
+        "task": "collector.daily_market_pipeline",
         "schedule": crontab(hour=20, minute=30),
-        # 마스터 소스는 STOCK_MASTER_SOURCE(기본 auto: .mst→실패시 fallback)
+    },
+    # 미국 지수·환율·대표 종목 — 미국 장 마감(한국 05~06시) 뒤
+    "collect-us-indices": {
+        "task": "collector.collect_market_indices",
+        "schedule": crontab(hour=7, minute=30),
+        "kwargs": {"region": "US"},
+    },
+    # 미국 거시 지표(FRED) — FRED_API_KEY 없으면 건너뜀
+    "collect-macro-series": {
+        "task": "collector.collect_macro_series",
+        "schedule": crontab(hour=8, minute=0),
+    },
+    "collect-ipo-events": {
+        "task": "collector.collect_ipo_events",
+        "schedule": crontab(hour=21, minute=30),
+    },
+    # 재무비율 — 실적은 분기마다 바뀌므로 주 1회(토)
+    "collect-fundamentals": {
+        "task": "collector.collect_fundamentals",
+        "schedule": crontab(hour=10, minute=0, day_of_week=6),
     },
     "settle-trading-season": {
         "task": "settle_trading_season",
