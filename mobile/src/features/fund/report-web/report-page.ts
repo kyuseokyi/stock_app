@@ -54,20 +54,21 @@ details > summary::-webkit-details-marker { display:none; }
 .card.more { margin-top:10px; }
 .memo ol { margin:6px 0 0; padding-left:18px; }
 a.link { color:var(--accent); font-weight:600; font-size:14px; text-decoration:none; display:inline-block; margin:10px 12px 0 0; }
-.kv { display:grid; grid-template-columns:1fr auto; align-items:baseline; }
-.kv > * { padding:9px 0; border-top:1px solid var(--line); }
-.kv > :first-child, .kv > .k:first-child + .v { border-top:0; padding-top:0; } /* 첫 줄은 위 선 없음 */
-.kv > .k { color:var(--text-2); font-size:14px; }
-.kv > .v { text-align:right; font-weight:600; white-space:pre; padding-left:16px; }
-.kv > .k.hero-k { color:var(--text); font-weight:700; font-size:15px; }
-.kv > .v.hero-v { font-size:24px; font-weight:800; letter-spacing:-0.02em; }
-.kv > .sub { border-top:0; padding-top:0; font-size:13px; }
+/* 구분선은 칸이 아닌 줄(.row)에 — 글자 크기가 달라도 좌우 선이 어긋나지 않는다. 값은 줄 오른쪽 끝(같은 기준선). */
+.row { display:flex; justify-content:space-between; align-items:baseline; gap:16px; padding:9px 0; border-top:1px solid var(--line); }
+.kv > :first-child { border-top:0; padding-top:0; } /* 첫 줄은 위 선 없음 */
+.row .k { color:var(--text-2); font-size:14px; }
+.row .v { text-align:right; font-weight:600; white-space:pre; }
+.row .k.hero-k { color:var(--text); font-weight:700; font-size:15px; }
+.row .v.hero-v { font-size:24px; font-weight:800; letter-spacing:-0.02em; }
+.hero { padding-bottom:9px; }
+.hero .row { padding:0; border-top:0; }
+.hero .sub { margin-top:9px; text-align:right; white-space:nowrap; font-size:13px; font-weight:600; }
 .more .kv { margin-top:8px; }
 .b-name { display:flex; justify-content:space-between; align-items:baseline; gap:8px; margin-bottom:10px; }
 .b-name b { font-size:16px; }
 .b-name span { color:var(--text-2); font-size:12px; white-space:nowrap; }
-.step-title { grid-column:1 / -1; font-weight:700; font-size:14px; padding-top:14px !important; color:var(--accent); }
-.kv > .step-title:first-child { padding-top:0 !important; border-top:0; }
+.step-title { font-weight:700; font-size:14px; padding:14px 0 9px; border-top:1px solid var(--line); color:var(--accent); }
 `;
 
 // 페이지 스크립트(ES2017, WebView 에서 그대로 실행) — Hermes 는 함수 소스를 보존하지 않아 문자열로 둔다.
@@ -92,14 +93,11 @@ const PAGE_SCRIPT = String.raw`
     el.title = '원본: ' + c.raw;
     return el;
   }
+  // 이름+값 한 줄 — 구분선은 줄에
   function kvRow(r, kCls, vCls) {
-    return [h('div', 'k' + (kCls ? ' ' + kCls : ''), [r.label]), val(r.value, 'v' + (r.highlight ? ' hl' : '') + (vCls ? ' ' + vCls : ''), 'div')];
+    return h('div', 'row', [h('div', 'k' + (kCls ? ' ' + kCls : ''), [r.label]), val(r.value, 'v' + (r.highlight ? ' hl' : '') + (vCls ? ' ' + vCls : ''), 'div')]);
   }
-  function kv(rows) {
-    var g = h('div', 'kv', []);
-    rows.forEach(function (r) { kvRow(r).forEach(function (el) { g.appendChild(el); }); });
-    return g;
-  }
+  function kv(rows) { return h('div', 'kv', rows.map(function (r) { return kvRow(r); })); }
   function link(l) {
     var href = l[1];
     if (!/^https?:\/\//i.test(href)) return null;
@@ -119,20 +117,20 @@ const PAGE_SCRIPT = String.raw`
   function accountCard(a) {
     var g = h('div', 'kv', []);
     if (a.hero) {
-      kvRow(a.hero, 'hero-k', 'hero-v').forEach(function (el) { g.appendChild(el); });
+      var hero = h('div', 'hero', [kvRow(a.hero, 'hero-k', 'hero-v')]);
+      g.appendChild(hero);
       if (a.summary.length) {
-        var sub = h('div', 'v sub num', []);
+        var sub = h('div', 'sub num', []);
         a.summary.forEach(function (r, i) {
           if (i) sub.appendChild(document.createTextNode(' · '));
           var el = val(r.value, '', 'span');
           el.title = r.label + ' · 원본: ' + r.value.raw;
           sub.appendChild(el);
         });
-        g.appendChild(h('div', 'k sub', []));
-        g.appendChild(sub);
+        hero.appendChild(sub);
       }
     }
-    a.rows.forEach(function (r) { kvRow(r).forEach(function (el) { g.appendChild(el); }); });
+    a.rows.forEach(function (r) { g.appendChild(kvRow(r)); });
     return h('div', 'card', [
       h('div', 'b-name', [h('b', '', [a.name]), a.since ? h('span', 'num', [a.since + ' 시작']) : null]),
       g,
@@ -154,7 +152,7 @@ const PAGE_SCRIPT = String.raw`
     var g = h('div', 'kv', []);
     s.steps.forEach(function (st) {
       g.appendChild(h('div', 'step-title', [st.no + ' · ' + st.name]));
-      st.rows.forEach(function (r) { kvRow(r).forEach(function (el) { g.appendChild(el); }); });
+      st.rows.forEach(function (r) { g.appendChild(kvRow(r)); });
     });
     out.push(h('div', 'card', [g].concat(links(s.links))));
   }

@@ -16,12 +16,11 @@ import {
 // 표시 포맷은 core 의 toReportView 가 끝냈다 — 여기선 그리기만. 링크는 http(s)만(core 에서 걸러짐) 새 탭으로.
 const TONE: Record<ViewCell['tone'], string> = { up: 'text-up', down: 'text-down', zero: 'text-ink-muted', '': '' }
 
-// 카드 전체가 한 격자(1fr auto) — 칸 간격 대신 값 칸 안쪽 여백이라 구분선이 끊기지 않는다
-const GRID = 'grid grid-cols-[1fr_auto] items-baseline'
-const CELL = 'border-t border-line py-[9px]'
-const FIRST = 'border-t-0 pt-0' // 격자 첫 줄은 위 선 없음
+// 구분선은 칸이 아닌 줄(이름+값 한 줄)에 그린다 — 글자 크기가 달라도 좌우 선이 어긋나지 않는다.
+// 값은 줄 오른쪽 끝에 붙어 카드 안 모든 값이 같은 오른쪽 기준선을 쓴다.
+const ROW = 'flex items-baseline justify-between gap-4 border-t border-line py-[9px] first:border-t-0 first:pt-0'
 const K = 'text-sm text-ink-muted'
-const V = 'whitespace-pre pl-4 text-right font-semibold tabular-nums'
+const V = 'whitespace-pre text-right tabular-nums' // 굵기는 쓰는 곳에서(유틸 순서상 semibold 가 extrabold 를 덮음)
 const CARD = 'mt-2.5 rounded-[18px] bg-surface p-[18px]'
 const SUMMARY =
   "cursor-pointer list-none text-[13px] text-ink-muted before:content-['▸_'] group-open:before:content-['▾_'] [&::-webkit-details-marker]:hidden"
@@ -35,23 +34,22 @@ function Value({ c, className = '', title }: { c: ViewCell; className?: string; 
   )
 }
 
-function Row({ r, first }: { r: ViewRow; first?: boolean }) {
-  const line = first ? FIRST : ''
+function Row({ r }: { r: ViewRow }) {
   return (
-    <>
-      <div className={`${CELL} ${K} ${line}`}>{r.label}</div>
-      <div className={`${CELL} ${V} ${line}`}>
+    <div className={ROW}>
+      <div className={K}>{r.label}</div>
+      <div className={`${V} font-semibold`}>
         <Value c={r.value} className={r.highlight ? 'text-up' : ''} />
       </div>
-    </>
+    </div>
   )
 }
 
 function Rows({ rows }: { rows: ViewRow[] }) {
   return (
-    <div className={GRID}>
+    <div>
       {rows.map((r, i) => (
-        <Row key={i} r={r} first={i === 0} />
+        <Row key={i} r={r} />
       ))}
     </div>
   )
@@ -103,30 +101,30 @@ function AccountCard({ a }: { a: AccountView }) {
         <b className="text-base text-ink">{a.name}</b>
         {a.since && <span className="whitespace-nowrap text-xs tabular-nums text-ink-muted">{a.since} 시작</span>}
       </div>
-      <div className={GRID}>
+      <div>
         {hero && (
-          <>
-            <div className={`${CELL} ${FIRST} text-[15px] font-bold text-ink`}>{hero.label}</div>
-            <div className={`${CELL} ${FIRST} ${V} text-2xl font-extrabold tracking-tight`}>
-              <Value c={hero.value} />
+          // 대표값 + 요약 한 줄을 묶은 첫 줄(위 선 없음)
+          <div className="pb-[9px]">
+            <div className="flex items-baseline justify-between gap-4">
+              <div className="text-[15px] font-bold text-ink">{hero.label}</div>
+              <div className={`${V} text-2xl font-extrabold tracking-tight`}>
+                <Value c={hero.value} />
+              </div>
             </div>
-          </>
-        )}
-        {hero && a.summary.length > 0 && (
-          <>
-            <div className="pb-[9px]" />
-            <div className="whitespace-nowrap pb-[9px] pl-4 text-right text-[13px] font-semibold tabular-nums">
-              {a.summary.map((r, i) => (
-                <span key={i}>
-                  {i > 0 && ' · '}
-                  <Value c={r.value} title={`${r.label} · 원본: ${r.value.raw}`} />
-                </span>
-              ))}
-            </div>
-          </>
+            {a.summary.length > 0 && (
+              <div className="mt-[9px] whitespace-nowrap text-right text-[13px] font-semibold tabular-nums">
+                {a.summary.map((r, i) => (
+                  <span key={i}>
+                    {i > 0 && ' · '}
+                    <Value c={r.value} title={`${r.label} · 원본: ${r.value.raw}`} />
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
         )}
         {a.rows.map((r, i) => (
-          <Row key={i} r={r} first={!hero && i === 0} />
+          <Row key={i} r={r} />
         ))}
       </div>
       {a.memo && (
@@ -183,11 +181,11 @@ function StepsBlock({ s }: { s: StepsView }) {
     <>
       <SectionTitle>{s.title}</SectionTitle>
       <div className={CARD}>
-        <div className={GRID}>
+        <div>
           {s.steps.map((st, i) => (
-            <div key={i} className="contents">
+            <div key={i}>
               <div
-                className={`col-span-full text-sm font-bold text-brand ${i === 0 ? 'pb-[9px]' : `${CELL} pt-3.5`}`}
+                className={`text-sm font-bold text-brand ${i === 0 ? 'pb-[9px]' : 'border-t border-line pb-[9px] pt-3.5'}`}
               >
                 {st.no} · {st.name}
               </div>
