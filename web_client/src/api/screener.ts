@@ -1,0 +1,60 @@
+import axios from 'axios'
+import { STOCK_API_URL } from '../config'
+import type { CanslimMarket, CanslimScore, CanslimScreen, ScreenFilters } from '../types/screener'
+
+// stock_api GraphQL CANSLIM 조회(공개 — 로그인 불필요). api/stock 과 같은 axios POST 방식.
+
+const ITEM_FIELDS = `ticker name market sectorName close score passCount liquid rs pctFromHigh
+  letters { c a n s l i m }`
+
+const SCREEN_QUERY = `query CanslimScreen($market: String!, $minPass: Int!, $required: [String!], $sort: String!,
+  $liquidOnly: Boolean!, $limit: Int!, $offset: Int!) {
+  canslimMarket { market date status close ma50 ma200 distributionDays }
+  canslimScreen(market: $market, minPass: $minPass, required: $required, sort: $sort, liquidOnly: $liquidOnly,
+    limit: $limit, offset: $offset) { date total items { ${ITEM_FIELDS} } }
+}`
+
+const SCORE_QUERY = `query CanslimScore($ticker: String!) {
+  canslimScore(ticker: $ticker) {
+    date ticker name market sectorName close score passCount marketStatus
+    letters { key status value display threshold label explanation }
+    history { date score passCount }
+  }
+}`
+
+interface GqlResponse<T> {
+  data?: T | null
+  errors?: { message: string }[]
+}
+
+async function gql<T>(query: string, variables: Record<string, unknown>): Promise<T> {
+  if (!STOCK_API_URL) throw new Error('STOCK_API_URL 미설정')
+  const { data } = await axios.post<GqlResponse<T>>(STOCK_API_URL, { query, variables })
+  if ((data.errors && data.errors.length > 0) || !data.data) throw new Error(data.errors?.[0]?.message ?? '응답 없음')
+  return data.data
+}
+
+export const PAGE_SIZE = 50
+
+/** 시장 상태 + 목록(첫 페이지 또는 offset 부터) */
+export async function getCanslimScreen(
+  f: ScreenFilters,
+  offset = 0,
+): Promise<{ markets: CanslimMarket[]; screen: CanslimScreen }> {
+  const res = await gql<{ canslimMarket: CanslimMarket[]; canslimScreen: CanslimScreen }>(SCREEN_QUERY, {
+    market: f.market,
+    minPass: f.minPass,
+    required: f.required,
+    sort: f.sort,
+    liquidOnly: f.liquidOnly,
+    limit: PAGE_SIZE,
+    offset,
+  })
+  return { markets: res.canslimMarket, screen: res.canslimScreen }
+}
+
+/** 종목 점수표(분석 대상이 아니면 null) */
+export async function getCanslimScore(ticker: string): Promise<CanslimScore | null> {
+  const res = await gql<{ canslimScore: CanslimScore | null }>(SCORE_QUERY, { ticker })
+  return res.canslimScore
+}

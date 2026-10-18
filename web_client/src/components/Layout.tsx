@@ -20,8 +20,8 @@ export default function Layout() {
   const navigate = useNavigate()
   // 섹션 판별: 경로로(별도 상태 불필요) — 게시판·글 상세는 커뮤니티
   const section = sectionOf(location.pathname)
-  // 게임은 넓은 화면(lg+)에서 차트 + 오른쪽 주문 패널 2단 → 헤더·본문 폭을 함께 넓힌다(로고·메뉴 정렬 유지)
-  const width = section === 'game' ? 'max-w-3xl lg:max-w-6xl' : 'max-w-3xl'
+  // 게임·스크리너는 넓은 화면(lg+)에서 2단(차트+주문 / 목록+상세) → 헤더·본문 폭을 함께 넓힌다(로고·메뉴 정렬 유지)
+  const width = section === 'game' || section === 'screener' ? 'max-w-3xl lg:max-w-6xl' : 'max-w-3xl'
 
   useEffect(() => {
     fetchBoards()

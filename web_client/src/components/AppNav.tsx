@@ -1,12 +1,13 @@
 import { Link } from 'react-router-dom'
 
-// 1차 메뉴 — 앱 하단 탭과 같은 4개(홈 · 커뮤니티 · 게임 · 내정보).
+// 1차 메뉴 — 홈 · 커뮤니티 · 게임 · 스크리너 · 내정보(스크리너는 웹 먼저, 앱 탭은 다음 단계).
 // 데스크톱(sm 이상)은 헤더 상단 메뉴, 모바일 폭은 화면 아래 고정 탭바(앱과 같은 자리).
-export type Section = 'home' | 'community' | 'game' | 'me'
+export type Section = 'home' | 'community' | 'game' | 'screener' | 'me'
 
 /** 경로 → 섹션. 게시판·글 상세는 커뮤니티로 본다 */
 export function sectionOf(pathname: string): Section {
   if (pathname.startsWith('/game')) return 'game'
+  if (pathname.startsWith('/screener')) return 'screener'
   if (pathname.startsWith('/me')) return 'me'
   if (pathname === '/' || pathname === '') return 'home'
   return 'community' // /community, /boards/:id, /posts/:id, 기타
@@ -37,6 +38,7 @@ const ITEMS: { key: Section; to: string; label: string; icon: JSX.Element }[] = 
     label: '게임',
     icon: icon('M6 8h12a4 4 0 0 1 0 8 3 3 0 0 1-2.4-1.2L14.5 13h-5l-1.1 1.8A3 3 0 0 1 6 16a4 4 0 0 1 0-8zM8 11v2M7 12h2M15.5 11.5h.01M17 13h.01'),
   },
+  { key: 'screener', to: '/screener', label: '스크리너', icon: icon('M4 19h16M7 16V9M12 16V5M17 16v-4') },
   { key: 'me', to: '/me', label: '내정보', icon: icon('M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 21a8 8 0 0 1 16 0') },
 ]
 
