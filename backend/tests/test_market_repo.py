@@ -110,6 +110,11 @@ def test_upsert_events_idempotent(db):
     assert len(rows) == 1 and rows[0].title == "미국 CPI 발표(수정)" and rows[0].payload == {"release_id": 10}
 
 
+def test_profile_map(db):
+    repo.sync_profiles(db, [_p("005930"), _p("247540", market="KOSDAQ", sector_m="1028", settle_month=None)])
+    assert repo.profile_map(db) == {"005930": ("0013", 12), "247540": ("1028", None)}
+
+
 def test_names_for(db):
     _meta(db, ("005930", "삼성전자", "KOSPI"))
     assert repo.names_for(db, ["005930", "999999"]) == {"005930": "삼성전자"}

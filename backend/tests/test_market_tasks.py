@@ -160,8 +160,9 @@ def test_daily_pipeline_continues_after_failure(monkeypatch):
     monkeypatch.setattr(md, "_daily_ohlcv", boom)
     monkeypatch.setattr(md, "collect_market_indices", lambda region="KR": order.append(f"idx:{region}") or {"ok": []})
     monkeypatch.setattr(md, "collect_investor_daily", lambda: order.append("investor") or {"ok": 0})
+    monkeypatch.setattr(md, "compute_canslim", lambda: order.append("canslim") or {})
     out = md.daily_market_pipeline()
-    assert order == ["daily", "idx:KR", "investor"]
+    assert order == ["daily", "idx:KR", "investor", "canslim"]
     assert "error" in out["daily"] and out["investor"] == {"ok": 0}
 
 

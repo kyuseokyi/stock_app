@@ -32,6 +32,7 @@ celery_app = Celery(
         "apps.collector.tasks.quiz",
         "apps.collector.tasks.weekly_close",
         "apps.collector.tasks.market_data",
+        "apps.collector.tasks.canslim",
     ],
 )
 
@@ -73,6 +74,11 @@ celery_app.conf.beat_schedule = {
     "collect-fundamentals": {
         "task": "collector.collect_fundamentals",
         "schedule": crontab(hour=10, minute=0, day_of_week=6),
+    },
+    # 재무가 바뀐 뒤 CANSLIM C·A 반영(같은 기준일 재계산 — 멱등). 재무 수집(약 6분) 뒤
+    "compute-canslim-after-fundamentals": {
+        "task": "collector.compute_canslim",
+        "schedule": crontab(hour=10, minute=40, day_of_week=6),
     },
     "settle-trading-season": {
         "task": "settle_trading_season",

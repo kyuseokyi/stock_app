@@ -95,6 +95,12 @@ def upsert_events(session: Session, events: list[dict]) -> int:
     return _upsert(session, StockEvent, list(by_key.values()), ["source_key"])
 
 
+def profile_map(session: Session) -> dict[str, tuple[str, int | None]]:
+    """{ticker: (업종 중분류, 결산월)} — CANSLIM 업종 RS·단독 분기 EPS 계산용."""
+    rows = session.execute(select(StockProfile.ticker, StockProfile.sector_m, StockProfile.settle_month)).all()
+    return {t: (s, m) for t, s, m in rows}
+
+
 def names_for(session: Session, tickers: list[str]) -> dict[str, str]:
     if not tickers:
         return {}
