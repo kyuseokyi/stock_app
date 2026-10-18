@@ -210,6 +210,13 @@ npm run build:android:prod # 상용(app-bundle) / build:ios:prod
 - **테스트/검증**: 순수 로직 단위 테스트는 `cd mobile && npm test`(jest). 화면은 `npx tsc --noEmit`(+ 실기기 확인)로 검증한다. 이 프로젝트에는 eslint가 설정되어 있지 않아 모바일 lint 단계는 없다.
 - **검증(설정 레벨)**: `npx tsc --noEmit` · `npx expo-doctor` · `APP_ENV=production npx expo config --type public --json`
 
+### 펀드 수익보기 (웹 /me/funds · 앱 내정보 > 내 펀드 수익)
+- 회원이 fund.ivyro.net 펀드 현황 주소를 **기기에만** 저장하고, 클라이언트가 원본을 직접 가져와 파싱한다(백엔드·환경변수 없음).
+- 공용 코드 기준은 `mobile/src/features/fund/core`, 웹은 복사본 `web_client/src/lib/fundCore`.
+  core 를 고치면 `scripts/check-fund-core-sync.sh --write` 로 복사하고 `scripts/check-fund-core-sync.sh` 로 확인.
+- 테스트: `cd mobile && npx jest src/features/fund` (가린 픽스처 + convert.py 기대 JSON 교차 검증).
+- 설계: `docs/superpowers/specs/2026-10-18-fund-report-viewer-design.md`
+
 ## 🔄 작업 재개(Resume) 가이드 & 환경 점검
 
 작업을 중단했다가 다시 시작할 때, **DB 인프라(Docker)** 는 재부팅 전까지 계속 떠 있지만 **앱 서비스(FastAPI/Celery/Vite)** 는 종료되므로 다시 띄워야 합니다.
