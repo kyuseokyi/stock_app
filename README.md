@@ -362,6 +362,9 @@ uv run pytest tests/test_universe_cooldown.py    # 특정 파일
 | `STOCK_MASTER_SOURCE` | collector | `auto` | 전종목 마스터 소스 — `mst`(.mst 전종목) \| `fallback`(대형주 20) \| `auto`(mst→실패시 fallback) |
 | `KIS_RATE_PER_SEC` | collector | `15`(prod) / `8`(vps) | 전종목 수집 KIS 초당 호출 상한 — 모든 스레드 공유, HTTP 요청(J 폴백·재시도 포함)마다 셈(실전 한도 ~20) |
 | `KIS_WORKERS` | collector | `4` | 전종목 수집·백필 병렬 스레드 수(`1`=기존 순차) |
+| `FRED_API_KEY` | collector | (없음) | 미국 거시 지표(FRED, 무료 발급). 없으면 거시 지표 수집만 건너뜀 |
+| `MACRO_SERIES_EXTRA` | collector | (없음) | 추가 FRED 시리즈(쉼표) |
+| `MARKET_INDEX_EXTRA` | collector | (없음) | 추가 미국 대표 종목(쉼표, 기본 NVDA·MU·AAPL·MSFT·TSLA) |
 | `KIS_COOLDOWN_THRESHOLD` | collector | `5` | 연속 연결실패 몇 회에서 적응형 쿨다운 시작 |
 | `KIS_COOLDOWN_BASE_SEC` / `KIS_COOLDOWN_MAX_SEC` | collector | `60` / `600` | 쿨다운 시작·상한(초). 연속실패 지속 시 2배씩 에스컬레이트 |
 | `KIS_ACCOUNT_NO` | collector | (빈값) | 계좌번호(시세조회만이면 생략 가능) |
@@ -433,6 +436,23 @@ uv run python -c "from apps.collector.tasks.universe import backfill_all_daily; 
 - 이후 매일 20:30 `beat`이 `collect_all_daily`로 자동 갱신합니다.
 - **이미 백업본이 있으면** 재수집(~1시간) 대신 복원이 빠릅니다 → `docs/deployment/clickhouse-backup.md`.
 - 빠른 확인만 원하면 대형주 몇 종목만: `... backfill_domestic_daily('005930', months=14)`.
+
+### 📈 시장 데이터 수집 (스크리너 프로젝트 1 — CANSLIM·주달 화면용)
+설계 `docs/superpowers/specs/2026-10-18-market-data-foundation-design.md`. 모두 공식 경로(KIS·KIS 마스터 파일·FRED).
+
+| 시각(KST) | 작업 | 저장 |
+|---|---|---|
+| 07:30 | 미국 지수(S&P500·나스닥·나스닥100·SOX·VIX·다우)·원/달러·대표 종목 | CH `market_index_daily` |
+| 08:00 | FRED 거시 지표(CPI·근원CPI·PCE·실업률·고용·기준금리·국채) + CPI·고용·PCE 발표 예정일 — 키 있을 때만 | CH `macro_series`, PG `stock_events` |
+| 20:30 | `collector.daily_market_pipeline`: 전종목 일봉 → 국내 지수(KOSPI·KOSDAQ·KOSPI200) → 투자자별 순매수(보통주만) | CH `daily_prices`·`market_index_daily`·`investor_daily` |
+| 20:30 (마스터 동기화 때) | 종목 프로필(업종·시총·상장주식·ETF/스팩/우선주·관리/정지)·업종명·KIS 테마 | PG `stock_profile`·`sectors`·`themes`·`theme_stocks` |
+| 21:30 | 공모주 청약·상장 일정 | PG `stock_events` |
+| 토 10:00 | 재무비율(연간·분기 EPS·ROE·증가율) — 보통주만 | CH `fundamentals_periodic` |
+
+- 지수는 처음 실행 때 2년치를 백필하고 이후 10일씩 겹쳐 받는다. CH 테이블은 각 태스크가 처음 돌 때 자동 생성.
+- 수동 실행: `uv run celery -A apps.collector.celery_app call collector.collect_fundamentals` (같은 방식으로 `collect_market_indices --kwargs '{"region":"US"}'`·`collect_investor_daily`·`collect_ipo_events`·`collect_macro_series`).
+- 테마 보정 API(관리자 JWT, stock_api): `GET/POST /api/v1/admin/themes`, `PATCH /api/v1/admin/themes/{id}`(이름·설명·숨김), `GET/POST /api/v1/admin/themes/{id}/stocks`, `DELETE /api/v1/admin/themes/{id}/stocks/{ticker}`(제외 표시). KIS 테마 동기화는 `source=kis` 연결만 바꿔 관리자 보정이 유지된다.
+- 네이버 증권 크롤링은 하지 않는다(`robots.txt` 전체 거부) — 로드맵 "추후 확인".
 
 ## 🔔 알림 아키텍처
 - **웹(SSE)**: 블로그 서비스의 `GET /api/v1/notifications/stream` 에 EventSource 로 연결 → 새 글 작성 시 Redis pub/sub 로 즉시 토스트 알림.

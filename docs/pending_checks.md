@@ -15,6 +15,15 @@
 - [ ] **분봉 시각 라벨**: KIS `stck_cntg_hour`(예: `093000`)를 **분 시작**(09:30:00~09:30:59)으로 저장함 — MTS 1분봉과 같은 분의 OHLC 가 맞는지 비교(한 분 밀리면 kis_backfill.parse_rows 에서 -1분 보정)
 - [ ] `GET /api/game/candles?interval=5m` 응답 캔들 수·시각(KST 09:00 = `t` 가 UTC 00:00)이 맞는지
 
+### 시장 데이터 첫 수집(스크리너 프로젝트 1 배포 후) — 실제 KIS·FRED 로는 한 번도 호출하지 않음
+- [ ] **참조 데이터**: 20:30 worker 로그 `참조 데이터 동기화: {'profiles': ~4,395, 'sectors': ~490, 'theme_themes': ~302 …}`. PG `SELECT count(*) FROM stock_profile WHERE NOT (is_etp OR is_spac OR is_preferred)` ≈ 2,664. 긴 ETF 이름 잘림 수정으로 `stock_meta` 이름 23개가 한 글자 길어지는 게 정상
+- [ ] **지수**: 07:30·20:30 로그 `지수 수집: ok=… failed=…`. `US:DJI`(코드 `.DJI` 추정)·대표 종목(`USSTK:*`, 시장코드 N) 실패 여부 — 실패면 그 지표만 빠짐. 백필 뒤 `SELECT code, count() FROM stock_data.market_index_daily FINAL GROUP BY code` 가 코드당 ≈490(2년)인지 — 적으면 응답 행 수 상한 의심(청크 60일 축소). 미국 지수 날짜가 미국 현지 날짜인지
+- [ ] **투자자**: 응답 일수(≈30), UN 빈 응답/거부 → J 폴백 비율, 소요 시간(보통주 ≈2,664회)
+- [ ] **재무**(토 10:00 또는 수동 1회): 연간·분기 기간 수(CANSLIM C 는 분기 5개↑, A 는 연간 4개↑ 필요), **분기 EPS 가 누적(연초부터 합산)인지** — `SELECT stac_yymm, eps FROM stock_data.fundamentals_periodic FINAL WHERE ticker='005930' AND period='Q' ORDER BY stac_yymm`
+- [ ] **모의(vps) 키라면**: 재무·투자자·해외 지수 `rt_cd` 오류 여부(국내·해외 지수 예제는 모의도 같은 TR ID)
+- [ ] **공모주**: `stock_events` 의 `subscr_dt`·`list_dt` 날짜 형식이 파싱됐는지, 상장 전 종목은 제목이 종목코드로 나옴 — `payload` 에 회사명 필드가 있으면 제목에 쓰도록 수정
+- [ ] **FRED**: 키 발급 후 첫 수집 로그 `FRED 수집: ok=9 …`, 캘린더는 CPI·고용보고서·PCE 발표일만(금리·국채는 매 영업일이라 제외)
+
 ## 2. 브라우저·기기로 아직 확인하지 않은 화면
 ### web_client (`app.haezean.com/game`)
 - [ ] 연속 출석 보상 모달(🔥 칩 → 보상 받기 → 자본금 증가)

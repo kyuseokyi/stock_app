@@ -1,6 +1,8 @@
 # 시장 데이터 수집 기반 (프로젝트 1) — 설계
 
-> 상태: 설계 확정 대기 · 작성 2026-10-18
+> 상태: 구현 완료(dev) · 작성 2026-10-18 · 구현 계획 `docs/superpowers/plans/2026-10-18-market-data-foundation.md`
+>
+> **구현 중 보정**: ① `.mst` 뒤쪽 필드 실길이 KOSPI 227 / KOSDAQ 221(4.1 의 228/222 는 줄바꿈 포함 값) ② `idxcode.mst` 업종명 `[5:45]` ③ 테마 보정 API 는 GraphQL 대신 stock_api REST `/api/v1/admin/themes`(관리자 JWT) ④ 미 국채는 KIS 대신 FRED(`DGS10`·`DGS2`)만 ⑤ 국내 지수·투자자는 체인 대신 `collector.daily_market_pipeline` 한 작업이 차례로 ⑥ 지수 청크 60일 ⑦ FRED 발표일 캘린더는 CPI·고용보고서·PCE 만(금리는 매 영업일 발표) ⑧ 기존 버그 수정: 긴 ETF 이름 마지막 글자 잘림(23개)
 > 상위 맥락: 스크리너 기획 브레인스토밍. 스크리너·주달 기능을 독립 프로젝트 3개로 분해했고 이 문서는 그중 **프로젝트 1(데이터 수집 기반)**.
 > - 프로젝트 2 — CANSLIM 분석(계산 `canslim_daily`·GraphQL·웹 화면). 이 문서의 데이터를 사용
 > - 프로젝트 3 — 주달 화면(업종·테마 트리맵, 테마 랭킹, 관리자 테마 보정 UI, 일정 캘린더, 뉴스·AI 요약)
