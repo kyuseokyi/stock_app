@@ -28,9 +28,13 @@ export default function FundReportScreen() {
 
   useEffect(() => {
     let alive = true;
-    void loadFunds().then((l) => {
-      if (alive) setFund(l.find((f) => f.id === id) ?? null);
-    });
+    void loadFunds()
+      .then((l) => {
+        if (alive) setFund(l.find((f) => f.id === id) ?? null);
+      })
+      .catch(() => {
+        if (alive) setFund(null); // 목록을 못 읽으면 무한 로딩 대신 '찾을 수 없어요'
+      });
     return () => {
       alive = false;
     };
