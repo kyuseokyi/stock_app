@@ -1,7 +1,8 @@
-// 펀드 리포트 WebView 페이지 — fund_report/template.html 의 화면을 DOM 생성 방식으로 옮긴 것.
-// RN 이 window.__report({type:'render', report, colors}) 로 데이터를 넣고, 페이지는 준비되면 {type:'ready'},
-// 링크를 누르면 {type:'open', href} 를 보낸다(외부 브라우저로 여는 건 RN). 값은 textContent 로만 넣는다.
-import type { FundReport } from '../core';
+// 펀드 리포트 WebView 페이지 — B안(정렬 그리드 카드). docs/superpowers/specs/fund-report-design/
+// RN 이 window.__report({type:'render', view, colors}) 로 화면 모델(core/view.ts toReportView 결과)을 넣고,
+// 페이지는 준비되면 {type:'ready'}, 링크를 누르면 {type:'open', href} 를 보낸다(외부 브라우저로 여는 건 RN).
+// 포맷은 core 에서 끝났다 — 여기선 그리기만. 값은 textContent 로만 넣는다.
+import type { ReportView } from '../core';
 
 export type ReportColors = Record<
   | 'bg'
@@ -19,7 +20,7 @@ export type ReportColors = Record<
   | 'warn-soft',
   string
 >;
-export type ReportMessage = { type: 'render'; report: FundReport; colors: ReportColors };
+export type ReportMessage = { type: 'render'; view: ReportView; colors: ReportColors };
 export type PageMessage = { type: 'ready' } | { type: 'open'; href: string };
 
 export const toReportScript = (msg: ReportMessage): string =>
@@ -27,91 +28,52 @@ export const toReportScript = (msg: ReportMessage): string =>
 
 const CSS = `
 :root { --bg:#f7f5ff; --surface:#fff; --surface-2:#efebfb; --line:#ebe7f7; --text:#25223a; --text-2:#8e8aa6; --text-3:#8e8aa6;
-  --accent:#6f8ef0; --accent-soft:#e2ecff; --up:#c93a6c; --down:#4f73d9; --warn:#c93a6c; --warn-soft:#fbd6e4; --radius:18px; }
-* { box-sizing: border-box; }
-html { -webkit-text-size-adjust: 100%; }
+  --accent:#6f8ef0; --accent-soft:#e2ecff; --up:#c93a6c; --down:#4f73d9; --warn:#c93a6c; --warn-soft:#fbd6e4; }
+* { box-sizing:border-box; }
+html { -webkit-text-size-adjust:100%; }
 body { margin:0; background:var(--bg); color:var(--text);
-  font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Noto Sans KR", Roboto, sans-serif;
-  font-size:15px; line-height:1.55; letter-spacing:-0.01em; word-break:keep-all; overflow-wrap:anywhere; }
-a { color:var(--accent); text-decoration:none; }
-.num { font-variant-numeric: tabular-nums; }
-.wrap { padding: 4px 16px 40px; }
-.card { background:var(--surface); border-radius:var(--radius); padding:20px; }
-section { margin-top:28px; }
-.sec-head { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin:0 4px 12px; }
-.sec-head h2 { margin:0; font-size:18px; font-weight:700; display:flex; align-items:center; gap:8px; }
-.sec-head h2::before { content:""; flex:none; width:4px; height:18px; border-radius:2px; background:var(--tone, var(--accent)); }
-.sec-head .date { color:var(--text-3); font-size:13px; }
-.notice { border:1px solid var(--warn-soft); }
-.notice-label { display:inline-block; font-size:12px; font-weight:700; color:var(--warn); background:var(--warn-soft); padding:3px 10px; border-radius:999px; }
-.signals { display:flex; flex-wrap:wrap; gap:8px; margin:14px 0 10px; }
-.signal { display:inline-flex; align-items:center; gap:6px; padding:6px 12px; border-radius:10px; background:var(--surface-2); font-size:13px; color:var(--text-2); }
-.signal b { color:var(--warn); }
-.notice-msg { margin:0; font-size:16px; font-weight:600; }
-.services { display:flex; flex-wrap:wrap; align-items:center; gap:6px 8px; margin-top:16px; padding-top:16px; border-top:1px solid var(--line); font-size:13px; color:var(--text-2); }
-.services .k { font-weight:700; color:var(--text); margin-right:4px; }
-.tag { padding:4px 10px; border-radius:999px; background:var(--surface-2); }
-.links { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; }
-.link-btn { display:inline-flex; align-items:center; gap:4px; padding:8px 14px; border-radius:10px; background:var(--accent-soft); color:var(--accent); font-size:14px; font-weight:600; }
-.link-btn::after { content:"→"; }
-.grid-2 { display:grid; gap:16px; }
-@media (min-width:900px) { .grid-2.multi { grid-template-columns:1fr 1fr; } }
-.acct-head { display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap; }
-.acct-name { font-weight:700; font-size:16px; }
-.pills { display:flex; flex-wrap:wrap; gap:6px; }
-.pill { white-space:nowrap; font-size:12px; padding:3px 10px; border-radius:999px; background:var(--surface-2); color:var(--text-2); }
-.pill b { color:var(--text); }
-.hero { margin:14px 0 18px; }
-.hero .label { color:var(--text-3); font-size:13px; }
-.hero .value { font-size:clamp(26px, 8vw, 34px); font-weight:800; letter-spacing:-0.03em; line-height:1.2; }
-.hero .value small { font-size:.5em; font-weight:600; color:var(--text-2); margin-left:2px; }
-.hero .delta { margin-top:4px; font-size:14px; font-weight:600; }
-.metrics { display:grid; grid-template-columns:repeat(auto-fit, minmax(140px, 1fr)); background:var(--surface-2); border-radius:14px; overflow:hidden; }
-.metric { padding:12px 14px; min-width:0; box-shadow:0 0 0 .5px var(--line); }
-.metric .k { font-size:12px; color:var(--text-3); }
-.metric .v { font-size:15px; font-weight:700; text-align:right; margin-top:2px; }
-.up { color:var(--up); } .down { color:var(--down); }
-.memo { margin-top:14px; padding:14px 16px; border-radius:14px; background:var(--surface-2); font-size:13px; color:var(--text-2); }
-.memo strong { display:block; color:var(--text); margin-bottom:6px; }
-.memo ol { margin:0; padding-left:18px; }
-.notes { margin-top:16px; }
-.notes h3 { margin:0 0 10px 4px; font-size:14px; color:var(--text-2); }
-.notes ul { list-style:none; margin:0; padding:0; display:grid; gap:8px; }
-.notes li { padding:12px 14px; background:var(--surface); border-radius:12px; font-size:14px; color:var(--text-2); }
-.notes b { color:var(--text); }
-.progress { margin:4px 0 18px; }
-.progress .bar { height:10px; border-radius:999px; background:var(--surface-2); overflow:hidden; }
-.progress .fill { height:100%; border-radius:inherit; background:var(--tone, var(--accent)); }
-.progress .cap { display:flex; justify-content:space-between; flex-wrap:wrap; gap:4px 8px; margin-top:6px; font-size:12px; color:var(--text-3); }
-.steps { display:grid; gap:12px; grid-template-columns:repeat(auto-fit, minmax(240px, 1fr)); }
-.step { background:var(--surface-2); border-radius:14px; padding:16px; }
-.step .no { display:inline-block; font-size:12px; font-weight:700; color:var(--tone); background:var(--surface); padding:2px 10px; border-radius:999px; }
-.step h4 { margin:8px 0 12px; font-size:15px; }
-.step dl { margin:0; display:grid; gap:8px; }
-.step dl div { display:flex; justify-content:space-between; gap:12px; align-items:baseline; }
-.step dt { font-size:13px; color:var(--text-3); }
-.step dd { margin:0; font-weight:700; text-align:right; }
-.step dd.hl { color:var(--warn); font-size:18px; }
-.cert { display:grid; gap:16px; }
-.cert .company p { margin:6px 0 0; color:var(--text-2); font-size:14px; }
-.cert .company p:first-of-type { color:var(--text); font-weight:700; font-size:16px; }
-.cert dl { margin:0; display:grid; gap:10px; }
-.cert dl div { display:flex; justify-content:space-between; gap:12px; padding-bottom:10px; border-bottom:1px dashed var(--line); }
-.cert dl div:last-child { border-bottom:0; padding-bottom:0; }
-.cert dt { color:var(--text-3); font-size:13px; }
-.cert dd { margin:0; font-weight:700; text-align:right; white-space:pre-line; }
-.cert dd.big { font-size:20px; color:var(--accent); }
+  font-family:-apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Pretendard", "Noto Sans KR", Roboto, sans-serif;
+  font-size:15px; line-height:1.5; letter-spacing:-0.01em; word-break:keep-all; overflow-wrap:anywhere; }
+.wrap { max-width:680px; margin:0 auto; padding:4px 16px 48px; }
+.num { font-variant-numeric:tabular-nums; font-feature-settings:"tnum"; }
+h2 { font-size:14px; font-weight:700; margin:26px 4px 8px; color:var(--text-2); }
+h2 .date { font-weight:500; }
+.card { background:var(--surface); border-radius:18px; padding:18px; margin-top:10px; }
+.notice { background:var(--warn-soft); border-radius:14px; padding:10px 14px; margin-top:12px; font-size:14px; }
+.notice b { color:var(--warn); margin-right:6px; }
+.notice .sig { display:block; margin-top:2px; font-size:12px; color:var(--text-2); }
+.unit { color:var(--text-2); font-weight:500; font-size:.85em; margin-left:1px; }
+.up { color:var(--up); } .down { color:var(--down); } .zero { color:var(--text-2); }
+.muted { color:var(--text-2); }
+.hl { color:var(--up); }
+details > summary { cursor:pointer; list-style:none; }
+details > summary::-webkit-details-marker { display:none; }
+.more { color:var(--text-2); font-size:13px; margin-top:8px; }
+.more > summary::before { content:"▸ "; } .more[open] > summary::before { content:"▾ "; }
+.more p { margin:8px 0 0; }
+.card.more { margin-top:10px; }
+.memo ol { margin:6px 0 0; padding-left:18px; }
+a.link { color:var(--accent); font-weight:600; font-size:14px; text-decoration:none; display:inline-block; margin:10px 12px 0 0; }
+.kv { display:grid; grid-template-columns:1fr auto; align-items:baseline; }
+.kv > * { padding:9px 0; border-top:1px solid var(--line); }
+.kv > :first-child, .kv > .k:first-child + .v { border-top:0; padding-top:0; } /* 첫 줄은 위 선 없음 */
+.kv > .k { color:var(--text-2); font-size:14px; }
+.kv > .v { text-align:right; font-weight:600; white-space:pre; padding-left:16px; }
+.kv > .k.hero-k { color:var(--text); font-weight:700; font-size:15px; }
+.kv > .v.hero-v { font-size:24px; font-weight:800; letter-spacing:-0.02em; }
+.kv > .sub { border-top:0; padding-top:0; font-size:13px; }
+.more .kv { margin-top:8px; }
+.b-name { display:flex; justify-content:space-between; align-items:baseline; gap:8px; margin-bottom:10px; }
+.b-name b { font-size:16px; }
+.b-name span { color:var(--text-2); font-size:12px; white-space:nowrap; }
+.step-title { grid-column:1 / -1; font-weight:700; font-size:14px; padding-top:14px !important; color:var(--accent); }
+.kv > .step-title:first-child { padding-top:0 !important; border-top:0; }
 `;
 
 // 페이지 스크립트(ES2017, WebView 에서 그대로 실행) — Hermes 는 함수 소스를 보존하지 않아 문자열로 둔다.
-// 백틱 금지(바깥 String.raw 가 끝난다).
+// 백틱 금지(바깥 String.raw 가 끝난다). 화면 모델만 그린다(포맷 로직 없음).
 const PAGE_SCRIPT = String.raw`
 (function () {
-  var TONES = ['#7c5cff', '#ff7a45', '#00a5a5', '#4e5968', '#e0a800'];
-  var HERO_KEYS = ['현재평가금', '수익측정가치'];
-  var DELTA_KEYS = ['총 손익금', '누적수익율', '연환산수익율'];
-  var PILL_KEYS = ['초기화/시작일'];
-  var PROGRESS = ['누적송금액', '남은목표금액'];
   var app = document.getElementById('app');
 
   function post(m) { if (window.ReactNativeWebView) window.ReactNativeWebView.postMessage(JSON.stringify(m)); }
@@ -124,141 +86,90 @@ const PAGE_SCRIPT = String.raw`
     });
     return el;
   }
-  function isMoney(v) { return /^-?[\d,]+$/.test(v); }
-  function toNum(v) { return Number(String(v).replace(/[^\d.-]/g, '')); }
-  function won(v) { return isMoney(v) ? v + '원' : v; }
-  function toneOf(k, v) { return toNum(v) < 0 ? 'down' : k.indexOf('손익금') >= 0 ? 'up' : ''; }
-  function linkBtn(l) {
+  // 포맷된 값 칸: 본문 + 작은 단위, 원본은 title
+  function val(c, cls, tag) {
+    var el = h(tag || 'span', ['num', c.tone, cls].filter(Boolean).join(' '), [c.text, c.unit ? h('span', 'unit', [c.unit]) : null]);
+    el.title = '원본: ' + c.raw;
+    return el;
+  }
+  function kvRow(r, kCls, vCls) {
+    return [h('div', 'k' + (kCls ? ' ' + kCls : ''), [r.label]), val(r.value, 'v' + (r.highlight ? ' hl' : '') + (vCls ? ' ' + vCls : ''), 'div')];
+  }
+  function kv(rows) {
+    var g = h('div', 'kv', []);
+    rows.forEach(function (r) { kvRow(r).forEach(function (el) { g.appendChild(el); }); });
+    return g;
+  }
+  function link(l) {
     var href = l[1];
     if (!/^https?:\/\//i.test(href)) return null;
-    var a = h('a', 'link-btn', [l[0]]);
+    var a = h('a', 'link', [l[0] + ' →']);
     a.href = '#';
     a.addEventListener('click', function (e) { e.preventDefault(); post({ type: 'open', href: href }); });
     return a;
   }
-  function links(ls) {
-    var btns = (ls || []).map(linkBtn).filter(Boolean);
-    return btns.length ? h('div', 'links', btns) : null;
-  }
-  function rich(segs) { return segs.map(function (s) { return s[1] ? h('b', '', [s[0]]) : s[0]; }); }
-  function metric(k, v) { return h('div', 'metric', [h('div', 'k', [k]), h('div', 'v num ' + toneOf(k, v), [v])]); }
+  function links(ls) { return (ls || []).map(link).filter(Boolean); }
+  function fold(cls, summary, kids) { return h('details', cls, [h('summary', '', [summary])].concat(kids)); }
 
-  function renderNotice(n) {
+  function notice(n) {
     if (!n) return null;
-    return h('div', 'card notice', [
-      h('span', 'notice-label', [n.label]),
-      n.signals.length ? h('div', 'signals', [h('span', 'signal', [n.signalsLabel])].concat(n.signals.map(function (s) {
-        return h('span', 'signal', [s[0] + ' ', h('b', '', [s[1]])]);
-      }))) : null,
-      n.message ? h('p', 'notice-msg', [n.message]) : null,
-      n.services.length ? h('div', 'services', [h('span', 'k', [n.servicesLabel])].concat(n.services.map(function (t) {
-        return h('span', 'tag', [t]);
-      }))) : null,
-      links(n.links)
-    ]);
+    return h('div', 'notice', [h('b', '', [n.label]), n.message, n.signals ? h('span', 'sig', [n.signals]) : null].concat(links(n.links)));
   }
 
   function accountCard(a) {
-    var map = new Map(a.values);
-    var heroKey = HERO_KEYS.filter(function (k) { return map.has(k); })[0];
-    var delta = DELTA_KEYS.filter(function (k) { return map.has(k); }).slice(0, 2)
-      .map(function (k) { return k + ' ' + won(map.get(k)); }).join(' · ');
-    var pills = PILL_KEYS.filter(function (k) { return map.has(k); })
-      .map(function (k) { return [k, map.get(k)]; }).concat(a.remarks);
-    var metrics = a.values.filter(function (p) { return p[0] !== heroKey && PILL_KEYS.indexOf(p[0]) < 0; });
-
-    var progress = null;
-    if (PROGRESS.every(function (k) { return map.has(k); })) {
-      var done = toNum(map.get(PROGRESS[0])), left = toNum(map.get(PROGRESS[1]));
-      if (done + left > 0) {
-        var pct = (done / (done + left)) * 100;
-        var fill = h('div', 'fill');
-        fill.style.width = pct.toFixed(1) + '%';
-        progress = h('div', 'progress', [
-          h('div', 'bar', [fill]),
-          h('div', 'cap', [h('span', '', [PROGRESS[0] + ' ' + won(map.get(PROGRESS[0]))]), h('span', '', [PROGRESS[1] + ' ' + won(map.get(PROGRESS[1]))])]),
-          h('div', 'cap', [h('span', '', ['※ 진행률 ' + pct.toFixed(1) + '%는 ' + PROGRESS[0] + ' ÷ (' + PROGRESS[0] + ' + ' + PROGRESS[1] + ')으로 화면에서 계산한 값입니다.'])])
-        ]);
+    var g = h('div', 'kv', []);
+    if (a.hero) {
+      kvRow(a.hero, 'hero-k', 'hero-v').forEach(function (el) { g.appendChild(el); });
+      if (a.summary.length) {
+        var sub = h('div', 'v sub num', []);
+        a.summary.forEach(function (r, i) {
+          if (i) sub.appendChild(document.createTextNode(' · '));
+          var el = val(r.value, '', 'span');
+          el.title = r.label + ' · 원본: ' + r.value.raw;
+          sub.appendChild(el);
+        });
+        g.appendChild(h('div', 'k sub', []));
+        g.appendChild(sub);
       }
     }
-
-    var hero = null;
-    if (heroKey) {
-      var hv = map.get(heroKey);
-      hero = h('div', 'hero', [
-        h('div', 'label', [heroKey]),
-        h('div', 'value num', [hv, isMoney(hv) ? h('small', '', ['원']) : null]),
-        delta ? h('div', 'delta num up', [delta]) : null
-      ]);
-    }
-    var memo = a.remarkText ? h('div', 'memo', [
-      a.remarkText.title ? h('strong', '', [a.remarkText.title]) : null,
-      h('ol', '', a.remarkText.lines.map(function (l) { return h('li', '', [l]); }))
-    ]) : null;
-
-    return h('article', 'card', [
-      h('div', 'acct-head', [
-        h('span', 'acct-name', [a.name]),
-        h('span', 'pills', pills.map(function (p) { return h('span', 'pill', [p[0] + ' ', h('b', 'num', [p[1]])]); }))
-      ]),
-      hero, progress,
-      h('div', 'metrics', metrics.map(function (p) { return metric(p[0], p[1]); })),
-      memo
+    a.rows.forEach(function (r) { kvRow(r).forEach(function (el) { g.appendChild(el); }); });
+    return h('div', 'card', [
+      h('div', 'b-name', [h('b', '', [a.name]), a.since ? h('span', 'num', [a.since + ' 시작']) : null]),
+      g,
+      a.memo ? fold('more memo', a.memo.title || '메모', [h('ol', '', a.memo.lines.map(function (l) { return h('li', '', [l]); }))]) : null,
+      a.details.length ? fold('more', '상세', [kv(a.details)]) : null
     ]);
   }
 
-  function renderAccounts(s) {
-    var out = [h('div', 'grid-2' + (s.accounts.length > 1 ? ' multi' : ''), s.accounts.map(accountCard))];
+  function renderAccounts(s, out) {
+    out.push(h('h2', '', [s.title, s.group ? ' · ' + s.group : '', s.evalDate ? h('span', 'date', [' · ' + s.evalDate]) : null]));
+    s.accounts.forEach(function (a) { out.push(accountCard(a)); });
     s.notes.forEach(function (n) {
-      out.push(h('div', 'notes', [
-        h('h3', '', [n.title]),
-        h('ul', '', n.items.map(function (it) { return h('li', '', rich(it)); })),
-        links(n.links)
-      ]));
+      out.push(fold('card more', n.title + ' (' + n.items.length + ')', n.items.map(function (t) { return h('p', 'muted', [t]); }).concat(links(n.links))));
     });
-    return out;
   }
 
-  function renderSteps(s) {
-    return [h('div', 'card', [
-      h('div', 'steps', s.steps.map(function (st) {
-        return h('div', 'step', [
-          h('span', 'no', [st.no]),
-          h('h4', '', [st.name]),
-          h('dl', '', st.items.map(function (it) {
-            return h('div', '', [h('dt', '', [it[0]]), h('dd', 'num' + (it[2] ? ' hl' : ''), [it[1]])]);
-          }))
-        ]);
-      })),
-      links(s.links)
-    ])];
+  function renderSteps(s, out) {
+    out.push(h('h2', '', [s.title]));
+    var g = h('div', 'kv', []);
+    s.steps.forEach(function (st) {
+      g.appendChild(h('div', 'step-title', [st.no + ' · ' + st.name]));
+      st.rows.forEach(function (r) { kvRow(r).forEach(function (el) { g.appendChild(el); }); });
+    });
+    out.push(h('div', 'card', [g].concat(links(s.links))));
   }
 
-  function renderCert(s) {
-    return [h('div', 'card cert', [
-      h('div', 'company', [h('span', 'pill', [s.companyLabel])].concat(s.company.map(function (l) { return h('p', '', [l]); }))),
-      h('dl', '', s.fields.map(function (f) {
-        return h('div', '', [h('dt', '', [f[0]]), h('dd', 'num' + (/^₩/.test(f[1]) ? ' big' : ''), [f[1]])]);
-      }))
-    ])];
+  function renderCert(s, out) {
+    out.push(fold('card more', s.title, [s.company ? h('p', '', [s.company]) : null, kv(s.rows)]));
   }
 
   var RENDERERS = { accounts: renderAccounts, steps: renderSteps, cert: renderCert };
 
-  function render(d) {
+  function render(v) {
     app.textContent = '';
-    var notice = renderNotice(d.notice);
-    if (notice) app.appendChild(notice);
-    d.sections.forEach(function (s, i) {
-      var sec = h('section', '', []);
-      sec.style.setProperty('--tone', TONES[i % TONES.length]);
-      sec.appendChild(h('div', 'sec-head', [
-        h('h2', '', [s.title, s.group ? h('span', 'pill', [s.group]) : null]),
-        s.evalDate ? h('span', 'date', ['최종평가일 ' + s.evalDate]) : null
-      ]));
-      (RENDERERS[s.kind] ? RENDERERS[s.kind](s) : []).forEach(function (el) { if (el) sec.appendChild(el); });
-      app.appendChild(sec);
-    });
+    var out = [notice(v.notice)];
+    v.sections.forEach(function (s) { if (RENDERERS[s.kind]) RENDERERS[s.kind](s, out); });
+    out.forEach(function (el) { if (el) app.appendChild(el); });
   }
 
   function applyColors(c) {
@@ -267,7 +178,7 @@ const PAGE_SCRIPT = String.raw`
   }
 
   window.__report = function (msg) {
-    if (msg && msg.type === 'render') { applyColors(msg.colors); render(msg.report); }
+    if (msg && msg.type === 'render') { applyColors(msg.colors); render(msg.view); }
   };
   post({ type: 'ready' });
 })();

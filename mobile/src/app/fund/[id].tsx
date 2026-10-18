@@ -11,6 +11,7 @@ import {
   displayName,
   evalDateOf,
   formatChecked,
+  formatValue,
   renameFund,
   useFundReport,
   type FundEntry,
@@ -113,7 +114,7 @@ export default function FundReportScreen() {
     );
   }
 
-  const evalDate = evalDateOf(entry.report);
+  const evalDate = formatValue('', evalDateOf(entry.report)).text; // YYYY.MM.DD
   return (
     <View style={styles.flex}>
       {header}
