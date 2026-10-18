@@ -65,3 +65,86 @@ class ChartData:
     ma_order: str
     bollinger: BollingerBand
     volume_profile: list[VolumeProfileBin]
+
+
+# ---------------------------------------------------------------- CANSLIM (스크리너 프로젝트 2)
+# 항목 상태: 1 통과 · 0 미달 · -1 데이터 부족 · -2 준비 중
+
+
+@strawberry.type
+class CanslimMarket:
+    """시장(KOSPI/KOSDAQ) 방향 — M 항목·배너."""
+
+    market: str
+    date: str
+    status: str  # 상승 추세 | 조정 | 하락
+    close: float
+    ma50: float
+    ma200: float
+    distribution_days: int
+
+
+@strawberry.type
+class CanslimLetters:
+    c: int
+    a: int
+    n: int
+    s: int
+    l: int  # noqa: E741
+    i: int
+    m: int
+
+
+@strawberry.type
+class CanslimItem:
+    ticker: str
+    name: str
+    market: str
+    sector_name: str | None
+    close: float
+    score: int
+    pass_count: int
+    liquid: bool
+    letters: CanslimLetters
+    rs: int | None
+    pct_from_high: float | None
+
+
+@strawberry.type
+class CanslimScreen:
+    date: str | None  # 계산된 날이 없으면 null(준비 중)
+    total: int
+    items: list[CanslimItem]
+
+
+@strawberry.type
+class CanslimLetter:
+    key: str  # c a n s l i m
+    status: int
+    value: float | None
+    display: str  # 근거 수치 한 줄(예: "+32.5% (2026년 6월 분기)")
+    threshold: str
+    label: str
+    explanation: str
+
+
+@strawberry.type
+class CanslimHistoryPoint:
+    date: str
+    score: int
+    pass_count: int
+
+
+@strawberry.type
+class CanslimScore:
+    date: str
+    ticker: str
+    name: str
+    market: str
+    sector_name: str | None
+    close: float
+    score: int
+    pass_count: int
+    letters: list[CanslimLetter]
+    history: list[CanslimHistoryPoint]
+    market_status: str | None

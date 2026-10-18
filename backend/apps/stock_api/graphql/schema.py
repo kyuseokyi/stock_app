@@ -9,11 +9,19 @@ import strawberry
 from apps.stock_api.graphql.types import (
     BollingerBand,
     Candle,
+    CanslimHistoryPoint,
+    CanslimItem,
+    CanslimLetter,
+    CanslimLetters,
+    CanslimMarket,
+    CanslimScore,
+    CanslimScreen,
     ChartData,
     Stock,
     VolumeProfileBin,
 )
 from apps.stock_api.seed_catalog import search as catalog_search
+from apps.stock_api.services import canslim_query
 from apps.stock_api.services import chart as chart_service
 from apps.stock_api.services import clickhouse_source as ch_source
 from shared import stock_meta_repo
@@ -143,6 +151,37 @@ class Query:
                 )
                 for b in vp
             ],
+        )
+
+    # ------------------------------------------------------------ CANSLIM (공개)
+    @strawberry.field(description="CANSLIM 시장 방향(M) — 최신 기준일 KOSPI·KOSDAQ")
+    def canslim_market(self) -> list[CanslimMarket]:
+        return [CanslimMarket(**m) for m in canslim_query.markets()]
+
+    @strawberry.field(description="CANSLIM 스크리너 목록 — 최신 기준일, 필터·정렬")
+    def canslim_screen(
+        self,
+        market: str = "ALL",
+        min_pass: int = 0,
+        required: list[str] | None = None,
+        sort: str = "score",
+        liquid_only: bool = True,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> CanslimScreen:
+        out = canslim_query.screen(market=market, min_pass=min_pass, required=required, sort=sort,
+                                   liquid_only=liquid_only, limit=limit, offset=offset)
+        items = [CanslimItem(**{**it, "letters": CanslimLetters(**it["letters"])}) for it in out["items"]]
+        return CanslimScreen(date=out["date"], total=out["total"], items=items)
+
+    @strawberry.field(description="CANSLIM 종목 점수표 — 7항목 판정·근거·최근 60거래일 추이(분석 대상 아니면 null)")
+    def canslim_score(self, ticker: str) -> CanslimScore | None:
+        out = canslim_query.score(ticker)
+        if out is None:
+            return None
+        return CanslimScore(
+            **{**out, "letters": [CanslimLetter(**x) for x in out["letters"]],
+               "history": [CanslimHistoryPoint(**h) for h in out["history"]]}
         )
 
 
