@@ -9,6 +9,7 @@ from alembic import context
 # 프로젝트 ORM 모델 메타데이터 (autogenerate 대상)
 from shared.models import Base
 import shared.game_models  # noqa: F401  (게임 테이블을 Base.metadata 에 등록)
+import shared.market_models  # noqa: F401  (시장 참조 테이블 — 프로필·업종·테마·일정)
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
