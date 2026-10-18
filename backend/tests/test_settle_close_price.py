@@ -17,6 +17,8 @@ def _c(d: str, close: float) -> Candle:
 @pytest.fixture
 def ch(monkeypatch):
     """get_candles / 날짜별 전체 행 수를 대역으로."""
+    monkeypatch.delenv("TRADING_DAYS", raising=False)  # ALL 이면 주말도 거래일이 됨 — 실제 달력으로
+    monkeypatch.delenv("MARKET_HOLIDAYS", raising=False)
     state = {"candles": [], "rows": {}}
     monkeypatch.setattr(ss, "get_candles", lambda t, s, e: [c for c in state["candles"] if s <= c.date <= e] or None)
     monkeypatch.setattr(ss, "_market_rows_on", lambda d: state["rows"].get(d, 0))
@@ -51,10 +53,20 @@ def test_weekday_missing_same_day_holds(ch):
     assert ss.clickhouse_close_price("005930", end, now=end + timedelta(minutes=40)) is None
 
 
-def test_weekday_holiday_settles_next_day(ch):
-    # 2026-12-31(목) 휴장: 다음 날 실행에서 전 종목 0행이면 휴장으로 보고 직전 거래일 종가
+def test_calendar_holiday_settles_same_night(ch, monkeypatch):
+    # 2026-12-31(목) KRX 연말 휴장 — 거래일 달력이 알므로 당일 20:40 에 직전 거래일 종가
+    monkeypatch.delenv("TRADING_DAYS", raising=False)
     ch["candles"] = [_c("2026-12-30", 120)]
     end = _end(2026, 12, 31)
+    assert ss.clickhouse_close_price("005930", end, now=end + timedelta(minutes=40)) == Decimal("120")
+
+
+def test_unknown_holiday_settles_next_day(ch, monkeypatch):
+    # 달력이 모르는 임시 휴장(평일 2026-11-04 수): 당일은 보류, 다음 날 전 종목 0행이면 휴장으로 보고 직전 종가
+    monkeypatch.delenv("TRADING_DAYS", raising=False)
+    monkeypatch.delenv("MARKET_HOLIDAYS", raising=False)
+    ch["candles"] = [_c("2026-11-03", 120)]
+    end = _end(2026, 11, 4)
     assert ss.clickhouse_close_price("005930", end, now=end + timedelta(minutes=40)) is None  # 당일은 보류
     assert ss.clickhouse_close_price("005930", end, now=end + timedelta(days=1)) == Decimal("120")
 

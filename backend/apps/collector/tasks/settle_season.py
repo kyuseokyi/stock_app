@@ -13,7 +13,7 @@ from shared.clickhouse_schema import CLICKHOUSE_DB, get_client
 from shared.database import AsyncSessionLocal, engine
 from apps.collector.celery_app import celery_app
 from apps.stock_api.services.clickhouse_source import get_candles
-from apps.trading_game.services import settlement
+from apps.trading_game.services import market_calendar, settlement
 
 log = logging.getLogger("trading_game.settle_task")
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
@@ -39,7 +39,7 @@ def _market_rows_on(d: date) -> int:
 def clickhouse_close_price(ticker: str, end_at: datetime, now: datetime | None = None) -> Decimal | None:
     """시즌 종료일(KST) 당일 또는 그 이전 가장 최근 거래일 종가. None 이면 정산 보류(다음 실행 재시도).
 
-    - 주말 종료: 직전 거래일 종가.
+    - 주말·휴장일 종료(거래일 달력 — 공휴일·대체공휴일·KRX 연말 휴장·MARKET_HOLIDAYS): 직전 거래일 종가.
     - 평일 종료인데 당일 봉 없음: 20:30 수집이 덜 끝났거나 실패했을 수 있어 보류.
       다음 날 이후 실행에서 전 종목이 0행이면 휴장(예: 12/31)으로 보고 직전 거래일 종가.
       그래도 판단이 안 되면 종료 3일 뒤부터 있는 종가로 정산(최후 수단).
@@ -52,7 +52,7 @@ def clickhouse_close_price(ticker: str, end_at: datetime, now: datetime | None =
         return None
     last = usable[-1]
     close = Decimal(str(last.close))
-    if str(last.date)[:10] == end_date.isoformat() or end_date.weekday() >= 5:
+    if str(last.date)[:10] == end_date.isoformat() or not market_calendar.is_trading_day(end_date):
         return close
     if now.astimezone(_KST).date() > end_date and _market_rows_on(end_date) == 0:
         return close  # 평일 휴장

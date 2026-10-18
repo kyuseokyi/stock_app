@@ -41,7 +41,7 @@
 - [ ] admin → 데일리 코치에서 오늘 브리핑을 **실제 지지선·저항선**으로 수정·재발행(시드 값 71,000/73,500 은 예시라 차트 축척이 깨짐)
 
 - [ ] 시즌 기간·월간 랭킹 push 후: 마이그레이션 `e1f2a3b4c5d6` 자동 적용, celery beat 재시작으로 `close-trading-month` 등록, admin 게임 설정 화면 로드·저장 확인
-- [ ] 10/31(토) 시즌 1기 정산이 10/30(금) 종가로 20:40 에 실행되는지(로그 `시즌 1 정산 완료`), 11월 시즌이 admin 설정 기간으로 생성됐는지
+- [ ] 10/31(토) **20:40** 시즌 1기 정산이 10/30(금) 종가로 실행되는지(로그 `시즌 1 정산 완료 — closed=… archived=… next=2`), 11월 시즌이 admin 설정 기간으로 생성됐는지(월간 11/1 09:00~11/30 20:00, 분기 ~12/31 20:00). 흐름은 리허설 테스트로 검증됨(`tests/test_settlement_rehearsal.py`, 2026-10-18) — 서버에서는 **10/30 20:30 일봉 수집 성공**(시즌 종목 10/30 봉 존재)과 admin '다음 시즌 기간' 값만 미리 확인. 12/31 같은 휴장일 종료는 이제 당일 밤 정산(거래일 달력)
 - [ ] 게임 분봉 push 후: `game_ws` 시작 시 `stock_data.game_minute_bars` 자동 생성(`CREATE TABLE IF NOT EXISTS`) 확인 — 실패 로그가 있으면 `docker exec stock_game_ws python -m shared.clickhouse_schema` 로 수동 생성. `game_ws` 컨테이너가 ClickHouse 에 닿는지(`.env.production` 의 `CLICKHOUSE_*` 공유)
 - [ ] 분기 선택은 **web·모바일 새 버전 배포 후**(구 버전은 월간 보상 토스트를 주간 문구로 표시)
 
