@@ -15,7 +15,8 @@ from __future__ import annotations
 import logging
 import os
 
-from apps.collector.kis.master import MasterStock
+from apps.collector.kis.master import MasterStock, download_master_lines, parse_master_lines
+from apps.collector.reference_sync import sync_reference
 from shared import stock_meta_repo as repo
 from shared.database import SyncSessionLocal
 
@@ -46,29 +47,37 @@ _FALLBACK: list[MasterStock] = [
 ]
 
 
-def _fetch_master(source: str | None = None) -> list[MasterStock]:
-    """원천(.mst 또는 fallback)에서 마스터 목록 확보. source: 'mst'|'fallback'|'auto'."""
+def _download_lines() -> dict[str, list[str]]:
+    return download_master_lines()
+
+
+def _fetch_master_bundle(source: str | None = None) -> tuple[list[MasterStock], dict | None]:
+    """원천(.mst 또는 fallback) 목록 + (.mst 일 때) 시장별 원문 줄. source: 'mst'|'fallback'|'auto'."""
     source = (source or os.getenv("STOCK_MASTER_SOURCE", "auto")).strip().lower()
 
     if source == "fallback":
-        return list(_FALLBACK)
+        return list(_FALLBACK), None
 
     if source in ("mst", "auto"):
         try:
-            from apps.collector.kis.master import download_and_parse_master
-
-            stocks = download_and_parse_master()
+            lines = _download_lines()
+            stocks = parse_master_lines(lines)
             if stocks:
                 logger.info("전종목 마스터(.mst) 로드: %d종목", len(stocks))
-                return stocks
+                return stocks, lines
             raise RuntimeError("마스터 파싱 결과가 비어 있음")
         except Exception as e:
             if source == "mst":
                 raise
             logger.warning("마스터(.mst) 로드 실패 → fallback(%d종목) 사용: %s", len(_FALLBACK), e)
-            return list(_FALLBACK)
+            return list(_FALLBACK), None
 
     raise ValueError(f"알 수 없는 STOCK_MASTER_SOURCE: {source}")
+
+
+def _fetch_master(source: str | None = None) -> list[MasterStock]:
+    """원천(.mst 또는 fallback)에서 마스터 목록 확보(호환용)."""
+    return _fetch_master_bundle(source)[0]
 
 
 def load_domestic_tickers(source: str | None = None) -> list[MasterStock]:
@@ -76,8 +85,10 @@ def load_domestic_tickers(source: str | None = None) -> list[MasterStock]:
 
     원천(.mst/fallback)을 매 호출마다 stock_meta 에 동기화한 뒤 활성 종목을 반환한다.
     → 신규상장/상장폐지가 stock_meta 에 반영되고, 그 단일 마스터가 수집 대상이 된다.
+    .mst 원천이면 같은 원문으로 종목 프로필·업종·테마도 동기화한다(실패해도 수집은 계속).
     """
-    rows = [(s.ticker, s.name, s.market) for s in _fetch_master(source)]
+    stocks, lines = _fetch_master_bundle(source)
+    rows = [(s.ticker, s.name, s.market) for s in stocks]
     with SyncSessionLocal() as db:
         res = repo.sync_master(db, rows)
         active = repo.list_active(db)
@@ -85,4 +96,9 @@ def load_domestic_tickers(source: str | None = None) -> list[MasterStock]:
         "stock_meta 동기화: active=%d inactive=%d (원천 %d)",
         res["active_total"], res["inactive_total"], len(rows),
     )
+    if lines is not None:
+        try:
+            sync_reference(lines)
+        except Exception:  # noqa: BLE001 — 참조 데이터 실패가 일봉 수집을 막지 않게
+            logger.exception("참조 데이터(프로필·업종·테마) 동기화 실패 — 수집은 계속")
     return [MasterStock(ticker=t, name=n, market=m) for t, n, m in active]
