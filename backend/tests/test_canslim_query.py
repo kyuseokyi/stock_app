@@ -118,6 +118,61 @@ def test_markets(monkeypatch):
                       "ma50": 2500.0, "ma200": 2400.0, "distribution_days": 2}
 
 
+# ⚠️ web_client/src/api/screener.ts 의 SCREEN_QUERY·SCORE_QUERY 와 글자 그대로 맞출 것(웹↔API 계약 검증)
+WEB_ITEM_FIELDS = """ticker name market sectorName close score passCount liquid rs pctFromHigh
+  letters { c a n s l i m }"""
+WEB_SCREEN_QUERY = f"""query CanslimScreen($market: String!, $minPass: Int!, $required: [String!], $sort: String!,
+  $liquidOnly: Boolean!, $limit: Int!, $offset: Int!) {{
+  canslimMarket {{ market date status close ma50 ma200 distributionDays }}
+  canslimScreen(market: $market, minPass: $minPass, required: $required, sort: $sort, liquidOnly: $liquidOnly,
+    limit: $limit, offset: $offset) {{ date total items {{ {WEB_ITEM_FIELDS} }} }}
+}}"""
+WEB_SCORE_QUERY = """query CanslimScore($ticker: String!) {
+  canslimScore(ticker: $ticker) {
+    date ticker name market sectorName close score passCount marketStatus
+    letters { key status value display threshold label explanation }
+    history { date score passCount }
+  }
+}"""
+
+
+def test_web_queries_match_schema(monkeypatch):
+    import pathlib
+
+    ts = (pathlib.Path(__file__).resolve().parents[2] / "web_client/src/api/screener.ts").read_text(encoding="utf-8")
+    assert WEB_ITEM_FIELDS in ts and WEB_SCORE_QUERY in ts  # 웹 파일과 같은 문자열인지(바뀌면 여기도 고칠 것)
+    assert "$liquidOnly: Boolean!, $limit: Int!, $offset: Int!) {" in ts
+
+    seen = {}
+
+    def fake_screen(**kw):
+        seen.update(kw)
+        return {"date": "2026-10-16", "total": 1, "items": [
+            {"ticker": "AAA", "name": "에이", "market": "KOSPI", "sector_name": "전기·전자", "close": 1.0, "score": 50,
+             "pass_count": 3, "liquid": True, "letters": {k: 1 for k in "canslim"}, "rs": 81, "pct_from_high": -1.0}]}
+
+    monkeypatch.setattr(cq, "markets", lambda: [])
+    monkeypatch.setattr(cq, "screen", fake_screen)
+    variables = {"market": "ALL", "minPass": 0, "required": [], "sort": "score", "liquidOnly": True, "limit": 50,
+                 "offset": 0}
+    res = schema.execute_sync(WEB_SCREEN_QUERY, variable_values=variables)
+    assert res.errors is None, res.errors
+    assert res.data["canslimScreen"]["items"][0]["sectorName"] == "전기·전자"
+    assert seen == {"market": "ALL", "min_pass": 0, "required": [], "sort": "score", "liquid_only": True,
+                    "limit": 50, "offset": 0}
+
+    monkeypatch.setattr(cq, "score", lambda ticker: {
+        "date": "2026-10-16", "ticker": ticker, "name": "에이", "market": "KOSPI", "sector_name": None, "close": 1.0,
+        "score": 80, "pass_count": 6, "market_status": "상승 추세",
+        "letters": [{"key": "c", "status": -2, "value": None, "display": "실적 형식 확인 중", "threshold": "t",
+                     "label": "l", "explanation": "e"}],
+        "history": [{"date": "2026-10-16", "score": 80, "pass_count": 6}]})
+    res = schema.execute_sync(WEB_SCORE_QUERY, variable_values={"ticker": "AAA"})
+    assert res.errors is None, res.errors
+    assert res.data["canslimScore"]["marketStatus"] == "상승 추세"
+    assert res.data["canslimScore"]["history"][0]["passCount"] == 6
+
+
 def test_graphql_wiring(monkeypatch):
     monkeypatch.setattr(cq, "markets", lambda: [{"market": "KOSPI", "date": "2026-10-16", "status": "조정",
                                                  "close": 1.0, "ma50": 1.0, "ma200": 1.0, "distribution_days": 3}])
