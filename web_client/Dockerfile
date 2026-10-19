@@ -22,8 +22,8 @@ RUN npm run build
 # ---- serve stage (정적 SPA 서버 — nginx 미사용) ----
 FROM node:20-alpine
 WORKDIR /app
-RUN npm install -g serve
+RUN npm install -g serve@14.2.6
 COPY --from=build /app/dist ./dist
 EXPOSE 3000
-# -s: SPA 폴백(모든 경로 → index.html)
-CMD ["serve", "-s", "dist", "-l", "3000"]
+# SPA 폴백·캐시는 dist/serve.json(public/serve.json): /assets/ 밖 경로만 index.html, 없는 /assets/ 는 404, index.html no-cache
+CMD ["serve", "dist", "-l", "3000"]

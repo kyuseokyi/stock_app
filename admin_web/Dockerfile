@@ -19,7 +19,7 @@ RUN npm run build
 # ---- serve stage (정적 SPA 서버 — nginx 미사용) ----
 FROM node:20-alpine
 WORKDIR /app
-RUN npm install -g serve
+RUN npm install -g serve@14.2.6
 COPY --from=build /app/dist ./dist
 EXPOSE 3000
-CMD ["serve", "-s", "dist", "-l", "3000"]
+CMD ["serve", "dist", "-l", "3000"]
