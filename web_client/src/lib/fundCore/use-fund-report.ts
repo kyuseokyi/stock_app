@@ -8,7 +8,10 @@ import { isFundError, type FundErrorCode } from './types';
 
 export type ReportState = { entry: CacheEntry | null; refreshing: boolean; error: FundErrorCode | null };
 
-export function useFundReport(fund: FundEntry | null, cache: CachePort): ReportState & { refresh: () => void } {
+export function useFundReport(
+  fund: FundEntry | null,
+  cache: CachePort,
+): ReportState & { refresh: () => void; reload: () => void } {
   const id = fund?.id ?? null;
   const url = fund?.url ?? null;
   const [state, setState] = useState<ReportState>({ entry: null, refreshing: id !== null, error: null });
@@ -37,6 +40,18 @@ export function useFundReport(fund: FundEntry | null, cache: CachePort): ReportS
       });
   }, [id, url, cache]);
 
+  // 원본을 가져오지 않고 캐시만 다시 읽는다 — 자동 갱신이 이 펀드를 새로 가져온 뒤 열린 화면이 부른다
+  const reload = useCallback(() => {
+    if (id === null) return;
+    void readValidCache(cache, id)
+      .then((c) => {
+        if (c && alive.current && currentId.current === id) {
+          setState((s) => ({ ...s, entry: c, error: s.refreshing ? s.error : null }));
+        }
+      })
+      .catch(() => {});
+  }, [id, cache]);
+
   useEffect(() => {
     if (currentId.current !== id) {
       currentId.current = id;
@@ -51,5 +66,5 @@ export function useFundReport(fund: FundEntry | null, cache: CachePort): ReportS
     refresh();
   }, [id, cache, refresh]);
 
-  return { ...state, refresh };
+  return { ...state, refresh, reload };
 }

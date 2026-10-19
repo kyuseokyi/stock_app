@@ -1,5 +1,7 @@
 // 화면 표시용 순수 함수. web_client/src/lib/fundCore 와 동일.
+import type { CacheEntry } from './refresh';
 import type { FundReport } from './types';
+import { formatValue } from './view';
 
 /** 기준일 = 첫 자금 현황 섹션의 최종평가일 */
 export function evalDateOf(r: FundReport): string {
@@ -17,4 +19,12 @@ export function formatChecked(ts: number, now: number): string {
   const sameDay =
     d.getFullYear() === n.getFullYear() && d.getMonth() === n.getMonth() && d.getDate() === n.getDate();
   return sameDay ? hm : `${d.getMonth() + 1}/${d.getDate()} ${hm}`;
+}
+
+/** 목록 한 줄 — "기준일 2026.10.19 · 14:05 확인". 캐시가 없으면 '' */
+export function fundStatusLine(entry: Pick<CacheEntry, 'fetchedAt' | 'report'> | null, now: number): string {
+  if (!entry) return '';
+  const checked = `${formatChecked(entry.fetchedAt, now)} 확인`;
+  const d = evalDateOf(entry.report);
+  return d ? `기준일 ${formatValue('', d).text} · ${checked}` : checked;
 }
