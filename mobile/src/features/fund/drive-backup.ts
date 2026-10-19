@@ -7,7 +7,7 @@ const UPLOAD = 'https://www.googleapis.com/upload/drive/v3/files';
 // JSON.stringify 결과엔 줄바꿈이 없어 본문에 "\r\n--경계" 가 생길 수 없다
 const BOUNDARY = 'fund_backup_part';
 
-export type DriveErrorCode = 'auth' | 'network';
+export type DriveErrorCode = 'auth' | 'network' | 'invalid';
 export type DriveError = Error & { driveCode: DriveErrorCode };
 
 export const driveError = (code: DriveErrorCode, message: string): DriveError =>

@@ -53,5 +53,9 @@ export async function disconnect(): Promise<void> {
   } catch {
     // 이미 끊겼어도 로그아웃은 진행
   }
-  await GoogleSignin.signOut();
+  try {
+    await GoogleSignin.signOut();
+  } catch {
+    // 로그아웃 실패여도 백업 상태 초기화는 화면에서 계속 진행
+  }
 }

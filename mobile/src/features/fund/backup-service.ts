@@ -2,16 +2,26 @@
 // 받기가 '파일 없음' 외 이유로 실패하면 올리지 않는다(downloadBackup 이 던지면 업로드 전에 빠져나간다).
 import { buildBackup, mergeBackup, newFundId, parseBackup, shouldAutoBackup } from './core';
 import { loadBackupState, saveBackupState } from './backup-state';
-import { downloadBackup, findBackupId, isDriveError, uploadBackup, type DriveDeps } from './drive-backup';
+import { downloadBackup, driveError, findBackupId, isDriveError, uploadBackup, type DriveDeps } from './drive-backup';
 import { loadFunds, saveFunds } from './fund-store';
 import { accessToken, isBackupConfigured } from './google-auth';
 import { loadAllHistories, writeHistories } from './history-store';
 
 const deps: DriveDeps = { getAccessToken: accessToken };
 
+// Drive 작업(백업·복원)은 한 번에 하나씩 — 수동/자동/Alert 복원이 겹치지 않게
+let chain: Promise<unknown> = Promise.resolve();
+function exclusive<T>(fn: () => Promise<T>): Promise<T> {
+  const next = chain.then(fn, fn);
+  chain = next.catch(() => {});
+  return next;
+}
+
 /** Drive 오류를 상태에 남기고 다시 던진다(401/403 이면 연결 해제 상태로) */
 async function recordFailure(e: unknown): Promise<never> {
   if (isDriveError(e, 'auth')) await saveBackupState({ connected: false, lastError: '다시 연결해 주세요' });
+  else if (isDriveError(e, 'invalid'))
+    await saveBackupState({ lastError: 'Drive 백업 파일을 읽을 수 없어 올리지 않았어요' });
   else if (isDriveError(e, 'network')) await saveBackupState({ lastError: '네트워크 문제로 백업하지 못했어요' });
   throw e;
 }
@@ -24,12 +34,16 @@ export async function hasRemoteBackup(): Promise<boolean> {
   }
 }
 
-export async function backupNow(now = Date.now()): Promise<void> {
+export const backupNow = (now = Date.now()): Promise<void> => exclusive(() => doBackup(now));
+
+async function doBackup(now: number): Promise<void> {
   const funds = await loadFunds();
   const histories = await loadAllHistories(funds); // 못 읽으면 던진다 — 빈 기록으로 올리지 않는다
   try {
     const raw = await downloadBackup(deps);
-    const remote = raw === null ? null : parseBackup(raw); // 깨진 Drive 파일은 로컬 내용으로 새로 쓴다
+    const remote = raw === null ? null : parseBackup(raw);
+    // 파일은 있는데 읽을 수 없으면(깨짐·새 버전) 덮어쓰지 않는다
+    if (raw !== null && remote === null) throw driveError('invalid', 'Drive 백업 파일을 읽을 수 없어요');
     await uploadBackup(deps, JSON.stringify(buildBackup({ funds, histories }, remote, now)));
   } catch (e) {
     return recordFailure(e);
@@ -42,7 +56,9 @@ export type RestoreResult =
   | { status: 'invalid' }
   | { status: 'ok'; addedFunds: number; skippedFunds: number; mergedPoints: number };
 
-export async function restoreFromDrive(): Promise<RestoreResult> {
+export const restoreFromDrive = (): Promise<RestoreResult> => exclusive(doRestore);
+
+async function doRestore(): Promise<RestoreResult> {
   let raw: string | null;
   try {
     raw = await downloadBackup(deps);
