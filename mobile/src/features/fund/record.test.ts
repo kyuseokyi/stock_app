@@ -41,3 +41,10 @@ it('새 날짜가 생겼을 때만 자동 백업을 시도한다', async () => {
   await recordFetched(FUND, entry(2));
   expect(backup).toHaveBeenCalledTimes(1);
 });
+
+it('backup:false 면 added 여도 백업하지 않고 added 를 돌려준다', async () => {
+  snap.mockResolvedValue(true);
+  await expect(recordFetched(FUND, entry(5), { backup: false })).resolves.toBe(true);
+  expect(backup).not.toHaveBeenCalled();
+  await expect(recordFetched(FUND, entry(5))).resolves.toBe(false); // 중복
+});

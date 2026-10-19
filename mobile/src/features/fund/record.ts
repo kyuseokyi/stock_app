@@ -6,11 +6,17 @@ import { recordSnapshot } from './history-store';
 
 const recorded = new Map<string, number>(); // 펀드 id → 마지막으로 기록한 fetchedAt
 
-export async function recordFetched(fund: FundEntry, entry: CacheEntry): Promise<void> {
-  if (recorded.get(fund.id) === entry.fetchedAt) return;
+/** 기록했으면 true(새 날짜가 생김). backup:false 면 자동 백업은 호출자가 맡는다. 백업은 기다리지 않는다. */
+export async function recordFetched(
+  fund: FundEntry,
+  entry: CacheEntry,
+  opts: { backup?: boolean } = {},
+): Promise<boolean> {
+  if (recorded.get(fund.id) === entry.fetchedAt) return false;
   recorded.set(fund.id, entry.fetchedAt);
   const added = await recordSnapshot(fund, entry.report, entry.fetchedAt);
-  if (added) await maybeAutoBackup();
+  if (opts.backup !== false && added) void maybeAutoBackup();
+  return added;
 }
 
 export const resetRecordedForTest = (): void => recorded.clear();

@@ -5,14 +5,41 @@ import { AppState, type AppStateStatus } from 'react-native';
 
 import { useAuthStore } from '@/features/auth/store';
 
-import { createAutoRefresher, fetchReportHtml } from './core';
-import { fileCache, loadFunds } from './fund-store';
+import { maybeAutoBackup } from './backup-service';
+import { createAutoRefresher, fetchReportHtml, type CacheEntry, type FundEntry } from './core';
+import { deleteCache, fileCache, loadFunds } from './fund-store';
 import { recordFetched } from './record';
+
+/** 갱신 중 목록에서 지운 펀드는 되살리지 않는다(캐시 삭제·기록 생략). 목록을 못 읽으면 판단 불가라 기록한다. */
+export async function recordIfRegistered(
+  fund: FundEntry,
+  entry: CacheEntry,
+  deps = { loadFunds, deleteCache, recordFetched },
+): Promise<boolean> {
+  const funds = await deps.loadFunds().catch(() => null);
+  if (funds && !funds.some((f) => f.id === fund.id)) {
+    deps.deleteCache(fund.id);
+    return false;
+  }
+  return deps.recordFetched(fund, entry, { backup: false });
+}
+
+let addedThisRun = false;
 
 export const fundRefresher = createAutoRefresher({
   loadFunds,
   deps: { fetchHtml: (u) => fetchReportHtml(u), cache: fileCache, now: Date.now },
-  onRefreshed: recordFetched,
+  onRefreshed: async (fund, entry) => {
+    if (await recordIfRegistered(fund, entry)) addedThisRun = true;
+  },
+});
+
+// 백업은 이번 갱신의 모든 펀드를 기록한 뒤 1번 — 첫 펀드에서 하면 나머지 기록이 다음 날까지 Drive 에 빠진다
+fundRefresher.subscribe(() => {
+  if (!fundRefresher.getStatus().running && addedThisRun) {
+    addedThisRun = false;
+    void maybeAutoBackup();
+  }
 });
 
 /** 루트 레이아웃에서 한 번 — 로그인 상태일 때 시작 1회 + 백그라운드에서 돌아올 때마다 */
