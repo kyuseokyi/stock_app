@@ -47,23 +47,40 @@ case "$WHAT" in
   *) echo "backend|web 중 하나" >&2; exit 2 ;;
 esac
 
-echo "🚀 스택 갱신(BACKEND_TAG=$BACKEND_TAG WEB_TAG=$WEB_TAG)"
+# 이번 배포에서 이미지가 실제로 바뀌는 서비스만 기다린다(같은 태그 재실행이면 Swarm 이 갱신하지 않으므로 대상 아님).
+if [ "$WHAT" = backend ]; then
+  CANDIDATES="auth_api stock_api blog_api trading_game game_ws celery_worker celery_beat"; NEW="$BACKEND_TAG"
+else
+  CANDIDATES="web_client admin_web"; NEW="$WEB_TAG"
+fi
+EXPECT=""
+for s in $CANDIDATES; do
+  [ "$(current_tag "$s")" != "$NEW" ] && EXPECT="$EXPECT ${STACK}_$s"
+done
+
+echo "🚀 스택 갱신(BACKEND_TAG=$BACKEND_TAG WEB_TAG=$WEB_TAG) 대상:${EXPECT:- 없음}"
+since=$(date -u +%Y-%m-%dT%H:%M:%S)   # 이 시각 이후 시작된 갱신만 이번 배포로 본다(이전 배포의 completed·rollback 상태에 속지 않게)
 # env_file(../../backend/.env.production)이 스택 파일 기준 상대경로라 그 폴더에서 실행
 (cd deploy/swarm && docker stack deploy --resolve-image never -c single-node.yml "$STACK")
 
-# 모든 서비스 갱신이 끝날 때까지 대기(최대 5분). rollback 으로 끝나면 실패.
+# 대상 서비스의 갱신이 끝날 때까지 대기(최대 5분). 롤백되면 실패.
 deadline=$((SECONDS + 300))
-while :; do
+while [ -n "$EXPECT" ]; do
   pending=0; failed=""
-  for svc in $(docker stack services "$STACK" --format '{{.Name}}'); do
+  for svc in $EXPECT; do
+    started=$(docker service inspect "$svc" --format '{{if .UpdateStatus}}{{.UpdateStatus.StartedAt}}{{end}}')
     state=$(docker service inspect "$svc" --format '{{if .UpdateStatus}}{{.UpdateStatus.State}}{{end}}')
+    if [ -z "$started" ] || [[ "$started" < "$since" ]]; then pending=$((pending + 1)); continue; fi  # 아직 시작 전
     case "$state" in
-      ""|completed) ;;
-      rollback_completed|rollback_paused|paused) failed="$failed $svc($state)" ;;
+      completed)
+        # 실제로 새 태그 태스크가 Running 인지(start-first + healthcheck 통과 뒤에만 Running)
+        docker service ps "$svc" --filter desired-state=running --format '{{.Image}} {{.CurrentState}}' \
+          | grep -q ":$NEW Running" || pending=$((pending + 1)) ;;
+      rollback_*|paused) failed="$failed $svc($state)" ;;
       *) pending=$((pending + 1)) ;;
     esac
   done
-  if [ -n "$failed" ]; then echo "::error::갱신 실패 → 자동 롤백:$failed"; exit 1; fi
+  if [ -n "$failed" ]; then echo "::error::갱신 실패 → 자동 롤백:$failed"; docker stack ps "$STACK" --no-trunc | head -40; exit 1; fi
   if [ "$pending" -eq 0 ]; then break; fi
   if [ "$SECONDS" -ge "$deadline" ]; then echo "::error::5분 안에 갱신이 끝나지 않음"; docker stack ps "$STACK" --no-trunc | head -40; exit 1; fi
   sleep 5

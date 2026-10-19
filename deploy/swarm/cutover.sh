@@ -22,13 +22,22 @@ for pair in $DBS; do
   [ "$(docker inspect -f '{{.State.Health.Status}}' "$c" 2>/dev/null)" = healthy ] || { echo "$c 가 healthy 가 아님 — 중단"; exit 1; }
 done
 
+# 사전 점검(중단 전에 실패해야 할 것들)
+major=$(docker version --format '{{.Server.Version}}' | cut -d. -f1)
+[ "${major:-0}" -ge 23 ] || { echo "Docker 23 이상 필요(지금 $(docker version --format '{{.Server.Version}}')) — 중단"; exit 1; }
+[ "$(docker info --format '{{.LiveRestoreEnabled}}')" = false ] || { echo "live-restore 가 켜져 있으면 swarm init 이 거부된다(/etc/docker/daemon.json) — 중단"; exit 1; }
+if ip -4 route 2>/dev/null | grep -qE '^10\.'; then
+  echo "⚠️  호스트 경로에 10.x 대역이 있다 — Swarm 기본 주소 풀(10.0.0.0/8)과 겹칠 수 있음."
+  echo "   겹치면 중단하고 ADDR_POOL=172.30.0.0/16 처럼 지정해 다시 실행(현재: ${ADDR_POOL:-기본})."
+fi
+
 echo "이 작업은 앱 컨테이너 9개를 내리고 Swarm 스택($STACK, 태그 $TAG)으로 다시 올립니다. 1~2분 접속이 끊깁니다."
 echo "20:30~20:50(일일 수집) 은 피하세요. 계속하려면 yes 입력:"
 read -r ok; [ "$ok" = yes ] || { echo "취소"; exit 1; }
 
 # 1) Swarm·망 준비(이미 있으면 그대로)
 if [ "$(docker info --format '{{.Swarm.LocalNodeState}}')" != active ]; then
-  docker swarm init --advertise-addr "${ADVERTISE_ADDR:-127.0.0.1}"
+  docker swarm init --advertise-addr "${ADVERTISE_ADDR:-127.0.0.1}" ${ADDR_POOL:+--default-addr-pool "$ADDR_POOL"}
 fi
 docker network inspect stock_net >/dev/null 2>&1 || docker network create -d overlay --attachable stock_net
 for pair in $DBS; do
@@ -44,6 +53,21 @@ docker run --rm --network stock_net --env-file backend/.env.production "stock-ap
 # 망·DNS 확인: 새 망에서 DB 이름이 풀리는지
 docker run --rm --network stock_net --env-file backend/.env.production "stock-app-backend:$TAG" \
   python -c "import socket;[socket.gethostbyname(h) for h in ('postgres','clickhouse','redis')];print('DB 이름 확인 OK')"
+
+# env 해석 비교 — compose 는 따옴표 제거·${} 치환·행 끝 주석 제거를 하지만 Swarm env_file·--env-file 은 값을 글자 그대로 쓴다.
+# 다르게 읽히는 키가 있으면 전환 뒤 조용히 깨진다(KIS 키·비밀번호·REDIS_URL 등) → 키 이름만 출력하고 중단(값은 출력하지 않음).
+docker compose -f docker-compose.prod.yml config --format json > /tmp/stock_compose_cfg.json
+docker run --rm -i --env-file backend/.env.production -v /tmp/stock_compose_cfg.json:/cfg.json:ro "stock-app-backend:$TAG" python - <<'PY'
+import json, os, sys
+env = json.load(open("/cfg.json"))["services"]["stock_api"].get("environment") or {}
+diff = sorted(k for k, v in env.items() if os.environ.get(k) != ("" if v is None else str(v)))
+if diff:
+    print("❌ compose 와 Swarm 이 다르게 읽는 env 키:", ", ".join(diff))
+    print("   .env.production 에서 이 키들의 따옴표·${}·행 끝 주석을 없앤 뒤 다시 실행하세요.")
+    sys.exit(1)
+print(f"env 해석 일치({len(env)}개 키)")
+PY
+rm -f /tmp/stock_compose_cfg.json
 
 # 3) 전환(여기부터 중단)
 start=$SECONDS

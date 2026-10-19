@@ -41,6 +41,12 @@ bash deploy/swarm/cutover.sh
 - [ ] `https://app.haezean.com`·`api`·`auth`·`blog`·`game`·`admin` 정상
 - [ ] 백엔드 파일 하나 바꿔 push → Actions 로그 `모드: Swarm(start-first)` → 배포 중 브라우저에서 계속 새로고침해도 끊기지 않는지
 - [ ] `docker service ps stock_stock_api` — 옛 태스크 `Shutdown`, 새 태스크 `Running`
+- [ ] **재부팅 내성(중요, 한가한 시간에)**: `sudo systemctl restart docker` → DB 3개가 healthy 로 돌아오고 여전히 `stock_net` 에 붙어 있는지(`docker inspect -f '{{json .NetworkSettings.Networks}}' stock_postgres_prod`), 스택 9개 `1/1`. compose 컨테이너가 overlay 에 붙은 상태로 데몬이 재시작될 때 망 준비 전에 떠서 실패한 사례가 Docker 에 있었다. 불안정하면 대안: DB 를 overlay 에 붙이지 않고 스택에 `extra_hosts: ["postgres:host-gateway", …]` 로 호스트 공개 포트(5432·8123·6379)를 쓰게 바꾼다.
+
+## 4-1. 전환 전에 알아 둘 것
+- **스크립트는 아직 어디서도 실제로 돌려 보지 않았다**(문법 검사·`docker stack config` 렌더링만). 대신 `cutover.sh` 는 중단 전에 실패하도록 사전 점검을 모아 뒀다: DB healthy, Docker ≥ 23, live-restore 꺼짐, 10.x 대역 겹침 경고, 이미지 빌드·마이그레이션, 새 망에서 DB 이름 확인, **compose 와 Swarm 의 env 해석 비교**(따옴표·`${}`·행 끝 주석 때문에 다르게 읽히는 키가 있으면 키 이름만 출력하고 중단).
+- 이 변경을 처음 push 하면(`docker-compose.prod.yml`·`deploy/swarm/**` 변경) **두 워크플로가 기존 compose 방식으로 한 번 배포**한다 — 평소처럼 잠깐 끊김. 20:30~20:50 은 피한다.
+- 이미지 이름이 `stock-app-backend` 등으로 바뀌어 예전 이름(`<프로젝트>-auth_api` 류) 이미지가 태그 달린 채 남는다(`docker image prune` 로 안 지워짐). 전환 뒤 한 번 정리: `docker images | grep -E -- '-(auth_api|stock_api|blog_api|trading_game|game_ws|celery_worker|celery_beat|web_client|admin_web) '` 확인 후 `docker rmi`.
 
 ## 5. 바뀐 운영 명령
 컨테이너 이름이 `stock_celery_worker.1.<id>` 처럼 바뀐다. 이름으로 찾아서 실행:
