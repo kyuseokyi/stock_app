@@ -130,7 +130,8 @@ def _latest(table: str, key: str, label: str, ref: date | None) -> dict:
 
 def _market_groups(ref: date | None) -> dict:
     rows = _query(f"SELECT date, kind, uniqExact(group_id) FROM {DB}.market_group_daily FINAL "
-                  f"WHERE date = (SELECT max(date) FROM {DB}.market_group_daily) AND members > 0 GROUP BY date, kind")
+                  f"WHERE date = (SELECT max(date) FROM {DB}.market_group_daily WHERE members > 0) "
+                  f"AND members > 0 GROUP BY date, kind")
     d = _day(rows[0][0]) if rows else None
     if d is None:
         return _item("market_groups", "시장 그룹(테마·업종)", unit="그룹", status="empty", note="데이터가 없어요")
@@ -191,9 +192,21 @@ def _safe(key: str, label: str, fn: Callable[[], dict]) -> dict:
 
 def _settings() -> dict:
     """설정 '여부'만 — 값 자체는 절대 내보내지 않는다."""
-    q = q_cumulative_setting()
-    return {"fred_key": fred.api_key() is not None,
-            "q_cumulative": "unset" if q is None else ("true" if q else "false")}
+    try:
+        q = q_cumulative_setting()
+        return {"fred_key": fred.api_key() is not None,
+                "q_cumulative": "unset" if q is None else ("true" if q else "false")}
+    except Exception as exc:  # noqa: BLE001
+        log.warning("설정 상태 조회 실패: %s", exc)
+        return {"fred_key": False, "q_cumulative": "unset"}
+
+
+def _pipeline() -> dict | None:
+    try:
+        return pipeline_record.load(get_sync_redis())
+    except Exception as exc:  # noqa: BLE001 — 기록을 못 읽어도 현황 화면은 보여준다
+        log.warning("파이프라인 기록 읽기 실패: %s", exc)
+        return None
 
 
 def build_status() -> dict:
@@ -223,4 +236,4 @@ def build_status() -> dict:
         _safe("market_groups", "시장 그룹(테마·업종)", lambda: _market_groups(ref)),
     ]
     return {"ref_date": _iso(ref), "generated_at": datetime.now().astimezone().isoformat(timespec="seconds"),
-            "datasets": datasets, "settings": _settings(), "pipeline": pipeline_record.load(get_sync_redis())}
+            "datasets": datasets, "settings": _settings(), "pipeline": _pipeline()}

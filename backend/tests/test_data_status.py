@@ -138,3 +138,27 @@ def test_ref_query_failure_marks_daily_error(env):
     env.use(ref=(f"max(date) FROM {DB}.daily_prices", RuntimeError("ch down")))
     got = _by_key(ds.build_status())
     assert got["daily"]["status"] == "error"
+
+
+def test_pipeline_client_failure_is_ignored(env, monkeypatch):
+    def boom():
+        raise ValueError("bad url")
+
+    monkeypatch.setattr(ds, "get_sync_redis", boom)
+    out = ds.build_status()
+    assert out["pipeline"] is None
+    assert len(out["datasets"]) == 9
+
+
+def test_market_groups_latest_date_ignores_tombstones(env, monkeypatch):
+    seen = []
+    orig = ds._query
+
+    def spy(sql, params=None):
+        seen.append(sql)
+        return orig(sql, params)
+
+    monkeypatch.setattr(ds, "_query", spy)
+    ds.build_status()
+    sql = next(q for q in seen if "market_group_daily" in q)
+    assert "max(date) FROM" in sql and "market_group_daily WHERE members > 0)" in sql
