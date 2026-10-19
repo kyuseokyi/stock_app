@@ -1,5 +1,5 @@
 import axios, { type AxiosError, type AxiosInstance } from 'axios'
-import { API_BASE_URL as BLOG_BASE_URL, AUTH_BASE_URL, GAME_API_URL } from '../config'
+import { API_BASE_URL as BLOG_BASE_URL, AUTH_BASE_URL, GAME_API_URL, STOCK_API_URL } from '../config'
 
 // 마이크로서비스별 base URL(빌드 타임 주입, 폴백/fail-fast 는 ../config 참조).
 // 운영에서는 Cloudflare 터널이 각 서브도메인(blog/auth.haezean.com)으로 라우팅한다.
@@ -43,5 +43,8 @@ export const authClient = makeClient(AUTH_BASE_URL)
 
 // 게임 서비스(trading_game) — 미설정 배포에서는 null(호출부가 미연결 안내)
 export const gameClient: AxiosInstance | null = GAME_API_URL ? makeClient(GAME_API_URL) : null
+
+// stock_api REST(관리자 테마 보정·데이터 현황) — GraphQL 엔드포인트에서 /graphql 을 뗀 주소
+export const stockAdminClient = makeClient(STOCK_API_URL.replace(/\/graphql\/?$/, ''))
 
 export default blogClient
