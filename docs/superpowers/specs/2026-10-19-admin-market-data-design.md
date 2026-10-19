@@ -34,10 +34,10 @@
 
 ### 1) 테마 목록·종목에 시장 지표 추가 (기존 응답에 필드만 추가)
 
-- `GET /api/v1/admin/themes`: 각 항목에 다음을 추가한다.
-  - `as_of`(지표 기준일), `rank`, `chg_1d`, `value`, `members`, `leader_ticker`, `leader_name`
+- `GET /api/v1/admin/themes/metrics`(신규): `{as_of, themes: {"<테마 id>": {rank, chg_1d, value, members, leader_ticker, leader_name}}}`
   - 값은 `market_group_daily` 의 최신 날짜, `kind='theme'`, `group_id=str(theme.id)` 에서 읽는다(FINAL).
-  - 해당 행이 없으면(숨김 테마, 종목 3개 미만 등) 모두 `null` 이다.
+  - 해당 행이 없는 테마(숨김 테마, 종목 3개 미만 등)는 키가 빠진다.
+  - 기존 `GET /api/v1/admin/themes` 응답은 그대로 둔다. 기존 테스트가 응답 전체를 비교하므로, 지표는 화면에서 합친다.
 - `GET /api/v1/admin/themes/{id}/stocks`: 각 항목에 다음을 추가한다.
   - `name`: `market_repo.names_for`
   - `chg_1d`, `value`: `market_stock_daily` 최신 날짜에서 읽는다.
@@ -62,7 +62,7 @@
 | canslim | CANSLIM | `max(date)` canslim_daily | 그 날짜 행 수 | `< ref` |
 | market_groups | 시장 그룹 | `max(date)` market_group_daily | 그 날짜 kind 별 행 수 | `< ref` |
 
-- **응답:** `{ref_date, generated_at, datasets:[{key, label, latest, count, status: ok|stale|warn|empty|off, note, items?:[{code, latest, status}]}], settings:{fred_key: bool, q_cumulative: "true"|"false"|"unset"}, pipeline}`
+- **응답:** `{ref_date, generated_at, datasets:[{key, label, latest, count, unit, status: ok|stale|warn|empty|off|error, note, items?:[{code, name?, latest, status}]}], settings:{fred_key: bool, q_cumulative: "true"|"false"|"unset"}, pipeline}`
 - 데이터 하나의 조회가 실패하면 그 항목만 `status:"error"` 로 표시하고, 나머지는 그대로 반환한다.
 - **설정 표시:** 값은 절대 반환하지 않는다. `FRED_API_KEY` 는 있는지 여부만, `FUNDAMENTALS_Q_CUMULATIVE` 는 true/false/unset 세 값만 보여준다. stock_api 와 worker 는 같은 env 파일을 쓴다.
 - **`pipeline`:** 아래 3)에서 저장한 최근 일일 파이프라인 기록이다. 기록이 없으면 `null` 이다.
@@ -97,6 +97,7 @@
 - `POST /api/v1/admin/market/jobs/{job}`: 결과는 다음 셋 중 하나다.
   - 알 수 없는 job 이면 `404`
   - 이미 실행 중이면 `409 {detail:"실행 중", task_id, requested_at}`
+  - 작업 큐(브로커)에 보내지 못하면 `503`(잠금은 바로 해제)
   - 성공하면 `202 {task_id}`
 
 **수동 실행 안전장치**
@@ -111,7 +112,7 @@
 - **상태 판정:** `state` 가 `PENDING` 이면 `queued`(워커 대기 중), `STARTED` 이면 `running` 이다(`task_track_started=True`). 워커 동시 실행 수는 기본값(CPU 수)이다. 다만 긴 파이프라인 중에도 대기할 수 있어 "대기 중"을 따로 표시한다.
 - **Redis 연결:** stock_api 는 지금 Redis 를 쓰지 않는다. `redis.asyncio.from_url(REDIS_URL)` 을 작업 서비스 안에서 지연 생성해 쓴다. `/ready` 는 바꾸지 않는다.
 
-라우터는 `routers/market_admin.py`(status·jobs)에 둔다. 서비스는 `services/data_status.py`, `services/admin_jobs.py`, 저장소는 CH 조회 함수(`shared/market_status_repo.py`)로 나눈다.
+라우터는 `routers/market_admin.py`(status·jobs)에 둔다. 서비스는 `services/data_status.py`(CH 조회 포함 — 기존 `market_query.py` 의 `_query` 관례를 따름)와 `services/admin_jobs.py` 로 나눈다. 동기 Redis 는 `shared/sync_redis.py`, 파이프라인 기록은 `shared/pipeline_record.py` 를 함께 쓴다.
 
 ## 관리자 웹 (admin_web)
 
