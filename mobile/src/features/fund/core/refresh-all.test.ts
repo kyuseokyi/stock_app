@@ -3,7 +3,13 @@ import path from 'path';
 
 import type { FundEntry } from './funds';
 import { PARSER_VERSION, type CacheEntry, type CachePort } from './refresh';
-import { AUTO_REFRESH_MIN_AGE_MS, refreshAll, type RefreshOutcome } from './refresh-all';
+import {
+  AUTO_REFRESH_MIN_AGE_MS,
+  createAutoRefresher,
+  refreshAll,
+  type AutoRefreshStatus,
+  type RefreshOutcome,
+} from './refresh-all';
 import { fundError, type FundReport } from './types';
 
 const HTML = fs.readFileSync(path.join(__dirname, '..', '__fixtures__', 'current.html'), 'utf8');
@@ -101,5 +107,86 @@ describe('refreshAll', () => {
   it('펀드가 없으면 아무것도 하지 않는다', async () => {
     const r = await refreshAll([], { fetchHtml: async () => HTML, cache: memoryCache(), now: () => NOW });
     expect(r).toEqual({ refreshed: 0, skipped: 0, failed: 0 });
+  });
+});
+
+const flush = () => new Promise((res) => setTimeout(res, 0));
+
+describe('createAutoRefresher', () => {
+  const setup = (opts: { delayMs?: number; funds?: () => Promise<FundEntry[]> } = {}) => {
+    const fetched: string[] = [];
+    const refreshedCalls: string[] = [];
+    const r = createAutoRefresher({
+      loadFunds: opts.funds ?? (async () => [fund('a')]),
+      deps: {
+        fetchHtml: async (u) => {
+          fetched.push(u);
+          if (opts.delayMs) await new Promise((res) => setTimeout(res, opts.delayMs));
+          return HTML;
+        },
+        cache: memoryCache(),
+        now: () => NOW,
+      },
+      onRefreshed: (f) => {
+        refreshedCalls.push(f.id);
+      },
+    });
+    return { r, fetched, refreshedCalls };
+  };
+
+  it('진행 중에 다시 부르면 같은 실행을 돌려준다(single-flight)', async () => {
+    const { r, fetched } = setup({ delayMs: 5 });
+    const p1 = r.run();
+    const p2 = r.run();
+    expect(p2).toBe(p1);
+    await p1;
+    expect(fetched).toHaveLength(1);
+  });
+
+  it('진행 중 force 요청은 끝난 뒤 force 로 한 번 더 실행한다', async () => {
+    const { r, fetched } = setup({ delayMs: 5 });
+    const p = r.run();
+    void r.run({ force: true });
+    await p;
+    expect(fetched).toHaveLength(2); // 두 번째는 방금 확인했어도 force 라 다시 가져옴
+  });
+
+  it('진행 중 일반 요청은 추가 실행을 만들지 않는다', async () => {
+    const { r, fetched } = setup({ delayMs: 5 });
+    const p = r.run();
+    void r.run();
+    await p;
+    await r.run(); // 방금 확인 → 10분 이내라 건너뜀
+    expect(fetched).toHaveLength(1);
+  });
+
+  it('상태: 실행 중 running, 끝나면 version 증가 + 갱신된 펀드 id', async () => {
+    const { r, refreshedCalls } = setup();
+    const seen: AutoRefreshStatus[] = [];
+    const off = r.subscribe(() => seen.push(r.getStatus()));
+    expect(r.getStatus()).toEqual({ running: false, version: 0, refreshedIds: [] });
+    await r.run();
+    await flush();
+    expect(seen[0].running).toBe(true);
+    expect(r.getStatus()).toEqual({ running: false, version: 1, refreshedIds: ['a'] });
+    expect(refreshedCalls).toEqual(['a']);
+    off();
+    await r.run({ force: true });
+    expect(seen).toHaveLength(2); // 구독 해제 후에는 알림 없음
+  });
+
+  it('getStatus 는 바뀌기 전까지 같은 객체를 돌려준다(useSyncExternalStore 요건)', () => {
+    const { r } = setup();
+    expect(r.getStatus()).toBe(r.getStatus());
+  });
+
+  it('목록 읽기가 실패해도 실행이 끝나고 상태가 돌아온다', async () => {
+    const { r } = setup({
+      funds: async () => {
+        throw new Error('read');
+      },
+    });
+    await r.run();
+    expect(r.getStatus()).toEqual({ running: false, version: 1, refreshedIds: [] });
   });
 });

@@ -55,3 +55,80 @@ export async function refreshAll(funds: FundEntry[], deps: RefreshAllDeps): Prom
   await Promise.all(Array.from({ length: n }, worker));
   return result;
 }
+
+export type AutoRefreshStatus = { running: boolean; version: number; refreshedIds: readonly string[] };
+
+export type AutoRefresher = {
+  /** 진행 중이면 같은 Promise. 진행 중 force 요청은 끝난 뒤 force 로 한 번 더(신호 유실 방지). */
+  run(opts?: { force?: boolean }): Promise<void>;
+  subscribe(listener: () => void): () => void;
+  /** 바뀌기 전까지 같은 객체 — useSyncExternalStore 의 getSnapshot 으로 쓴다 */
+  getStatus(): AutoRefreshStatus;
+};
+
+export function createAutoRefresher(cfg: {
+  loadFunds: () => Promise<FundEntry[]>;
+  deps: Omit<RefreshAllDeps, 'force' | 'onResult'>;
+  /** 새로 가져온 펀드마다(앱: 히스토리 기록). 오류는 무시 */
+  onRefreshed?: (fund: FundEntry, entry: CacheEntry) => unknown;
+}): AutoRefresher {
+  let status: AutoRefreshStatus = { running: false, version: 0, refreshedIds: [] };
+  const listeners = new Set<() => void>();
+  let current: Promise<void> | null = null;
+  let pendingForce = false;
+
+  const setStatus = (s: AutoRefreshStatus) => {
+    status = s;
+    listeners.forEach((l) => l());
+  };
+
+  const once = async (force: boolean) => {
+    const ids: string[] = [];
+    setStatus({ ...status, running: true });
+    try {
+      const funds = await cfg.loadFunds();
+      await refreshAll(funds, {
+        ...cfg.deps,
+        force,
+        onResult: (fund, r) => {
+          if (!('entry' in r)) return;
+          ids.push(fund.id);
+          void Promise.resolve()
+            .then(() => cfg.onRefreshed?.(fund, r.entry))
+            .catch(() => {});
+        },
+      });
+    } catch {
+      // 목록 읽기 실패 — 다음 실행 때 다시
+    } finally {
+      setStatus({ running: false, version: status.version + 1, refreshedIds: ids });
+    }
+  };
+
+  return {
+    run({ force = false } = {}) {
+      if (current) {
+        if (force) pendingForce = true;
+        return current;
+      }
+      current = (async () => {
+        let f = force;
+        do {
+          pendingForce = false;
+          await once(f);
+          f = true;
+        } while (pendingForce);
+      })().finally(() => {
+        current = null;
+      });
+      return current;
+    },
+    subscribe(listener) {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
+    },
+    getStatus: () => status,
+  };
+}
