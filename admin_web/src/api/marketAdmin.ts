@@ -5,6 +5,7 @@ import type {
   MarketStatusReport,
   ThemeMetrics,
   ThemeStockRow,
+  VerifyReport,
 } from '../types/marketAdmin'
 
 // stock_api 관리자 REST(관리자 JWT). 보정(생성·수정·추가·제외) 뒤 테마 순위 재계산은 서버가 맡는다.
@@ -42,3 +43,6 @@ export const getJobs = async (): Promise<JobsOverview> => (await http.get<JobsOv
 
 export const runJob = async (key: string): Promise<{ task_id: string; requested_at: string }> =>
   (await http.post<{ task_id: string; requested_at: string }>(`${MARKET}/jobs/${encodeURIComponent(key)}`)).data
+
+export const getVerify = async (ticker: string, date?: string): Promise<VerifyReport> =>
+  (await http.get<VerifyReport>(`${MARKET}/verify`, { params: date ? { ticker, date } : { ticker } })).data

@@ -101,3 +101,128 @@ export interface JobsOverview {
   jobs: AdminJob[]
   history: JobRun[]
 }
+
+// 데이터 검증 GET /api/v1/admin/market/verify — backend/apps/stock_api/services/verify_ticker.py
+export interface VerifyProfile {
+  name: string
+  market: string
+  is_active: boolean
+  sector_code: string | null
+  sector_name: string | null
+  listed_shares_k: number | null // 천 주
+  is_halted: boolean | null
+}
+
+export interface VerifyBar {
+  date: string
+  open: number
+  high: number
+  low: number
+  close: number
+  volume: number
+}
+
+export interface VerifyComputed {
+  close: number
+  chg_1d: number | null // %
+  chg_5d: number | null
+  chg_20d: number | null
+  value: number // 거래대금(원, 종가×거래량 근사)
+  mcap: number | null // 원
+  sector_m: string
+}
+
+export interface VerifyInvestor {
+  prsn_qty: number
+  frgn_qty: number
+  orgn_qty: number
+  prsn_amt: number // KIS 원값(단위 변환 없음)
+  frgn_amt: number
+  orgn_amt: number
+}
+
+export interface VerifyFundamentalRow {
+  stac_yymm: string
+  eps: number | null
+  bps: number | null
+  sps: number | null
+  roe: number | null
+  sales_growth: number | null
+  op_growth: number | null
+  ni_growth: number | null
+  debt_ratio: number | null
+}
+
+export interface VerifyFundamentals {
+  quarterly: VerifyFundamentalRow[] // 최신이 앞
+  annual: VerifyFundamentalRow[]
+}
+
+// c~m: 1 통과 · 0 미달 · -1 판단 불가 · -2 준비 중 (backend/apps/collector/canslim/rules.py)
+export interface VerifyCanslim {
+  score: number
+  pass_count: number
+  liquid: number
+  c: number
+  a: number
+  n: number
+  s: number
+  l: number
+  i: number
+  m: number
+  c_growth: number | null
+  c_quarter: string
+  c_turnaround: number
+  a_cagr: number | null
+  a_roe: number | null
+  n_pct_from_high: number | null
+  n_high_52w: number | null
+  s_ud_ratio: number | null
+  l_rs: number | null
+  l_rs_raw: number | null
+  sector_rs_rank: number | null
+  sector_rs_count: number | null
+  i_net_qty: number | null
+  i_buy_days: number | null
+  m_dist_days: number | null
+  avg_value_20d: number | null
+}
+
+export interface VerifyMembership {
+  kind: 'theme' | 'sector'
+  group_id: string
+  name: string
+  rank: number | null // 0 = 순위 제외(3종목 미만), null = 그날 계산 행 없음
+  chg_1d: number | null
+  members: number | null
+}
+
+export interface VerifyLink {
+  label: string
+  url: string
+}
+
+export type VerifySection =
+  | 'date'
+  | 'profile'
+  | 'bars'
+  | 'computed'
+  | 'investor'
+  | 'fundamentals'
+  | 'canslim'
+  | 'memberships'
+
+export interface VerifyReport {
+  ticker: string
+  date: string | null // 결정된 기준일
+  requested_date: string | null
+  profile: VerifyProfile | null
+  bars: VerifyBar[] | null // 최신이 앞
+  computed: VerifyComputed | null
+  investor: VerifyInvestor | null
+  fundamentals: VerifyFundamentals | null
+  canslim: VerifyCanslim | null
+  memberships: VerifyMembership[] | null
+  links: VerifyLink[]
+  notes: Partial<Record<VerifySection, string>> // 섹션별 실패·없음 안내
+}

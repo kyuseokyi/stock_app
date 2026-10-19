@@ -18,3 +18,6 @@ export const formatDateTime = (iso: string | null | undefined): string =>
 
 export const formatSeconds = (s: number): string =>
   s < 60 ? `${s.toFixed(1)}초` : `${Math.floor(s / 60)}분 ${Math.round(s % 60)}초`
+
+export const formatNum = (v: number | null | undefined, digits = 0): string =>
+  v == null ? '—' : v.toLocaleString('ko-KR', { maximumFractionDigits: digits })
