@@ -1,11 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Redirect, Stack, useLocalSearchParams, useRouter } from 'expo-router';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Linking, Pressable, Text, View } from 'react-native';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
 import { useAuthStore } from '@/features/auth/store';
-import { maybeAutoBackup } from '@/features/fund/backup-service';
 import { ReportView } from '@/features/fund/components/report-view';
 import {
   defaultName,
@@ -18,7 +17,7 @@ import {
   type FundEntry,
 } from '@/features/fund/core';
 import { fileCache, loadFunds, saveFunds } from '@/features/fund/fund-store';
-import { recordSnapshot } from '@/features/fund/history-store';
+import { recordFetched } from '@/features/fund/record';
 import { reportColors } from '@/features/fund/report-colors';
 import { Button, ListState } from '@/ui';
 
@@ -48,13 +47,9 @@ export default function FundReportScreen() {
   const colors = useMemo(() => reportColors(theme.colors), [theme.colors]);
 
   // 새로 가져오기에 성공한 회차만 기록(캐시만 보일 때·실패했을 때는 기록하지 않음). 같은 날짜는 덮어쓴다.
-  const recordedAt = useRef(0);
   useEffect(() => {
-    if (!fund || !entry || refreshing || error || recordedAt.current === entry.fetchedAt) return;
-    recordedAt.current = entry.fetchedAt;
-    void recordSnapshot(fund, entry.report, entry.fetchedAt).then((added) => {
-      if (added) void maybeAutoBackup(); // 새 날짜가 생긴 날만, 하루 1번
-    });
+    if (!fund || !entry || refreshing || error) return;
+    void recordFetched(fund, entry);
   }, [fund, entry, refreshing, error]);
 
   // 이름 없이 등록한 펀드는 첫 리포트로 기본 이름을 붙여 저장
