@@ -10,6 +10,7 @@ on:
       - "web_client/**"
       - "admin_web/**"
       - "docker-compose.prod.yml"
+      - "deploy/swarm/**"
   workflow_dispatch:
 
 concurrency:
@@ -39,7 +40,22 @@ jobs:
           cp "$HOST_ENV/compose.env" .env
         fi
 
+    - name: Detect deploy mode (Swarm stack 'stock' → 무중단, 없으면 compose)
+      id: mode
+      run: |
+        # 전환(deploy/swarm/cutover.sh) 전에는 기존 compose 방식 그대로. 문서: docs/deploy/single-node-swarm.md
+        if [ "$(docker info --format '{{.Swarm.LocalNodeState}}')" = active ] && docker stack ls --format '{{.Name}}' | grep -qx stock; then
+          echo "swarm=true" >> "$GITHUB_OUTPUT"; echo "모드: Swarm(start-first)"
+        else
+          echo "swarm=false" >> "$GITHUB_OUTPUT"; echo "모드: compose"
+        fi
+
+    - name: Build and Deploy frontends (Swarm, 무중단)
+      if: steps.mode.outputs.swarm == 'true'
+      run: bash deploy/swarm/deploy.sh web "${GITHUB_SHA::12}"
+
     - name: Build and Deploy frontends
+      if: steps.mode.outputs.swarm != 'true'
       run: |
         echo "🚀 Deploying web (client + admin)…"
         # 지정한 프론트 2개만 재빌드·재생성(VITE_* build args = haezean URL). 백엔드/워커 무영향.

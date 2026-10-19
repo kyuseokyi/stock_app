@@ -62,6 +62,7 @@ services:
   # -------------------------
   auth_api:
     build: ./backend
+    image: stock-app-backend:${TAG:-latest}  # Swarm(deploy/swarm/single-node.yml)도 같은 이미지
     container_name: stock_auth_api
     command: uvicorn apps.auth.main:app --host 0.0.0.0 --port 8001
     ports:
@@ -77,6 +78,7 @@ services:
 
   stock_api:
     build: ./backend
+    image: stock-app-backend:${TAG:-latest}  # Swarm(deploy/swarm/single-node.yml)도 같은 이미지
     container_name: stock_stock_api
     command: uvicorn apps.stock_api.main:app --host 0.0.0.0 --port 8002
     ports:
@@ -94,6 +96,7 @@ services:
 
   blog_api:
     build: ./backend
+    image: stock-app-backend:${TAG:-latest}  # Swarm(deploy/swarm/single-node.yml)도 같은 이미지
     container_name: stock_blog_api
     command: uvicorn apps.blog.main:app --host 0.0.0.0 --port 8003
     ports:
@@ -110,6 +113,7 @@ services:
   # Cloudflare 터널: game.haezean.com → http://localhost:8004 (WebSocket 포함)
   trading_game:
     build: ./backend
+    image: stock-app-backend:${TAG:-latest}  # Swarm(deploy/swarm/single-node.yml)도 같은 이미지
     container_name: stock_trading_game
     command: uvicorn apps.trading_game.main:app --host 0.0.0.0 --port 8004 --workers 1
     ports:
@@ -130,6 +134,7 @@ services:
   # 장외 시간 테스트는 .env.production 에 MOCK_TICK_STREAM=true 로 Mock 틱 사용 가능.
   game_ws:
     build: ./backend
+    image: stock-app-backend:${TAG:-latest}  # Swarm(deploy/swarm/single-node.yml)도 같은 이미지
     container_name: stock_game_ws
     command: python -m apps.collector.run_game_ws
     env_file:
@@ -146,6 +151,7 @@ services:
   # -------------------------
   celery_worker:
     build: ./backend
+    image: stock-app-backend:${TAG:-latest}  # Swarm(deploy/swarm/single-node.yml)도 같은 이미지
     container_name: stock_celery_worker
     command: celery -A apps.collector.celery_app worker --loglevel=info
     env_file:
@@ -166,6 +172,7 @@ services:
 
   celery_beat:
     build: ./backend
+    image: stock-app-backend:${TAG:-latest}  # Swarm(deploy/swarm/single-node.yml)도 같은 이미지
     container_name: stock_celery_beat
     command: celery -A apps.collector.celery_app beat --loglevel=info
     env_file:
@@ -179,6 +186,7 @@ services:
   # 4. Frontends (정적 SPA — node serve. VITE_* 는 빌드타임 주입이라 args로 굽는다)
   # -------------------------
   web_client:
+    image: stock-app-web:${TAG:-latest}
     build:
       context: ./web_client
       args:
@@ -194,6 +202,7 @@ services:
     restart: unless-stopped
 
   admin_web:
+    image: stock-app-admin:${TAG:-latest}
     build:
       context: ./admin_web
       args:

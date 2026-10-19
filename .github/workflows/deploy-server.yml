@@ -9,6 +9,7 @@ on:
     paths:
       - "backend/**"
       - "docker-compose.prod.yml"
+      - "deploy/swarm/**"
   workflow_dispatch:
 
 # 같은 대상 배포가 겹치지 않도록 직렬화(진행 중 배포는 중단하지 않음)
@@ -39,18 +40,35 @@ jobs:
           cp "$HOST_ENV/compose.env" .env
         fi
 
+    - name: Detect deploy mode (Swarm stack 'stock' → 무중단, 없으면 compose)
+      id: mode
+      run: |
+        # 전환(deploy/swarm/cutover.sh) 전에는 기존 compose 방식 그대로. 문서: docs/deploy/single-node-swarm.md
+        if [ "$(docker info --format '{{.Swarm.LocalNodeState}}')" = active ] && docker stack ls --format '{{.Name}}' | grep -qx stock; then
+          echo "swarm=true" >> "$GITHUB_OUTPUT"; echo "모드: Swarm(start-first)"
+        else
+          echo "swarm=false" >> "$GITHUB_OUTPUT"; echo "모드: compose"
+        fi
+
+    - name: Build, migrate, rolling update (Swarm, 무중단)
+      if: steps.mode.outputs.swarm == 'true'
+      run: bash deploy/swarm/deploy.sh backend "${GITHUB_SHA::12}"
+
     - name: Build backend images
+      if: steps.mode.outputs.swarm != 'true'
       run: |
         docker compose -f docker-compose.prod.yml build \
           auth_api stock_api blog_api trading_game game_ws celery_worker celery_beat
 
     - name: Migrate PostgreSQL schema (alembic upgrade head)
+      if: steps.mode.outputs.swarm != 'true'
       run: |
         # 새 이미지로 마이그레이션을 먼저 적용한다(멱등 — 이미 최신이면 no-op).
         # 실패하면 이 스텝에서 배포가 중단되어 구 컨테이너가 그대로 유지된다.
         docker compose -f docker-compose.prod.yml run --rm stock_api alembic upgrade head
 
     - name: Deploy backend services
+      if: steps.mode.outputs.swarm != 'true'
       run: |
         echo "🚀 Deploying backend (APIs + Game + Celery)…"
         # 지정 서비스만 재생성. DB(postgres/clickhouse/redis)는 depends_on 으로

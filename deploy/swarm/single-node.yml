@@ -1,0 +1,146 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# 단일 서버(개발 서버 haezean) 무중단 배포용 Swarm 스택 — 앱만. DB 는 계속 docker-compose.prod.yml.
+#
+# 왜: compose `up -d` 는 같은 호스트 포트라 옛 컨테이너를 먼저 끄고 새 것을 켠다(stop-first) →
+#     uvicorn 이 뜰 때까지 Cloudflare 터널(localhost:8001~8004·3000·3001)이 502.
+#     Swarm 은 새 태스크가 healthy 된 뒤 옛 것을 내린다(start-first). 포트는 ingress 라우팅 메시가 받는다.
+#
+# 전환·되돌리기: docs/deploy/single-node-swarm.md (deploy/swarm/cutover.sh, rollback-to-compose.sh)
+# 배포: deploy/swarm/deploy.sh backend|web <tag> (GitHub Actions 가 호출)
+#
+#   - 이미지는 같은 서버에서 빌드한 로컬 이미지(레지스트리 없음) → stack deploy --resolve-image never.
+#   - DB(postgres·clickhouse·redis)는 compose 컨테이너를 외부 overlay 망 stock_net 에 붙여 같은 이름으로 접근.
+#   - 비밀값은 지금처럼 backend/.env.production(env_file) — 워크플로가 /opt/stock_app/env 에서 복사.
+#   - 단일 실행 전용(celery_beat·game_ws)은 stop-first(동시 2개 금지). 나머지는 start-first.
+# ─────────────────────────────────────────────────────────────────────────────
+version: "3.8"
+
+x-backend: &backend
+  image: stock-app-backend:${BACKEND_TAG:?BACKEND_TAG 필요}
+  env_file: ../../backend/.env.production
+  networks: [stock_net]
+  logging:
+    driver: json-file
+    options: {max-size: "20m", max-file: "5"}
+
+x-rolling: &rolling
+  replicas: 1
+  update_config:
+    parallelism: 1
+    order: start-first       # 새 것 healthy → 옛 것 종료
+    failure_action: rollback
+    monitor: 20s
+  rollback_config:
+    parallelism: 1
+    order: start-first
+  restart_policy:
+    condition: any
+    delay: 5s
+
+x-singleton: &singleton
+  replicas: 1
+  update_config:
+    parallelism: 1
+    order: stop-first        # 동시 2개 금지(스케줄 중복·KIS 세션 제한)
+    failure_action: rollback
+    monitor: 20s
+  rollback_config:
+    parallelism: 1
+    order: stop-first
+  restart_policy:
+    condition: any
+    delay: 10s
+
+x-health-api: &health-api
+  interval: 5s
+  timeout: 3s
+  retries: 3
+  start_period: 30s
+
+services:
+  auth_api:
+    <<: *backend
+    command: uvicorn apps.auth.main:app --host 0.0.0.0 --port 8001
+    ports: [{target: 8001, published: 8001, mode: ingress}]
+    healthcheck:
+      <<: *health-api
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://localhost:8001/ready',timeout=2)"]
+    deploy: *rolling
+
+  stock_api:
+    <<: *backend
+    command: uvicorn apps.stock_api.main:app --host 0.0.0.0 --port 8002
+    ports: [{target: 8002, published: 8002, mode: ingress}]
+    healthcheck:
+      <<: *health-api
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://localhost:8002/ready',timeout=2)"]
+    deploy: *rolling
+
+  blog_api:
+    <<: *backend
+    command: uvicorn apps.blog.main:app --host 0.0.0.0 --port 8003
+    ports: [{target: 8003, published: 8003, mode: ingress}]
+    healthcheck:
+      <<: *health-api
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://localhost:8003/ready',timeout=2)"]
+    deploy: *rolling
+
+  # 잠깐 2개가 겹쳐도 틱 리스너·브로드캐스트는 Redis 리더 선출로 1개만 돈다. WS 는 클라이언트가 재연결.
+  trading_game:
+    <<: *backend
+    command: uvicorn apps.trading_game.main:app --host 0.0.0.0 --port 8004 --workers 1
+    ports: [{target: 8004, published: 8004, mode: ingress}]
+    stop_grace_period: 30s
+    healthcheck:
+      <<: *health-api
+      start_period: 40s
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://localhost:8004/ready',timeout=2)"]
+    deploy: *rolling
+
+  game_ws:
+    <<: *backend
+    command: python -m apps.collector.run_game_ws
+    stop_grace_period: 20s
+    deploy: *singleton
+
+  # 겹치는 동안 두 워커가 같은 큐를 나눠 받는다(태스크는 멱등). 실행 중 태스크는 60초 안에 끝내거나 다음 주기에 다시.
+  celery_worker:
+    <<: *backend
+    command: celery -A apps.collector.celery_app worker --loglevel=info
+    stop_grace_period: 60s
+    ulimits:
+      nofile: {soft: 8192, hard: 8192}
+    deploy: *rolling
+
+  celery_beat:
+    <<: *backend
+    command: celery -A apps.collector.celery_app beat --loglevel=info
+    deploy: *singleton
+
+  web_client:
+    image: stock-app-web:${WEB_TAG:?WEB_TAG 필요}
+    ports: [{target: 3000, published: 3000, mode: ingress}]
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000',r=>process.exit(r.statusCode<500?0:1)).on('error',()=>process.exit(1))"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+    networks: [stock_net]
+    deploy: *rolling
+
+  admin_web:
+    image: stock-app-admin:${WEB_TAG:?WEB_TAG 필요}
+    ports: [{target: 3000, published: 3001, mode: ingress}]
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000',r=>process.exit(r.statusCode<500?0:1)).on('error',()=>process.exit(1))"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+    networks: [stock_net]
+    deploy: *rolling
+
+networks:
+  stock_net:
+    external: true   # cutover.sh 가 만든다: docker network create -d overlay --attachable stock_net
