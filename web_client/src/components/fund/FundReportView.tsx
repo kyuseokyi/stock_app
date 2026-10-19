@@ -163,14 +163,17 @@ function AccountsBlock({ s }: { s: AccountsView }) {
         <AccountCard key={i} a={a} />
       ))}
       {s.notes.map((n, i) => (
-        <Fold key={i} title={`${n.title} (${n.items.length})`} className={CARD}>
-          {n.items.map((t, j) => (
-            <p key={j} className="mt-2">
-              {t}
-            </p>
-          ))}
+        // 링크는 접힘 밖에 둬서 펼치지 않아도 보이게 한다
+        <div key={i} className={CARD}>
+          <Fold title={`${n.title} (${n.items.length})`} className="!mt-0">
+            {n.items.map((t, j) => (
+              <p key={j} className="mt-2">
+                {t}
+              </p>
+            ))}
+          </Fold>
           <Links links={n.links} />
-        </Fold>
+        </div>
       ))}
     </>
   )

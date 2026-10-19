@@ -52,6 +52,7 @@ details > summary::-webkit-details-marker { display:none; }
 .more > summary::before { content:"▸ "; } .more[open] > summary::before { content:"▾ "; }
 .more p { margin:8px 0 0; }
 .card.more { margin-top:10px; }
+.card > .more:first-child { margin-top:0; }
 .memo ol { margin:6px 0 0; padding-left:18px; }
 a.link { color:var(--accent); font-weight:600; font-size:14px; text-decoration:none; display:inline-block; margin:10px 12px 0 0; }
 /* 구분선은 칸이 아닌 줄(.row)에 — 글자 크기가 달라도 좌우 선이 어긋나지 않는다. 값은 줄 오른쪽 끝(같은 기준선). */
@@ -143,7 +144,9 @@ const PAGE_SCRIPT = String.raw`
     out.push(h('h2', '', [s.title, s.group ? ' · ' + s.group : '', s.evalDate ? h('span', 'date', [' · ' + s.evalDate]) : null]));
     s.accounts.forEach(function (a) { out.push(accountCard(a)); });
     s.notes.forEach(function (n) {
-      out.push(fold('card more', n.title + ' (' + n.items.length + ')', n.items.map(function (t) { return h('p', 'muted', [t]); }).concat(links(n.links))));
+      // 링크는 접힘 밖에 둬서 펼치지 않아도 보이게 한다
+      var f = fold('more', n.title + ' (' + n.items.length + ')', n.items.map(function (t) { return h('p', 'muted', [t]); }));
+      out.push(h('div', 'card', [f].concat(links(n.links))));
     });
   }
 
