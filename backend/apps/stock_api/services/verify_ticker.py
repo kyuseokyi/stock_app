@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import logging
+import math
 import re
 from datetime import date
 from typing import Callable
@@ -30,6 +31,7 @@ QUARTERS = 8
 YEARS = 5
 FAILED = "조회에 실패했어요(서버 로그 확인)"
 TABLE_MISSING = "아직 계산·수집된 적이 없어요(테이블 없음)"
+THEME_FAILED = "테마 소속 조회 실패"
 NO_BARS = "일봉이 없어 기준일을 정할 수 없어요"
 
 INVESTOR_COLS = ("prsn_qty", "frgn_qty", "orgn_qty", "prsn_amt", "frgn_amt", "orgn_amt")
@@ -123,7 +125,16 @@ def _section(name: str, fn: Callable[[], object], notes: dict, empty=None):
 
 
 def _f(v) -> float | None:
-    return None if v is None else float(v)
+    """float 로 바꾸되 None·NaN·Inf 는 None(JSON 직렬화가 터지지 않게)."""
+    if v is None:
+        return None
+    x = float(v)
+    return x if math.isfinite(x) else None
+
+
+def _clean(v):
+    """원값 그대로 두되 비유한 float 만 None."""
+    return None if isinstance(v, float) and not math.isfinite(v) else v
 
 
 def links(ticker: str, name: str | None) -> list[dict]:
@@ -152,8 +163,8 @@ def _bars(ticker: str, d: date) -> list[dict]:
     rows = _query(f"SELECT date, open, high, low, close, volume FROM {DB}.daily_prices FINAL "
                   "WHERE ticker = %(t)s AND date <= %(d)s ORDER BY date DESC LIMIT %(n)s",
                   {"t": ticker, "d": d, "n": BAR_ROWS})
-    return [{"date": r[0].isoformat(), "open": float(r[1]), "high": float(r[2]), "low": float(r[3]),
-             "close": float(r[4]), "volume": int(r[5])} for r in rows]
+    return [{"date": r[0].isoformat(), "open": _f(r[1]), "high": _f(r[2]), "low": _f(r[3]),
+             "close": _f(r[4]), "volume": int(r[5])} for r in rows]
 
 
 def _computed(ticker: str, d: date) -> dict | None:
@@ -162,14 +173,14 @@ def _computed(ticker: str, d: date) -> dict | None:
     if not rows:
         return None
     close, c1, c5, c20, value, mcap, sector_m = rows[0]
-    return {"close": float(close), "chg_1d": _f(c1), "chg_5d": _f(c5), "chg_20d": _f(c20), "value": float(value),
+    return {"close": _f(close), "chg_1d": _f(c1), "chg_5d": _f(c5), "chg_20d": _f(c20), "value": _f(value),
             "mcap": _f(mcap), "sector_m": sector_m}
 
 
 def _investor(ticker: str, d: date) -> dict | None:
     rows = _query(f"SELECT {', '.join(INVESTOR_COLS)} FROM {DB}.investor_daily FINAL "
                   "WHERE ticker = %(t)s AND date = %(d)s", {"t": ticker, "d": d})
-    return dict(zip(INVESTOR_COLS, (int(v) for v in rows[0]))) if rows else None
+    return dict(zip(INVESTOR_COLS, (None if _f(v) is None else int(v) for v in rows[0]))) if rows else None
 
 
 def _fundamentals(ticker: str) -> dict:
@@ -189,7 +200,7 @@ def _fundamentals(ticker: str) -> dict:
 def _canslim(ticker: str, d: date) -> dict | None:
     rows = _query(f"SELECT {', '.join(CANSLIM_COLS)} FROM {DB}.canslim_daily FINAL "
                   "WHERE date = %(d)s AND ticker = %(t)s", {"t": ticker, "d": d})
-    return dict(zip(CANSLIM_COLS, rows[0])) if rows else None
+    return dict(zip(CANSLIM_COLS, (_clean(v) for v in rows[0]))) if rows else None
 
 
 def _memberships(ticker: str, d: date, profile: dict | None, notes: dict) -> list[dict]:
@@ -197,7 +208,13 @@ def _memberships(ticker: str, d: date, profile: dict | None, notes: dict) -> lis
     wanted: list[tuple[str, str, str | None]] = []
     if profile and profile.get("sector_code"):
         wanted.append(("sector", profile["sector_code"], profile.get("sector_name")))
-    wanted += [("theme", gid, name) for gid, name in _theme_memberships(ticker)]
+    try:
+        wanted += [("theme", gid, name) for gid, name in _theme_memberships(ticker)]
+    except Exception as exc:  # noqa: BLE001 — 테마 PG 조회 실패가 업종 항목까지 지우지 않게
+        if not wanted:
+            raise
+        log.warning("데이터 검증 테마 소속 조회 실패 %s: %s", ticker, exc)
+        notes["memberships"] = THEME_FAILED
     if not wanted:
         return []
     try:
@@ -242,7 +259,16 @@ def build(ticker_raw: str | None, date_raw: str | None = None) -> dict:
 
     bars = dated("bars", _bars)
     if profile_ok and profile is None and not bars and notes.get("date", NO_BARS) == NO_BARS and "bars" not in notes:
-        raise StockNotFound(ticker)
+        # 날짜를 직접 줬다면 그 날짜 이전 일봉이 없을 뿐일 수 있다 — 종목의 최신 일봉이 있으면 404 가 아니다
+        has_any = False
+        if requested is not None:
+            try:
+                has_any = _resolve_date(ticker, None) is not None
+            except Exception as exc:  # noqa: BLE001
+                log.warning("데이터 검증 최신일 조회 실패 %s: %s", ticker, exc)
+                has_any = True  # 판단 불가 — 404 로 단정하지 않는다
+        if not has_any:
+            raise StockNotFound(ticker)
 
     return {
         "ticker": ticker,

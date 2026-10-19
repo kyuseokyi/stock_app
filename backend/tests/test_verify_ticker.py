@@ -182,3 +182,54 @@ def test_links():
     assert links[4]["url"] == ("https://dart.fss.or.kr/dsab007/main.do?option=corp&textCrpNm="
                                "%EC%82%BC%EC%84%B1%20%EC%A0%84%EC%9E%90%26%EC%9A%B0")
     assert len(vt.links("005930", None)) == 4
+
+
+def test_non_finite_floats_become_none(env):
+    nan, inf = float("nan"), float("inf")
+    row = list(CANSLIM_ROW)
+    row[10], row[25] = nan, inf
+    env.use(computed=(f"FROM {DB}.market_stock_daily", [[70500.0, nan, inf, None, 8.7e11, -inf, "0013"]]),
+            investor=(f"FROM {DB}.investor_daily", [[nan, 800, 200, -70, 56, 14]]),
+            fund=(f"FROM {DB}.fundamentals_periodic", [["Q", "202606", nan, 1.0, None, inf, None, None, None, 2.0]]),
+            canslim=(f"FROM {DB}.canslim_daily", [row]),
+            groups=(f"FROM {DB}.market_group_daily", [["sector", "0013", "x", 4, nan, 120]]))
+    out = vt.build(T, None)
+    assert out["computed"]["chg_1d"] is None and out["computed"]["chg_5d"] is None and out["computed"]["mcap"] is None
+    assert out["investor"]["prsn_qty"] is None and out["investor"]["frgn_qty"] == 800
+    assert out["fundamentals"]["quarterly"][0]["eps"] is None and out["fundamentals"]["quarterly"][0]["roe"] is None
+    assert out["canslim"]["c_growth"] is None and out["canslim"]["avg_value_20d"] is None
+    assert out["memberships"][0]["chg_1d"] is None
+    import json
+    json.dumps(out, allow_nan=False)
+    assert out["notes"] == {}
+
+
+def test_theme_failure_keeps_sector(env, monkeypatch):
+    def boom(t):
+        raise RuntimeError("pg down")
+
+    monkeypatch.setattr(vt, "_theme_memberships", boom)
+    out = vt.build(T, None)
+    assert [m["kind"] for m in out["memberships"]] == ["sector"] and out["memberships"][0]["rank"] == 4
+    assert out["notes"] == {"memberships": vt.THEME_FAILED}
+
+
+def test_explicit_date_before_first_bar_is_not_404(env, monkeypatch):
+    monkeypatch.setattr(vt, "_stock_info", lambda t: None)
+    env.use(bars=(f"FROM {DB}.daily_prices FINAL", []))  # 그 날짜 이전 일봉 없음, 최신 일봉은 있음
+    out = vt.build("999999", "2000-01-03")
+    assert out["bars"] == [] and out["profile"] is None
+
+
+def test_explicit_date_without_any_bars_is_404(env, monkeypatch):
+    monkeypatch.setattr(vt, "_stock_info", lambda t: None)
+    env.use(latest=(f"max(date) FROM {DB}.daily_prices WHERE ticker", [[date(1970, 1, 1)]]),
+            bars=(f"FROM {DB}.daily_prices FINAL", []))
+    with pytest.raises(vt.StockNotFound):
+        vt.build("999999", "2026-10-15")
+
+
+def test_dart_link_encodes_korean_name():
+    from urllib.parse import quote
+    url = vt.links("005930", "삼성전자")[-1]["url"]
+    assert url.endswith(quote("삼성전자")) and "삼성" not in url
