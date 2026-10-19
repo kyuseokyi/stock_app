@@ -33,6 +33,7 @@ celery_app = Celery(
         "apps.collector.tasks.weekly_close",
         "apps.collector.tasks.market_data",
         "apps.collector.tasks.canslim",
+        "apps.collector.tasks.market_groups",
     ],
 )
 
