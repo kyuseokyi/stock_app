@@ -1,5 +1,6 @@
 import axios from 'axios'
 import { AUTH_BASE_URL as authURL } from '../config'
+import { installRetry } from '../lib/retry'
 import type { SocialProvider, SocialProviders, TokenResponse, UserOut } from '../types/api'
 
 // 인증 서비스 base URL (auth 8001) — 빌드 타임 주입, 폴백/fail-fast 는 ../config
@@ -8,6 +9,7 @@ const authClient = axios.create({
   baseURL: authURL,
   headers: { 'Content-Type': 'application/json' },
 })
+installRetry(authClient) // 조회(GET /me 등)만 재시도 — 로그인·교환(POST)은 그대로
 
 // 임시 로그인 — 닉네임으로 게스트 계정 발급(개발·테스트용, ENABLE_GUEST_LOGIN 일 때만 노출)
 export const guestLogin = async (nickname: string): Promise<TokenResponse> => {

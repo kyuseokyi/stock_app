@@ -1,6 +1,7 @@
 import axios, { type AxiosError } from 'axios'
 import { TOKEN_KEY, bearerToken, reasonFromBody, useAuthStore } from '../store/auth'
 import { API_BASE_URL as baseURL } from '../config'
+import { installRetry } from '../lib/retry'
 
 // 블로그 서비스 base URL (조회 + 인증형 댓글 작성) — 빌드 타임 주입, 폴백/fail-fast 는 ../config
 
@@ -26,5 +27,7 @@ client.interceptors.response.use(
     return Promise.reject(err)
   },
 )
+
+installRetry(client) // 배포 순간 연결 거부·502~504 → 조회(GET)만 짧게 재시도
 
 export default client

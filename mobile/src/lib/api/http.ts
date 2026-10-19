@@ -4,6 +4,7 @@
  * 로그인 상태면 Bearer를 자동 부착하고, 401 응답 시 저장된 인증 정보를 정리한다(web client/client.js와 동일 동작).
  */
 import { getAuthToken, notifyUnauthorized } from './auth-token';
+import { withRetry } from './retry';
 import { reasonFromBody } from './session-end';
 
 export class ApiError extends Error {
@@ -79,7 +80,8 @@ async function request<T>(
 
 export function createHttpClient(baseUrl: string) {
   return {
-    get: <T>(path: string, query?: Query) => request<T>(baseUrl, path, { method: 'GET', query }),
+    // 조회(GET)만 배포 순간 공백(연결 실패·502~504)에 짧게 재시도 — 쓰기(POST·PUT·DELETE)는 그대로(중복 실행 방지)
+    get: <T>(path: string, query?: Query) => withRetry(() => request<T>(baseUrl, path, { method: 'GET', query })),
     post: <T>(path: string, body?: unknown) =>
       request<T>(baseUrl, path, { method: 'POST', body: body == null ? undefined : JSON.stringify(body) }),
     put: <T>(path: string, body?: unknown) =>
