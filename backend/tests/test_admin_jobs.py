@@ -134,3 +134,18 @@ def test_overview_redis_down_is_queue_unavailable(env, monkeypatch):
     monkeypatch.setattr(env.redis, "get", boom)
     with pytest.raises(aj.QueueUnavailable):
         aj.overview()
+
+
+def test_queue_failure_and_lock_release_failure_still_queue_unavailable(env, monkeypatch):
+    import redis
+
+    def down(*a, **k):
+        raise ConnectionError("broker down")
+
+    def del_fail(*a, **k):
+        raise redis.ConnectionError("redis down")
+
+    monkeypatch.setattr(aj.celery_app, "send_task", down)
+    monkeypatch.setattr(env.redis, "delete", del_fail)
+    with pytest.raises(aj.QueueUnavailable):
+        aj.run("canslim", "A")

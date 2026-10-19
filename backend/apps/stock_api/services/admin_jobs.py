@@ -126,7 +126,10 @@ def run(job_key: str, actor: str) -> dict:
     try:
         celery_app.send_task(job.task, kwargs=job.kwargs, task_id=info["task_id"])
     except Exception as exc:  # noqa: BLE001
-        r.delete(key)
+        try:
+            r.delete(key)
+        except redis.RedisError:
+            log.warning("admin job lock release failed job=%s (TTL 로 풀림)", job.key)
         raise QueueUnavailable(str(exc)) from exc
     try:
         with r.pipeline() as p:
