@@ -146,6 +146,10 @@ npm run dev        # http://localhost:5173
 - API 응답 타입은 `admin_web/src/types/`(백엔드 pydantic·GraphQL 스키마 기준)에 있다. 백엔드 응답 스키마를 바꾸면 여기도 함께 갱신한다.
 - **트레이딩 게임 > 데일리 코치**(`/game/coach`)는 trading_game(8003)을 호출한다. `VITE_GAME_API_URL`은 **선택** 변수 — dev 에서 미설정 시 `http://localhost:8003`, 배포 빌드에서 미설정이면 화면에 "게임 서버 미연결" 안내(빌드는 실패하지 않음). trading_game 운영 배포 전까지 필수 목록(`vite.config.js` REQUIRED)에 넣지 않는다.
 - **트레이딩 게임 > 🎓 아카데미 문항**(`/game/academy`): 문항 추가·편집(선택지 2~6·정답 라디오·해설·순서)·활성 토글·삭제, 활성 문항 수 표시(활성 문항을 모두 맞혀야 5배 해금). **🧩 퀴즈 관리**(`/game/quizzes`): 활성 필터·페이지네이션 목록, 상세 차트(기준일선 + 이후 5거래일은 stock_api 일봉으로 다른 색), 패턴·해설 편집, 활성 토글, 삭제(시도 있으면 비활성 안내), "N개 자동 생성", "직접 출제"(국내 종목 검색·기준일). 게임 서버(8003)와 차트·검색용 stock_api(8002) 필요.
+- **시장 데이터 › 테마 보정**(`/market/themes`): KIS 테마 숨김·이름·설명 수정, 관리자 테마 생성, 종목 검색 추가·제외. 최신 순위·1일 등락·거래대금을 함께 표시하고, 저장하면 서버가 테마 순위를 다시 계산한다.
+- **시장 데이터 › 데이터 현황**(`/market/status`): 일봉·지수·투자자·재무·FRED·공모주·CANSLIM·시장 그룹의 최신일과 상태(기준 거래일 비교), 설정 상태(값은 표시 안 함), 최근 일일 파이프라인 단계별 결과.
+  KIS 를 호출하지 않는 계산 4개(CANSLIM·시장 그룹 계산과 각 60일 백필)는 버튼으로 실행한다. 같은 작업은 동시에 하나만 돈다(Redis 잠금).
+  API: stock_api `GET /api/v1/admin/market/status`, `GET·POST /api/v1/admin/market/jobs[/{job}]`(관리자 JWT).
 
 ### 4. 일반 유저 웹 (web_client)
 일반 사용자(B2C)용 반응형 웹. 블로그/커뮤니티 조회 + SSE 실시간 알림 + **임시 로그인(닉네임)으로 댓글 작성**. 디자인은 **토스(Toss) 라이트 스타일**(`docs/mobile_design_language.md`의 토큰을 Tailwind `theme.extend`로 이식 — brand `#3182f6` 등)로 모바일과 통일.

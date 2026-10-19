@@ -30,6 +30,13 @@ const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
+    title: '시장 데이터',
+    items: [
+      { to: '/market/themes', label: '테마 보정', icon: '🏷️' },
+      { to: '/market/status', label: '데이터 현황', icon: '🩺' },
+    ],
+  },
+  {
     title: '회원 관리',
     items: [{ to: '/members', label: '회원 목록', icon: '👥' }],
   },
