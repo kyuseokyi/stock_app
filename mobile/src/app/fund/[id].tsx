@@ -5,6 +5,7 @@ import { ActivityIndicator, Linking, Pressable, Text, View } from 'react-native'
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
 import { useAuthStore } from '@/features/auth/store';
+import { fundRefresher } from '@/features/fund/auto-refresh';
 import { ReportView } from '@/features/fund/components/report-view';
 import {
   defaultName,
@@ -43,7 +44,7 @@ export default function FundReportScreen() {
     };
   }, [id]);
 
-  const { entry, refreshing, error, refresh } = useFundReport(fund ?? null, fileCache);
+  const { entry, refreshing, error, refresh, reload } = useFundReport(fund ?? null, fileCache);
   const colors = useMemo(() => reportColors(theme.colors), [theme.colors]);
 
   // 새로 가져오기에 성공한 회차만 기록(캐시만 보일 때·실패했을 때는 기록하지 않음). 같은 날짜는 덮어쓴다.
@@ -51,6 +52,16 @@ export default function FundReportScreen() {
     if (!fund || !entry || refreshing || error) return;
     void recordFetched(fund, entry);
   }, [fund, entry, refreshing, error]);
+
+  // 자동 갱신이 이 펀드를 새로 가져왔으면 캐시만 다시 읽어 화면에 반영(다시 가져오지 않음)
+  useEffect(
+    () =>
+      fundRefresher.subscribe(() => {
+        const s = fundRefresher.getStatus();
+        if (!s.running && fund && s.refreshedIds.includes(fund.id)) reload();
+      }),
+    [fund, reload],
+  );
 
   // 이름 없이 등록한 펀드는 첫 리포트로 기본 이름을 붙여 저장
   useEffect(() => {
