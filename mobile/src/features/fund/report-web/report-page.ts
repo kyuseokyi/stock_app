@@ -71,6 +71,8 @@ a.link { color:var(--accent); font-weight:600; font-size:14px; text-decoration:n
 .b-name span { color:var(--text-2); font-size:12px; white-space:nowrap; }
 .step-title { font-weight:700; font-size:14px; padding:14px 0 9px; border-top:1px solid var(--line); color:var(--accent); }
 `;
+/** 히스토리 페이지가 같은 토큰·줄 스타일을 쓴다 */
+export const REPORT_CSS = CSS;
 
 // 페이지 스크립트(ES2017, WebView 에서 그대로 실행) — Hermes 는 함수 소스를 보존하지 않아 문자열로 둔다.
 // 백틱 금지(바깥 String.raw 가 끝난다). 화면 모델만 그린다(포맷 로직 없음).

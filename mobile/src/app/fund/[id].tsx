@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { Redirect, Stack, useLocalSearchParams } from 'expo-router';
+import { Redirect, Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Linking, Pressable, Text, View } from 'react-native';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
@@ -24,6 +24,7 @@ import { Button, ListState } from '@/ui';
 // 펀드 리포트 — 캐시를 먼저 보여주고 열 때마다 원본을 다시 가져온다(헤더 새로고침 버튼으로 수동 갱신).
 export default function FundReportScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
+  const router = useRouter();
   const { theme } = useUnistyles();
   const user = useAuthStore((s) => s.user);
   const [fund, setFund] = useState<FundEntry | null | undefined>(undefined); // undefined=읽는 중, null=없음
@@ -72,14 +73,27 @@ export default function FundReportScreen() {
     <Stack.Screen
       options={{
         title: fund ? displayName(fund) : '펀드 리포트',
-        headerRight: () =>
-          refreshing ? (
-            <ActivityIndicator />
-          ) : (
-            <Pressable onPress={refresh} hitSlop={8} accessibilityRole="button" accessibilityLabel="새로고침">
-              <Ionicons name="refresh" size={20} color={theme.colors.text} />
-            </Pressable>
-          ),
+        headerRight: () => (
+          <View style={styles.headerActions}>
+            {fund ? (
+              <Pressable
+                onPress={() => router.push(`/fund/history/${fund.id}`)}
+                hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel="수익 히스토리"
+              >
+                <Ionicons name="stats-chart-outline" size={20} color={theme.colors.text} />
+              </Pressable>
+            ) : null}
+            {refreshing ? (
+              <ActivityIndicator />
+            ) : (
+              <Pressable onPress={refresh} hitSlop={8} accessibilityRole="button" accessibilityLabel="새로고침">
+                <Ionicons name="refresh" size={20} color={theme.colors.text} />
+              </Pressable>
+            )}
+          </View>
+        ),
       }}
     />
   );
@@ -158,6 +172,7 @@ function Banner({ text, action, onAction }: { text: string; action?: string; onA
 
 const styles = StyleSheet.create((theme) => ({
   flex: { flex: 1, backgroundColor: theme.colors.background },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: theme.gap(2) },
   center: { flex: 1, justifyContent: 'center', padding: theme.gap(2), gap: theme.gap(2) },
   status: {
     flexDirection: 'row',
