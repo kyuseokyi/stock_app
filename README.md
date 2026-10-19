@@ -150,6 +150,8 @@ npm run dev        # http://localhost:5173
 - **시장 데이터 › 데이터 현황**(`/market/status`): 일봉·지수·투자자·재무·FRED·공모주·CANSLIM·시장 그룹의 최신일과 상태(기준 거래일 비교), 설정 상태(값은 표시 안 함), 최근 일일 파이프라인 단계별 결과.
   KIS 를 호출하지 않는 계산 4개(CANSLIM·시장 그룹 계산과 각 60일 백필)는 버튼으로 실행한다. 같은 작업은 동시에 하나만 돈다(Redis 잠금).
   API: stock_api `GET /api/v1/admin/market/status`, `GET·POST /api/v1/admin/market/jobs[/{job}]`(관리자 JWT).
+- **시장 데이터 › 데이터 검증**(`/market/verify`): 종목 하나의 우리 값(기본 정보·최근 5일 일봉·계산값·투자자 순매수·분기/연간 재무·CANSLIM·소속 테마/업종의 그날 순위)을 한 화면에 모으고, 네이버·FnGuide·DART 링크로 외부 값과 눈으로 비교한다. 날짜를 비우면 그 종목의 최신 일봉일이다. 읽기 전용.
+  API: stock_api `GET /api/v1/admin/market/verify?ticker=&date=`(관리자 JWT, 형식 오류 422·없는 종목 404 `{code,message}`).
 
 ### 4. 일반 유저 웹 (web_client)
 일반 사용자(B2C)용 반응형 웹. 블로그/커뮤니티 조회 + SSE 실시간 알림 + **임시 로그인(닉네임)으로 댓글 작성**. 디자인은 **토스(Toss) 라이트 스타일**(`docs/mobile_design_language.md`의 토큰을 Tailwind `theme.extend`로 이식 — brand `#3182f6` 등)로 모바일과 통일.
@@ -482,6 +484,28 @@ uv run python -c "from apps.collector.tasks.universe import backfill_all_daily; 
 - 수동 실행: `uv run celery -A apps.collector.celery_app call collector.collect_fundamentals` (같은 방식으로 `collect_market_indices --kwargs '{"region":"US"}'`·`collect_investor_daily`·`collect_ipo_events`·`collect_macro_series`).
 - 테마 보정 API(관리자 JWT, stock_api): `GET/POST /api/v1/admin/themes`, `PATCH /api/v1/admin/themes/{id}`(이름·설명·숨김), `GET/POST /api/v1/admin/themes/{id}/stocks`, `DELETE /api/v1/admin/themes/{id}/stocks/{ticker}`(제외 표시). KIS 테마 동기화는 `source=kis` 연결만 바꿔 관리자 보정이 유지된다.
 - 네이버 증권 크롤링은 하지 않는다(`robots.txt` 전체 거부) — 로드맵 "추후 확인".
+
+### 🔍 시장 데이터 표본 점검 (로컬 CLI)
+
+무작위 N 종목의 일봉을 KRX(pykrx, KRX 단독·수정주가)와 비교하고, 내부 계산값이 원천과 맞는지 검사한다. 읽기 전용이고 KIS 는 호출하지 않는다. pykrx 는 운영 의존성이 아니라서 `uv run --with pykrx` 로만 쓴다.
+
+```bash
+# 1) 별도 터미널에서 개발 DB 터널 유지(PG 15432 · CH 18123 — backend/.env.development 가 이미 가리킴)
+./scripts/dev-db-tunnel.sh
+
+# 2) 점검(기본: 일봉 최신일, 30종목, 보고서 ./spot_check_<date>.md)
+cd backend && uv run --with pykrx python -m apps.collector.verify.spot_check --n 30 [--date YYYY-MM-DD] [--seed S] [--out PATH]
+```
+
+- **외부:** 우리 일봉은 KRX+넥스트레이드 통합 시세다. 그래서 고가≥·저가≤·거래량≥ 이면 정상이고, 거래량이 같으면(NXT 미상장) OHLC 도 같아야 한다. 분류는 일치·통합 정상·위반·KRX 없음·오류다. pykrx 의 "KRX 로그인 실패" 경고는 무시해도 된다(개별 종목 OHLCV 는 로그인 없이 된다).
+- **내부:**
+  - (a) market_stock_daily 종가 = 일봉 종가
+  - (b) 1일 등락 = 직전 봉 대비 재계산
+  - (c) 테마·업종 1일 평균 = 구성 종목 평균(거래정지 제외)
+  - (d) 같은 이름 그룹(경고)
+  - 테마 소속·거래정지는 현재 PG 값이다. 그래서 구성 수가 다르면 "구성 변경 추정"(경고)으로 둔다.
+- **종료 코드:** 위반·불일치가 있으면 1, 경고만 있으면 0, 일봉이 없으면 2.
+- 보고서 파일은 커밋하지 않는다.
 
 ### 🗺️ 스크리너 탭 — 시장·테마·업종·일정 (스크리너 프로젝트 3)
 설계 `docs/superpowers/specs/2026-10-19-market-dashboard-design.md`. 웹 `/screener/market|themes|sectors|calendar|leaders`(`/screener` → 시장 탭, 비로그인 공개).

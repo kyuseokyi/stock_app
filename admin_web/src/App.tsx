@@ -14,6 +14,7 @@ import TradingGameAcademy from './pages/TradingGameAcademy'
 import TradingGameQuizzes from './pages/TradingGameQuizzes'
 import MarketThemes from './pages/MarketThemes'
 import MarketStatus from './pages/MarketStatus'
+import MarketVerify from './pages/MarketVerify'
 
 export default function App() {
   return (
@@ -41,6 +42,7 @@ export default function App() {
         <Route path="game/quizzes" element={<TradingGameQuizzes />} />
         <Route path="market/themes" element={<MarketThemes />} />
         <Route path="market/status" element={<MarketStatus />} />
+        <Route path="market/verify" element={<MarketVerify />} />
         <Route path="*" element={<Navigate to="/boards" replace />} />
       </Route>
     </Routes>

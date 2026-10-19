@@ -34,6 +34,7 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { to: '/market/themes', label: '테마 보정', icon: '🏷️' },
       { to: '/market/status', label: '데이터 현황', icon: '🩺' },
+      { to: '/market/verify', label: '데이터 검증', icon: '🔍' },
     ],
   },
   {
