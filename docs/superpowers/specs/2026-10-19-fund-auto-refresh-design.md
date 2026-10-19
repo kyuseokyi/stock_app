@@ -23,7 +23,8 @@ refreshAll(funds: FundEntry[], deps: RefreshAllDeps): Promise<{ refreshed: numbe
 ```
 - 펀드별로 `readValidCache` → `fetchedAt >= now - minAgeMs` 면 건너뜀, 아니면 기존 `refreshReport`.
 - 동시 실행 상한 `concurrency`. 한 펀드 실패가 나머지를 막지 않는다(실패는 `onResult` 의 `error`).
-- 중복 실행 방지(single-flight)는 플랫폼 래퍼 몫: 진행 중이면 같은 Promise 를 돌려준다. 진행 중에 `force` 호출이 오면 끝난 뒤 force 로 한 번 더 실행(신호 유실 방지).
+- 중복 실행 방지(single-flight)는 core `createAutoRefresher({ loadFunds, deps, onRefreshed })` 가 맡는다(웹·앱 공용, jest 로 검증): 진행 중이면 같은 Promise, 진행 중 `force` 요청은 끝난 뒤 force 로 한 번 더(신호 유실 방지). 상태 `{ running, version, refreshedIds }` 는 `subscribe/getStatus` → 훅 `useAutoRefreshStatus`(useSyncExternalStore).
+- 목록 한 줄은 core `fundStatusLine(entry, now)` → `기준일 YYYY.MM.DD · HH:mm 확인`(기존 `formatChecked` 규칙: 오늘이 아니면 `M/D HH:mm`).
 
 ## 3. 공용 훅 `useFundReport` — `reload()` 추가
 - 기존 동작(캐시 먼저 → 열 때마다 다시 가져오기)은 그대로.
@@ -37,7 +38,7 @@ refreshAll(funds: FundEntry[], deps: RefreshAllDeps): Promise<{ refreshed: numbe
   - `onFundsRefreshed(listener) → unsubscribe` (모듈 내 Set), `isAutoRefreshing()` + 상태 구독(목록 로딩 표시용).
 - 훅 `useFundAutoRefresh()` 를 `app/_layout.tsx` 에 한 번: 로그인 상태일 때 마운트 1회 + `AppState` 가 `background|inactive → active` 로 바뀔 때.
 - `fund/[id].tsx`: 갱신된 id 에 자기 펀드가 있으면 `reload()`.
-- 목록 `fund/index.tsx`: 펀드 이름 아래 `기준일 YYYY.MM.DD · N분 전 확인`(캐시 기준, 캐시 없으면 줄 생략), 자동 갱신 중이면 헤더에 작은 로딩 표시. 갱신 이벤트에 캐시를 다시 읽는다. 기존 행 레이아웃은 유지하고 한 줄만 추가.
+- 목록 `fund/index.tsx`: 펀드 이름 아래 `fundStatusLine`(캐시 기준, 캐시 없으면 줄 생략), 자동 갱신 중이면 헤더에 작은 로딩 표시. 갱신 이벤트에 캐시를 다시 읽는다. 기존 행 레이아웃은 유지하고 한 줄만 추가.
 
 ## 5. 웹 (web_client)
 - `lib/fundAutoRefresh.ts`: 같은 구조(`localCache`, 히스토리 없음) + single-flight + 이벤트.
