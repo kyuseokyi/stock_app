@@ -44,6 +44,11 @@ export default {
       ],
       'react-native-edge-to-edge',
       'expo-secure-store',
+      // iOS 출시(애플 로그인과 함께) 전에 실제 값으로
+      [
+        '@react-native-google-signin/google-signin',
+        { iosUrlScheme: process.env.GOOGLE_IOS_URL_SCHEME ?? 'com.googleusercontent.apps.unset' },
+      ],
     ],
     experiments: {
       typedRoutes: true,
