@@ -217,6 +217,21 @@ npm run build:android:prod # 상용(app-bundle) / build:ios:prod
 - 테스트: `cd mobile && npx jest src/features/fund` (가린 픽스처 + convert.py 기대 JSON 교차 검증).
 - 설계: `docs/superpowers/specs/2026-10-18-fund-report-viewer-design.md`
 
+### 펀드 히스토리 · Google Drive 백업 (앱)
+- 리포트를 새로 가져올 때마다 계좌별 현재평가금·당일 손익금·월 손익금을 날짜(원본 최종평가일)별로 기기에 저장(`fund-history-<id>.json`). 서버 저장 없음.
+- 리포트 헤더의 차트 아이콘 → 수익 히스토리(차트+목록). 펀드 목록 헤더의 구름 아이콘 → 기록 백업.
+- 백업은 사용자 본인 Google Drive 의 앱 전용 폴더(`appDataFolder`, Drive 목록에 안 보임)에 `fund-backup-v1.json` 하나.
+  업로드는 항상 Drive 와 합친 뒤 올리고(재설치 직후 덮어쓰기 보호), 읽을 수 없는 Drive 파일은 덮어쓰지 않는다. 복원도 합치기(멱등). 기기에서 지운 펀드도 Drive 백업에는 남는다.
+- **설정(최초 1회, Google Cloud Console)**
+  1. 프로젝트 생성 → API 및 서비스 → **Google Drive API** 사용 설정
+  2. OAuth 동의 화면: 외부 · 테스트 모드 · 테스트 사용자에 본인 계정 · 범위 `.../auth/drive.appdata`
+  3. 사용자 인증 정보 → OAuth 클라이언트 ID
+     - **Android** × 2: 패키지 `com.stockapp.dev` / `com.stockapp`, 각 서명 인증서 SHA-1 (`eas credentials` 또는 `keytool -list -v -keystore <파일>`)
+     - **웹 애플리케이션** × 1 → 이 ID 를 아래 env 에
+  4. `mobile/.env.development`·`.env.production` 에 `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID=<웹 클라이언트 ID>` → **새 dev build** 필요(네이티브 모듈 `@react-native-google-signin/google-signin`)
+- ID 가 비어 있으면 히스토리는 그대로 동작하고 백업 화면만 "백업 설정이 필요해요". iOS 는 출시 전 `GOOGLE_IOS_URL_SCHEME` 설정 필요(`mobile/app.config.js`).
+- 설계: `docs/superpowers/specs/2026-10-19-fund-history-backup-design.md`
+
 ## 🔄 작업 재개(Resume) 가이드 & 환경 점검
 
 작업을 중단했다가 다시 시작할 때, **DB 인프라(Docker)** 는 재부팅 전까지 계속 떠 있지만 **앱 서비스(FastAPI/Celery/Vite)** 는 종료되므로 다시 띄워야 합니다.
