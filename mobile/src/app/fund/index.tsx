@@ -1,20 +1,24 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Redirect, Stack, useFocusEffect, useRouter } from 'expo-router';
-import { useCallback, useState } from 'react';
-import { Alert, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { useCallback, useEffect, useState } from 'react';
+import { ActivityIndicator, Alert, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
 import { useAuthStore } from '@/features/auth/store';
+import { fundRefresher } from '@/features/fund/auto-refresh';
 import {
   addFund,
   displayName,
+  fundStatusLine,
   isFundError,
   MAX_NAME,
   newFundId,
+  readValidCache,
   removeFund,
+  useAutoRefreshStatus,
   type FundEntry,
 } from '@/features/fund/core';
-import { deleteCache, loadFunds, saveFunds } from '@/features/fund/fund-store';
+import { deleteCache, fileCache, loadFunds, saveFunds } from '@/features/fund/fund-store';
 import { isBackupConfigured } from '@/features/fund/google-auth';
 import { deleteHistory } from '@/features/fund/history-store';
 import { Button, Card, ListRow, ListState, showToast } from '@/ui';
@@ -29,6 +33,25 @@ export default function FundListScreen() {
   const [url, setUrl] = useState('');
   const [error, setError] = useState('');
   const [loadError, setLoadError] = useState('');
+  const status = useAutoRefreshStatus(fundRefresher);
+  const [lines, setLines] = useState<Record<string, string>>({});
+
+  // 목록 한 줄(기준일·확인 시각) — 목록이 바뀌거나 자동 갱신이 끝날 때마다 캐시를 다시 읽는다
+  useEffect(() => {
+    if (!funds) return;
+    let alive = true;
+    const now = Date.now();
+    void Promise.all(
+      funds.map(
+        async (f) => [f.id, fundStatusLine(await readValidCache(fileCache, f.id).catch(() => null), now)] as const,
+      ),
+    ).then((pairs) => {
+      if (alive) setLines(Object.fromEntries(pairs));
+    });
+    return () => {
+      alive = false;
+    };
+  }, [funds, status.version]);
 
   // 리포트 화면에서 기본 이름이 붙을 수 있어 돌아올 때마다 다시 읽는다
   useFocusEffect(
@@ -92,14 +115,17 @@ export default function FundListScreen() {
       <Stack.Screen
         options={{
           headerRight: () => (
-            <Pressable
-              onPress={() => router.push('/fund/backup')}
-              hitSlop={8}
-              accessibilityRole="button"
-              accessibilityLabel="기록 백업"
-            >
-              <Ionicons name="cloud-upload-outline" size={20} color={theme.colors.text} />
-            </Pressable>
+            <View style={styles.headerActions}>
+              {status.running ? <ActivityIndicator /> : null}
+              <Pressable
+                onPress={() => router.push('/fund/backup')}
+                hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel="기록 백업"
+              >
+                <Ionicons name="cloud-upload-outline" size={20} color={theme.colors.text} />
+              </Pressable>
+            </View>
           ),
         }}
       />
@@ -150,7 +176,7 @@ export default function FundListScreen() {
             <ListRow
               key={f.id}
               title={displayName(f)}
-              subtitle="탭해서 수익 보기"
+              subtitle={lines[f.id] || '탭해서 수익 보기'}
               left={<Text style={styles.emoji}>📈</Text>}
               right={
                 <Pressable onPress={() => handleRemove(f)} hitSlop={8} accessibilityRole="button">
@@ -168,6 +194,7 @@ export default function FundListScreen() {
 
 const styles = StyleSheet.create((theme) => ({
   flex: { flex: 1, backgroundColor: theme.colors.background },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: theme.gap(2) },
   content: { padding: theme.gap(2), gap: theme.gap(2) },
   label: { fontSize: 13, color: theme.colors.textSecondary, marginBottom: theme.gap(0.5) },
   input: {
