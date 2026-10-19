@@ -5,7 +5,7 @@ import { ActivityIndicator, Linking, Pressable, Text, View } from 'react-native'
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
 import { useAuthStore } from '@/features/auth/store';
-import { fundRefresher } from '@/features/fund/auto-refresh';
+import { fundRefresher, markAddedDuringRun } from '@/features/fund/auto-refresh';
 import { ReportView } from '@/features/fund/components/report-view';
 import {
   defaultName,
@@ -50,7 +50,11 @@ export default function FundReportScreen() {
   // 새로 가져오기에 성공한 회차만 기록(캐시만 보일 때·실패했을 때는 기록하지 않음). 같은 날짜는 덮어쓴다.
   useEffect(() => {
     if (!fund || !entry || refreshing || error) return;
-    void recordFetched(fund, entry);
+    // 자동 갱신 중이면 백업은 갱신이 끝난 뒤 1번으로 묶는다(먼저 하면 다른 펀드의 오늘 기록이 빠진다)
+    const duringRun = fundRefresher.getStatus().running;
+    void recordFetched(fund, entry, { backup: !duringRun }).then((added) => {
+      if (added && duringRun) markAddedDuringRun();
+    });
   }, [fund, entry, refreshing, error]);
 
   // 자동 갱신이 이 펀드를 새로 가져왔으면 캐시만 다시 읽어 화면에 반영(다시 가져오지 않음)

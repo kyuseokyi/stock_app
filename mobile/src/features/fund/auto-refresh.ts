@@ -34,6 +34,12 @@ export const fundRefresher = createAutoRefresher({
   },
 });
 
+/** 갱신 도중 다른 곳(리포트 화면)이 새 날짜를 기록했을 때 — 백업을 이번 갱신 끝으로 미룬다. 이미 끝났으면 바로. */
+export function markAddedDuringRun(): void {
+  if (fundRefresher.getStatus().running) addedThisRun = true;
+  else void maybeAutoBackup();
+}
+
 // 백업은 이번 갱신의 모든 펀드를 기록한 뒤 1번 — 첫 펀드에서 하면 나머지 기록이 다음 날까지 Drive 에 빠진다
 fundRefresher.subscribe(() => {
   if (!fundRefresher.getStatus().running && addedThisRun) {

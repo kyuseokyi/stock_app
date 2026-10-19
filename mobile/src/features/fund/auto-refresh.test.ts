@@ -4,8 +4,10 @@ jest.mock('./fund-store', () => ({ loadFunds: jest.fn(), deleteCache: jest.fn(),
 jest.mock('./record', () => ({ recordFetched: jest.fn() }));
 jest.mock('./backup-service', () => ({ maybeAutoBackup: jest.fn() }));
 
-import { recordIfRegistered } from './auto-refresh';
+import { fundRefresher, markAddedDuringRun, recordIfRegistered } from './auto-refresh';
+import { maybeAutoBackup } from './backup-service';
 import type { CacheEntry, FundEntry } from './core';
+import { loadFunds } from './fund-store';
 
 const FUND: FundEntry = { id: 'f1', name: '', url: 'https://fund.example.com/dataroom/om_data/x.htm' };
 const ENTRY = { v: 1, fetchedAt: 1 } as unknown as CacheEntry;
@@ -36,4 +38,26 @@ it('목록을 못 읽으면 판단할 수 없으니 기록한다', async () => {
   await expect(recordIfRegistered(FUND, ENTRY, d)).resolves.toBe(true);
   expect(d.recordFetched).toHaveBeenCalled();
   expect(d.deleteCache).not.toHaveBeenCalled();
+});
+
+describe('markAddedDuringRun', () => {
+  const backup = maybeAutoBackup as jest.Mock;
+  beforeEach(() => backup.mockClear());
+
+  it('자동 갱신 중이 아니면 바로 백업한다', () => {
+    markAddedDuringRun();
+    expect(backup).toHaveBeenCalledTimes(1);
+  });
+
+  it('자동 갱신 중이면 갱신이 끝난 뒤 1번 백업한다', async () => {
+    let release: (l: FundEntry[]) => void = () => {};
+    (loadFunds as jest.Mock).mockImplementationOnce(() => new Promise<FundEntry[]>((res) => (release = res)));
+    const run = fundRefresher.run();
+    markAddedDuringRun();
+    markAddedDuringRun();
+    expect(backup).not.toHaveBeenCalled();
+    release([]);
+    await run;
+    expect(backup).toHaveBeenCalledTimes(1);
+  });
 });

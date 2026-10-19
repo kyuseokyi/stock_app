@@ -1,6 +1,6 @@
 # 펀드 리포트 알림 설계 — 관리자 발송 · 푸시 · SSE (2026-10-19)
 
-선행: [펀드 리포트 자동 갱신](2026-10-19-fund-auto-refresh-design.md)(`runAutoRefresh({ force: true })` 사용).
+선행: [펀드 리포트 자동 갱신](2026-10-19-fund-auto-refresh-design.md)(`fundRefresher.run({ force: true })` 사용).
 범위: backend(blog 8000 + collector Celery) · admin_web · mobile · web_client.
 
 ## 1. 목표
@@ -80,9 +80,9 @@ SSE 이벤트: `{"type": "fund_report_updated", "date": "YYYY-MM-DD"}` — 제�
 - `features/push/`
   - `permission.ts`: 펀드 **첫 등록** 직후 앱 안내 시트("리포트가 올라오면 알려드릴까요?") → [알림 받기] 일 때만 OS 권한 요청. 결과를 SecureStore `push_prompt_v1` 에 기록(다시 묻지 않음).
   - `registration.ts`: `syncPushRegistration()` — 로그인 + 펀드 ≥1 + 권한 허용 + 설정됨 → `getExpoPushTokenAsync({projectId})` → `PUT /push-devices`. 펀드 0개·로그아웃 → `DELETE`. 마지막 등록 토큰은 SecureStore 에 두고 바뀌었을 때만 PUT. 실패는 조용히(다음 시점에 재시도). 호출 시점: 앱 실행, 펀드 추가·삭제, 로그인 직후, 로그아웃 직전.
-  - `handlers.ts`: Android 채널 `fund-report`(이름 "펀드 리포트"). 포그라운드 수신은 배너 표시 안 함(`shouldShowBanner:false`). 탭 → `data.type==='fund_report'` 이면 `router.push('/fund')` + `runAutoRefresh({force:true})`. 콜드 스타트는 `getLastNotificationResponseAsync`.
+  - `handlers.ts`: Android 채널 `fund-report`(이름 "펀드 리포트"). 포그라운드 수신은 배너 표시 안 함(`shouldShowBanner:false`). 탭 → `data.type==='fund_report'` 이면 `router.push('/fund')` + `fundRefresher.run({ force: true })`. 콜드 스타트는 `getLastNotificationResponseAsync`.
   - 권한 거부 상태면 펀드 목록 상단에 "알림이 꺼져 있어요 · 설정 열기"(닫기 가능, 닫음 기억).
-- `features/fund/fund-signal.ts` SSE: 로그인 + 펀드 있음 + `AppState=active` 일 때만 `EXPO_PUBLIC_BLOG_API_URL/api/v1/notifications/stream` 연결, 백그라운드면 닫음. `fund_report_updated` → 0~30초 무작위 지연 후 `runAutoRefresh({force:true})`.
+- `features/fund/fund-signal.ts` SSE: 로그인 + 펀드 있음 + `AppState=active` 일 때만 `EXPO_PUBLIC_BLOG_API_URL/api/v1/notifications/stream` 연결, 백그라운드면 닫음. `fund_report_updated` → 0~30초 무작위 지연 후 `fundRefresher.run({ force: true })`.
 
 ## 8. 웹 (web_client)
 - `NotificationToaster` 의 같은 EventSource 에 `fund_report_updated` 처리 추가: 로그인 + 펀드 있음이면 0~30초 무작위 지연 후 자동 갱신(force) + 토스트 "오늘 수익률 리포트가 올라왔어요". 이 type 은 기존 "새 알림이 도착했습니다" 토스트를 띄우지 않는다. `new_post` 처리는 그대로.

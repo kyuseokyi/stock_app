@@ -1,7 +1,7 @@
 # 펀드 리포트 자동 갱신 설계 (2026-10-19)
 
 선행: [펀드 수익보기](2026-10-18-fund-report-viewer-design.md), [히스토리·백업](2026-10-19-fund-history-backup-design.md).
-후속: [펀드 리포트 알림](2026-10-19-fund-report-notice-design.md) — 이 문서의 `runAutoRefresh({ force: true })` 를 SSE 신호·알림 탭에서 호출한다.
+후속: [펀드 리포트 알림](2026-10-19-fund-report-notice-design.md) — 이 문서의 `fundRefresher.run({ force: true })` 를 SSE 신호·알림 탭에서 호출한다.
 범위: 웹(`web_client`) + 앱(`mobile`). **서버 변경 없음**(URL 은 계속 기기에만).
 
 ## 1. 목표
@@ -34,8 +34,8 @@ refreshAll(funds: FundEntry[], deps: RefreshAllDeps): Promise<{ refreshed: numbe
 - `features/fund/record.ts` — `fund/[id].tsx` effect 안의 기록 규칙을 옮긴다(동작 동일).
   `recordFetched(fund, entry)`: 같은 `(fund.id, fetchedAt)` 은 한 번만 → `recordSnapshot` → 새 날짜면 `maybeAutoBackup()`. 리포트 화면과 자동 갱신이 함께 쓴다.
 - `features/fund/auto-refresh.ts`
-  - `runAutoRefresh({ force? })`: `loadFunds()` → 비었으면 끝 → `refreshAll(funds, { fetchHtml: fetchReportHtml, cache: fileCache, now: Date.now, force, onResult })`. 성공 펀드는 `recordFetched`. single-flight. 끝나면 `emitFundsRefreshed(ids)`.
-  - `onFundsRefreshed(listener) → unsubscribe` (모듈 내 Set), `isAutoRefreshing()` + 상태 구독(목록 로딩 표시용).
+  - `fundRefresher = createAutoRefresher({ loadFunds, deps: { fetchHtml, cache: fileCache, now }, onRefreshed })` — 실행은 `fundRefresher.run({ force? })`, 상태는 `subscribe/getStatus`(목록 로딩 표시·리포트 재읽기).
+  - `onRefreshed` = `recordIfRegistered`: 갱신 중 삭제된 펀드는 캐시를 지우고 기록 생략, 아니면 `recordFetched(…, { backup: false })`. 자동 백업은 갱신이 모두 끝난 뒤 1번(모듈 구독). 갱신 중 리포트 화면이 새 날짜를 기록하면 `markAddedDuringRun()` 으로 같은 끝에 묶는다.
 - 훅 `useFundAutoRefresh()` 를 `app/_layout.tsx` 에 한 번: 로그인 상태일 때 마운트 1회 + `AppState` 가 `background|inactive → active` 로 바뀔 때.
 - `fund/[id].tsx`: 갱신된 id 에 자기 펀드가 있으면 `reload()`.
 - 목록 `fund/index.tsx`: 펀드 이름 아래 `fundStatusLine`(캐시 기준, 캐시 없으면 줄 생략), 자동 갱신 중이면 헤더에 작은 로딩 표시. 갱신 이벤트에 캐시를 다시 읽는다. 기존 행 레이아웃은 유지하고 한 줄만 추가.
