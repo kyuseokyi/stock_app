@@ -35,7 +35,7 @@
 - [ ] 접속이 적은 시간에 `bash deploy/swarm/cutover.sh` → 6개 포트 응답·`docker stack services stock` 9개 `1/1`
 - [ ] 다음 백엔드 push 때 Actions 로그 `모드: Swarm(start-first)`, 배포 중 새로고침해도 끊기지 않는지
 - [ ] 앱(Expo) 새 빌드 후 조회 재시도 적용(웹은 다음 웹 배포부터)
-- [ ] 전환 뒤 한가한 시간에 Docker Desktop 재시작(메뉴 막대 고래 → Restart, 또는 `osascript -e 'quit app "Docker"' && open -a Docker`) → DB 3개 healthy·`stock_net` 연결 유지·스택 9개 `1/1`(재부팅 내성)
+- [ ] 전환 뒤 한가한 시간에 OrbStack 재시작(`orb restart docker`, 또는 메뉴 막대 OrbStack → Restart) → DB 3개 healthy·`stock_net` 연결 유지·스택 9개 `1/1`(재부팅 내성)
 - [ ] 예전 이름 이미지(`<프로젝트>-auth_api` 류) 1회 정리
 
 ### 스크리너 탭 — 시장·테마·업종·일정(프로젝트 3 배포 후)

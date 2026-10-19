@@ -64,26 +64,26 @@ for s in $CANDIDATES; do
 done
 
 echo "🚀 스택 갱신(BACKEND_TAG=$BACKEND_TAG WEB_TAG=$WEB_TAG) 대상:${EXPECT:- 없음}"
-since=$(date -u +%Y-%m-%dT%H:%M:%S)   # 이 시각 이후 시작된 갱신만 이번 배포로 본다(이전 배포의 completed·rollback 상태에 속지 않게)
 # env_file(../../backend/.env.production)이 스택 파일 기준 상대경로라 그 폴더에서 실행
 (cd deploy/swarm && docker stack deploy --resolve-image never -c single-node.yml "$STACK")
 
-# 대상 서비스의 갱신이 끝날 때까지 대기(최대 5분). 롤백되면 실패.
+# 대상 서비스의 갱신이 끝날 때까지 대기(최대 5분). 시각 비교 없이 판정한다(UpdateStatus 시각 형식이 환경마다 달라 틀렸었다):
+#   - 서비스 설정 이미지가 새 태그가 아니면 → Swarm 이 롤백한 것(실패). 이전 배포의 rollback 상태는 stack deploy 가 설정을 새 태그로 바꾸므로 영향 없음
+#   - State paused → 실패
+#   - State completed 이고 실행 중(desired=running) 태스크가 전부 새 태그·Running → 완료(start-first + healthcheck 통과 뒤에만 Running)
 deadline=$((SECONDS + 300))
 while [ -n "$EXPECT" ]; do
   pending=0; failed=""
   for svc in $EXPECT; do
-    started=$(docker service inspect "$svc" --format '{{if .UpdateStatus}}{{.UpdateStatus.StartedAt}}{{end}}')
+    spec=$(docker service inspect "$svc" --format '{{.Spec.TaskTemplate.ContainerSpec.Image}}')
     state=$(docker service inspect "$svc" --format '{{if .UpdateStatus}}{{.UpdateStatus.State}}{{end}}')
-    if [ -z "$started" ] || [[ "$started" < "$since" ]]; then pending=$((pending + 1)); continue; fi  # 아직 시작 전
-    case "$state" in
-      completed)
-        # 실제로 새 태그 태스크가 Running 인지(start-first + healthcheck 통과 뒤에만 Running)
-        docker service ps "$svc" --filter desired-state=running --format '{{.Image}} {{.CurrentState}}' \
-          | grep -q ":$NEW Running" || pending=$((pending + 1)) ;;
-      rollback_*|paused) failed="$failed $svc($state)" ;;
-      *) pending=$((pending + 1)) ;;
-    esac
+    case "$spec" in *":$NEW"|*":$NEW@"*) ;; *) failed="$failed $svc(롤백됨:$state)"; continue ;; esac
+    if [ "$state" = paused ]; then failed="$failed $svc(paused)"; continue; fi
+    tasks=$(docker service ps "$svc" --filter desired-state=running --format '{{.Image}}|{{.CurrentState}}')
+    if [ "$state" = completed ] && [ -n "$tasks" ] && ! printf '%s\n' "$tasks" | grep -qv ":$NEW|Running"; then
+      continue   # 완료
+    fi
+    pending=$((pending + 1))
   done
   if [ -n "$failed" ]; then echo "::error::갱신 실패 → 자동 롤백:$failed"; docker stack ps "$STACK" --no-trunc | head -40; exit 1; fi
   if [ "$pending" -eq 0 ]; then break; fi
