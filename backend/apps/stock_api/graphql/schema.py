@@ -16,12 +16,26 @@ from apps.stock_api.graphql.types import (
     CanslimMarket,
     CanslimScore,
     CanslimScreen,
+    CalendarEvent,
     ChartData,
+    GroupDetail,
+    GroupHistory,
+    GroupItem,
+    GroupLeader,
+    GroupRanking,
+    GroupStock,
+    MacroValue,
+    MarketIndex,
+    MarketOverview,
     Stock,
+    Treemap,
+    TreemapGroup,
+    TreemapStock,
     VolumeProfileBin,
 )
 from apps.stock_api.seed_catalog import search as catalog_search
 from apps.stock_api.services import canslim_query
+from apps.stock_api.services import market_query
 from apps.stock_api.services import chart as chart_service
 from apps.stock_api.services import clickhouse_source as ch_source
 from shared import stock_meta_repo
@@ -183,6 +197,39 @@ class Query:
             **{**out, "letters": [CanslimLetter(**x) for x in out["letters"]],
                "history": [CanslimHistoryPoint(**h) for h in out["history"]]}
         )
+
+    # ------------------------------------------------------------ 시장 탭 (공개)
+    @strawberry.field(description="시장 요약 — 국내·미국 지수(20일 스파크라인)·미국 거시 지표")
+    def market_overview(self) -> MarketOverview:
+        out = market_query.overview()
+        return MarketOverview(indices=[MarketIndex(**i) for i in out["indices"]],
+                              macro=[MacroValue(**m) for m in out["macro"]])
+
+    @strawberry.field(description="테마·업종 순위 — kind: theme|sector, period: 1d|5d|20d, sort: chg|value")
+    def market_groups(self, kind: str = "theme", period: str = "1d", sort: str = "chg", limit: int = 30,
+                      offset: int = 0) -> GroupRanking:
+        out = market_query.groups(kind=kind, period=period, sort=sort, limit=limit, offset=offset)
+        items = [GroupItem(**{**it, "leader": GroupLeader(**it["leader"]) if it["leader"] else None})
+                 for it in out["items"]]
+        return GroupRanking(date=out["date"], total=out["total"], items=items)
+
+    @strawberry.field(description="트리맵 — 업종(전체)·테마(거래대금 상위 30), 면적 size: mcap|value")
+    def market_treemap(self, kind: str = "sector", size: str = "mcap", period: str = "1d") -> Treemap:
+        out = market_query.treemap(kind=kind, size=size, period=period)
+        groups = [TreemapGroup(**{**g, "stocks": [TreemapStock(**s) for s in g["stocks"]]}) for g in out["groups"]]
+        return Treemap(date=out["date"], groups=groups)
+
+    @strawberry.field(description="테마·업종 상세 — 60거래일 순위 추이·구성 종목(없으면 null)")
+    def market_group(self, kind: str, id: str) -> GroupDetail | None:  # noqa: A002 — GraphQL 인자 이름
+        out = market_query.group(kind, id)
+        if out is None:
+            return None
+        return GroupDetail(**{**out, "history": [GroupHistory(**h) for h in out["history"]],
+                              "stocks": [GroupStock(**s) for s in out["stocks"]]})
+
+    @strawberry.field(description="일정 — 공모주·경제지표(최대 92일)")
+    def market_calendar(self, start: str, end: str, category: str | None = None) -> list[CalendarEvent]:
+        return [CalendarEvent(**e) for e in market_query.calendar(start, end, category)]
 
 
 schema = strawberry.Schema(query=Query)

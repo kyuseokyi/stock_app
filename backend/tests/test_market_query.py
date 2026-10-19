@@ -174,3 +174,34 @@ def test_calendar_range_category_and_detail(monkeypatch):
     assert out[1]["detail"] == "" and out[2]["detail"] == "발표 예정" and out[2]["name"] is None
     mq.calendar("bad", None, "해킹")
     assert seen == {"start": D, "end": date(2026, 12, 15), "category": None}
+
+
+def test_graphql_wiring(monkeypatch):
+    from apps.stock_api.graphql.schema import schema
+
+    monkeypatch.setattr(mq, "overview", lambda: {
+        "indices": [{"code": "KR:0001", "name": "KOSPI", "region": "KR", "date": "2026-10-16", "close": 2550.0,
+                     "chg1d": 2.0, "spark": [2500.0, 2550.0]}],
+        "macro": [{"series_id": "UNRATE", "name": "실업률", "unit": "%", "date": "2026-09-01", "value": 4.2,
+                   "prev": 4.1}]})
+    monkeypatch.setattr(mq, "groups", lambda **kw: {"date": "2026-10-16", "total": 1, "items": [
+        {"id": "7", "name": "반도체", "members": 5, "chg": 3.2, "value": 1e9, "up": 4, "down": 1, "flat": 0,
+         "leader": None, "rank": 1, "streak": 2}]})
+    monkeypatch.setattr(mq, "treemap", lambda **kw: {"date": "2026-10-16", "groups": [
+        {"id": "0013", "name": "전기·전자", "chg": 1.0, "size": 9.0,
+         "stocks": [{"ticker": "", "name": "기타 2종목", "chg": None, "size": 9.0}]}]})
+    monkeypatch.setattr(mq, "group", lambda kind, gid: None)
+    monkeypatch.setattr(mq, "calendar", lambda s, e, c: [
+        {"date": "2026-10-20", "title": "에이 청약", "category": "공모주", "ticker": "AAA", "name": "에이",
+         "detail": "공모가 25,000원"}])
+    res = schema.execute_sync("""{ marketOverview { indices { code chg1d spark } macro { seriesId unit } }
+      marketGroups(kind: "theme") { total items { id leader { ticker } streak } }
+      marketTreemap { groups { id stocks { ticker name } } }
+      marketGroup(kind: "theme", id: "404") { id }
+      marketCalendar(start: "2026-10-16", end: "2026-12-15") { date detail } }""")
+    assert res.errors is None, res.errors
+    assert res.data["marketOverview"]["macro"] == [{"seriesId": "UNRATE", "unit": "%"}]
+    assert res.data["marketGroups"]["items"][0] == {"id": "7", "leader": None, "streak": 2}
+    assert res.data["marketTreemap"]["groups"][0]["stocks"][0]["name"] == "기타 2종목"
+    assert res.data["marketGroup"] is None
+    assert res.data["marketCalendar"] == [{"date": "2026-10-20", "detail": "공모가 25,000원"}]

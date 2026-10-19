@@ -148,3 +148,133 @@ class CanslimScore:
     letters: list[CanslimLetter]
     history: list[CanslimHistoryPoint]
     market_status: str | None
+
+
+# ---------------------------------------------------------------- 시장 탭(지수·테마·업종·일정)
+@strawberry.type
+class MarketIndex:
+    code: str
+    name: str
+    region: str  # KR | US | FX
+    date: str
+    close: float
+    chg1d: float | None
+    spark: list[float]
+
+
+@strawberry.type
+class MacroValue:
+    series_id: str
+    name: str
+    unit: str
+    date: str
+    value: float
+    prev: float | None
+
+
+@strawberry.type
+class MarketOverview:
+    indices: list[MarketIndex]
+    macro: list[MacroValue]
+
+
+@strawberry.type
+class GroupLeader:
+    ticker: str
+    name: str
+    chg: float | None
+
+
+@strawberry.type
+class GroupItem:
+    id: str
+    name: str
+    members: int
+    chg: float | None  # 선택 기간 평균 등락률(%)
+    value: float
+    up: int
+    down: int
+    flat: int
+    leader: GroupLeader | None
+    rank: int  # 1일 순위(0 = 순위 제외)
+    streak: int  # 연속 상위(10위 안) 거래일 수
+
+
+@strawberry.type
+class GroupRanking:
+    date: str | None
+    total: int
+    items: list[GroupItem]
+
+
+@strawberry.type
+class TreemapStock:
+    ticker: str  # '' = 기타 묶음
+    name: str
+    chg: float | None
+    size: float
+
+
+@strawberry.type
+class TreemapGroup:
+    id: str
+    name: str
+    chg: float | None
+    size: float
+    stocks: list[TreemapStock]
+
+
+@strawberry.type
+class Treemap:
+    date: str | None
+    groups: list[TreemapGroup]
+
+
+@strawberry.type
+class GroupHistory:
+    date: str
+    chg1d: float | None
+    rank: int
+
+
+@strawberry.type
+class GroupStock:
+    ticker: str
+    name: str
+    close: float
+    chg1d: float | None
+    chg5d: float | None
+    value: float
+    mcap: float | None
+    is_leader: bool
+    reason: str | None
+
+
+@strawberry.type
+class GroupDetail:
+    kind: str
+    id: str
+    name: str
+    description: str | None
+    date: str
+    chg1d: float | None
+    chg5d: float | None
+    chg20d: float | None
+    value: float
+    mcap: float
+    up: int
+    down: int
+    flat: int
+    rank: int
+    history: list[GroupHistory]
+    stocks: list[GroupStock]
+
+
+@strawberry.type
+class CalendarEvent:
+    date: str
+    title: str
+    category: str
+    ticker: str | None
+    name: str | None
+    detail: str
