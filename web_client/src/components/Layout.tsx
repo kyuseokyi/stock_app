@@ -10,6 +10,7 @@ import UserMenu from './UserMenu'
 import DeleteAccountModal from './DeleteAccountModal'
 import AppToaster from './AppToaster'
 import { showToast } from '../store/toast'
+import { useFundAutoRefresh } from '../lib/fundAutoRefresh'
 
 export default function Layout() {
   const { boards, fetchBoards } = useBoardStore()
@@ -22,6 +23,7 @@ export default function Layout() {
   const section = sectionOf(location.pathname)
   // 게임·스크리너는 넓은 화면(lg+)에서 2단(차트+주문 / 목록+상세) → 헤더·본문 폭을 함께 넓힌다(로고·메뉴 정렬 유지)
   const width = section === 'game' || section === 'screener' ? 'max-w-3xl lg:max-w-6xl' : 'max-w-3xl'
+  useFundAutoRefresh() // 접속·탭 복귀 시 등록 펀드 자동 갱신(로그인 상태일 때만)
 
   useEffect(() => {
     fetchBoards()

@@ -1,8 +1,20 @@
-import { useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import { Link, Navigate } from 'react-router-dom'
 import Button from '../components/ui/Button'
-import { addFund, displayName, isFundError, MAX_NAME, newFundId, removeFund, type FundEntry } from '../lib/fundCore'
-import { deleteCache, loadFunds, saveFunds } from '../lib/fundStore'
+import {
+  addFund,
+  displayName,
+  fundStatusLine,
+  isFundError,
+  MAX_NAME,
+  newFundId,
+  readValidCache,
+  removeFund,
+  useAutoRefreshStatus,
+  type FundEntry,
+} from '../lib/fundCore'
+import { deleteCache, loadFunds, localCache, saveFunds } from '../lib/fundStore'
+import { fundRefresher } from '../lib/fundAutoRefresh'
 import { useAuthStore } from '../store/auth'
 
 // 내 펀드 수익(/me/funds) — 이 브라우저에 저장한 fund.ivyro.net 펀드 현황 주소 목록. 서버에는 저장하지 않는다.
@@ -12,6 +24,22 @@ export default function FundListPage() {
   const [name, setName] = useState('')
   const [url, setUrl] = useState('')
   const [error, setError] = useState('')
+  const status = useAutoRefreshStatus(fundRefresher)
+  const [lines, setLines] = useState<Record<string, string>>({})
+
+  // 목록 한 줄(기준일·확인 시각) — 목록이 바뀌거나 자동 갱신이 끝날 때마다 캐시를 다시 읽는다
+  useEffect(() => {
+    let alive = true
+    const now = Date.now()
+    void Promise.all(
+      funds.map(async (f) => [f.id, fundStatusLine(await readValidCache(localCache, f.id), now)] as const),
+    ).then((pairs) => {
+      if (alive) setLines(Object.fromEntries(pairs))
+    })
+    return () => {
+      alive = false
+    }
+  }, [funds, status.version])
 
   if (!user) return <Navigate to="/me" replace />
 
@@ -45,7 +73,10 @@ export default function FundListPage() {
       <Link to="/me" className="text-sm text-ink-muted">
         ‹ 내정보
       </Link>
-      <h1 className="mb-5 mt-1 text-xl font-bold text-ink">내 펀드 수익</h1>
+      <h1 className="mb-5 mt-1 text-xl font-bold text-ink">
+        내 펀드 수익
+        {status.running && <span className="ml-2 text-xs font-normal text-ink-muted">확인 중…</span>}
+      </h1>
 
       <form onSubmit={handleAdd} className="rounded-card bg-surface p-5">
         <label htmlFor="fund-url" className="block text-sm text-ink-muted">
@@ -89,7 +120,12 @@ export default function FundListPage() {
                 to={`/me/funds/${f.id}`}
                 className="flex flex-1 items-center justify-between px-5 py-4 text-ink hover:bg-line"
               >
-                <span>📈 {displayName(f)}</span>
+                <span className="min-w-0">
+                  <span className="block">📈 {displayName(f)}</span>
+                  {lines[f.id] && (
+                    <span className="mt-0.5 block text-xs tabular-nums text-ink-muted">{lines[f.id]}</span>
+                  )}
+                </span>
                 <span className="text-ink-muted">›</span>
               </Link>
               <button
