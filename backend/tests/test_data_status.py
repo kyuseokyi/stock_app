@@ -114,6 +114,23 @@ def test_stale_warn_and_off(env, monkeypatch):
     assert out["pipeline"] is None
 
 
+def test_missing_table_is_empty_not_error(env):
+    """아직 한 번도 계산되지 않아 CH 테이블이 없으면 '오류'가 아니라 '없음'(계산 전)."""
+    missing = RuntimeError("Code: 60. DB::Exception: Unknown table expression identifier "
+                           "'stock.canslim_daily' in scope SELECT ... (UNKNOWN_TABLE)")
+    env.use(canslim=(f"FROM {DB}.canslim_daily", missing),
+            groups=(f"FROM {DB}.market_group_daily", missing))
+    got = _by_key(ds.build_status())
+    for key in ("canslim", "market_groups"):
+        assert got[key]["status"] == "empty" and "계산" in got[key]["note"]
+    assert got["daily"]["status"] == "ok"
+
+
+def test_ipo_note_does_not_repeat_count(env):
+    note = _by_key(ds.build_status())["ipo"]["note"]
+    assert "4건" not in note and "60일" in note
+
+
 def test_query_failure_is_isolated(env):
     env.use(index=(f"FROM {DB}.market_index_daily", RuntimeError("table missing")))
     got = _by_key(ds.build_status())

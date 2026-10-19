@@ -178,14 +178,22 @@ def _ipo(today: date) -> dict:
     if d is None:
         return _item("ipo", "공모주 일정", unit="건", status="empty", note="수집된 일정이 없어요")
     late = (today - d).days > IPO_STALE_DAYS
-    note = f"앞으로 {IPO_AHEAD_DAYS}일 일정 {upcoming}건" + (f" · {IPO_STALE_DAYS}일 넘게 갱신되지 않았어요" if late else "")
+    note = f"앞으로 {IPO_AHEAD_DAYS}일 일정" + (f" · {IPO_STALE_DAYS}일 넘게 갱신되지 않았어요" if late else "")  # 건수는 count
     return _item("ipo", "공모주 일정", d, upcoming, "건", "stale" if late else "ok", note)
+
+
+def _missing_table(exc: Exception) -> bool:
+    """CH 테이블이 아직 없음(Code 60 UNKNOWN_TABLE) — 계산·수집 태스크가 처음 돌 때 테이블을 만든다."""
+    msg = str(exc)
+    return "UNKNOWN_TABLE" in msg or "Code: 60." in msg
 
 
 def _safe(key: str, label: str, fn: Callable[[], dict]) -> dict:
     try:
         return fn()
     except Exception as exc:  # noqa: BLE001 — 한 항목 실패가 화면 전체를 막지 않게
+        if _missing_table(exc):
+            return _item(key, label, status="empty", note="아직 계산·수집된 적이 없어요(테이블 없음)")
         log.warning("데이터 현황 조회 실패 %s: %s", key, exc)
         return _item(key, label, status="error", note="조회에 실패했어요(서버 로그 확인)")
 
