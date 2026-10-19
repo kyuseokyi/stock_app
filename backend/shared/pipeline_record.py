@@ -17,7 +17,10 @@ SUMMARY_MAX = 200
 
 
 def summarize(value) -> str:
-    return json.dumps(value, ensure_ascii=False, default=str)[:SUMMARY_MAX]
+    try:
+        return json.dumps(value, ensure_ascii=False, default=str)[:SUMMARY_MAX]
+    except Exception:  # noqa: BLE001 — 순환 참조·비문자열 키 등
+        return repr(value)[:SUMMARY_MAX]
 
 
 def save(client, started_at: datetime, finished_at: datetime, steps: list[dict]) -> None:

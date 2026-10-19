@@ -187,5 +187,8 @@ def daily_market_pipeline() -> dict:
         result = out[name]
         record.append({"name": name, "ok": not (isinstance(result, dict) and "error" in result),
                        "seconds": round(time.monotonic() - t0, 1), "summary": pipeline_record.summarize(result)})
-    pipeline_record.save(get_sync_redis(), started, datetime.now(timezone.utc), record)
+    try:
+        pipeline_record.save(get_sync_redis(), started, datetime.now(timezone.utc), record)
+    except Exception as exc:  # noqa: BLE001 — 기록 실패가 파이프라인 결과를 막지 않게
+        log.warning("파이프라인 기록 저장 실패: %s", exc)
     return out

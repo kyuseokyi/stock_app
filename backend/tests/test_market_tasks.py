@@ -205,7 +205,7 @@ def test_daily_pipeline_records_steps(monkeypatch):
     # 예외로 끝난 단계와 결과에 error 가 담긴 단계는 실패로 기록
     assert [s["ok"] for s in rec["steps"]] == [False, True, True, True, False]
     assert "master down" in rec["steps"][0]["summary"]
-    assert all(isinstance(s["seconds"], float) for s in rec["steps"])
+    assert all(isinstance(s["seconds"], float) and s["seconds"] >= 0 for s in rec["steps"])
     assert rec["started_at"] <= rec["finished_at"]
 
 
@@ -215,6 +215,17 @@ def test_daily_pipeline_result_unchanged_when_redis_down(monkeypatch):
             raise ConnectionError("redis down")
 
     monkeypatch.setattr(md, "get_sync_redis", lambda: Down())
+    _stub_steps(monkeypatch)
+    out = md.daily_market_pipeline()
+    assert out == {"daily": {"ok": 1}, "indices_kr": {"ok": ["KOSPI"]}, "investor": {"ok": 3},
+                   "canslim": {"rows": 10}, "market_groups": {"error": "no bars"}}
+
+
+def test_daily_pipeline_result_unchanged_when_redis_client_fails(monkeypatch):
+    def bad_client():
+        raise ValueError("bad url")
+
+    monkeypatch.setattr(md, "get_sync_redis", bad_client)
     _stub_steps(monkeypatch)
     out = md.daily_market_pipeline()
     assert out == {"daily": {"ok": 1}, "indices_kr": {"ok": ["KOSPI"]}, "investor": {"ok": 3},

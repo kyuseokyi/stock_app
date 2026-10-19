@@ -42,3 +42,10 @@ def test_redis_failure_is_swallowed():
 def test_summarize_truncates_and_handles_non_json():
     assert len(pr.summarize({"x": "a" * 500})) == pr.SUMMARY_MAX
     assert pr.summarize({"d": T0}).startswith('{"d": "2026-10-16')
+
+
+def test_summarize_circular_reference_does_not_raise():
+    d: dict = {}
+    d["self"] = d
+    out = pr.summarize(d)
+    assert isinstance(out, str) and len(out) <= pr.SUMMARY_MAX
