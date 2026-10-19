@@ -43,7 +43,7 @@ const RE_DATE = /^(\d{4})년\s*(\d{1,2})월\s*(\d{1,2})일$/;
 /** 원본 금액 문자열(₩·쉼표·음수) → 숫자. 금액 모양이 아니면 null. 히스토리 기록이 쓴다. */
 export function parseAmount(raw: string): number | null {
   const s = raw.trim();
-  if (!RE_INT.test(s)) return null;
+  if (!RE_INT.test(s) || !/\d/.test(s)) return null;
   const n = Number(s.replace(/[₩,]/g, ''));
   return Number.isFinite(n) ? n : null;
 }

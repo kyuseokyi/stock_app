@@ -180,3 +180,10 @@ describe('parseAmount', () => {
     expect(parseAmount('')).toBeNull();
   });
 });
+
+describe('parseAmount 숫자 없음', () => {
+  it('쉼표·₩ 만 있으면 null', () => {
+    expect(parseAmount(',')).toBeNull();
+    expect(parseAmount('₩,')).toBeNull();
+  });
+});

@@ -84,3 +84,13 @@ describe('shouldAutoBackup', () => {
     expect(shouldAutoBackup(at(19, 1), at(19, 23))).toBe(false);
   });
 });
+
+describe('기본 속성 이름 계좌', () => {
+  it('parseBackup — hasOwnProperty 계좌가 있어도 던지지 않는다', () => {
+    const raw = JSON.stringify({
+      v: 1, exportedAt: 1, funds: [{ name: 'A', url: u(1) }],
+      history: { [u(1)]: { hasOwnProperty: [pt('2026-10-01', 1)] } },
+    });
+    expect(parseBackup(raw)?.history[u(1)].hasOwnProperty).toEqual([pt('2026-10-01', 1)]);
+  });
+});

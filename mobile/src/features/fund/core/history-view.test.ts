@@ -54,3 +54,10 @@ describe('toHistoryView', () => {
     expect(toHistoryView(h({}), '', '3m')).toMatchObject({ accounts: [], account: '', rows: [], chart: null, total: 0 });
   });
 });
+
+describe('가린 날짜 기간 필터', () => {
+  it('기준일이 넘치는 가린 날짜면 필터하지 않는다', () => {
+    const v = toHistoryView(h({ A: [p('3072-90-98', 1), p('3072-90-99', 2)] }), 'A', '1m');
+    expect(v.rows).toHaveLength(2);
+  });
+});

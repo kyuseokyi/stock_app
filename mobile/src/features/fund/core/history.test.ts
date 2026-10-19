@@ -110,3 +110,16 @@ describe('parseHistory', () => {
     expect(h.accounts).toEqual({ A: [pt('2026-10-01', null), pt('2026-10-02', 2)] });
   });
 });
+
+describe('기본 속성 이름 계좌', () => {
+  it('parseHistory — toString 계좌를 유지하고 던지지 않는다', () => {
+    const raw = JSON.stringify({ v: 1, accounts: { toString: [pt('2026-10-01', 1)] } });
+    expect(parseHistory(raw, URL1).accounts).toEqual({ toString: [pt('2026-10-01', 1)] });
+  });
+
+  it('mergePoint — valueOf 계좌를 추가한다', () => {
+    const r = mergePoint(emptyHistory(URL1), { date: '2026-10-08', points: { valueOf: pt('2026-10-08', 1) } });
+    expect(r.added).toBe(true);
+    expect(r.history.accounts.valueOf).toEqual([pt('2026-10-08', 1)]);
+  });
+});

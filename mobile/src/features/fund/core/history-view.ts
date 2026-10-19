@@ -1,7 +1,7 @@
 // 히스토리 화면 모델 — 기간 필터·차트 좌표·표시 포맷(B안 규칙, formatValue)을 여기서 끝내고 페이지는 그리기만.
 // 기간은 마지막 기록 날짜 기준 문자열 비교(Date.now 에 기대지 않아 결정적).
 // web_client/src/lib/fundCore 에 같은 파일이 있다 — scripts/check-fund-core-sync.sh
-import type { FundHistory, HistoryPoint } from './history';
+import { own, type FundHistory, type HistoryPoint } from './history';
 import { formatValue, type ViewCell } from './view';
 
 export type HistoryRange = '1m' | '3m' | 'all';
@@ -49,10 +49,11 @@ function chartOf(pts: HistoryPoint[]): HistoryChartView | null {
 export function toHistoryView(h: FundHistory, account: string, range: HistoryRange): HistoryView {
   const accounts = Object.keys(h.accounts);
   const name = accounts.includes(account) ? account : (accounts[0] ?? '');
-  const all = h.accounts[name] ?? [];
+  const all = own(h.accounts, name) ?? [];
   const days = RANGE_DAYS[range];
   const from = days === null || all.length === 0 ? '' : daysBefore(all[all.length - 1].date, days);
-  const pts = from ? all.filter((p) => p.date >= from) : all;
+  const last = all.length ? all[all.length - 1].date : '';
+  const pts = from && from <= last ? all.filter((p) => p.date >= from) : all; // 가린 날짜로 from 이 넘치면 필터 안 함
   return {
     accounts,
     account: name,

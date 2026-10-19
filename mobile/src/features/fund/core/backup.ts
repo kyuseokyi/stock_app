@@ -2,7 +2,7 @@
 // 펀드 id 는 기기마다 새로 생기므로 백업에서는 URL 이 키. 업로드는 항상 Drive 합본(buildBackup 의 remote).
 // web_client/src/lib/fundCore 에 같은 파일이 있다 — scripts/check-fund-core-sync.sh
 import { MAX_FUNDS, MAX_NAME, type FundEntry } from './funds';
-import { mergeAccounts, parseAccounts, type HistoryAccounts } from './history';
+import { mergeAccounts, own, parseAccounts, type HistoryAccounts } from './history';
 import { isFundUrl } from './url';
 
 export const BACKUP_FILE = 'fund-backup-v1.json';
@@ -23,7 +23,7 @@ export function buildBackup(local: LocalData, remote: Backup | null, now: number
   for (const f of remote?.funds ?? []) if (!funds.some((x) => x.url === f.url)) funds.push(f);
   const history: Record<string, HistoryAccounts> = {};
   for (const { url } of funds) {
-    const merged = mergeAccounts(remote?.history[url] ?? {}, local.histories[url] ?? {}).accounts;
+    const merged = mergeAccounts((remote && own(remote.history, url)) || {}, own(local.histories, url) ?? {}).accounts;
     if (Object.keys(merged).length) history[url] = merged;
   }
   return { v: 1, exportedAt: now, funds, history };
@@ -72,9 +72,9 @@ export function mergeBackup(local: LocalData, backup: Backup, newId: () => strin
   const histories = { ...local.histories };
   let mergedPoints = 0;
   for (const { url } of funds) {
-    const extra = backup.history[url];
+    const extra = own(backup.history, url);
     if (!extra) continue;
-    const r = mergeAccounts(histories[url] ?? {}, extra);
+    const r = mergeAccounts(own(histories, url) ?? {}, extra);
     histories[url] = r.accounts;
     mergedPoints += r.changed;
   }

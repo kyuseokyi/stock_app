@@ -17,6 +17,10 @@ export type Snapshot = { date: string; points: Record<string, HistoryPoint> };
 
 const RE_ISO = /^\d{4}-\d{2}-\d{2}$/;
 const RE_KO_DATE = /^(\d{4})년\s*(\d{1,2})월\s*(\d{1,2})일$/;
+/** 상속 속성(toString 등)을 읽지 않는 자기 속성 읽기 */
+export const own = <T>(o: Record<string, T>, k: string): T | undefined =>
+  Object.prototype.hasOwnProperty.call(o, k) ? o[k] : undefined;
+
 const BAD_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
 
 export const emptyHistory = (url: string): FundHistory => ({ v: 1, url, accounts: {} });
@@ -81,7 +85,7 @@ export function mergePoint(h: FundHistory, snap: Snapshot): { history: FundHisto
   const accounts: HistoryAccounts = { ...h.accounts };
   for (const [name, p] of Object.entries(snap.points)) {
     if (BAD_KEYS.has(name)) continue;
-    const r = upsert(accounts[name] ?? [], p, true);
+    const r = upsert(own(accounts, name) ?? [], p, true);
     accounts[name] = r.list;
     if (r.change === 'added') added = true;
   }
@@ -97,7 +101,7 @@ export function mergeAccounts(
   const accounts: HistoryAccounts = { ...base };
   for (const [name, pts] of Object.entries(extra)) {
     if (BAD_KEYS.has(name)) continue;
-    let list = accounts[name] ?? [];
+    let list = own(accounts, name) ?? [];
     for (const p of pts) {
       const r = upsert(list, p, false);
       list = r.list;
@@ -130,7 +134,8 @@ export function parseAccounts(raw: unknown): HistoryAccounts {
   const out: HistoryAccounts = {};
   for (const [name, pts] of Object.entries(raw as Record<string, unknown>)) {
     if (BAD_KEYS.has(name) || !Array.isArray(pts)) continue;
-    const list = mergeAccounts({}, { [name]: pts.filter(isHistoryPoint) }).accounts[name] ?? [];
+    const accs = mergeAccounts({}, { [name]: pts.filter(isHistoryPoint) }).accounts;
+    const list = own(accs, name) ?? [];
     if (list.length) out[name] = list;
   }
   return out;
