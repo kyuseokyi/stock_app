@@ -157,9 +157,17 @@ function QuizDetailPanel({
           <h3 className="font-semibold text-slate-900">
             퀴즈 #{quiz.id} · {quiz.ticker} · 기준일 {quiz.base_date}
           </h3>
-          <p className="mt-1 text-sm text-slate-500">
-            {TYPE_LABEL[quiz.quiz_type ?? 'DIRECTION']} · 정답 <strong className={changeColor(quiz)}>{answerText(quiz)}</strong>{' '}
-            ({formatChange(quiz.actual_change)}) · 차트 {quiz.window_bars ?? 60}봉 · 예측 {quiz.horizon_bars ?? DEFAULT_HORIZON}일 · 시도 {quiz.attempt_count}회 · 보상 {quiz.reward_cash.toLocaleString()}원
+          {/* 항목 단위로만 줄바꿈(항목 안에서는 끊기지 않게) */}
+          <p className="mt-1 flex flex-wrap gap-x-2 gap-y-0.5 text-sm text-slate-500">
+            <span className="whitespace-nowrap">{TYPE_LABEL[quiz.quiz_type ?? 'DIRECTION']}</span>
+            <span className="break-keep">
+              · 정답 <strong className={changeColor(quiz)}>{answerText(quiz)}</strong>{' '}
+              <span className="whitespace-nowrap">({formatChange(quiz.actual_change)})</span>
+            </span>
+            <span className="whitespace-nowrap">· 차트 {quiz.window_bars ?? 60}봉</span>
+            <span className="whitespace-nowrap">· 예측 {quiz.horizon_bars ?? DEFAULT_HORIZON}일</span>
+            <span className="whitespace-nowrap">· 시도 {quiz.attempt_count}회</span>
+            <span className="whitespace-nowrap">· 보상 {quiz.reward_cash.toLocaleString()}원</span>
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -470,8 +478,8 @@ function QuizzesPanel() {
         {list && <span className="text-slate-400">총 {list.total.toLocaleString()}개</span>}
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-2">
-        <div>
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+        <div className="min-w-0">
           {loading && !list ? (
             <p className="text-sm text-slate-400">불러오는 중…</p>
           ) : loadFailed ? (
@@ -492,14 +500,14 @@ function QuizzesPanel() {
           ) : (
             list && (
               <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
-                <table className="w-full text-sm">
+                {/* 목록·상세 2단(xl)에서 칸이 좁아도 글자가 낱자로 끊기지 않게 — 짧은 값은 nowrap,
+                    한글 문구(패턴·정답 보기)는 단어 단위(break-keep)로만 줄바꿈. 종목·기준일·차트 길이는 한 칸에 두 줄로 묶는다. */}
+                <table className="w-full min-w-[520px] text-sm">
                   <thead className="bg-slate-50 text-left text-xs text-slate-500">
-                    <tr>
+                    <tr className="whitespace-nowrap">
                       <th className="px-3 py-2">#</th>
-                      <th className="px-3 py-2">종목</th>
-                      <th className="px-3 py-2">기준일</th>
+                      <th className="px-3 py-2">종목 · 기준일</th>
                       <th className="px-3 py-2">패턴</th>
-                      <th className="px-3 py-2">차트·예측</th>
                       <th className="px-3 py-2">정답</th>
                       <th className="px-3 py-2 text-right">시도</th>
                       <th className="px-3 py-2">상태</th>
@@ -510,23 +518,26 @@ function QuizzesPanel() {
                       <tr
                         key={q.id}
                         onClick={() => setSelectedId(q.id)}
-                        className={`cursor-pointer border-t border-slate-100 hover:bg-slate-50 ${
+                        className={`cursor-pointer border-t border-slate-100 align-top hover:bg-slate-50 ${
                           selectedId === q.id ? 'bg-indigo-50' : ''
                         }`}
                       >
-                        <td className="px-3 py-2 text-slate-400">{q.id}</td>
-                        <td className="px-3 py-2">{q.ticker}</td>
-                        <td className="px-3 py-2">{q.base_date}</td>
-                        <td className="px-3 py-2">{q.pattern_type}</td>
-                        <td className="px-3 py-2 text-slate-500">
-                          {q.window_bars ?? 60}봉 · {q.horizon_bars ?? DEFAULT_HORIZON}일
+                        <td className="whitespace-nowrap px-3 py-2 text-slate-400">{q.id}</td>
+                        <td className="whitespace-nowrap px-3 py-2">
+                          <div className="font-medium text-slate-800">{q.ticker}</div>
+                          <div className="text-xs text-slate-400">
+                            {q.base_date} · {q.window_bars ?? 60}봉 → {q.horizon_bars ?? DEFAULT_HORIZON}일
+                          </div>
                         </td>
-                        <td className={`px-3 py-2 ${changeColor(q)}`}>
-                          <span className="mr-1 text-xs text-slate-400">{TYPE_LABEL[q.quiz_type ?? 'DIRECTION']}</span>
-                          {answerText(q)} {formatChange(q.actual_change)}
+                        <td className="min-w-[96px] break-keep px-3 py-2 text-slate-700">{q.pattern_type}</td>
+                        <td className={`min-w-[120px] break-keep px-3 py-2 ${changeColor(q)}`}>
+                          <div className="whitespace-nowrap text-xs text-slate-400">{TYPE_LABEL[q.quiz_type ?? 'DIRECTION']}</div>
+                          <div>
+                            {answerText(q)} <span className="whitespace-nowrap">{formatChange(q.actual_change)}</span>
+                          </div>
                         </td>
-                        <td className="px-3 py-2 text-right">{q.attempt_count}</td>
-                        <td className="px-3 py-2">
+                        <td className="whitespace-nowrap px-3 py-2 text-right">{q.attempt_count}</td>
+                        <td className="whitespace-nowrap px-3 py-2">
                           {q.is_active ? (
                             <span className="text-emerald-600">활성</span>
                           ) : (
@@ -565,7 +576,7 @@ function QuizzesPanel() {
           )}
         </div>
 
-        <div>
+        <div className="min-w-0">
           {selectedId === null ? (
             <p className="rounded-xl border border-dashed border-slate-300 bg-white px-5 py-10 text-center text-sm text-slate-500">
               목록에서 퀴즈를 선택하면 차트·해설이 표시됩니다.

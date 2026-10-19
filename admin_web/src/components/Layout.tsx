@@ -1,11 +1,17 @@
-import { Outlet, useNavigate } from 'react-router-dom'
+import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { getUser, logout } from '../api/auth'
 import { useUiStore } from '../store/ui'
 import Sidebar from './Sidebar'
 import NotificationToaster from './NotificationToaster'
 
+// 목록·상세 2단 화면은 넓게 — 4xl(896px) 안에서 두 칸으로 나누면 칸당 ~430px 라 표 글자가 낱자로 끊긴다.
+// 나머지 화면(글 편집 등)은 읽기 폭을 유지한다.
+const WIDE_PREFIXES = ['/game/quizzes', '/market/']
+
 export default function Layout() {
   const navigate = useNavigate()
+  const { pathname } = useLocation()
+  const wide = WIDE_PREFIXES.some((p) => pathname.startsWith(p))
   const user = getUser()
   const toggleSidebar = useUiStore((s) => s.toggleSidebar)
 
@@ -55,7 +61,7 @@ export default function Layout() {
       <div className="flex flex-1">
         <Sidebar />
         <main className="min-w-0 flex-1 px-4 py-6 sm:px-6 sm:py-8">
-          <div className="mx-auto max-w-4xl">
+          <div className={`mx-auto ${wide ? 'max-w-7xl' : 'max-w-4xl'}`}>
             <Outlet />
           </div>
         </main>
