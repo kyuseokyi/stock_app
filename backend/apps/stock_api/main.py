@@ -15,7 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from strawberry.fastapi import GraphQLRouter
 
 from apps.stock_api.graphql.schema import schema
-from apps.stock_api.routers import themes_admin
+from apps.stock_api.routers import market_admin, themes_admin
 from shared.cors import build_allowed_origins
 from shared.health import add_health_routes
 
@@ -36,6 +36,9 @@ app.include_router(graphql_app, prefix="/graphql")
 
 # 테마 관리자 보정(관리자 JWT) — KIS 테마 숨김·이름 수정, 관리자 테마, 종목 추가·제외
 app.include_router(themes_admin.router)
+
+# 관리자 시장 데이터(관리자 JWT) — 데이터 현황, KIS 를 호출하지 않는 계산 수동 실행
+app.include_router(market_admin.router)
 
 
 @app.get("/health", tags=["health"])
