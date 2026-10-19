@@ -24,6 +24,7 @@ export default function MarketVerify() {
     if (!ticker) {
       setData(null)
       setError(null)
+      setLoading(false)
       return
     }
     let alive = true
@@ -100,7 +101,7 @@ export default function MarketVerify() {
       {error && <p className="break-keep rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
 
       {data && (
-        <>
+        <div className={`space-y-6 transition ${loading ? 'opacity-50' : ''}`}>
           <p className="break-keep text-sm text-slate-600">
             <b className="text-slate-800">{data.profile?.name ?? data.ticker}</b>{' '}
             <span className="text-slate-400">{data.ticker}</span> · 기준일 {data.date ?? '—'}
@@ -119,7 +120,7 @@ export default function MarketVerify() {
             <LinksCard links={data.links} />
             <FundamentalsCard rows={data.fundamentals} note={notes.fundamentals} className={WIDE} />
           </div>
-        </>
+        </div>
       )}
     </div>
   )

@@ -115,30 +115,30 @@ export interface VerifyProfile {
 
 export interface VerifyBar {
   date: string
-  open: number
-  high: number
-  low: number
-  close: number
-  volume: number
+  open: number | null
+  high: number | null
+  low: number | null
+  close: number | null
+  volume: number | null
 }
 
 export interface VerifyComputed {
-  close: number
+  close: number | null
   chg_1d: number | null // %
   chg_5d: number | null
   chg_20d: number | null
-  value: number // 거래대금(원, 종가×거래량 근사)
+  value: number | null // 거래대금(원, 종가×거래량 근사)
   mcap: number | null // 원
   sector_m: string
 }
 
 export interface VerifyInvestor {
-  prsn_qty: number
-  frgn_qty: number
-  orgn_qty: number
-  prsn_amt: number // KIS 원값(단위 변환 없음)
-  frgn_amt: number
-  orgn_amt: number
+  prsn_qty: number | null
+  frgn_qty: number | null
+  orgn_qty: number | null
+  prsn_amt: number | null // KIS 원값(단위 변환 없음)
+  frgn_amt: number | null
+  orgn_amt: number | null
 }
 
 export interface VerifyFundamentalRow {

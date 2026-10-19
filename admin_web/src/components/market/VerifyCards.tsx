@@ -194,7 +194,7 @@ export function LinksCard({ links }: { links: VerifyLink[] }) {
             <a
               href={l.url}
               target="_blank"
-              rel="noreferrer"
+              rel="noopener noreferrer"
               className="inline-block whitespace-nowrap rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-indigo-600 hover:bg-slate-50"
             >
               {l.label} ↗
