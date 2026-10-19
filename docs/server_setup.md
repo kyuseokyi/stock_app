@@ -166,6 +166,7 @@ sudo apt-get update && sudo apt-get install -y cloudflared
   ```
 - **수동**: GitHub Actions 탭 → `Deploy Server` 또는 `Deploy Web` → **Run workflow**(workflow_dispatch). 수집 시간(매일 20:30)을 피해 원하는 때 배포할 때 사용.
 - 각 워크플로는 지정 서비스만 `up -d --build` 하므로 나머지 컨테이너·볼륨은 그대로 유지된다. `concurrency` 로 같은 대상 배포는 직렬화된다.
+- **무중단 배포(2026-10-19 준비)**: compose 방식은 옛 컨테이너를 먼저 꺼서 배포마다 수십 초 502 가 난다. 앱 9개를 단일 노드 Swarm(start-first)으로 옮기는 1회 전환 절차는 [`docs/deploy/single-node-swarm.md`](deploy/single-node-swarm.md). 워크플로는 스택 `stock` 이 있으면 자동으로 Swarm 방식(`deploy/swarm/deploy.sh`), 없으면 위 compose 방식. 전환 후에는 `docker exec stock_celery_worker …` 대신 `docker exec $(docker ps -qf name=stock_celery_worker -f status=running | head -1) …`.
 
 ---
 

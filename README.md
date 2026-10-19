@@ -492,6 +492,8 @@ uv run python -c "from apps.collector.tasks.universe import backfill_all_daily; 
 
 > 📈 **상용 수평 확장(Docker Swarm · Kubernetes)**: 설정은 `deploy/swarm/`·`deploy/k8s/`, 초보자용 단계별 가이드는 [`docs/deploy/README.md`](docs/deploy/README.md).
 
+> 🔁 **무중단 배포(단일 서버)**: compose `up -d` 는 옛 컨테이너를 먼저 꺼서 배포마다 수십 초 502 가 났다 → 앱 9개만 단일 노드 Swarm(start-first)으로 옮기는 전환을 준비했다(DB 는 compose 그대로). 1회 전환 `bash deploy/swarm/cutover.sh`, 되돌리기 `rollback-to-compose.sh`, 절차 [`docs/deploy/single-node-swarm.md`](docs/deploy/single-node-swarm.md). 워크플로는 스택 `stock` 이 있으면 Swarm(`deploy/swarm/deploy.sh`), 없으면 기존 compose. 웹·앱은 조회(GET·GraphQL query)만 연결 실패·502~504 에 1·3·6초 재시도(`web_client/src/lib/retry.ts`, `mobile/src/lib/api/retry.ts`).
+
 | 워크플로 | 자동 트리거(경로) | 배포 대상 |
 |---|---|---|
 | `deploy-server.yml` | `backend/**`, `docker-compose.prod.yml` | auth/stock/blog API + trading_game(8004, `game.haezean.com`)·game_ws(KIS 실시간) + celery worker/beat. 기동 전 `alembic upgrade head` 자동 |

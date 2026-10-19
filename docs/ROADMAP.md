@@ -149,6 +149,7 @@
 - [x] web_client TypeScript 전환 (서브페이즈 6 직전, admin_web과 동일 방식) — 2026-10-13 strict 전환 완료
 - [x] **trading_game 개발 서버(develop) 배포 구성** — prod compose 에 `trading_game`(호스트 8004)·`game_ws` 추가, web/admin 빌드에 `VITE_GAME_API_URL=https://game.haezean.com` 주입, Deploy Server 에 `alembic upgrade head` 자동 단계 (2026-10-13). **남은 수동 작업**: Cloudflare `game.haezean.com → localhost:8004`, 서버에서 시즌 시드·퀴즈 생성(`docs/server_setup.md` §7-1)
 - [ ] trading_game product 배포(도메인 확정 시 — 빌드 인자·CORS_ORIGINS 추가)
+- [x] **무중단 배포 준비(단일 서버)** — 원인: compose stop-first 로 배포마다 수십 초 502. 앱 9개 단일 노드 Swarm(start-first·healthcheck·자동 롤백, DB 는 compose 유지) `deploy/swarm/single-node.yml`·`deploy.sh`·`cutover.sh`·`rollback-to-compose.sh`, 워크플로 자동 분기(스택 있으면 Swarm). 웹·앱 조회만 재시도(1·3·6초, mutation·POST 제외). 문서 `docs/deploy/single-node-swarm.md` (2026-10-19). **남은 일: 운영자 1회 전환(`cutover.sh`)**
 - [x] **게임 일봉 오늘 봉** — `GET /api/game/candles/session`(분봉으로 만든 최근 거래일 봉)을 일봉 마지막보다 나중이면 이어 붙임(웹·앱 `withSessionBar`). 재조회·탭 복귀에도 유지, 20:30 수집 후엔 공식 일봉 (2026-10-17). 앱은 새 빌드 필요
 - [x] **랭킹 창 자동 갱신** — 열려 있고 화면이 보일 때 15초마다 조용히 갱신(주간·월간·시즌, 실패 시 기존 유지), 서버 Top 100 응답 5초 Redis 캐시(`board_cache`) (2026-10-17). 앱은 새 빌드 필요
 - [x] **차트 지지·저항선 자동 범위** — `autoscaleInfoProvider` 로 일봉은 지지·저항·진입가, 분봉은 진입가만 포함(손절·익절 제외), 웹·앱 (2026-10-17)

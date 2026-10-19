@@ -30,6 +30,12 @@
 - [ ] 상식 점검: RS 상위가 실제 주도주인지, 시장 방향(M)이 실제 KOSPI·KOSDAQ 흐름과 맞는지
 - [ ] 재무 형식 확인 뒤 `.env.production` 에 `FUNDAMENTALS_Q_CUMULATIVE=true|false` → worker 재시작 → C 가 '준비 중'에서 판정으로 바뀌는지
 
+### 무중단 배포 — 단일 노드 Swarm 전환(운영자 1회 작업, `docs/deploy/single-node-swarm.md`)
+- [ ] 서버 `docker version` 23 이상인지(스택 `ulimits`)
+- [ ] 접속이 적은 시간에 `bash deploy/swarm/cutover.sh` → 6개 포트 응답·`docker stack services stock` 9개 `1/1`
+- [ ] 다음 백엔드 push 때 Actions 로그 `모드: Swarm(start-first)`, 배포 중 새로고침해도 끊기지 않는지
+- [ ] 앱(Expo) 새 빌드 후 조회 재시도 적용(웹은 다음 웹 배포부터)
+
 ### 스크리너 탭 — 시장·테마·업종·일정(프로젝트 3 배포 후)
 - [ ] 20:30 파이프라인 끝 로그 `시장 그룹 계산: {'date': …, 'stocks': ~2,600, 'themes': …, 'sectors': ~27}` → 웹 `/screener` 가 시장 탭으로 열리고 지수 카드·주도 테마·업종 지도가 뜨는지
 - [ ] 한 번 `collector.backfill_market_groups` 실행(60거래일) → 테마 상세 순위 추이·'n일째 상위' 배지
