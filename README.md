@@ -219,6 +219,8 @@ npm run build:android:prod # 상용(app-bundle) / build:ios:prod
 - 공용 코드 기준은 `mobile/src/features/fund/core`, 웹은 복사본 `web_client/src/lib/fundCore`.
   core 를 고치면 `scripts/check-fund-core-sync.sh --write` 로 복사하고 `scripts/check-fund-core-sync.sh` 로 확인.
 - 테스트: `cd mobile && npx jest src/features/fund` (가린 픽스처 + convert.py 기대 JSON 교차 검증).
+- **자동 갱신**: 앱 실행·앱 복귀·웹 접속·탭 복귀 때 등록한 펀드를 모두 다시 가져온다(로그인 상태, 10분 이내 확인한 펀드는 건너뜀, 동시 2개). 앱은 리포트를 열지 않아도 히스토리가 쌓인다. 목록에 `기준일 · 확인 시각` 표시.
+  설계: `docs/superpowers/specs/2026-10-19-fund-auto-refresh-design.md` (로직은 core `refresh-all.ts`)
 - 설계: `docs/superpowers/specs/2026-10-18-fund-report-viewer-design.md`
 
 ### 펀드 히스토리 · Google Drive 백업 (앱)
