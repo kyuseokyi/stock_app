@@ -10,4 +10,5 @@ export * from './display';
 export * from './view';
 export * from './history';
 export * from './backup';
+export * from './history-view';
 export { useFundReport, type ReportState } from './use-fund-report';
