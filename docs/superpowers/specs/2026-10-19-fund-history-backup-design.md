@@ -46,8 +46,9 @@ type Backup = {
 ```
   펀드 id 는 기기마다 새로 생기므로 **URL 이 키**.
 - **Drive 호출**(`fetch` 직접, 서버 경유 없음): `files.list?spaces=appDataFolder&q=name='fund-backup-v1.json'`, 업로드(없으면 `POST multipart` 생성, 있으면 `PATCH uploadType=multipart`), 다운로드 `files/{id}?alt=media`.
+- **업로드 = 받아서 합친 뒤 올리기(덮어쓰기 보호):** 모든 업로드(자동·수동)는 Drive 파일을 먼저 받아 로컬과 합친 결과를 올린다. 재설치 직후 복원 전에 자동 백업이 돌아도 Drive 의 옛 기록이 사라지지 않는다(iOS 는 키체인이 남아 '연결됨' 상태가 재설치 뒤에도 유지될 수 있음). 받기가 "파일 없음" 외의 이유로 실패하면 **올리지 않는다**. 부작용: 기기에서 지운 펀드도 Drive 백업에는 남고, 복원하면 다시 추가된다.
 - **자동 백업:** 연결 상태에서 `mergePoint` 가 새 날짜를 추가했고 마지막 성공 백업이 오늘(기기 날짜) 이전이면 백그라운드로 업로드 → 하루 최대 1번. 실패는 조용히 상태에만 기록, 다음 새 기록 때 재시도.
-- **수동:** 백업 화면의 [지금 백업](로컬 전체로 덮어씀) / [복원] / [연결 해제](`signOut` + `revokeAccess`, Drive 파일은 남김).
+- **수동:** 백업 화면의 [지금 백업](Drive 와 합쳐 올림) / [복원] / [연결 해제](`signOut` + `revokeAccess`, Drive 파일은 남김).
 - **복원 = 합치기(덮어쓰기 아님, 멱등):**
   - 펀드: URL 기준, 로컬에 없는 것만 추가. `MAX_FUNDS`(10) 초과분은 건너뛰고 개수 안내. 이름은 `MAX_NAME` 으로 자름.
   - 히스토리: (URL, 계좌, 날짜) 기준 합집합, 같은 날짜면 `recordedAt` 늦은 쪽.
@@ -55,7 +56,7 @@ type Backup = {
 - **검증:** `parseBackup` 이 `v`, `isFundUrl`, 날짜 형식, 숫자 타입을 확인하고 틀린 항목은 버린다. 최상위가 깨졌으면 "백업 파일을 읽을 수 없어요", 로컬은 건드리지 않는다.
 - **재설치 진입점:** 펀드 목록이 비었을 때 빈 화면에 "Google Drive에서 복원" 버튼.
 
-core(`core/backup.ts`): `buildBackup(funds, histories, now)`, `parseBackup(raw)`, `mergeBackup(local, backup) → { funds, histories, addedFunds, skippedFunds, mergedPoints }`.
+core(`core/backup.ts`): `buildBackup(local, remote | null, now)`(로컬 + Drive 합본), `parseBackup(raw)`, `mergeBackup(local, backup, newId) → { funds, histories, addedFunds, skippedFunds, mergedPoints }`. 날짜 검사는 모양(`/^\d{4}-\d{2}-\d{2}$/`)만 — 가린 픽스처 날짜(3072년 90월 99일)도 통과해야 한다. 금액 해석은 `view.ts` 의 `parseAmount` 하나만 쓴다.
 앱: `features/fund/google-auth.ts`(로그인 래퍼), `features/fund/drive-backup.ts`(Drive REST), `features/fund/history-store.ts`(파일 I/O + 기록·자동백업 연결).
 
 ## 4. 화면
