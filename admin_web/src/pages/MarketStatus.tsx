@@ -17,6 +17,7 @@ const Q_LABEL: Record<MarketStatusReport['settings']['q_cumulative'], string> = 
 export default function MarketStatus() {
   const [data, setData] = useState<MarketStatusReport | null>(null)
   const [loading, setLoading] = useState(true)
+  const [refreshKey, setRefreshKey] = useState(0)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -45,7 +46,10 @@ export default function MarketStatus() {
         </div>
         <button
           type="button"
-          onClick={() => void load()}
+          onClick={() => {
+            void load()
+            setRefreshKey((k) => k + 1)
+          }}
           disabled={loading}
           className="rounded-lg border border-slate-300 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-40"
         >
@@ -84,7 +88,7 @@ export default function MarketStatus() {
         </>
       )}
 
-      <JobsPanel />
+      <JobsPanel refreshKey={refreshKey} />
     </div>
   )
 }
