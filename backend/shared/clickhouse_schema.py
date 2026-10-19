@@ -105,8 +105,13 @@ def ensure_game_minute_bars(client=None, db: str = CLICKHOUSE_DB) -> None:
 # 쌓여 FD 누수(EMFILE)로 이어진다 → 전종목 수집이 ~1000종목 부근에서
 # OSError(24, 'Too many open files')로 무더기 실패(누수된 FD는 회수 안 돼 복구 불가).
 # 한 프로세스는 클라이언트 하나만 재사용한다. celery prefork/포크 후에도 자식이
-# 자기 클라이언트를 갖도록 PID 로 캐시를 무효화한다. (clickhouse_connect 클라이언트는
-# 풀 기반이라 재사용·동시 조회에 안전하며, 어디서도 .close() 하지 않음)
+# 자기 클라이언트를 갖도록 PID 로 캐시를 무효화한다. (어디서도 .close() 하지 않음)
+#
+# autogenerate_session_id=False: 기본값이면 클라이언트가 세션 ID 하나를 모든 요청에 붙이고,
+# ClickHouse 는 같은 세션의 동시 쿼리를 거부한다("Attempt to execute concurrent queries
+# within the same session"). 전종목 수집이 스레드 4개로 이 클라이언트를 공유하면서
+# 2026-10-19 일봉 1,256/4,395 종목이 이 오류로 빠졌다. 세션 없이 쓰면 HTTP 풀 기반이라
+# 스레드 간 동시 사용에 안전하다(임시 테이블·SET 같은 세션 상태는 쓰지 않는다).
 _client = None
 _client_pid: int | None = None
 
@@ -121,6 +126,7 @@ def get_client():
             port=CLICKHOUSE_PORT,
             username=CLICKHOUSE_USER,
             password=CLICKHOUSE_PASSWORD,
+            autogenerate_session_id=False,
         )
         _client_pid = pid  # 연결 성공 후에만 캐시 확정(실패 시 다음 호출에서 재시도)
     return _client

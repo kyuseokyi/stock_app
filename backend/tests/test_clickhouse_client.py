@@ -62,3 +62,21 @@ def test_failed_connect_not_cached(monkeypatch):
     assert ch._client is None and ch._client_pid is None  # 캐시 미오염
     boom["fail"] = False
     assert ch.get_client() is not None  # 다음 호출은 성공
+
+
+def test_client_has_no_session(monkeypatch):
+    # 2026-10-19 사건: 기본 세션 ID 를 쓰면 스레드 4개가 같은 세션으로 동시 쿼리 →
+    # ClickHouse 가 "concurrent queries within the same session" 으로 거부(일봉 1,256종목 누락).
+    # 공유 클라이언트는 세션 없이 만들어야 한다.
+    _Dummy._n = 0
+    ch._client = None
+    ch._client_pid = None
+    seen = {}
+
+    def capture(**kw):
+        seen.update(kw)
+        return _Dummy()
+
+    monkeypatch.setattr(ch.clickhouse_connect, "get_client", capture)
+    ch.get_client()
+    assert seen.get("autogenerate_session_id") is False
