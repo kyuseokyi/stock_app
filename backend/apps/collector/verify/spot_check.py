@@ -116,20 +116,23 @@ def external_check(d: date, tickers: list[str], fetch: Callable[[str, date], Bar
     """종목마다 KRX 와 비교. 종목 사이에 throttle 초 쉰다(pause 는 테스트에서 바꿔 끼운다)."""
     ours = our_bars(d, tickers)
     out = []
-    for i, t in enumerate(tickers):
-        if i and throttle:
-            pause(throttle)
+    called = False
+    for t in tickers:
         mine = ours.get(t)
+        if mine is None:  # 우리 일봉이 없으면 KRX 를 부르지 않는다(missing — 오류 과반 규칙에 안 센다)
+            out.append({"ticker": t, "status": checks.MISSING, "reasons": ["우리 일봉 없음"],
+                        "ours": None, "krx": None})
+            continue
+        if called and throttle:
+            pause(throttle)
+        called = True
         try:
             krx = fetch(t, d)
         except Exception as exc:  # noqa: BLE001 — 한 종목 실패가 점검 전체를 막지 않게
             out.append({"ticker": t, "status": checks.ERROR, "reasons": [f"KRX 조회 실패: {exc}"[:200]],
                         "ours": _bar_dict(mine), "krx": None})
             continue
-        if mine is None:
-            status, reasons = checks.ERROR, ["우리 일봉 없음"]
-        else:
-            status, reasons = checks.judge_bar(mine, krx)
+        status, reasons = checks.judge_bar(mine, krx)
         out.append({"ticker": t, "status": status, "reasons": reasons, "ours": _bar_dict(mine),
                     "krx": _bar_dict(krx)})
     return out
@@ -213,7 +216,7 @@ def _v(x) -> str:
         return "—"
     if isinstance(x, float):
         return f"{x:.6f}".rstrip("0").rstrip(".")
-    return str(x)
+    return str(x).replace("|", "\\|")
 
 
 def _bar_text(b: dict | None) -> str:
@@ -264,6 +267,7 @@ def render_report(result: dict) -> str:
         "- 외부 기준은 KRX 단독(pykrx, 수정주가)이다. 우리 일봉은 KRX+넥스트레이드 통합 시세라 고가≥, 저가≤, 거래량≥ 가 정상이다.",
         "  거래량이 같으면(넥스트레이드 미상장) 시가·고가·저가·종가도 같아야 한다.",
         "- 테마 일관성 점검은 최신 거래일 실행을 권장(과거 날짜는 테마 구성 변경으로 '구성 변경 추정'이 많음)",
+        "- 과거 날짜는 이후 액면분할 등으로 수정주가 기준이 달라져 위반처럼 보일 수 있음",
         "- 그룹 평균 검사의 테마 소속·거래정지는 현재 PG 값이다. 구성 수가 다르면 '구성 변경 추정'(경고)으로 두고 평균은 비교하지 않는다.",
         "", "## 요약", "", "| 항목 | 수 |", "|---|---|",
         *[f"| 외부 {_LABEL[s]} | {c[s]} |" for s in _LABEL],
@@ -310,14 +314,26 @@ def main(argv: list[str] | None = None, *, fetch: Callable[[str, date], Bar | No
         return 2
     seed = args.seed if args.seed is not None else random.randrange(1_000_000)
     tickers = sample_tickers(d, args.n, seed)
-    result = {"date": d.isoformat(), "n": len(tickers), "seed": seed,
-              "external": external_check(d, tickers, fetch=fetch or krx_bar, pause=pause),
-              "internal": internal_checks(d)}
+    if not tickers:
+        print(f"그 날짜에 일봉이 없어요: {d.isoformat()}", file=sys.stderr)
+        return 2
+    external = external_check(d, tickers, fetch=fetch or krx_bar, pause=pause)
+    internal_failed = False
+    try:
+        internal = internal_checks(d)
+    except Exception as exc:  # noqa: BLE001 — 느린 KRX 조회 뒤라도 보고서는 남긴다
+        internal_failed = True
+        internal = {"stocks_checked": 0, "stock_mismatches": [], "groups_checked": 0, "group_mismatches": [],
+                    "group_drifts": [], "duplicates": [],
+                    "notes": [f"내부 일관성 점검 실패: {type(exc).__name__}: {exc}"[:300]]}
+    result = {"date": d.isoformat(), "n": len(tickers), "seed": seed, "external": external, "internal": internal}
     out = args.out or Path.cwd() / f"spot_check_{d.isoformat()}.md"
     out.write_text(render_report(result), encoding="utf-8")
     print(format_summary(result))
     print(f"보고서: {out}")
     code = checks.exit_code(result)
+    if internal_failed:
+        return 1  # 돌지 못한 검사가 통과처럼 보이면 안 된다
     if code == 0 and error_majority(result):
         print(ERROR_MAJORITY_MSG)
         return 3

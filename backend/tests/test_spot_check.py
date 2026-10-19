@@ -243,3 +243,39 @@ def test_report_header_recommends_latest_day(env, tmp_path):
     out = tmp_path / "r.md"
     sc.main(["--n", "5", "--seed", "1", "--out", str(out)], fetch=_fetch, pause=lambda s: None)
     assert "테마 일관성 점검은 최신 거래일 실행을 권장(과거 날짜는 테마 구성 변경으로 '구성 변경 추정'이 많음)" in out.read_text(encoding="utf-8")
+
+
+def test_main_explicit_date_without_rows_exits_2(env, tmp_path, capsys):
+    env.use(universe=(f"DISTINCT ticker FROM {DB}.daily_prices", []))
+    out = tmp_path / "x.md"
+    assert sc.main(["--date", "2026-10-15", "--out", str(out)], fetch=_fetch, pause=lambda s: None) == 2
+    assert "그 날짜에 일봉이 없어요: 2026-10-15" in capsys.readouterr().err and not out.exists()
+
+
+def test_main_internal_failure_still_writes_report_and_exits_1(env, tmp_path, monkeypatch):
+    def boom(d):
+        raise ValueError("ch 끊김")
+
+    monkeypatch.setattr(sc, "internal_checks", boom)
+    out = tmp_path / "r.md"
+    code = sc.main(["--n", "5", "--seed", "1", "--out", str(out)],
+                   fetch=lambda t, d: sc.our_bars(d, [t])[t], pause=lambda s: None)
+    assert code == 1
+    assert "내부 일관성 점검 실패: ValueError: ch 끊김" in out.read_text(encoding="utf-8")
+
+
+def test_external_missing_our_bar_skips_fetch(env):
+    env.use(bars=(f"open, high, low, close, volume FROM {DB}.daily_prices", []))
+    calls = []
+    out = sc.external_check(D, TICKERS[:2], fetch=lambda t, d: calls.append(t), pause=lambda s: None)
+    assert calls == [] and [(e["status"], e["reasons"]) for e in out] == [(checks.MISSING, ["우리 일봉 없음"])] * 2
+
+
+def test_report_escapes_pipes():
+    assert sc._v("a|b") == "a\\|b"
+
+
+def test_report_header_mentions_split_caveat(env, tmp_path):
+    out = tmp_path / "r.md"
+    sc.main(["--n", "5", "--seed", "1", "--out", str(out)], fetch=_fetch, pause=lambda s: None)
+    assert "이후 액면분할 등으로 수정주가 기준이 달라져 위반처럼 보일 수 있음" in out.read_text(encoding="utf-8")
