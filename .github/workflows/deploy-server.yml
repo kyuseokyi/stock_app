@@ -52,7 +52,7 @@ jobs:
 
     - name: Build, migrate, rolling update (Swarm, 무중단)
       if: steps.mode.outputs.swarm == 'true'
-      run: bash deploy/swarm/deploy.sh backend "${GITHUB_SHA::12}"
+      run: bash deploy/swarm/deploy.sh backend "${GITHUB_SHA:0:12}"
 
     - name: Build backend images
       if: steps.mode.outputs.swarm != 'true'

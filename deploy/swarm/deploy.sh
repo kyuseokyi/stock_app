@@ -11,9 +11,14 @@ WHAT=${1:?backend|web}
 TAG=${2:?tag}
 cd "$(dirname "$0")/../.."
 
-# 백엔드·웹 워크플로가 동시에 돌아도 스택 갱신이 겹치지 않게 서버 단위 잠금(먼저 온 쪽이 끝날 때까지 대기)
-exec 9>/tmp/stock_stack_deploy.lock
-flock 9
+# 백엔드·웹 워크플로가 동시에 돌아도 스택 갱신이 겹치지 않게 서버 단위 잠금(먼저 온 쪽이 끝날 때까지 대기).
+# 서버가 macOS(Mac mini)라 flock 이 없다 → mkdir 은 원자적이라 잠금으로 쓴다. 30분 넘은 잠금은 죽은 것으로 보고 치운다.
+LOCK=/tmp/stock_stack_deploy.lock.d
+until mkdir "$LOCK" 2>/dev/null; do
+  if [ -n "$(find "$LOCK" -maxdepth 0 -mmin +30 2>/dev/null)" ]; then rmdir "$LOCK" 2>/dev/null || true; continue; fi
+  echo "⏳ 다른 배포가 진행 중 — 대기"; sleep 5
+done
+trap 'rmdir "$LOCK" 2>/dev/null || true' EXIT
 
 # 지금 떠 있는 서비스의 이미지 태그(다른 쪽 배포가 바꾸지 않게 유지)
 current_tag() {

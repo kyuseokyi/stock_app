@@ -1,6 +1,6 @@
 # 단일 서버 무중단 배포 — 단일 노드 Docker Swarm 전환
 
-> 대상: 개발 서버(haezean) 한 대. 작성 2026-10-19. 결정 배경: 배포할 때마다 접속이 끊기거나 API 호출이 실패하던 문제.
+> 대상: 개발 서버(haezean) 한 대 — **Mac mini(macOS) + Docker Desktop**, 배포 러너 폴더 `/Users/kyuseok/actions-runner/_work/stock_app/stock_app`. 작성 2026-10-19. 결정 배경: 배포할 때마다 접속이 끊기거나 API 호출이 실패하던 문제.
 > 관련 파일: `deploy/swarm/single-node.yml`(스택), `deploy/swarm/deploy.sh`(워크플로가 호출), `deploy/swarm/cutover.sh`(1회 전환), `deploy/swarm/rollback-to-compose.sh`(되돌리기).
 > 다중 서버·레지스트리·Swarm secret 을 쓰는 상용 구성은 별도 문서 `docs/deploy/README.md`(`deploy/swarm/stack.yml`).
 
@@ -41,7 +41,7 @@ bash deploy/swarm/cutover.sh
 - [ ] `https://app.haezean.com`·`api`·`auth`·`blog`·`game`·`admin` 정상
 - [ ] 백엔드 파일 하나 바꿔 push → Actions 로그 `모드: Swarm(start-first)` → 배포 중 브라우저에서 계속 새로고침해도 끊기지 않는지
 - [ ] `docker service ps stock_stock_api` — 옛 태스크 `Shutdown`, 새 태스크 `Running`
-- [ ] **재부팅 내성(중요, 한가한 시간에)**: `sudo systemctl restart docker` → DB 3개가 healthy 로 돌아오고 여전히 `stock_net` 에 붙어 있는지(`docker inspect -f '{{json .NetworkSettings.Networks}}' stock_postgres_prod`), 스택 9개 `1/1`. compose 컨테이너가 overlay 에 붙은 상태로 데몬이 재시작될 때 망 준비 전에 떠서 실패한 사례가 Docker 에 있었다. 불안정하면 대안: DB 를 overlay 에 붙이지 않고 스택에 `extra_hosts: ["postgres:host-gateway", …]` 로 호스트 공개 포트(5432·8123·6379)를 쓰게 바꾼다.
+- [ ] **재부팅 내성(중요, 한가한 시간에)**: Docker Desktop 재시작(메뉴 막대 고래 → Restart, 또는 `osascript -e 'quit app "Docker"' && open -a Docker`) → DB 3개가 healthy 로 돌아오고 여전히 `stock_net` 에 붙어 있는지(`docker inspect -f '{{json .NetworkSettings.Networks}}' stock_postgres_prod`), 스택 9개 `1/1`. compose 컨테이너가 overlay 에 붙은 상태로 데몬이 재시작될 때 망 준비 전에 떠서 실패한 사례가 Docker 에 있었다. 불안정하면 대안: DB 를 overlay 에 붙이지 않고 스택에 `extra_hosts: ["postgres:host-gateway", …]` 로 호스트 공개 포트(5432·8123·6379)를 쓰게 바꾼다.
 
 ## 4-1. 전환 전에 알아 둘 것
 - **스크립트는 아직 어디서도 실제로 돌려 보지 않았다**(문법 검사·`docker stack config` 렌더링만). 대신 `cutover.sh` 는 중단 전에 실패하도록 사전 점검을 모아 뒀다: DB healthy, Docker ≥ 23, live-restore 꺼짐, 10.x 대역 겹침 경고, 이미지 빌드·마이그레이션, 새 망에서 DB 이름 확인, **compose 와 Swarm 의 env 해석 비교**(따옴표·`${}`·행 끝 주석 때문에 다르게 읽히는 키가 있으면 키 이름만 출력하고 중단).
@@ -69,3 +69,4 @@ bash deploy/swarm/rollback-to-compose.sh   # 스택 삭제 → compose 로 앱 9
 - 이미지 태그는 커밋 SHA. 최근 3개만 남기고 정리(롤백용).
 - 백엔드·웹 배포가 동시에 와도 `deploy.sh` 가 서버 잠금(`/tmp/stock_stack_deploy.lock`)으로 순서대로 처리.
 - Docker 23 이상 필요(스택 `ulimits`). `docker version` 으로 확인.
+- macOS 라 스크립트는 bash 3.2·BSD 도구 기준으로 작성(잠금은 `flock` 대신 `mkdir`). Docker Desktop 이 로그인 시 자동 시작되도록(설정 → General → Start Docker Desktop when you sign in) 둬야 재부팅 뒤 스택·DB 가 다시 뜬다.
