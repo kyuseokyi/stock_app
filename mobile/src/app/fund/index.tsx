@@ -14,6 +14,7 @@ import {
   type FundEntry,
 } from '@/features/fund/core';
 import { deleteCache, loadFunds, saveFunds } from '@/features/fund/fund-store';
+import { deleteHistory } from '@/features/fund/history-store';
 import { Button, Card, ListRow, ListState, showToast } from '@/ui';
 
 // 내 펀드 수익 — 기기에 저장한 fund.ivyro.net 펀드 현황 주소 목록(추가·삭제). 서버에는 저장하지 않는다.
@@ -66,7 +67,7 @@ export default function FundListScreen() {
   };
 
   const handleRemove = (f: FundEntry) => {
-    Alert.alert('펀드 삭제', `${displayName(f)}을(를) 목록에서 지울까요?`, [
+    Alert.alert('펀드 삭제', `${displayName(f)}을(를) 목록에서 지울까요?\n쌓인 기록도 삭제됩니다.`, [
       { text: '취소', style: 'cancel' },
       {
         text: '삭제',
@@ -76,6 +77,7 @@ export default function FundListScreen() {
           const next = removeFund(funds, f.id);
           void saveFunds(next).then(() => {
             deleteCache(f.id);
+            deleteHistory(f.id);
             setFunds(next);
           });
         },
