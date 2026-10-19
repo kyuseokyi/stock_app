@@ -1,6 +1,7 @@
 # 시장 대시보드·테마·업종·일정 (스크리너 프로젝트 3) — 설계
 
-> 상태: 설계 확정(사용자 승인 2026-10-19) · 작성 2026-10-19
+> 상태: 구현 완료(dev) · 작성 2026-10-19 · 계획 `docs/superpowers/plans/2026-10-19-market-dashboard.md`
+> 구현 메모: 일정 쿼리 인자는 `from/to` 대신 **`start/end`**(Python 예약어). 거시 지표에 `unit` 추가, 물가 지수(CPI·근원 CPI·근원 PCE)는 수준값 대신 **전년 대비 %**. 웹↔API 계약 테스트는 `api/market.ts` 의 `*_QUERY` 를 정규식으로 꺼내 실제 스키마로 실행. 실데이터(로컬 일봉 2,567종목) 계산 0.01초·조회 0.02초.
 > 선행: 프로젝트 1 시장 데이터 수집(`2026-10-18-market-data-foundation-design.md`), 프로젝트 2 CANSLIM(`2026-10-18-canslim-design.md`)
 > 기획 원본: `docs/joodal_curation_service_plan.md`(주달) — 이 문서는 그중 테마 랭킹·트리맵·테마 상세·일정 캘린더를 공식 데이터로 구현한다.
 

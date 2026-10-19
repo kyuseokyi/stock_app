@@ -83,6 +83,9 @@
 
 ### Phase 2 — 스크리너
 - [x] **CANSLIM 스크리너(프로젝트 2)** — 7항목 판정·점수 매일 사전 계산(`canslim_daily`), GraphQL `canslimMarket·canslimScreen·canslimScore`, 웹 `/screener`(시장 방향·필터·목록·차트·점수표·추이). C 는 재무 형식 확인 뒤 `FUNDAMENTALS_Q_CUMULATIVE` 로 켬. 스펙 `docs/superpowers/specs/2026-10-18-canslim-design.md` (2026-10-18). 앱 화면은 다음
+- [x] **스크리너 탭 — 시장·테마·업종·일정(프로젝트 3, 주달 화면)** — 메뉴 '스크리너' 안 탭(시장·테마·업종·일정·주도주), 종가 기준 하루 1회 사전 계산(`market_stock_daily`·`market_group_daily`) + 관리자 테마 보정 시 최신일 재계산, 테마/업종 순위·트리맵(시총/거래대금)·상세(순위 추이·대장주)·일정(공모주·경제지표), CANSLIM 탭 이름 '주도주'. 스펙 `docs/superpowers/specs/2026-10-19-market-dashboard-design.md` (2026-10-19). 다음: 관리자 테마 보정 UI, 뉴스·AI 요약(네이버 키·Ollama), 앱 화면
+- [ ] 관리자 테마 보정 UI(admin_web) — 보정 API(`/api/v1/admin/themes`)는 있음
+- [ ] 차트 패턴(컵·컵핸들·쌍바닥·플랫 베이스·HTF)·베이스 카운트·돌파 리포트 — 참고: 기존 `ams/workspace/api` 의 `app/services/chart_pattern/`(MarketSurge 맞춤 기준값)
 - [ ] `stock_api` 스크리너 리졸버/엔드포인트(필터 조합)
 - [ ] 프리셋(거래량급증/골든크로스/과매도/신고가) + 커스텀 필터(볼린저 σ·정/역배열·매물대·거래량·재무)
 - [ ] 결과 카드 UI + 정렬/편집, 차트 상세(웹 스플릿뷰)

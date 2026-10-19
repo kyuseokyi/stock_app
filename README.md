@@ -462,8 +462,15 @@ uv run python -c "from apps.collector.tasks.universe import backfill_all_daily; 
 - 테마 보정 API(관리자 JWT, stock_api): `GET/POST /api/v1/admin/themes`, `PATCH /api/v1/admin/themes/{id}`(이름·설명·숨김), `GET/POST /api/v1/admin/themes/{id}/stocks`, `DELETE /api/v1/admin/themes/{id}/stocks/{ticker}`(제외 표시). KIS 테마 동기화는 `source=kis` 연결만 바꿔 관리자 보정이 유지된다.
 - 네이버 증권 크롤링은 하지 않는다(`robots.txt` 전체 거부) — 로드맵 "추후 확인".
 
-### 🔎 CANSLIM 스크리너 (스크리너 프로젝트 2)
-설계 `docs/superpowers/specs/2026-10-18-canslim-design.md`. 웹 `/screener`(메뉴 "스크리너", 비로그인 공개).
+### 🗺️ 스크리너 탭 — 시장·테마·업종·일정 (스크리너 프로젝트 3)
+설계 `docs/superpowers/specs/2026-10-19-market-dashboard-design.md`. 웹 `/screener/market|themes|sectors|calendar|leaders`(`/screener` → 시장 탭, 비로그인 공개).
+- **계산**: `collector.compute_market_groups` — 20:30 일일 파이프라인 맨 끝(CANSLIM 뒤). 보통주의 1·5·20일 등락·거래대금(종가×거래량)·시총(종가×상장주식수)을 CH `market_stock_daily`, 테마·업종 단순 평균·대장주·순위를 `market_group_daily` 에 저장. 관리자 테마 보정 API 가 바꿀 때마다 최신 기준일만 다시 계산(`send_task`).
+- **처음 한 번**: 순위 추이·'n일째 상위'용 60거래일 — `uv run celery -A apps.collector.celery_app call collector.backfill_market_groups` (과거 날짜도 현재 테마 소속 기준).
+- **API(stock_api GraphQL)**: `marketOverview`(지수·FRED 거시), `marketGroups(kind, period, sort, limit, offset)`, `marketTreemap(kind, size, period)`, `marketGroup(kind, id)`, `marketCalendar(start, end, category)`.
+- 기준값(테마 최소 3종목·상위 10위 연속)은 `apps/collector/market_groups/compute.py` 상수, 트리맵 색 상한(1일 ±5%·5일 ±10%·20일 ±20%)은 `web_client/src/lib/treemap.ts`.
+
+### 🔎 CANSLIM 스크리너 (스크리너 프로젝트 2) — 화면 이름 '주도주'
+설계 `docs/superpowers/specs/2026-10-18-canslim-design.md`. 웹 `/screener/leaders`(스크리너 탭 '주도주', `?ticker=` 로 종목 바로 열기, 비로그인 공개).
 - **계산**: `collector.compute_canslim` — 20:30 일일 파이프라인 마지막 단계(일봉 → 국내 지수 → 투자자 → CANSLIM)와 토 10:40(재무 수집 뒤). 보통주 전체의 7항목 판정·0~100 점수를 CH `canslim_daily`·`canslim_market` 에 저장(같은 날 재계산은 멱등).
 - **처음 한 번**: 점수 추이용 60거래일 채우기 — `uv run celery -A apps.collector.celery_app call collector.backfill_canslim` (과거 날짜도 실적은 최신값 사용).
 - **API(stock_api GraphQL)**: `canslimMarket`, `canslimScreen(market, minPass, required, sort, liquidOnly, limit, offset)`, `canslimScore(ticker)`.
