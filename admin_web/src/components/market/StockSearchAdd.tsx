@@ -17,21 +17,33 @@ export default function StockSearchAdd({ disabled, existing, onAdd }: Props) {
   const [results, setResults] = useState<Stock[]>([])
   const [picked, setPicked] = useState<Stock | null>(null)
   const [reason, setReason] = useState('')
+  const [searching, setSearching] = useState(false)
+  const [searched, setSearched] = useState(false) // 마지막 검색이 끝났는지
 
   useEffect(() => {
     const q = query.trim()
     if (picked || !q) {
       setResults([])
+      setSearching(false)
+      setSearched(false)
       return
     }
     let alive = true
+    setSearched(false)
     const timer = window.setTimeout(() => {
+      setSearching(true)
       searchStocks(q)
         .then((rows) => {
           if (alive) setResults(rows.filter((r) => r.country === 'KR').slice(0, MAX_RESULTS))
         })
         .catch(() => {
           if (alive) setResults([])
+        })
+        .finally(() => {
+          if (alive) {
+            setSearching(false)
+            setSearched(true)
+          }
         })
     }, DEBOUNCE_MS)
     return () => {
@@ -59,6 +71,7 @@ export default function StockSearchAdd({ disabled, existing, onAdd }: Props) {
           </span>
           <input
             value={reason}
+            aria-label="편입 사유"
             onChange={(e) => setReason(e.target.value)}
             placeholder="편입 사유(선택) — 예: HBM 장비 공급"
             className="min-w-0 flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm"
@@ -85,10 +98,15 @@ export default function StockSearchAdd({ disabled, existing, onAdd }: Props) {
         <div className="relative">
           <input
             value={query}
+            aria-label="종목 검색"
             onChange={(e) => setQuery(e.target.value)}
             placeholder="종목명 또는 코드 검색"
             className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
           />
+          {query.trim() && searching && <p className="mt-1 text-xs text-slate-400">검색 중…</p>}
+          {query.trim() && !searching && searched && results.length === 0 && (
+            <p className="mt-1 text-xs text-slate-400">국내 종목 결과가 없어요</p>
+          )}
           {results.length > 0 && (
             <ul className="absolute z-10 mt-1 max-h-64 w-full overflow-auto rounded-lg border border-slate-200 bg-white shadow-lg">
               {results.map((r) => {

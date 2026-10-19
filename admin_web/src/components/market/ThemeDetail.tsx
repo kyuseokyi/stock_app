@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { addThemeStock, excludeThemeStock, listThemeStocks, updateTheme } from '../../api/marketAdmin'
 import { apiErrorMessage } from '../../lib/apiError'
 import { formatPct, pctClass } from '../../lib/marketFormat'
@@ -22,15 +22,18 @@ export default function ThemeDetail({ theme, onChanged, onClose }: Props) {
   const [stocks, setStocks] = useState<ThemeStockRow[]>([])
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
+  const seq = useRef(0) // 늦게 온 이전 응답이 최신 목록을 덮어쓰지 않게
 
   const loadStocks = useCallback(async () => {
+    const my = ++seq.current
     setLoading(true)
     try {
-      setStocks(await listThemeStocks(theme.id))
+      const rows = await listThemeStocks(theme.id)
+      if (my === seq.current) setStocks(rows)
     } catch (e) {
-      showToast(apiErrorMessage(e), { icon: '⚠️' })
+      if (my === seq.current) showToast(apiErrorMessage(e), { icon: '⚠️' })
     } finally {
-      setLoading(false)
+      if (my === seq.current) setLoading(false)
     }
   }, [theme.id])
 
@@ -95,12 +98,14 @@ export default function ThemeDetail({ theme, onChanged, onClose }: Props) {
       <div className="space-y-2">
         <input
           value={name}
+          aria-label="테마 이름"
           onChange={(e) => setName(e.target.value)}
           maxLength={100}
           className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
         />
         <textarea
           value={description}
+          aria-label="테마 설명"
           onChange={(e) => setDescription(e.target.value)}
           rows={2}
           placeholder="설명(선택) — 웹 테마 상세에 보여요"

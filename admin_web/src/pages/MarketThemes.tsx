@@ -109,12 +109,14 @@ export default function MarketThemes() {
       <div className="flex flex-wrap items-center gap-2">
         <input
           value={query}
+          aria-label="테마 검색"
           onChange={(e) => setQuery(e.target.value)}
           placeholder="테마 검색"
           className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm sm:w-56"
         />
         <select
           value={sort}
+          aria-label="정렬"
           onChange={(e) => setSort(e.target.value as SortKey)}
           className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
         >
@@ -134,6 +136,7 @@ export default function MarketThemes() {
         <div className="mt-3 flex flex-col gap-2 sm:flex-row">
           <input
             value={newName}
+            aria-label="새 테마 이름"
             onChange={(e) => setNewName(e.target.value)}
             placeholder="테마 이름"
             maxLength={100}
@@ -141,6 +144,7 @@ export default function MarketThemes() {
           />
           <input
             value={newDesc}
+            aria-label="새 테마 설명"
             onChange={(e) => setNewDesc(e.target.value)}
             placeholder="설명(선택)"
             className="min-w-0 flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm"

@@ -24,6 +24,7 @@ export default function ThemeList({ rows, loading, selectedId, onSelect }: Props
           <button
             type="button"
             onClick={() => onSelect(t.id)}
+            aria-current={t.id === selectedId ? 'true' : undefined}
             className={`flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-slate-50 ${
               t.id === selectedId ? 'bg-indigo-50' : ''
             } ${t.is_hidden ? 'opacity-60' : ''}`}
