@@ -101,6 +101,37 @@ def profile_map(session: Session) -> dict[str, tuple[str, int | None]]:
     return {t: (s, m) for t, s, m in rows}
 
 
+def group_profile_map(session: Session) -> dict[str, tuple[str, str, int | None, bool]]:
+    """{ticker: (시장, 업종 중분류, 상장주식수(천 주), 거래정지)} — 시장 그룹 집계용."""
+    rows = session.execute(select(StockProfile.ticker, StockProfile.market, StockProfile.sector_m,
+                                  StockProfile.listed_shares_k, StockProfile.is_halted)).all()
+    return {t: (m, s, k, bool(h)) for t, m, s, k, h in rows}
+
+
+def theme_groups(session: Session) -> dict[str, tuple[str, list[str]]]:
+    """{테마 id(문자열): (이름, [종목])} — 숨김 테마·제외 종목 빼고."""
+    rows = session.execute(
+        select(Theme.id, Theme.name, ThemeStock.ticker)
+        .join(ThemeStock, ThemeStock.theme_id == Theme.id)
+        .where(Theme.is_hidden.is_(False), ThemeStock.is_excluded.is_(False))
+        .order_by(Theme.id, ThemeStock.ticker)
+    ).all()
+    out: dict[str, tuple[str, list[str]]] = {}
+    for tid, name, ticker in rows:
+        out.setdefault(str(tid), (name, []))[1].append(ticker)
+    return out
+
+
+def theme_reasons(session: Session, theme_id: int) -> dict[str, str]:
+    rows = session.execute(select(ThemeStock.ticker, ThemeStock.reason).where(
+        ThemeStock.theme_id == theme_id, ThemeStock.reason.is_not(None))).all()
+    return dict(rows)
+
+
+def sector_name_map(session: Session) -> dict[str, str]:
+    return dict(session.execute(select(Sector.code, Sector.name)).all())
+
+
 def names_for(session: Session, tickers: list[str]) -> dict[str, str]:
     if not tickers:
         return {}

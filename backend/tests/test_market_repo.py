@@ -115,6 +115,31 @@ def test_profile_map(db):
     assert repo.profile_map(db) == {"005930": ("0013", 12), "247540": ("1028", None)}
 
 
+def test_group_profile_map(db):
+    repo.sync_profiles(db, [_p("005930"), _p("247540", market="KOSDAQ", sector_m="1028", listed_shares_k=None,
+                                              is_halted=True)])
+    assert repo.group_profile_map(db) == {"005930": ("KOSPI", "0013", 100, False),
+                                          "247540": ("KOSDAQ", "1028", None, True)}
+
+
+def test_theme_groups_skip_hidden_and_excluded(db):
+    semi = Theme(name="반도체", source="kis")
+    hidden = Theme(name="숨김", source="kis", is_hidden=True)
+    db.add_all([semi, hidden])
+    db.flush()
+    db.add_all([ThemeStock(theme_id=semi.id, ticker="005930", source="kis", reason="메모리"),
+                ThemeStock(theme_id=semi.id, ticker="000660", source="kis", is_excluded=True),
+                ThemeStock(theme_id=hidden.id, ticker="005930", source="kis")])
+    db.commit()
+    assert repo.theme_groups(db) == {str(semi.id): ("반도체", ["005930"])}
+    assert repo.theme_reasons(db, semi.id) == {"005930": "메모리"}
+
+
+def test_sector_name_map(db):
+    repo.sync_sectors(db, {"0013": "전기·전자"})
+    assert repo.sector_name_map(db) == {"0013": "전기·전자"}
+
+
 def test_names_for(db):
     _meta(db, ("005930", "삼성전자", "KOSPI"))
     assert repo.names_for(db, ["005930", "999999"]) == {"005930": "삼성전자"}
