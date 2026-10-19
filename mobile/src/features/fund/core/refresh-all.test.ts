@@ -78,7 +78,7 @@ describe('refreshAll', () => {
     const results: [string, RefreshOutcome][] = [];
     const r = await refreshAll([fund('a'), fund('b'), fund('c')], {
       fetchHtml: async (u) => {
-        if (u === fund('b').url) throw fundError('fetch', '실패');
+        if (u === fund('b').url) throw fundError('format', '실패');
         return HTML;
       },
       cache: memoryCache(),
@@ -88,7 +88,7 @@ describe('refreshAll', () => {
     expect(r).toEqual({ refreshed: 2, skipped: 0, failed: 1 });
     const byId = Object.fromEntries(results);
     expect('entry' in byId.a).toBe(true);
-    expect(byId.b).toEqual({ error: 'fetch' });
+    expect(byId.b).toEqual({ error: 'format' });
     expect('entry' in byId.c).toBe(true);
   });
 
@@ -156,6 +156,7 @@ describe('createAutoRefresher', () => {
     const p = r.run();
     void r.run();
     await p;
+    expect(r.getStatus().version).toBe(1);
     await r.run(); // 방금 확인 → 10분 이내라 건너뜀
     expect(fetched).toHaveLength(1);
   });
@@ -188,5 +189,44 @@ describe('createAutoRefresher', () => {
     });
     await r.run();
     expect(r.getStatus()).toEqual({ running: false, version: 1, refreshedIds: [] });
+  });
+
+  it('실행 중 force 요청이 있으면 두 번 실행되고 상태는 [true,false,true,false] 순으로 바뀐다', async () => {
+    const { r } = setup({ delayMs: 5 });
+    const seq: boolean[] = [];
+    r.subscribe(() => seq.push(r.getStatus().running));
+    const p = r.run();
+    void r.run({ force: true });
+    await p;
+    expect(seq).toEqual([true, false, true, false]);
+    expect(r.getStatus()).toEqual({ running: false, version: 2, refreshedIds: ['a'] });
+  });
+
+  it('onRefreshed(기록)가 끝난 뒤에 최종 상태를 알린다', async () => {
+    let done = false;
+    let doneAtFinal: boolean | null = null;
+    const r = createAutoRefresher({
+      loadFunds: async () => [fund('a')],
+      deps: { fetchHtml: async () => HTML, cache: memoryCache(), now: () => NOW },
+      onRefreshed: async () => {
+        await new Promise((res) => setTimeout(res, 5));
+        done = true;
+      },
+    });
+    r.subscribe(() => {
+      if (!r.getStatus().running) doneAtFinal = done;
+    });
+    await r.run();
+    expect(doneAtFinal).toBe(true);
+  });
+
+  it('구독자가 던져도 실행은 끝나고 상태는 running false 로 돌아온다', async () => {
+    const { r } = setup();
+    r.subscribe(() => {
+      throw new Error('listener');
+    });
+    await r.run();
+    expect(r.getStatus().running).toBe(false);
+    expect(r.getStatus().version).toBe(1);
   });
 });

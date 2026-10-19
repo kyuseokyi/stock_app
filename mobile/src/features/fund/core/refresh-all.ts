@@ -79,11 +79,18 @@ export function createAutoRefresher(cfg: {
 
   const setStatus = (s: AutoRefreshStatus) => {
     status = s;
-    listeners.forEach((l) => l());
+    listeners.forEach((l) => {
+      try {
+        l();
+      } catch {
+        // 구독자 오류가 상태 전이나 대기 중인 force 재실행을 막지 않도록
+      }
+    });
   };
 
   const once = async (force: boolean) => {
     const ids: string[] = [];
+    const pending: Promise<unknown>[] = [];
     setStatus({ ...status, running: true });
     try {
       const funds = await cfg.loadFunds();
@@ -93,11 +100,15 @@ export function createAutoRefresher(cfg: {
         onResult: (fund, r) => {
           if (!('entry' in r)) return;
           ids.push(fund.id);
-          void Promise.resolve()
-            .then(() => cfg.onRefreshed?.(fund, r.entry))
-            .catch(() => {});
+          pending.push(
+            Promise.resolve()
+              .then(() => cfg.onRefreshed?.(fund, r.entry))
+              .catch(() => {}),
+          );
         },
       });
+      // 기록(onRefreshed)이 모두 끝난 뒤에 '갱신됨' 상태를 알린다
+      await Promise.allSettled(pending);
     } catch {
       // 목록 읽기 실패 — 다음 실행 때 다시
     } finally {
@@ -112,15 +123,17 @@ export function createAutoRefresher(cfg: {
         return current;
       }
       current = (async () => {
-        let f = force;
-        do {
-          pendingForce = false;
-          await once(f);
-          f = true;
-        } while (pendingForce);
-      })().finally(() => {
-        current = null;
-      });
+        try {
+          let f = force;
+          do {
+            pendingForce = false;
+            await once(f);
+            f = true;
+          } while (pendingForce);
+        } finally {
+          current = null; // 루프 종료와 같은 틱에 비워 force 요청이 끼어들 틈을 없앤다
+        }
+      })();
       return current;
     },
     subscribe(listener) {

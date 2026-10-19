@@ -46,7 +46,7 @@ export function useFundReport(
     void readValidCache(cache, id)
       .then((c) => {
         if (c && alive.current && currentId.current === id) {
-          setState((s) => ({ ...s, entry: c, error: s.refreshing ? s.error : null }));
+          setState((s) => (s.entry && s.entry.fetchedAt >= c.fetchedAt ? s : { ...s, entry: c, error: null }));
         }
       })
       .catch(() => {});
