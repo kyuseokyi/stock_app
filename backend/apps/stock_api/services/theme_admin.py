@@ -1,13 +1,26 @@
 """테마 관리자 보정(async) — KIS 테마 숨김·이름 수정, 관리자 테마 생성, 종목 추가·제외.
 
 KIS 동기화(shared.market_repo.sync_kis_themes)는 source='kis' 연결만 건드리므로 여기서 바꾼 표시는 유지된다.
+바꾼 뒤에는 시장 그룹(테마 순위) 재계산을 워커에 맡긴다 — 실패해도 보정은 성공(다음 일일 파이프라인에서 반영).
 """
 from __future__ import annotations
+
+import logging
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from apps.collector.celery_app import celery_app
 from shared.market_models import Theme, ThemeStock
+
+log = logging.getLogger(__name__)
+
+
+def _recompute() -> None:
+    try:
+        celery_app.send_task("collector.compute_market_groups")
+    except Exception as exc:  # noqa: BLE001 — 브로커 장애가 보정을 막지 않게
+        log.warning("시장 그룹 재계산 위임 실패: %s", exc)
 
 
 class ThemeNotFound(Exception):
@@ -46,6 +59,7 @@ async def create_theme(db: AsyncSession, name: str, description: str | None) -> 
     db.add(t)
     await db.commit()
     await db.refresh(t)
+    _recompute()
     return _dto(t, 0)
 
 
@@ -59,6 +73,7 @@ async def update_theme(db: AsyncSession, theme_id: int, changes: dict) -> dict:
         t.is_hidden = bool(changes["is_hidden"])
     await db.commit()
     await db.refresh(t)
+    _recompute()
     return _dto(t, (await _counts(db)).get(t.id, 0))
 
 
@@ -81,6 +96,7 @@ async def add_stock(db: AsyncSession, theme_id: int, ticker: str, reason: str | 
         if reason:
             link.reason = reason
     await db.commit()
+    _recompute()
 
 
 async def exclude_stock(db: AsyncSession, theme_id: int, ticker: str) -> None:
@@ -90,3 +106,4 @@ async def exclude_stock(db: AsyncSession, theme_id: int, ticker: str) -> None:
     if link is not None:
         link.is_excluded = True
         await db.commit()
+        _recompute()

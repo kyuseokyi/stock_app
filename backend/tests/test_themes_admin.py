@@ -11,6 +11,15 @@ from shared.database import get_db
 from shared.market_models import Theme, ThemeStock
 from shared.models import Base, User, UserRole
 from apps.stock_api.main import app
+from apps.stock_api.services import theme_admin
+
+
+@pytest.fixture(autouse=True)
+def sent(monkeypatch):
+    """보정 후 재계산 태스크 전송을 가로챈다(테스트에서 실제 브로커에 붙지 않게)."""
+    calls: list = []
+    monkeypatch.setattr(theme_admin.celery_app, "send_task", lambda name, **kw: calls.append(name))
+    return calls
 
 
 @pytest.fixture
@@ -64,7 +73,7 @@ async def test_non_admin_forbidden(api, maker):
     assert (await client.get("/api/v1/admin/themes")).status_code == 403
 
 
-async def test_admin_flow(api, maker):
+async def test_admin_flow(api, maker, sent):
     client, state = api
     admin, _, tid = await _seed(maker)
     state["user"] = admin
@@ -93,6 +102,21 @@ async def test_admin_flow(api, maker):
     await client.post(f"/api/v1/admin/themes/{tid}/stocks", json={"ticker": "005930"})
     stocks = (await client.get(f"/api/v1/admin/themes/{tid}/stocks")).json()
     assert ("005930", "kis", False) in {(s["ticker"], s["source"], s["is_excluded"]) for s in stocks}
+    # 바꾸는 요청(생성·수정·추가·제외·재추가)마다 시장 그룹 재계산을 맡긴다. 조회는 맡기지 않는다
+    assert sent == ["collector.compute_market_groups"] * 5
+
+
+async def test_recompute_failure_does_not_break_correction(api, maker, monkeypatch):
+    client, state = api
+    admin, _, tid = await _seed(maker)
+    state["user"] = admin
+
+    def down(name, **kw):
+        raise ConnectionError("broker down")
+
+    monkeypatch.setattr(theme_admin.celery_app, "send_task", down)
+    r = await client.patch(f"/api/v1/admin/themes/{tid}", json={"name": "반도체2"})
+    assert r.status_code == 200 and r.json()["name"] == "반도체2"
 
 
 async def test_missing_theme_404(api, maker):
