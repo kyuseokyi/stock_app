@@ -1,5 +1,5 @@
-import { Redirect, useLocalSearchParams } from 'expo-router';
-import { useEffect, useMemo, useState } from 'react';
+import { Redirect, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { useCallback, useMemo, useState } from 'react';
 import { ScrollView, View } from 'react-native';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
@@ -26,21 +26,24 @@ export default function FundHistoryScreen() {
   const [account, setAccount] = useState('');
   const [range, setRange] = useState<HistoryRange>('3m');
 
-  useEffect(() => {
-    let alive = true;
-    loadFunds()
-      .then(async (l) => {
-        const f = l.find((x) => x.id === id);
-        const h = f ? await loadHistory(f) : null;
-        if (alive) setHistory(h);
-      })
-      .catch(() => {
-        if (alive) setHistory(null);
-      });
-    return () => {
-      alive = false;
-    };
-  }, [id]);
+  // 화면에 돌아올 때마다 다시 읽는다 — 직전에 기록된 스냅샷도 보이게
+  useFocusEffect(
+    useCallback(() => {
+      let alive = true;
+      loadFunds()
+        .then(async (l) => {
+          const f = l.find((x) => x.id === id);
+          const h = f ? await loadHistory(f) : null;
+          if (alive) setHistory(h);
+        })
+        .catch(() => {
+          if (alive) setHistory(null);
+        });
+      return () => {
+        alive = false;
+      };
+    }, [id]),
+  );
 
   const view = useMemo(() => (history ? toHistoryView(history, account, range) : null), [history, account, range]);
   const colors = useMemo(() => reportColors(theme.colors), [theme.colors]);
