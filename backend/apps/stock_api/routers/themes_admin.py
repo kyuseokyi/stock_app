@@ -4,6 +4,7 @@ from __future__ import annotations
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -11,6 +12,7 @@ from shared.auth import require_admin
 from shared.database import get_db
 from shared.models import User
 from apps.stock_api.services import theme_admin as svc
+from apps.stock_api.services import theme_metrics
 
 log = logging.getLogger("stock_api.themes_admin")
 router = APIRouter(prefix="/api/v1/admin/themes", tags=["themes-admin"])
@@ -41,6 +43,12 @@ async def list_themes(_admin: User = Depends(require_admin), db: AsyncSession = 
     return await svc.list_themes(db)
 
 
+@router.get("/metrics")
+async def theme_metrics_(_admin: User = Depends(require_admin)):
+    """테마별 최신 기준일 시장 지표 — 목록 응답(기존 형태)과 따로 받아 화면에서 합친다."""
+    return await run_in_threadpool(theme_metrics.theme_metrics)
+
+
 @router.post("", status_code=status.HTTP_201_CREATED)
 async def create_theme(body: ThemeCreate, admin: User = Depends(require_admin), db: AsyncSession = Depends(get_db)):
     out = await svc.create_theme(db, body.name, body.description)
@@ -62,9 +70,10 @@ async def update_theme(theme_id: int, body: ThemeUpdate, admin: User = Depends(r
 @router.get("/{theme_id}/stocks")
 async def list_stocks(theme_id: int, _admin: User = Depends(require_admin), db: AsyncSession = Depends(get_db)):
     try:
-        return await svc.list_stocks(db, theme_id)
+        rows = await svc.list_stocks(db, theme_id)
     except svc.ThemeNotFound:
         raise _404()
+    return await run_in_threadpool(theme_metrics.attach_stock_metrics, rows)
 
 
 @router.post("/{theme_id}/stocks", status_code=status.HTTP_201_CREATED)

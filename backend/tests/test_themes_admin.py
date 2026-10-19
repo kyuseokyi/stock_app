@@ -11,7 +11,7 @@ from shared.database import get_db
 from shared.market_models import Theme, ThemeStock
 from shared.models import Base, User, UserRole
 from apps.stock_api.main import app
-from apps.stock_api.services import theme_admin
+from apps.stock_api.services import theme_admin, theme_metrics
 
 
 @pytest.fixture(autouse=True)
@@ -20,6 +20,13 @@ def sent(monkeypatch):
     calls: list = []
     monkeypatch.setattr(theme_admin.celery_app, "send_task", lambda name, **kw: calls.append(name))
     return calls
+
+
+@pytest.fixture(autouse=True)
+def no_metrics(monkeypatch):
+    """지표 조회(CH·PG 동기 세션)가 실제 DB 에 붙지 않게 — 빈 결과."""
+    monkeypatch.setattr(theme_metrics, "_query", lambda sql, params=None: [])
+    monkeypatch.setattr(theme_metrics, "_names", lambda tickers: {})
 
 
 @pytest.fixture
@@ -126,3 +133,17 @@ async def test_missing_theme_404(api, maker):
     assert (await client.patch("/api/v1/admin/themes/999", json={"name": "x"})).status_code == 404
     assert (await client.get("/api/v1/admin/themes/999/stocks")).status_code == 404
     assert (await client.post("/api/v1/admin/themes/999/stocks", json={"ticker": "005930"})).status_code == 404
+
+
+async def test_metrics_endpoint_and_stock_fields(api, maker, monkeypatch):
+    client, state = api
+    admin, user, tid = await _seed(maker)
+    state["user"] = user
+    assert (await client.get("/api/v1/admin/themes/metrics")).status_code == 403
+    state["user"] = admin
+    monkeypatch.setattr(theme_metrics, "theme_metrics", lambda: {"as_of": "2026-10-16", "themes": {}})
+    r = await client.get("/api/v1/admin/themes/metrics")
+    assert r.status_code == 200 and r.json() == {"as_of": "2026-10-16", "themes": {}}
+    stocks = (await client.get(f"/api/v1/admin/themes/{tid}/stocks")).json()
+    assert stocks == [{"ticker": "005930", "source": "kis", "is_excluded": False, "reason": None,
+                       "name": None, "chg_1d": None, "value": None}]
