@@ -51,3 +51,6 @@ deploy/k8s/**/*.secret.env
 
 # Claude Code 개인용 권한 설정 — 커밋 금지
 .claude/settings.local.json
+
+# TypeScript 증분 빌드 캐시(tsc -b) — 커밋 금지
+*.tsbuildinfo
