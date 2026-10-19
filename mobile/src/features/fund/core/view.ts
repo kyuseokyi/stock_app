@@ -40,6 +40,14 @@ const RE_INT = /^₩?-?[\d,]+$/;
 const RE_PCT = /^-?\d+(\.\d+)?%$/;
 const RE_DATE = /^(\d{4})년\s*(\d{1,2})월\s*(\d{1,2})일$/;
 
+/** 원본 금액 문자열(₩·쉼표·음수) → 숫자. 금액 모양이 아니면 null. 히스토리 기록이 쓴다. */
+export function parseAmount(raw: string): number | null {
+  const s = raw.trim();
+  if (!RE_INT.test(s)) return null;
+  const n = Number(s.replace(/[₩,]/g, ''));
+  return Number.isFinite(n) ? n : null;
+}
+
 const isSigned = (k: string) => /손익|입출금|수익율/.test(k) && !k.includes('목표');
 const isToned = (k: string) => /손익|수익율/.test(k) && !k.includes('목표');
 const comma = (d: string) => d.replace(/^0+(?=\d)/, '').replace(/\B(?=(\d{3})+(?!\d))/g, ',');

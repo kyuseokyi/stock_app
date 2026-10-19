@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 
 import type { FundReport } from './types';
-import { formatValue, toReportView, type ReportView, type ViewRow } from './view';
+import { formatValue, parseAmount, toReportView, type ReportView, type ViewRow } from './view';
 
 const FX = path.join(__dirname, '..', '__fixtures__');
 const fixture = (f: string): FundReport => JSON.parse(fs.readFileSync(path.join(FX, `${f}.json`), 'utf8'));
@@ -168,5 +168,15 @@ describe('toReportView — 링크·대표값 없음', () => {
       rows: [{ label: '총 손익금' }, { label: '누적수익율' }],
     });
     expect(v.evalDate).toBe('2026.10.17');
+  });
+});
+
+describe('parseAmount', () => {
+  it('원본 금액 문자열 → 숫자', () => {
+    expect(parseAmount('₩12,345,000')).toBe(12345000);
+    expect(parseAmount('-15,000')).toBe(-15000);
+    expect(parseAmount(' 0 ')).toBe(0);
+    expect(parseAmount('1.5%')).toBeNull();
+    expect(parseAmount('')).toBeNull();
   });
 });

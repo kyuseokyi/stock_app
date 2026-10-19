@@ -8,4 +8,5 @@ export { djb2 } from './hash';
 export * from './refresh';
 export * from './display';
 export * from './view';
+export * from './history';
 export { useFundReport, type ReportState } from './use-fund-report';
