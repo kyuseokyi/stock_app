@@ -92,3 +92,45 @@ def test_queue_failure_releases_lock(env, monkeypatch):
         aj.run("canslim", "A")
     assert env.redis.get("admin:job:canslim") is None
     assert env.redis.llen(aj.HISTORY_KEY) == 0
+
+
+def test_redis_down_on_lock_is_queue_unavailable(env, monkeypatch):
+    import redis
+
+    def boom(*a, **k):
+        raise redis.ConnectionError("redis down")
+
+    monkeypatch.setattr(env.redis, "set", boom)
+    with pytest.raises(aj.QueueUnavailable):
+        aj.run("canslim", "A")
+    assert env.sent == []
+
+
+def test_task_state_backend_error_is_unknown(monkeypatch):
+    class Bad:
+        @property
+        def state(self):
+            raise RuntimeError("backend down")
+
+    monkeypatch.setattr(aj.celery_app, "AsyncResult", lambda tid: Bad())
+    assert aj._task_state("x") == ("UNKNOWN", None)
+
+
+def test_history_write_failure_does_not_fail_run(env, monkeypatch):
+    def boom(*a, **k):
+        raise RuntimeError("history down")
+
+    monkeypatch.setattr(env.redis, "pipeline", boom)
+    out = aj.run("canslim", "A")
+    assert out["task_id"] and len(env.sent) == 1
+
+
+def test_overview_redis_down_is_queue_unavailable(env, monkeypatch):
+    import redis
+
+    def boom(*a, **k):
+        raise redis.ConnectionError("redis down")
+
+    monkeypatch.setattr(env.redis, "get", boom)
+    with pytest.raises(aj.QueueUnavailable):
+        aj.overview()

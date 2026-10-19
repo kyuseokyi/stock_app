@@ -65,9 +65,15 @@ class JobRunning(Exception):
 
 def _task_state(task_id: str) -> tuple[str, object]:
     """(Celery 상태, 끝났으면 결과). 모르는 id 는 Celery 가 PENDING 으로 답한다."""
-    r = celery_app.AsyncResult(task_id)
-    state = r.state
-    return state, (r.result if state in ("SUCCESS", "FAILURE") else None)
+    # 결과 백엔드 장애는 UNKNOWN(비활성)으로 본다. Redis 자체가 죽었다면 잠금 읽기가 먼저 RedisError 로
+    # 실패해 QueueUnavailable 이 되므로, 여기서 UNKNOWN 을 '교체 가능'으로 취급해도 안전하다.
+    try:
+        r = celery_app.AsyncResult(task_id)
+        state = r.state
+        return state, (r.result if state in ("SUCCESS", "FAILURE") else None)
+    except Exception as exc:  # noqa: BLE001
+        log.warning("admin job state lookup failed task=%s: %s", task_id, exc)
+        return "UNKNOWN", None
 
 
 def _now() -> str:
@@ -107,21 +113,29 @@ def run(job_key: str, actor: str) -> dict:
     key = LOCK_KEY.format(job.key)
     info = {"task_id": uuid.uuid4().hex, "job": job.key, "actor": actor, "requested_at": _now()}
     payload = json.dumps(info, ensure_ascii=False)
-    if not r.set(key, payload, nx=True, ex=job.lock_ttl):
-        old = r.get(key)
-        held = json.loads(old) if old else None
-        if held and _task_state(held["task_id"])[0] in _ACTIVE:
-            raise JobRunning(held)
-        if not _replace_if_same(r, key, old, payload, job.lock_ttl):
-            raise JobRunning(json.loads(r.get(key) or payload))
+    try:
+        if not r.set(key, payload, nx=True, ex=job.lock_ttl):
+            old = r.get(key)
+            held = json.loads(old) if old else None
+            if held and _task_state(held["task_id"])[0] in _ACTIVE:
+                raise JobRunning(held)
+            if not _replace_if_same(r, key, old, payload, job.lock_ttl):
+                raise JobRunning(json.loads(r.get(key) or payload))
+    except redis.RedisError as exc:
+        raise QueueUnavailable(str(exc)) from exc
     try:
         celery_app.send_task(job.task, kwargs=job.kwargs, task_id=info["task_id"])
     except Exception as exc:  # noqa: BLE001
         r.delete(key)
         raise QueueUnavailable(str(exc)) from exc
-    r.lpush(HISTORY_KEY, payload)
-    r.ltrim(HISTORY_KEY, 0, HISTORY_MAX - 1)
-    log.info("admin job run job=%s task=%s actor=%s", job.key, info["task_id"], actor)
+    try:
+        with r.pipeline() as p:
+            p.lpush(HISTORY_KEY, payload)
+            p.ltrim(HISTORY_KEY, 0, HISTORY_MAX - 1)
+            p.execute()
+    except Exception as exc:  # noqa: BLE001 — 작업은 이미 큐에 들어갔다
+        log.warning("admin job history write failed task=%s: %s", info["task_id"], exc)
+    log.info("admin job run job=%s task=%s actor=%r", job.key, info["task_id"], actor)
     return {"task_id": info["task_id"], "requested_at": info["requested_at"]}
 
 
@@ -134,6 +148,13 @@ def _summary(state: str, result) -> str | None:
 
 
 def overview() -> dict:
+    try:
+        return _overview()
+    except redis.RedisError as exc:
+        raise QueueUnavailable(str(exc)) from exc
+
+
+def _overview() -> dict:
     r = get_sync_redis()
     jobs, active_ids = [], set()
     for job in JOBS.values():

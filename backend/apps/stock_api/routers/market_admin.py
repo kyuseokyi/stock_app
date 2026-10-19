@@ -9,6 +9,7 @@ from shared.auth import require_admin
 from shared.models import User
 
 router = APIRouter(prefix="/api/v1/admin/market", tags=["market-admin"])
+_QUEUE_DOWN = {"code": "QUEUE_UNAVAILABLE", "message": "작업 큐에 연결할 수 없어요. 잠시 뒤 다시 시도하세요."}
 
 
 @router.get("/status")
@@ -18,7 +19,10 @@ async def market_status(_admin: User = Depends(require_admin)):
 
 @router.get("/jobs")
 async def list_jobs(_admin: User = Depends(require_admin)):
-    return await run_in_threadpool(admin_jobs.overview)
+    try:
+        return await run_in_threadpool(admin_jobs.overview)
+    except admin_jobs.QueueUnavailable:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, detail=_QUEUE_DOWN)
 
 
 @router.post("/jobs/{job}", status_code=status.HTTP_202_ACCEPTED)
@@ -33,5 +37,4 @@ async def run_job(job: str, admin: User = Depends(require_admin)):
             "code": "JOB_RUNNING", "message": "이미 실행 중이에요", "task_id": e.info.get("task_id"),
             "actor": e.info.get("actor"), "requested_at": e.info.get("requested_at")})
     except admin_jobs.QueueUnavailable:
-        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, detail={
-            "code": "QUEUE_UNAVAILABLE", "message": "작업 큐에 연결할 수 없어요. 잠시 뒤 다시 시도하세요."})
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, detail=_QUEUE_DOWN)

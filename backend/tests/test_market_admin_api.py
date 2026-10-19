@@ -80,3 +80,15 @@ async def test_run_job_status_codes(api, monkeypatch):
     monkeypatch.setattr(admin_jobs, "run", down)
     r = await client.post("/api/v1/admin/market/jobs/canslim")
     assert r.status_code == 503 and r.json()["detail"]["code"] == "QUEUE_UNAVAILABLE"
+
+
+async def test_jobs_overview_queue_down_is_503(api, monkeypatch):
+    client, state = api
+    state["user"] = ADMIN
+
+    def down():
+        raise admin_jobs.QueueUnavailable("redis down")
+
+    monkeypatch.setattr(admin_jobs, "overview", down)
+    r = await client.get("/api/v1/admin/market/jobs")
+    assert r.status_code == 503 and r.json()["detail"]["code"] == "QUEUE_UNAVAILABLE"
