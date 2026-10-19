@@ -5,6 +5,7 @@ import { ActivityIndicator, Linking, Pressable, Text, View } from 'react-native'
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
 import { useAuthStore } from '@/features/auth/store';
+import { maybeAutoBackup } from '@/features/fund/backup-service';
 import { ReportView } from '@/features/fund/components/report-view';
 import {
   defaultName,
@@ -51,7 +52,9 @@ export default function FundReportScreen() {
   useEffect(() => {
     if (!fund || !entry || refreshing || error || recordedAt.current === entry.fetchedAt) return;
     recordedAt.current = entry.fetchedAt;
-    void recordSnapshot(fund, entry.report, entry.fetchedAt);
+    void recordSnapshot(fund, entry.report, entry.fetchedAt).then((added) => {
+      if (added) void maybeAutoBackup(); // 새 날짜가 생긴 날만, 하루 1번
+    });
   }, [fund, entry, refreshing, error]);
 
   // 이름 없이 등록한 펀드는 첫 리포트로 기본 이름을 붙여 저장

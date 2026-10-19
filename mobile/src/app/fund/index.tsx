@@ -1,4 +1,5 @@
-import { Redirect, useFocusEffect, useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
+import { Redirect, Stack, useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { Alert, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
@@ -14,6 +15,7 @@ import {
   type FundEntry,
 } from '@/features/fund/core';
 import { deleteCache, loadFunds, saveFunds } from '@/features/fund/fund-store';
+import { isBackupConfigured } from '@/features/fund/google-auth';
 import { deleteHistory } from '@/features/fund/history-store';
 import { Button, Card, ListRow, ListState, showToast } from '@/ui';
 
@@ -87,6 +89,20 @@ export default function FundListScreen() {
 
   return (
     <ScrollView style={styles.flex} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+      <Stack.Screen
+        options={{
+          headerRight: () => (
+            <Pressable
+              onPress={() => router.push('/fund/backup')}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="기록 백업"
+            >
+              <Ionicons name="cloud-upload-outline" size={20} color={theme.colors.text} />
+            </Pressable>
+          ),
+        }}
+      />
       <Card>
         <Text style={styles.label}>펀드 현황 주소</Text>
         <TextInput
@@ -117,12 +133,17 @@ export default function FundListScreen() {
       ) : funds === null ? (
         <ListState mode="loading" />
       ) : funds.length === 0 ? (
-        <ListState
-          mode="empty"
-          emoji="💰"
-          title="등록한 펀드가 없어요"
-          hint="fund.ivyro.net 에서 받은 내 펀드 현황 주소를 붙여 넣어 주세요."
-        />
+        <View style={styles.emptyBox}>
+          <ListState
+            mode="empty"
+            emoji="💰"
+            title="등록한 펀드가 없어요"
+            hint="fund.ivyro.net 에서 받은 내 펀드 현황 주소를 붙여 넣어 주세요."
+          />
+          {isBackupConfigured() ? (
+            <Button label="Google Drive에서 복원" variant="secondary" onPress={() => router.push('/fund/backup')} />
+          ) : null}
+        </View>
       ) : (
         <View style={styles.group}>
           {funds.map((f) => (
@@ -160,6 +181,7 @@ const styles = StyleSheet.create((theme) => ({
   },
   error: { color: theme.colors.up, fontSize: 13, marginBottom: theme.gap(1) },
   group: { backgroundColor: theme.colors.surface, borderRadius: theme.radius.card, overflow: 'hidden' },
+  emptyBox: { gap: theme.gap(1.5) },
   emoji: { fontSize: 20 },
   remove: { color: theme.colors.textSecondary, fontSize: 13 },
 }));

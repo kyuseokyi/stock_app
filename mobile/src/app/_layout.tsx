@@ -29,6 +29,7 @@ export default function RootLayout() {
         <Stack.Screen name="fund/index" options={{ headerShown: true, title: '내 펀드 수익' }} />
         <Stack.Screen name="fund/[id]" options={{ headerShown: true, title: '펀드 리포트' }} />
         <Stack.Screen name="fund/history/[id]" options={{ headerShown: true, title: '수익 히스토리' }} />
+        <Stack.Screen name="fund/backup" options={{ headerShown: true, title: '기록 백업' }} />
       </Stack>
       <AppToaster />
     </>
