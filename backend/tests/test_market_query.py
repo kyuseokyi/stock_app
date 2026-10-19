@@ -205,3 +205,44 @@ def test_graphql_wiring(monkeypatch):
     assert res.data["marketTreemap"]["groups"][0]["stocks"][0]["name"] == "기타 2종목"
     assert res.data["marketGroup"] is None
     assert res.data["marketCalendar"] == [{"date": "2026-10-20", "detail": "공모가 25,000원"}]
+
+
+def test_web_queries_match_schema(monkeypatch):
+    """web_client/src/api/market.ts 의 쿼리 문자열을 그대로 꺼내 실제 스키마로 실행(웹↔API 계약)."""
+    import pathlib
+    import re
+
+    from apps.stock_api.graphql.schema import schema
+
+    ts = (pathlib.Path(__file__).resolve().parents[2] / "web_client/src/api/market.ts").read_text(encoding="utf-8")
+    queries = dict(re.findall(r"export const (\w+_QUERY) = `([^`]+)`", ts))
+    assert set(queries) == {"OVERVIEW_QUERY", "GROUPS_QUERY", "TREEMAP_QUERY", "GROUP_QUERY", "CALENDAR_QUERY"}
+
+    seen = {}
+    monkeypatch.setattr(mq, "overview", lambda: {"indices": [], "macro": []})
+    monkeypatch.setattr(mq, "groups", lambda **kw: seen.setdefault("groups", kw) and {
+        "date": "2026-10-16", "total": 1, "items": [
+            {"id": "7", "name": "반도체", "members": 5, "chg": 3.2, "value": 1e9, "up": 4, "down": 1, "flat": 0,
+             "leader": {"ticker": "AAA", "name": "에이", "chg": 5.0}, "rank": 1, "streak": 2}]})
+    monkeypatch.setattr(mq, "treemap", lambda **kw: seen.setdefault("treemap", kw) and {"date": None, "groups": []})
+    monkeypatch.setattr(mq, "group", lambda kind, gid: {
+        "kind": kind, "id": gid, "name": "반도체", "description": None, "date": "2026-10-16", "chg1d": 1.0,
+        "chg5d": None, "chg20d": None, "value": 1.0, "mcap": 1.0, "up": 1, "down": 0, "flat": 0, "rank": 1,
+        "history": [{"date": "2026-10-16", "chg1d": 1.0, "rank": 1}],
+        "stocks": [{"ticker": "AAA", "name": "에이", "close": 1.0, "chg1d": 1.0, "chg5d": None, "value": 1.0,
+                    "mcap": None, "is_leader": True, "reason": None}]})
+    monkeypatch.setattr(mq, "calendar", lambda s, e, c: seen.setdefault("calendar", (s, e, c)) and [])
+
+    variables = {
+        "OVERVIEW_QUERY": {},
+        "GROUPS_QUERY": {"kind": "theme", "period": "5d", "sort": "value", "limit": 30, "offset": 0},
+        "TREEMAP_QUERY": {"kind": "sector", "size": "mcap", "period": "1d"},
+        "GROUP_QUERY": {"kind": "theme", "id": "7"},
+        "CALENDAR_QUERY": {"start": "2026-10-16", "end": "2026-12-15", "category": None},
+    }
+    for name, query in queries.items():
+        res = schema.execute_sync(query, variable_values=variables[name])
+        assert res.errors is None, (name, res.errors)
+    assert seen["groups"] == {"kind": "theme", "period": "5d", "sort": "value", "limit": 30, "offset": 0}
+    assert seen["treemap"] == {"kind": "sector", "size": "mcap", "period": "1d"}
+    assert seen["calendar"] == ("2026-10-16", "2026-12-15", None)

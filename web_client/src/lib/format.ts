@@ -23,6 +23,13 @@ export const formatPct = (n: number): string => {
   return `${r > 0 ? '+' : ''}${r.toFixed(1)}%`
 }
 
+/** 큰 금액(원) → 조·억: 1_234_000_000_000 → '1.2조', 345_600_000_000 → '3,456억', 그 아래는 원 */
+export const formatAmount = (won: number): string => {
+  if (Math.abs(won) >= 1e12) return `${(won / 1e12).toFixed(1)}조`
+  if (Math.abs(won) >= 1e8) return `${KRW.format(Math.round(won / 1e8))}억`
+  return formatWon(won)
+}
+
 /** 가격(원 단위 콤마): 71200 → '71,200' */
 export const formatPrice = (n: number): string => KRW.format(n)
 

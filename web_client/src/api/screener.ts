@@ -27,7 +27,8 @@ interface GqlResponse<T> {
   errors?: { message: string }[]
 }
 
-async function gql<T>(query: string, variables: Record<string, unknown>): Promise<T> {
+/** stock_api GraphQL POST — 시장 탭(api/market)도 같이 쓴다 */
+export async function gql<T>(query: string, variables: Record<string, unknown>): Promise<T> {
   if (!STOCK_API_URL) throw new Error('STOCK_API_URL 미설정')
   const { data } = await axios.post<GqlResponse<T>>(STOCK_API_URL, { query, variables })
   if ((data.errors && data.errors.length > 0) || !data.data) throw new Error(data.errors?.[0]?.message ?? '응답 없음')

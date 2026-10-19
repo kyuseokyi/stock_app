@@ -48,7 +48,7 @@ export default function CanslimDetail({ ticker }: { ticker: string }) {
   if (state === 'loading') return <p className="py-8 text-center text-sm text-ink-muted">불러오는 중…</p>
   if (state === 'failed') return <p className="py-8 text-center text-sm text-ink-muted">점수표를 불러오지 못했어요</p>
   if (state === 'none' || !data) {
-    return <p className="py-8 text-center text-sm text-ink-muted">CANSLIM 분석 대상(보통주)이 아니에요</p>
+    return <p className="py-8 text-center text-sm text-ink-muted">주도주 분석 대상(보통주)이 아니에요</p>
   }
 
   const n = data.letters.find((l) => l.key === 'n')

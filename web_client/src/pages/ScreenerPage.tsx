@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import Card from '../components/ui/Card'
 import EmptyState from '../components/ui/EmptyState'
 import CanslimDetail from '../components/screener/CanslimDetail'
@@ -10,9 +11,12 @@ import { useMediaQuery } from '../hooks/useMediaQuery'
 import { DEFAULT_FILTERS } from '../lib/canslim'
 import type { CanslimItem, CanslimMarket, ScreenFilters } from '../types/screener'
 
-// 스크리너 — CANSLIM(윌리엄 오닐) 탭. 넓은 화면은 목록 + 오른쪽 상세, 좁은 화면은 행을 눌러 펼침.
+// 스크리너 '주도주' 탭 — CANSLIM(윌리엄 오닐). 넓은 화면은 목록 + 오른쪽 상세, 좁은 화면은 행을 눌러 펼침.
+// ?ticker= 로 들어오면(테마·업종 상세의 종목) 그 종목 점수표를 바로 보여준다.
 export default function ScreenerPage() {
   const wide = useMediaQuery('(min-width: 1024px)')
+  const [params, setParams] = useSearchParams()
+  const linked = params.get('ticker')
   const [filters, setFilters] = useState<ScreenFilters>(DEFAULT_FILTERS)
   const [markets, setMarkets] = useState<CanslimMarket[]>([])
   const [date, setDate] = useState<string | null>(null)
@@ -57,11 +61,23 @@ export default function ScreenerPage() {
   return (
     <div className="space-y-3 sm:space-y-4">
       <div>
-        <h1 className="text-xl font-bold text-ink">CANSLIM 스크리너</h1>
+        <h1 className="text-xl font-bold text-ink">주도주 분석</h1>
         <p className="mt-0.5 text-sm text-ink-muted">
-          윌리엄 오닐의 성장주 체크리스트 7가지(C·A·N·S·L·I·M)로 오늘의 종목을 점검해요.
+          윌리엄 오닐의 CANSLIM 7가지 기준으로 실적과 추세가 강한 종목을 찾습니다.
         </p>
       </div>
+      {linked && (
+        // 목록 필터(유동성 등)에 걸려 목록에 없을 수도 있어 따로 보여준다
+        <Card>
+          <div className="mb-2 flex items-center justify-between">
+            <span className="text-xs font-medium text-ink-muted">테마·업종에서 고른 종목</span>
+            <button type="button" onClick={() => setParams({}, { replace: true })} className="text-sm font-medium text-brand">
+              닫기
+            </button>
+          </div>
+          <CanslimDetail ticker={linked} />
+        </Card>
+      )}
       <MarketStrip markets={markets} date={date} />
       <Card>
         <CanslimFilters value={filters} onChange={setFilters} />
