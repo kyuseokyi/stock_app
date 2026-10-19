@@ -1,12 +1,14 @@
 """시장 데이터 Celery 태스크 — 투자자 UN→J 폴백, 재무 연간·분기, 공모주 일정, FRED 키 없음, 일일 파이프라인."""
 from datetime import date
 
+import fakeredis
 import pytest
 import requests
 
 from apps.collector.kis.master import MasterStock
 from apps.collector.tasks import market_data as md
 from apps.collector.tasks import universe
+from shared import pipeline_record
 
 
 class _Client:
@@ -151,6 +153,7 @@ def test_macro_collects_and_isolates(monkeypatch):
 
 
 def test_daily_pipeline_continues_after_failure(monkeypatch):
+    monkeypatch.setattr(md, "get_sync_redis", lambda: fakeredis.FakeRedis(decode_responses=True))
     order = []
 
     def boom():
@@ -176,3 +179,43 @@ def test_beat_schedule_entries():
     for key in ("collect-macro-series", "collect-ipo-events", "collect-fundamentals"):
         assert beat[key]["task"].startswith("collector.")
     assert "apps.collector.tasks.market_data" in celery_app.conf.include
+
+
+def _stub_steps(monkeypatch, daily=None):
+    monkeypatch.setattr(md, "_daily_ohlcv", daily or (lambda: {"ok": 1}))
+    monkeypatch.setattr(md, "collect_market_indices", lambda region="KR": {"ok": ["KOSPI"]})
+    monkeypatch.setattr(md, "collect_investor_daily", lambda: {"ok": 3})
+    monkeypatch.setattr(md, "compute_canslim", lambda: {"rows": 10})
+    monkeypatch.setattr(md, "compute_market_groups", lambda: {"error": "no bars"})
+
+
+def test_daily_pipeline_records_steps(monkeypatch):
+    fake = fakeredis.FakeRedis(decode_responses=True)
+    monkeypatch.setattr(md, "get_sync_redis", lambda: fake)
+
+    def boom():
+        raise RuntimeError("master down")
+
+    _stub_steps(monkeypatch, daily=boom)
+    out = md.daily_market_pipeline()
+    assert list(out) == ["daily", "indices_kr", "investor", "canslim", "market_groups"]
+    assert out["investor"] == {"ok": 3} and "error" in out["daily"]
+    rec = pipeline_record.load(fake)
+    assert [s["name"] for s in rec["steps"]] == list(out)
+    # 예외로 끝난 단계와 결과에 error 가 담긴 단계는 실패로 기록
+    assert [s["ok"] for s in rec["steps"]] == [False, True, True, True, False]
+    assert "master down" in rec["steps"][0]["summary"]
+    assert all(isinstance(s["seconds"], float) for s in rec["steps"])
+    assert rec["started_at"] <= rec["finished_at"]
+
+
+def test_daily_pipeline_result_unchanged_when_redis_down(monkeypatch):
+    class Down:
+        def set(self, *a, **k):
+            raise ConnectionError("redis down")
+
+    monkeypatch.setattr(md, "get_sync_redis", lambda: Down())
+    _stub_steps(monkeypatch)
+    out = md.daily_market_pipeline()
+    assert out == {"daily": {"ok": 1}, "indices_kr": {"ok": ["KOSPI"]}, "investor": {"ok": 3},
+                   "canslim": {"rows": 10}, "market_groups": {"error": "no bars"}}

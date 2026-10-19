@@ -6,7 +6,8 @@
 from __future__ import annotations
 
 import logging
-from datetime import date, timedelta
+import time
+from datetime import date, datetime, timedelta, timezone
 
 import requests
 
@@ -21,7 +22,8 @@ from apps.collector.rate_limit import RateLimiter
 from apps.collector.tasks.canslim import compute_canslim
 from apps.collector.tasks.market_groups import compute_market_groups
 from apps.collector.tasks.universe import _DEFAULT_RATE, _run_universe, collect_all_daily
-from shared import market_repo
+from shared import market_repo, pipeline_record
+from shared.sync_redis import get_sync_redis
 from shared.database import SyncSessionLocal
 
 log = logging.getLogger(__name__)
@@ -165,15 +167,25 @@ def _daily_ohlcv() -> dict:
 
 @celery_app.task(name="collector.daily_market_pipeline")
 def daily_market_pipeline() -> dict:
-    """20:30 — 전종목 일봉 → 국내 지수 → 투자자별 순매수 → CANSLIM → 시장 그룹(차례로, 앞 단계 예외와 무관하게 진행)."""
+    """20:30 — 전종목 일봉 → 국내 지수 → 투자자별 순매수 → CANSLIM → 시장 그룹(차례로, 앞 단계 예외와 무관하게 진행).
+
+    끝나면 단계별 성공·걸린 시간·요약을 Redis 에 남긴다(관리자 데이터 현황). 기록 실패는 결과에 영향 없음.
+    """
     out: dict = {}
+    record: list[dict] = []
+    started = datetime.now(timezone.utc)
     steps = (("daily", _daily_ohlcv), ("indices_kr", lambda: collect_market_indices("KR")),
              ("investor", lambda: collect_investor_daily()), ("canslim", lambda: compute_canslim()),
              ("market_groups", lambda: compute_market_groups()))
     for name, step in steps:
+        t0 = time.monotonic()
         try:
             out[name] = step()
         except Exception as e:  # noqa: BLE001
             log.exception("일일 파이프라인 단계 실패: %s", name)
             out[name] = {"error": repr(e)[:300]}
+        result = out[name]
+        record.append({"name": name, "ok": not (isinstance(result, dict) and "error" in result),
+                       "seconds": round(time.monotonic() - t0, 1), "summary": pipeline_record.summarize(result)})
+    pipeline_record.save(get_sync_redis(), started, datetime.now(timezone.utc), record)
     return out
