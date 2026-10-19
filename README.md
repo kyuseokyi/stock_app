@@ -497,7 +497,7 @@ uv run python -c "from apps.collector.tasks.universe import backfill_all_daily; 
 cd backend && uv run --with pykrx python -m apps.collector.verify.spot_check --n 30 [--date YYYY-MM-DD] [--seed S] [--out PATH]
 ```
 
-- **외부:** 우리 일봉은 KRX+넥스트레이드 통합 시세다. 그래서 고가≥·저가≤·거래량≥ 이면 정상이고, 거래량이 같으면(NXT 미상장) OHLC 도 같아야 한다. 분류는 일치·통합 정상·위반·KRX 없음·오류·missing(우리 일봉 없음 → KRX 호출 안 함, 오류 과반 계산에 안 셈)이다. pykrx 의 "KRX 로그인 실패" 경고는 무시해도 된다(개별 종목 OHLCV 는 로그인 없이 된다).
+- **외부:** 우리 일봉은 KRX+넥스트레이드 통합 시세다. 그래서 고가≥·저가≤·거래량≥ 이면 정상이고, 거래량이 같으면(NXT 미상장) OHLC 도 같아야 한다. 분류는 일치·통합 정상·위반·missing(KRX 없음, 또는 우리 일봉이 없어 KRX 를 호출하지 않은 경우 — 오류 과반 계산에 안 셈)·오류다. pykrx 의 "KRX 로그인 실패" 경고는 무시해도 된다(개별 종목 OHLCV 는 로그인 없이 된다).
 - **내부:**
   - (a) market_stock_daily 종가 = 일봉 종가
   - (b) 1일 등락 = 직전 봉 대비 재계산
