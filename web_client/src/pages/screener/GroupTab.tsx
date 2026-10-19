@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Card from '../../components/ui/Card'
 import EmptyState from '../../components/ui/EmptyState'
 import BasisNote from '../../components/market/BasisNote'
@@ -36,6 +36,12 @@ export default function GroupTab({ kind }: { kind: GroupKind }) {
   const [state, setState] = useState<'loading' | 'ready' | 'failed'>('loading')
   const [loadingMore, setLoadingMore] = useState(false)
   const [selected, setSelected] = useState<string | null>(null)
+  const detailRef = useRef<HTMLDivElement>(null)
+
+  // 좁은 화면 트리맵에서 그룹을 고르면 아래 상세로 스크롤
+  useEffect(() => {
+    if (selected && !wide && ctrl.view === 'treemap') detailRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }, [selected, wide, ctrl.view])
 
   useEffect(() => {
     let cancelled = false
@@ -94,7 +100,8 @@ export default function GroupTab({ kind }: { kind: GroupKind }) {
       )}
 
       {state === 'ready' && date !== null && !empty && (
-        <div className="lg:grid lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)] lg:items-start lg:gap-4">
+        // 트리맵에서 아직 고르지 않았으면 오른쪽 상세 칸 없이 폭 전체를 쓴다
+        <div className={wide && shown ? 'lg:grid lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)] lg:items-start lg:gap-4' : ''}>
           <Card>
             {isList ? (
               <>
@@ -130,9 +137,12 @@ export default function GroupTab({ kind }: { kind: GroupKind }) {
             </Card>
           )}
           {!wide && !isList && shown && (
-            <Card className="mt-3">
-              <GroupDetailView kind={kind} id={shown} />
-            </Card>
+            // 좁은 화면 트리맵: 상세는 트리맵 아래 — 열리면 그 자리로 스크롤
+            <div ref={detailRef} className="mt-3 scroll-mt-4">
+              <Card>
+                <GroupDetailView key={shown} kind={kind} id={shown} />
+              </Card>
+            </div>
           )}
         </div>
       )}
