@@ -5,7 +5,7 @@ import { AppState } from 'react-native';
 
 import { useAuthStore } from '@/features/auth/store';
 import { useFundAutoRefresh } from '@/features/fund/auto-refresh';
-import { AppToaster } from '@/ui';
+import { ApiProgressBar, AppToaster } from '@/ui';
 
 export default function RootLayout() {
   useFundAutoRefresh(); // 실행·복귀 시 등록 펀드 자동 갱신(로그인 상태일 때만)
@@ -34,6 +34,7 @@ export default function RootLayout() {
         <Stack.Screen name="fund/backup" options={{ headerShown: true, title: '기록 백업' }} />
       </Stack>
       <AppToaster />
+      <ApiProgressBar />
     </>
   );
 }

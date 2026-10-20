@@ -1,6 +1,7 @@
 import axios from 'axios'
 import { GAME_API_URL } from '../config'
 import { installRetry } from '../lib/retry'
+import { installApiActivity } from '../lib/apiActivity'
 import { TOKEN_KEY, bearerToken, reasonFromBody, useAuthStore } from '../store/auth'
 
 // trading_game(8003) 클라이언트. GAME_API_URL 미설정(운영 빌드)이면 null → 게임 화면이 "준비 중"으로 처리.
@@ -10,6 +11,7 @@ export const gameClient = GAME_API_URL
   : null
 
 if (gameClient) installRetry(gameClient) // 조회(GET 시즌·랭킹 등)만 재시도 — 주문·청산(POST)은 절대 다시 보내지 않음
+if (gameClient) installApiActivity(gameClient) // 상단 진행 표시줄(재시도 뒤에 붙인다)
 
 gameClient?.interceptors.request.use((config) => {
   const token = localStorage.getItem(TOKEN_KEY)

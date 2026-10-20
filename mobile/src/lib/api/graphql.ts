@@ -6,6 +6,7 @@ import { GraphQLClient, type Variables } from 'graphql-request';
 
 import { ENV } from '@/lib/env';
 
+import { trackRequest } from './activity';
 import { isGraphqlQuery, withRetry } from './retry';
 
 export const stockGraphqlClient = new GraphQLClient(ENV.stockGraphqlUrl);
@@ -17,5 +18,5 @@ export function stockRequest<T, V extends Variables = Variables>(
 ): Promise<T> {
   const run = () => stockGraphqlClient.request<T>(document, variables);
   // 조회(query)만 배포 순간 공백에 짧게 재시도 — mutation 은 그대로(중복 실행 방지)
-  return isGraphqlQuery(document) ? withRetry(run) : run();
+  return trackRequest(() => (isGraphqlQuery(document) ? withRetry(run) : run()));
 }

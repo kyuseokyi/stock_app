@@ -1,4 +1,5 @@
 export { AmountText } from './amount-text';
+export { ApiProgressBar } from './api-progress-bar';
 export { BottomSheet } from './bottom-sheet';
 export { Button } from './button';
 export { Card } from './card';

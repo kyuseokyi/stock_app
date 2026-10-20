@@ -31,3 +31,15 @@ body {
 .post-content img {
   @apply my-4 max-w-full rounded-lg;
 }
+
+/* 상단 API 진행 표시줄(components/ApiProgressBar) — 막대가 왼쪽 밖에서 오른쪽 밖으로 반복 이동 */
+@keyframes api-progress-slide {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(300%); }
+}
+.api-progress-bar {
+  animation: api-progress-slide 1.1s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .api-progress-bar { animation: none; width: 100%; opacity: 0.6; }
+}
