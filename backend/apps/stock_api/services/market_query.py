@@ -5,13 +5,16 @@
 """
 from __future__ import annotations
 
-from datetime import date, timedelta
+import time
+from datetime import date, datetime, timedelta
 
+from apps.collector.intraday_indices import KST, load_intraday
 from apps.collector.market_indices import _BASE as INDEX_SPECS
 from shared import market_repo
 from shared.clickhouse_schema import CLICKHOUSE_DB, get_client
 from shared.database import SyncSessionLocal
 from shared.market_models import StockEvent, Theme
+from shared.sync_redis import get_sync_redis
 
 _EPOCH = date(1970, 1, 1)
 KINDS = ("theme", "sector")
@@ -25,6 +28,11 @@ HISTORY_DAYS = 60
 STREAK_TOP = 10
 CALENDAR_MAX_DAYS = 92
 SPARK_POINTS = 20
+
+# 지수·거시 CH 조회 메모리 캐시(프로세스별) — 화면이 30초마다 개요를 다시 부르므로 사용자 수만큼 CH 로 가지 않게.
+# Redis 장중 값은 캐시하지 않는다(덧씌우기는 매번).
+CACHE_SECONDS = 30
+_CACHE: dict[str, tuple[float, object, list]] = {}  # 이름 → (만료 시각 monotonic, 키, 행)
 
 # series_id → (화면 이름, 단위)
 MACRO_NAMES = {
@@ -55,6 +63,34 @@ def _query(sql: str, params: dict | None = None) -> list:
 
 def _today() -> date:
     return date.today()
+
+
+def _clock() -> float:
+    return time.monotonic()
+
+
+def _now_kst() -> datetime:
+    """장중 덧씌우기 기준 시각 — 컨테이너 TZ 와 무관하게 KST."""
+    return datetime.now(KST)
+
+
+def _intraday() -> dict:
+    """Redis 장중 값(collector.poll_intraday_indices). Redis 장애·형식 오류면 빈 값 — 확정 값만 보인다."""
+    try:
+        return load_intraday(get_sync_redis())
+    except Exception:  # noqa: BLE001
+        return {}
+
+
+def _cached_query(name: str, key, sql: str, params: dict) -> list:
+    """같은 key 로 CACHE_SECONDS 안에 다시 부르면 저장해 둔 행. 실패(예외)는 저장하지 않고 그대로 올린다."""
+    now = _clock()
+    hit = _CACHE.get(name)
+    if hit is not None and hit[0] > now and hit[1] == key:
+        return hit[2]
+    rows = _query(sql, params)
+    _CACHE[name] = (now + CACHE_SECONDS, key, rows)
+    return rows
 
 
 def _names(tickers: list[str]) -> dict[str, str]:
@@ -107,12 +143,45 @@ def _pct(a: float | None, b: float | None) -> float | None:
 
 
 # ---------------------------------------------------------------- 시장 요약
+def _live_point(cur, today_iso: str) -> tuple[float, str] | None:
+    """장중 값 한 항목 → (값, KST 'HH:MM'). 오늘 것이 아니거나 형식이 깨졌으면 None."""
+    if not isinstance(cur, dict) or cur.get("date") != today_iso:
+        return None
+    try:
+        return float(cur["value"]), datetime.fromtimestamp(float(cur["ts"]), KST).strftime("%H:%M")
+    except (KeyError, TypeError, ValueError, OverflowError, OSError):
+        return None
+
+
+def overlay_intraday(series: list[dict], intraday: dict, today: date) -> list[dict]:
+    """확정 종가 지수 목록에 장중 값을 덧씌운다(순수 함수 — 입력을 바꾸지 않음).
+
+    코드별로 장중 값의 date 가 오늘이고 확정 종가 마지막 날짜가 오늘보다 앞이면(= 오늘 종가 미확정):
+    추세선 끝에 한 점(길이는 SPARK_POINTS 유지), close = 장중 값, chg1d = 마지막 확정 종가 대비 %(_pct),
+    date = 오늘, live = True, as_of = 'HH:MM'. 아니면 확정 값 그대로 live = False, as_of = None.
+    """
+    iso = today.isoformat()
+    out = []
+    for item in series:
+        base = {**item, "live": False, "as_of": None}
+        point = _live_point(intraday.get(item["code"]), iso) if item["date"] < iso else None
+        if point is None:
+            out.append(base)
+            continue
+        value, as_of = point
+        out.append({**base, "date": iso, "close": value, "chg1d": _pct(value, item["close"]),
+                    "spark": (list(item["spark"]) + [value])[-SPARK_POINTS:], "live": True, "as_of": as_of})
+    return out
+
+
 def _indices() -> list[dict]:
     codes = [s.code for s in INDEX_SPECS]
+    today = _today()
     try:
-        rows = _query(f"SELECT code, date, close FROM {CLICKHOUSE_DB}.market_index_daily FINAL "
-                      "WHERE code IN %(codes)s AND date > %(since)s ORDER BY code, date",
-                      {"codes": tuple(codes), "since": _today() - timedelta(days=60)})
+        rows = _cached_query("indices", today,
+                             f"SELECT code, date, close FROM {CLICKHOUSE_DB}.market_index_daily FINAL "
+                             "WHERE code IN %(codes)s AND date > %(since)s ORDER BY code, date",
+                             {"codes": tuple(codes), "since": today - timedelta(days=60)})
     except Exception:  # noqa: BLE001
         return []
     series: dict[str, list[tuple]] = {}
@@ -128,7 +197,7 @@ def _indices() -> list[dict]:
                     "date": pts[-1][0].isoformat(), "close": closes[-1],
                     "chg1d": _pct(closes[-1], closes[-2]) if len(closes) > 1 else None,
                     "spark": closes[-SPARK_POINTS:]})
-    return out
+    return overlay_intraday(out, _intraday(), _now_kst().date())
 
 
 def _yoy(points: list[tuple], i: int) -> float | None:
@@ -142,10 +211,13 @@ def _yoy(points: list[tuple], i: int) -> float | None:
 
 
 def _macro() -> list[dict]:
+    today = _today()
     try:
-        rows = _query(f"SELECT series_id, date, value FROM {CLICKHOUSE_DB}.macro_series FINAL "
-                      "WHERE series_id IN %(ids)s AND date > %(since)s AND value IS NOT NULL ORDER BY series_id, date",
-                      {"ids": tuple(MACRO_NAMES), "since": _today() - timedelta(days=430)})
+        rows = _cached_query("macro", today,
+                             f"SELECT series_id, date, value FROM {CLICKHOUSE_DB}.macro_series FINAL "
+                             "WHERE series_id IN %(ids)s AND date > %(since)s AND value IS NOT NULL "
+                             "ORDER BY series_id, date",
+                             {"ids": tuple(MACRO_NAMES), "since": today - timedelta(days=430)})
     except Exception:  # noqa: BLE001
         return []
     series: dict[str, list[tuple]] = {}

@@ -1,8 +1,9 @@
 """시장 탭 조회 — 지수·거시 요약, 순위(기간·정렬·연속 상위), 트리맵('기타'), 그룹 상세, 일정(가짜 CH·PG)."""
-from datetime import date
+from datetime import date, datetime
 
 import pytest
 
+from apps.collector.intraday_indices import KST
 from apps.stock_api.services import market_query as mq
 
 D = date(2026, 10, 16)
@@ -29,6 +30,13 @@ def ch(monkeypatch):
     monkeypatch.setattr(mq, "_names", lambda tickers: {t: f"이름{t}" for t in tickers if t})
     monkeypatch.setattr(mq, "_today", lambda: D)
     return use
+
+
+@pytest.fixture(autouse=True)
+def _isolate_cache_and_intraday(monkeypatch):
+    """지수·거시 30초 캐시를 테스트마다 비우고, 장중 값은 기본 없음(Redis 를 읽지 않음)."""
+    mq._CACHE.clear()
+    monkeypatch.setattr(mq, "_intraday", lambda: {})
 
 
 def test_latest_date_none_when_empty_or_missing(ch, monkeypatch):
@@ -153,6 +161,113 @@ def test_overview_tables_missing(monkeypatch):
 
     monkeypatch.setattr(mq, "_ch", boom)
     assert mq.overview() == {"indices": [], "macro": []}
+
+
+TODAY = date(2026, 10, 20)
+TS = datetime(2026, 10, 20, 14, 32, 5, tzinfo=KST).timestamp()
+
+
+def _ix(code="KR:0001", d="2026-10-16", close=2550.0, spark=None):
+    return {"code": code, "name": "KOSPI", "region": code.split(":", 1)[0], "date": d, "close": close,
+            "chg1d": 1.0, "spark": spark if spark is not None else [2500.0, 2550.0]}
+
+
+def test_overlay_appends_live_point():
+    item = _ix()
+    (o,) = mq.overlay_intraday([item], {"KR:0001": {"value": 2601.0, "date": "2026-10-20", "ts": TS}}, TODAY)
+    assert o["live"] is True and o["as_of"] == "14:32" and o["date"] == "2026-10-20"
+    assert o["close"] == 2601.0 and o["chg1d"] == pytest.approx(2.0)  # 마지막 확정 종가 대비 %(_pct)
+    assert o["spark"] == [2500.0, 2550.0, 2601.0]
+    assert item["spark"] == [2500.0, 2550.0] and "live" not in item  # 입력은 바꾸지 않는다
+
+
+def test_overlay_keeps_spark_length():
+    spark = [float(i) for i in range(mq.SPARK_POINTS)]
+    live = {"KR:0001": {"value": 99.0, "date": "2026-10-20", "ts": TS}}
+    (o,) = mq.overlay_intraday([_ix(spark=spark, close=spark[-1])], live, TODAY)
+    assert len(o["spark"]) == mq.SPARK_POINTS and o["spark"][0] == 1.0 and o["spark"][-1] == 99.0
+
+
+@pytest.mark.parametrize("item, live", [
+    (_ix(d="2026-10-20"), {"value": 2601.0, "date": "2026-10-20", "ts": TS}),  # 오늘 확정 종가가 이미 있음
+    (_ix(), {"value": 2601.0, "date": "2026-10-19", "ts": TS}),               # 어제 장중 값
+    (_ix(), {"value": "x", "date": "2026-10-20", "ts": TS}),                   # 깨진 값
+    (_ix(), {"date": "2026-10-20", "ts": TS}),                                 # 값 없음
+    (_ix(), "garbage"),                                                        # 항목 형식이 아님
+    (_ix(), None),                                                             # 장중 값 없음
+])
+def test_overlay_keeps_confirmed(item, live):
+    intraday = {} if live is None else {"KR:0001": live}
+    (o,) = mq.overlay_intraday([item], intraday, TODAY)
+    assert o == {**item, "live": False, "as_of": None}
+
+
+def test_overview_overlays_intraday_and_caches_ch(ch, monkeypatch):
+    fake = ch([[("KR:0001", date(2026, 10, 15), 2500.0), ("KR:0001", D, 2550.0)], []])
+    monkeypatch.setattr(mq, "_now_kst", lambda: datetime(2026, 10, 20, 14, 33, tzinfo=KST))
+    monkeypatch.setattr(mq, "_intraday", lambda: {"KR:0001": {"value": 2601.0, "date": "2026-10-20", "ts": TS}})
+    first = mq.overview()["indices"][0]
+    assert first["live"] is True and first["close"] == 2601.0 and first["as_of"] == "14:32"
+    monkeypatch.setattr(mq, "_intraday",
+                        lambda: {"KR:0001": {"value": 2610.0, "date": "2026-10-20", "ts": TS + 60}})
+    second = mq.overview()["indices"][0]
+    assert second["close"] == 2610.0 and second["as_of"] == "14:33"  # 장중 값은 매번 새로 읽는다
+    assert len(fake.queries) == 2  # 지수·거시 각 1번 — 두 번째 호출은 CH 캐시
+
+
+def test_cache_expires_after_30s(ch, monkeypatch):
+    fake = ch([[("KR:0001", D, 2550.0)], [], [("KR:0001", D, 2560.0)], []])
+    clock = {"t": 1000.0}
+    monkeypatch.setattr(mq, "_clock", lambda: clock["t"])
+    assert mq.overview()["indices"][0]["close"] == 2550.0
+    clock["t"] += 29
+    assert mq.overview()["indices"][0]["close"] == 2550.0
+    clock["t"] += 2
+    assert mq.overview()["indices"][0]["close"] == 2560.0
+    assert len(fake.queries) == 4
+
+
+def test_cache_skips_failures(ch, monkeypatch):
+    # 1번째 overview: 지수 쿼리 실패(캐시 안 함) → 거시는 [] 를 꺼냄. 2번째: 지수만 다시 조회
+    real = ch([[], [("KR:0001", D, 2550.0)]])
+    calls = {"n": 0}
+
+    def flaky():
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise RuntimeError("CH down")
+        return real
+
+    monkeypatch.setattr(mq, "_ch", flaky)
+    assert mq.overview()["indices"] == []
+    assert mq.overview()["indices"][0]["close"] == 2550.0
+
+
+def test_intraday_reader_swallows_redis_errors(monkeypatch):
+    monkeypatch.undo()  # autouse 의 _intraday 바꿔치기를 되돌려 실제 함수를 검사
+    mq._CACHE.clear()
+
+    class Down:
+        def get(self, key):
+            raise ConnectionError("redis down")
+
+    monkeypatch.setattr(mq, "get_sync_redis", lambda: Down())
+    assert mq._intraday() == {}
+
+
+def test_graphql_market_index_live_fields(monkeypatch):
+    from apps.stock_api.graphql.schema import schema
+
+    monkeypatch.setattr(mq, "overview", lambda: {"indices": [
+        {**_ix(), "live": True, "as_of": "14:32"},
+        _ix(code="US:SPX"),  # 옛 형태(live·as_of 없음)도 기본값으로 — 하위 호환
+    ], "macro": []})
+    res = schema.execute_sync("{ marketOverview { indices { code live asOf } } }")
+    assert res.errors is None, res.errors
+    assert res.data["marketOverview"]["indices"] == [
+        {"code": "KR:0001", "live": True, "asOf": "14:32"},
+        {"code": "US:SPX", "live": False, "asOf": None},
+    ]
 
 
 def test_calendar_range_category_and_detail(monkeypatch):

@@ -160,6 +160,8 @@ class MarketIndex:
     close: float
     chg1d: float | None
     spark: list[float]
+    live: bool = False  # 장중 값이 덧씌워졌는가(국내 지수·원/달러, 거래일 09:00~15:35 KST)
+    as_of: str | None = None  # 장중 값 시각(KST 'HH:MM') — live 일 때만
 
 
 @strawberry.type
