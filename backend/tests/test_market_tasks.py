@@ -325,6 +325,86 @@ def test_poll_intraday_logs_kis_setup_error(monkeypatch):
         raise RuntimeError("KIS 자격증명 없음")
 
     monkeypatch.setattr(md, "KISClient", no_creds)
+    monkeypatch.setattr(md, "get_sync_redis", lambda: fakeredis.FakeRedis(decode_responses=True))
     monkeypatch.setattr(md.intraday, "now_kst", lambda: datetime(2026, 10, 20, 10, 0, tzinfo=ii.KST))
     out = md.poll_intraday_indices()
     assert "KIS 자격증명 없음" in out["error"]
+
+
+# ---- 중복 실행 잠금·시간 제한
+def _open_window(monkeypatch, fake):
+    monkeypatch.delenv("TRADING_DAYS", raising=False)
+    monkeypatch.delenv("MARKET_HOLIDAYS", raising=False)
+    monkeypatch.delenv("INTRADAY_INDICES_ENABLED", raising=False)
+    monkeypatch.setattr(md, "get_sync_redis", lambda: fake)
+    monkeypatch.setattr(md.intraday, "now_kst", lambda: datetime(2026, 10, 20, 14, 32, tzinfo=ii.KST))
+
+
+def test_poll_intraday_busy_when_locked(monkeypatch):
+    fake = fakeredis.FakeRedis(decode_responses=True)
+    _open_window(monkeypatch, fake)
+    fake.set(ii.INTRADAY_LOCK_KEY, "other", ex=60)
+    monkeypatch.setattr(md, "KISClient", _no_kis)  # 잠겨 있으면 클라이언트를 만들지 않는다
+    assert md.poll_intraday_indices() == {"skipped": "busy"}
+    assert fake.get(ii.INTRADAY_LOCK_KEY) == "other"  # 남의 잠금은 그대로
+
+
+def test_poll_intraday_releases_lock_after_run(monkeypatch):
+    fake = fakeredis.FakeRedis(decode_responses=True)
+    _open_window(monkeypatch, fake)
+    seen = {}
+
+    def make_client(limiter=None):
+        seen["ttl"] = fake.ttl(ii.INTRADAY_LOCK_KEY)  # 실행 중에는 잠겨 있다
+        return _IntradayClient()
+
+    monkeypatch.setattr(md, "KISClient", make_client)
+    out = md.poll_intraday_indices()
+    assert out["failed"] == [] and 0 < seen["ttl"] <= ii.INTRADAY_LOCK_TTL
+    assert fake.get(ii.INTRADAY_LOCK_KEY) is None
+
+
+def test_poll_intraday_releases_lock_on_error(monkeypatch):
+    fake = fakeredis.FakeRedis(decode_responses=True)
+    _open_window(monkeypatch, fake)
+
+    def boom(limiter=None):
+        raise RuntimeError("KIS 장애")
+
+    monkeypatch.setattr(md, "KISClient", boom)
+    assert "KIS 장애" in md.poll_intraday_indices()["error"]
+    assert fake.get(ii.INTRADAY_LOCK_KEY) is None
+
+
+def test_poll_intraday_releases_lock_on_soft_time_limit(monkeypatch):
+    from celery.exceptions import SoftTimeLimitExceeded
+
+    fake = fakeredis.FakeRedis(decode_responses=True)
+    _open_window(monkeypatch, fake)
+
+    def slow(limiter=None):
+        raise SoftTimeLimitExceeded()
+
+    monkeypatch.setattr(md, "KISClient", slow)
+    assert "error" in md.poll_intraday_indices()
+    assert fake.get(ii.INTRADAY_LOCK_KEY) is None
+
+
+def test_poll_intraday_does_not_delete_foreign_lock(monkeypatch):
+    # 내 실행이 길어져 잠금이 만료되고 다른 실행이 새로 잡았다면 그 잠금을 지우면 안 된다
+    fake = fakeredis.FakeRedis(decode_responses=True)
+    _open_window(monkeypatch, fake)
+
+    def make_client(limiter=None):
+        fake.set(ii.INTRADAY_LOCK_KEY, "someone-else", ex=60)  # 내 잠금이 사라지고 남이 잡음
+        return _IntradayClient()
+
+    monkeypatch.setattr(md, "KISClient", make_client)
+    md.poll_intraday_indices()
+    assert fake.get(ii.INTRADAY_LOCK_KEY) == "someone-else"
+
+
+def test_poll_intraday_time_limits_shorter_than_lock_ttl():
+    t = md.poll_intraday_indices
+    assert t.soft_time_limit == 40 and t.time_limit == 50
+    assert t.time_limit < ii.INTRADAY_LOCK_TTL

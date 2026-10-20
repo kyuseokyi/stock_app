@@ -179,8 +179,17 @@ def test_poll_uses_kst_date_for_utc_now():
 
 def test_merge_drops_future_ts_after_clock_rewind():
     ts = NOW.timestamp()
-    prev = {"KR:0001": {"value": 1.0, "date": "2026-10-20", "ts": ts + 120}}
+    prev = {"KR:0001": {"value": 1.0, "date": "2026-10-20", "ts": ts + 120}}  # 여유 60초보다 훨씬 미래
     assert ii.merge_intraday(prev, {}, ts) == {}
+
+
+def test_merge_keeps_slightly_future_ts_from_clock_skew():
+    # 컨테이너 간 시계 차이로 막 쓴 값이 30초 미래로 보여도 버리지 않는다(여유 INTRADAY_FUTURE_SKEW=60초)
+    ts = NOW.timestamp()
+    item = {"value": 1.0, "date": "2026-10-20", "ts": ts + 30}
+    assert ii.merge_intraday({"KR:0001": item}, {}, ts) == {"KR:0001": item}
+    edge = {"value": 1.0, "date": "2026-10-20", "ts": ts + ii.INTRADAY_FUTURE_SKEW + 1}
+    assert ii.merge_intraday({"KR:0001": edge}, {}, ts) == {}
 
 
 def test_window_closed_on_krx_year_end_holiday():

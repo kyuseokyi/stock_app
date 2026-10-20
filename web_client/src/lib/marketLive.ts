@@ -14,11 +14,11 @@ export function shouldRefreshNow(lastAt: number | null, now: number, ms = MARKET
   return lastAt == null || now < lastAt || now - lastAt >= ms
 }
 
-/** 지수 카드 날짜 자리 — 장중이면 '장중 14:32'(live, 화면엔 좁은 폭을 위해 짧은 label '● 14:32'), 국내 확정이면 없음, 해외·환율은 M/D(기존 표기) */
+/** 지수 카드 날짜 자리 — 장중이면 '장중 14:32'(live, 화면엔 좁은 폭을 위해 짧은 label '14:32' — 앞의 ● 는 화면에서 aria-hidden 으로 붙인다), 국내 확정이면 없음, 해외·환율은 M/D(기존 표기) */
 export function indexBadge(
   ix: Pick<MarketIndex, 'region' | 'date' | 'live' | 'asOf'>,
 ): { text: string; label: string; live: boolean } | null {
-  if (ix.live && ix.asOf) return { text: `장중 ${ix.asOf}`, label: `● ${ix.asOf}`, live: true }
+  if (ix.live && ix.asOf) return { text: `장중 ${ix.asOf}`, label: ix.asOf, live: true }
   if (ix.region === 'KR') return null
   const md = `${Number(ix.date.slice(5, 7))}/${Number(ix.date.slice(8, 10))}`
   return { text: md, label: md, live: false }

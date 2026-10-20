@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import logging
 import time
+import uuid
 from datetime import date, datetime, timedelta, timezone
 
 import requests
@@ -68,8 +69,20 @@ def collect_market_indices(region: str = "KR") -> dict:
 
 
 # ---------------------------------------------------------------- 장중 지수(30초)
+def _release_lock(redis, token: str) -> None:
+    """내 토큰일 때만 잠금 해제. Lua 대신 get 비교 후 delete — 단순한 쪽을 택했다. 비교와 삭제 사이에
+    만료+재획득이 끼면 남의 잠금을 지울 수 있으나, 그 틈은 마이크로초이고 결과도 다음 30초 한 번 중복 실행일 뿐이다."""
+    try:
+        if redis.get(intraday.INTRADAY_LOCK_KEY) == token:
+            redis.delete(intraday.INTRADAY_LOCK_KEY)
+    except Exception as e:  # noqa: BLE001 — 해제 실패는 60초 뒤 만료로 풀린다
+        log.warning("장중 지수 잠금 해제 실패: %s", str(e)[:160])
+
+
 # ignore_result — 30초마다 돌아 결과를 Redis 결과 백엔드에 남기면 하루 2,880건이 쌓인다(아무도 읽지 않음)
-@celery_app.task(name="collector.poll_intraday_indices", ignore_result=True)
+# 시간 제한 — KISClient 는 재시도·백오프로 4건이면 최대 약 6분이라, 제한이 없으면 장애 때 워커를 오래 붙잡는다.
+# 잠금 만료(INTRADAY_LOCK_TTL=60)보다 짧게 둔다. KIS 클라이언트 재시도 설정은 다른 수집에 쓰이므로 건드리지 않는다.
+@celery_app.task(name="collector.poll_intraday_indices", ignore_result=True, soft_time_limit=40, time_limit=50)
 def poll_intraday_indices() -> dict:
     """장중 국내 지수 3개·원/달러 → Redis market:intraday(30초 beat). 꺼짐·장 밖이면 KIS 를 부르지 않고 바로 끝.
 
@@ -82,15 +95,25 @@ def poll_intraday_indices() -> dict:
     if not intraday.in_intraday_window(now):
         return {"skipped": "closed"}
     client = None
+    redis = None
+    token = uuid.uuid4().hex
+    locked = False
     try:
+        redis = get_sync_redis()
+        # 중복 실행 잠금(KIS 클라이언트 생성 전) — 앞 실행이 아직 돌면 바로 끝낸다
+        if not redis.set(intraday.INTRADAY_LOCK_KEY, token, nx=True, ex=intraday.INTRADAY_LOCK_TTL):
+            return {"skipped": "busy"}
+        locked = True
         client = KISClient(limiter=RateLimiter(intraday.INTRADAY_RATE))
-        return intraday.poll(client, get_sync_redis(), now)
-    except Exception as e:  # noqa: BLE001 — 장중 갱신 실패가 워커를 흔들지 않게(화면은 확정 종가로)
+        return intraday.poll(client, redis, now)
+    except Exception as e:  # noqa: BLE001 — 장중 갱신 실패가 워커를 흔들지 않게(화면은 확정 종가로). 시간 제한 예외 포함
         log.warning("장중 지수 갱신 실패: %s", str(e)[:200])
         return {"error": repr(e)[:300]}
     finally:
         if client is not None:
             client.close()
+        if locked:
+            _release_lock(redis, token)
 
 
 # ---------------------------------------------------------------- 투자자별 순매수

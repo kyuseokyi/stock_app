@@ -24,6 +24,11 @@ log = logging.getLogger(__name__)
 KST = timezone(timedelta(hours=9))
 INTRADAY_KEY = "market:intraday"
 INTRADAY_TTL = 600  # 10분 — 수집이 멈추면 값이 저절로 사라져 확정 종가로 돌아간다
+INTRADAY_FUTURE_SKEW = 60  # 컨테이너 간 시계 차이로 막 쓴 값이 미래로 보여도 이만큼(초)은 남긴다
+# 중복 실행 잠금 — KIS 장애로 한 실행이 길어져도 30초마다 새 실행이 쌓여 워커를 다 차지하지 않게.
+# 만료는 태스크 time_limit(50초)보다 길어야 한다(강제 종료돼 해제를 못 해도 곧 풀림)
+INTRADAY_LOCK_KEY = "market:intraday:lock"
+INTRADAY_LOCK_TTL = 60
 # 이 기능 전용 장 시간(09:00 ≤ t < 15:35). 게임 TRADING_WINDOWS(애프터마켓 포함)와 목적이 달라 공유하지 않는다
 INTRADAY_WINDOW = (time(9, 0), time(15, 35))
 INTRADAY_CODES = ("KR:0001", "KR:1001", "KR:2001", "FX:USDKRW")
@@ -83,7 +88,7 @@ def merge_intraday(prev: dict, fresh: dict, now_ts: float) -> dict:
     kept = {}
     for code, item in prev.items():
         try:
-            if 0 <= now_ts - float(item["ts"]) <= INTRADAY_TTL:  # 시계 역행으로 미래 ts 가 된 항목도 버린다
+            if -INTRADAY_FUTURE_SKEW <= now_ts - float(item["ts"]) <= INTRADAY_TTL:  # 여유보다 더 미래인 ts(시계 역행)는 버린다
                 kept[code] = item
         except (KeyError, TypeError, ValueError):
             continue  # 형식이 깨진 항목은 버린다
@@ -115,9 +120,6 @@ def valid_value(value) -> float | None:
     return v if math.isfinite(v) and v > 0 else None
 
 
-_valid = valid_value  # 기존 이름 유지 — 동작 불변
-
-
 def poll(client, redis, now: datetime, fetch=None) -> dict:
     """대상마다 오늘 값 조회 → 성공한 것만 이전 값과 병합해 저장(TTL 10분). 전부 실패하면 Redis 를 건드리지 않는다.
 
@@ -130,7 +132,7 @@ def poll(client, redis, now: datetime, fetch=None) -> dict:
     failed: list[str] = []
     for spec in intraday_specs():
         try:
-            value = _valid(fetch(spec, client, today))
+            value = valid_value(fetch(spec, client, today))
         except Exception as e:  # noqa: BLE001 — 코드 하나 실패가 나머지를 막지 않게
             log.warning("장중 지수 조회 실패 %s(%s): %s", spec.code, spec.name, str(e)[:160])
             value = None
