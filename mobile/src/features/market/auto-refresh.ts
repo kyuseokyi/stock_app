@@ -19,3 +19,11 @@ export function createSilentRunner(run: () => Promise<unknown>): () => void {
       });
   };
 }
+
+/**
+ * 포커스·앱 복귀 때 즉시 갱신할지 — 마지막 실행 후 주기 이상 지났을 때만(탭을 빠르게 오갈 때 중복 방지).
+ * 한 번도 안 돌았거나 시계가 거꾸로 갔으면 즉시.
+ */
+export function shouldRefreshNow(lastAt: number | null, now: number, ms = MARKET_REFRESH_MS): boolean {
+  return lastAt == null || now < lastAt || now - lastAt >= ms;
+}

@@ -41,13 +41,14 @@ export function toneOf(n: number | null | undefined): Tone {
   return r > 0 ? 'up' : 'down';
 }
 
-/** 지수 카드 날짜 자리 — 장중이면 '장중 14:32'(live), 국내 확정이면 없음, 해외·환율은 MM/DD */
+/** 지수 카드 날짜 자리 — 장중이면 '장중 14:32'(live, 화면엔 짧은 label '● 14:32'), 국내 확정이면 없음, 해외·환율은 MM/DD */
 export function indexBadge(
   ix: Pick<MarketIndex, 'region' | 'date' | 'live' | 'asOf'>,
-): { text: string; live: boolean } | null {
-  if (ix.live && ix.asOf) return { text: `장중 ${ix.asOf}`, live: true };
+): { text: string; label: string; live: boolean } | null {
+  if (ix.live && ix.asOf) return { text: `장중 ${ix.asOf}`, label: `● ${ix.asOf}`, live: true };
   if (ix.region === 'KR') return null;
-  return { text: ix.date.slice(5).replace('-', '/'), live: false };
+  const md = ix.date.slice(5).replace('-', '/');
+  return { text: md, label: md, live: false };
 }
 
 /** 지수 종가 → '2,601.5' (소수 최대 두 자리, 뒤 0 생략) */

@@ -1,6 +1,6 @@
 import { startForegroundInterval } from '@/features/game/lib/foreground-interval';
 
-import { createSilentRunner, MARKET_REFRESH_MS } from './auto-refresh';
+import { createSilentRunner, MARKET_REFRESH_MS, shouldRefreshNow } from './auto-refresh';
 
 /** 프로미스 연쇄(then·catch·finally)가 끝날 때까지 마이크로태스크를 흘려보낸다 */
 const flush = async () => {
@@ -70,5 +70,20 @@ describe('30초 자동 새로고침(포그라운드 주기 + 조용한 실행기
     await flush();
     expect(run).toHaveBeenCalledTimes(1);
     expect(MARKET_REFRESH_MS).toBe(30_000);
+  });
+});
+
+describe('shouldRefreshNow', () => {
+  it('한 번도 안 돌았으면 즉시', () => {
+    expect(shouldRefreshNow(null, 1000)).toBe(true);
+  });
+  it('주기가 지나기 전에는 건너뛴다(탭을 빠르게 오갈 때 중복 방지)', () => {
+    expect(shouldRefreshNow(1000, 1000 + MARKET_REFRESH_MS - 1)).toBe(false);
+  });
+  it('주기 이상 지났으면 즉시', () => {
+    expect(shouldRefreshNow(1000, 1000 + MARKET_REFRESH_MS)).toBe(true);
+  });
+  it('시계가 거꾸로 가면 즉시', () => {
+    expect(shouldRefreshNow(5000, 1000)).toBe(true);
   });
 });

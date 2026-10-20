@@ -166,13 +166,13 @@ describe('오류 코드', () => {
 describe('지수 카드 날짜 자리(장중 배지)', () => {
   const ix = { region: 'KR', date: '2026-10-16', live: false, asOf: null };
   it('장중이면 "장중 HH:MM" 배지', () => {
-    expect(indexBadge({ ...ix, live: true, asOf: '14:32' })).toEqual({ text: '장중 14:32', live: true });
-    expect(indexBadge({ ...ix, region: 'FX', live: true, asOf: '09:05' })).toEqual({ text: '장중 09:05', live: true });
+    expect(indexBadge({ ...ix, live: true, asOf: '14:32' })).toEqual({ text: '장중 14:32', label: '● 14:32', live: true });
+    expect(indexBadge({ ...ix, region: 'FX', live: true, asOf: '09:05' })).toEqual({ text: '장중 09:05', label: '● 09:05', live: true });
   });
   it('확정 값이면 국내는 없음, 해외·환율은 MM/DD(지금과 같음)', () => {
     expect(indexBadge(ix)).toBeNull();
-    expect(indexBadge({ ...ix, region: 'US' })).toEqual({ text: '10/16', live: false });
-    expect(indexBadge({ ...ix, region: 'FX', date: '2026-09-05' })).toEqual({ text: '09/05', live: false });
+    expect(indexBadge({ ...ix, region: 'US' })).toEqual({ text: '10/16', label: '10/16', live: false });
+    expect(indexBadge({ ...ix, region: 'FX', date: '2026-09-05' })).toEqual({ text: '09/05', label: '09/05', live: false });
   });
   it('live 인데 시각이 없으면 확정처럼 다룬다', () => {
     expect(indexBadge({ ...ix, live: true, asOf: null })).toBeNull();

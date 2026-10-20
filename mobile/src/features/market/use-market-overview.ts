@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { kstDateString } from '@/features/game/lib/format';
 
@@ -31,6 +31,9 @@ export function useMarketOverview() {
   const [state, setState] = useState<State>({ data: null, loading: true, error: null });
   // 요청 번호 — 늦게 도착한 옛 응답(당겨서 새로고침·자동 새로고침)이 새 결과를 덮지 않게
   const [gate] = useState(createLatest);
+  // 자동 새로고침이 데이터 유무를 렌더 없이 보기 위한 최신 값
+  const hasData = useRef(false);
+  hasData.current = state.data != null;
 
   const reload = useCallback(async () => {
     const id = gate.next();
@@ -53,9 +56,10 @@ export function useMarketOverview() {
   /**
    * 장중 자동 새로고침 — 개요(지수·거시)만 다시 받아 바꾼다(테마·일정은 하루 한 번 바뀌므로 다시 받지 않음).
    * 번호를 올리지 않아 진행 중인 전체 새로고침을 막지 않고, 그 뒤에 시작된 전체 새로고침이 있으면 결과를 버린다.
-   * 아직 데이터가 없으면(첫 로딩·오류 화면) 아무것도 바꾸지 않는다. 실패는 호출한 쪽(createSilentRunner)이 삼킨다.
+   * 아직 데이터가 없으면(첫 로딩·오류 화면) 요청도 보내지 않는다(복구는 [다시 시도]·당겨서 새로고침). 실패는 호출한 쪽(createSilentRunner)이 삼킨다.
    */
   const silentRefresh = useCallback(async () => {
+    if (!hasData.current) return; // 첫 로딩·오류 화면에서는 요청 자체를 보내지 않는다
     const id = gate.current();
     const overview = await fetchMarketOverview();
     if (!gate.isLatest(id)) return;

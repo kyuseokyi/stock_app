@@ -16,7 +16,13 @@ export function IndexCard({ index }: { index: MarketIndex }) {
     >
       <View style={styles.head}>
         <Text style={styles.name} numberOfLines={1}>{index.name}</Text>
-        {badge == null ? null : <Text style={badge.live ? styles.live : styles.date}>{badge.text}</Text>}
+        {badge == null ? null : <Text
+            style={badge.live ? styles.live : styles.date}
+            numberOfLines={1}
+            maxFontSizeMultiplier={1.2}
+          >
+            {badge.label}
+          </Text>}
       </View>
       <Text style={styles.close} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{formatIndex(index.close)}</Text>
       <Text style={[styles.chg, styles[toneOf(index.chg1d)]]}>{formatChg(index.chg1d)}</Text>
