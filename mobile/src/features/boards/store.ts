@@ -10,6 +10,8 @@ type BoardState = {
   error: string;
   /** 활성 게시판 목록을 최초 1회만 불러온다(이미 로드됐거나 로딩 중이면 skip). */
   load: () => Promise<void>;
+  /** 당겨서 새로고침 — 이미 불러왔어도 다시 가져온다(실패는 throw, 기존 목록 유지). */
+  refresh: () => Promise<void>;
   boardName: (id: number) => string;
 };
 
@@ -28,6 +30,10 @@ export const useBoardStore = create<BoardState>((set, get) => ({
     } catch {
       set({ loading: false, error: '게시판을 불러오지 못했습니다. 백엔드(8000)가 실행 중인지 확인하세요.' });
     }
+  },
+  refresh: async () => {
+    const boards = await fetchBoards();
+    set({ boards, loaded: true, loading: false, error: '' });
   },
   boardName: (id) => get().boards.find((b) => b.id === id)?.name ?? '',
 }));

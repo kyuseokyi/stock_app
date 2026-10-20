@@ -36,6 +36,13 @@ export function useComments(blogId: number) {
     }
   }, [blogId]);
 
+  /** 당겨서 새로고침 — 기존 댓글을 그대로 두고, 성공하면 바꾼다(실패는 throw → 토스트). */
+  const refresh = useCallback(async () => {
+    if (!Number.isFinite(blogId)) return;
+    const comments = await fetchComments(blogId);
+    setState({ data: comments, loading: false, error: null });
+  }, [blogId]);
+
   useEffect(() => {
     load();
   }, [load]);
@@ -66,5 +73,5 @@ export function useComments(blogId: number) {
     [blogId],
   );
 
-  return { ...state, reload: load, submit, submitting, submitError };
+  return { ...state, reload: load, refresh, submit, submitting, submitError };
 }

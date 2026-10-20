@@ -1,15 +1,18 @@
-import { ActivityIndicator, FlatList, Pressable, Text, View } from 'react-native';
+import { ActivityIndicator, FlatList, Pressable, RefreshControl, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StyleSheet } from 'react-native-unistyles';
 
 import { BlogCard } from '@/features/blog/blog-card';
 import { useFeaturedPosts } from '@/features/blog/use-featured-posts';
+import { usePullRefresh } from '@/hooks/use-pull-refresh';
 
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
-  const { data, loading, error, reload } = useFeaturedPosts();
+  const { data, loading, error, reload, refresh } = useFeaturedPosts();
+  const { refreshing, onRefresh } = usePullRefresh(refresh);
 
-  if (loading) {
+  // 처음 불러올 때만 전체 화면 로딩 — 당겨서 새로고침 중에는 목록을 그대로 둔다
+  if (loading && data.length === 0) {
     return (
       <View style={[styles.center, { paddingTop: insets.top }]}>
         <ActivityIndicator />
@@ -18,36 +21,37 @@ export default function HomeScreen() {
     );
   }
 
-  if (error) {
-    return (
-      <View style={[styles.center, { paddingTop: insets.top }]}>
-        <Text style={styles.errorTitle}>추천 글을 불러오지 못했습니다</Text>
-        <Text style={styles.hint}>{error}</Text>
-        <Pressable style={styles.retry} onPress={reload}>
-          <Text style={styles.retryText}>다시 시도</Text>
-        </Pressable>
-      </View>
-    );
-  }
-
-  if (data.length === 0) {
-    return (
-      <View style={[styles.center, { paddingTop: insets.top }]}>
-        <Text style={styles.title}>📌 추천 글</Text>
-        <Text style={styles.hint}>아직 추천 글이 없습니다</Text>
-      </View>
-    );
-  }
-
+  // 빈 상태·오류도 목록 안에 둬서 당겨서 새로고침이 되게 한다
   return (
     <FlatList
       style={styles.list}
-      contentContainerStyle={[styles.listContent, { paddingTop: insets.top + 16 }]}
+      contentContainerStyle={[
+        styles.listContent,
+        { paddingTop: insets.top + 16 },
+        data.length === 0 && styles.grow,
+      ]}
       data={data}
       keyExtractor={(item) => String(item.id)}
       ListHeaderComponent={<Text style={styles.title}>📌 추천 글</Text>}
       renderItem={({ item }) => <BlogCard post={item} />}
       ItemSeparatorComponent={() => <View style={styles.sep} />}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+      ListEmptyComponent={
+        error ? (
+          <View style={styles.center}>
+            <Text style={styles.errorTitle}>추천 글을 불러오지 못했습니다</Text>
+            <Text style={styles.hint}>{error}</Text>
+            <Pressable style={styles.retry} onPress={reload}>
+              <Text style={styles.retryText}>다시 시도</Text>
+            </Pressable>
+          </View>
+        ) : (
+          <View style={styles.center}>
+            <Text style={styles.hint}>아직 추천 글이 없습니다</Text>
+            <Text style={styles.hint}>화면을 아래로 당기면 새로고침돼요</Text>
+          </View>
+        )
+      }
     />
   );
 }
@@ -97,5 +101,8 @@ const styles = StyleSheet.create((theme) => ({
   },
   sep: {
     height: theme.gap(1.5),
+  },
+  grow: {
+    flexGrow: 1,
   },
 }));

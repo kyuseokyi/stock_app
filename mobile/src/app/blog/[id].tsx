@@ -5,6 +5,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   Pressable,
+  RefreshControl,
   ScrollView,
   Text,
   TextInput,
@@ -17,6 +18,7 @@ import { useAuthStore } from '@/features/auth/store';
 import { useBlogDetail } from '@/features/blog/use-blog-detail';
 import { useComments } from '@/features/blog/use-comments';
 import { useBoardStore } from '@/features/boards/store';
+import { usePullRefresh } from '@/hooks/use-pull-refresh';
 
 function fmtDateTime(iso: string): string {
   const d = new Date(iso);
@@ -80,16 +82,19 @@ export default function BlogDetailScreen() {
   // boards 배열을 구독해야 로드 완료 시 재렌더된다(boardName 함수 참조 자체는 불변).
   const boards = useBoardStore((s) => s.boards);
   const boardName = useBoardStore((s) => s.boardName);
-  const { data: post, loading, error, reload } = useBlogDetail(blogId);
+  const { data: post, loading, error, reload, refresh } = useBlogDetail(blogId);
   const {
     data: comments,
     loading: commentsLoading,
     error: commentsListError,
     reload: reloadComments,
+    refresh: refreshComments,
     submit,
     submitting,
     submitError,
   } = useComments(blogId);
+  // 당겨서 새로고침: 글 본문과 댓글을 함께 다시 가져온다
+  const { refreshing, onRefresh } = usePullRefresh(() => Promise.all([refresh(), refreshComments()]));
   const token = useAuthStore((s) => s.token);
   const user = useAuthStore((s) => s.user);
 
@@ -140,7 +145,11 @@ export default function BlogDetailScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 88 : 0}
     >
-      <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+      >
         <View style={styles.header}>
           <Text style={styles.boardName}>{boardName(post.boardId)}</Text>
           <Text style={styles.title}>{post.title}</Text>

@@ -33,9 +33,16 @@ export function useBlogDetail(id: number) {
     }
   }, [id]);
 
+  /** 당겨서 새로고침 — 화면을 "불러오는 중"으로 바꾸지 않고, 성공하면 글만 바꾼다(실패는 throw → 토스트). */
+  const refresh = useCallback(async () => {
+    if (!Number.isFinite(id)) return;
+    const post = await fetchBlog(id);
+    setState({ data: post, loading: false, error: null });
+  }, [id]);
+
   useEffect(() => {
     load();
   }, [load]);
 
-  return { ...state, reload: load };
+  return { ...state, reload: load, refresh };
 }

@@ -43,9 +43,16 @@ export function useBlogList(options: UseBlogListOptions = {}) {
     }
   }, [boardId, page, size]);
 
+  /** 당겨서 새로고침 — 화면을 "불러오는 중"으로 바꾸지 않고, 성공하면 목록만 바꾼다(실패는 throw → 토스트). */
+  const refresh = useCallback(async () => {
+    if (boardId === undefined) return;
+    const res = await fetchBlogList({ boardId, page, size });
+    setState({ data: res.items, total: res.total, page: res.page, loading: false, error: null });
+  }, [boardId, page, size]);
+
   useEffect(() => {
     load();
   }, [load]);
 
-  return { ...state, reload: load };
+  return { ...state, reload: load, refresh };
 }

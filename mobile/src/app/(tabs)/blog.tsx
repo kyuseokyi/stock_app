@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, FlatList, Pressable, Text, View } from 'react-native';
+import { ActivityIndicator, FlatList, Pressable, RefreshControl, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StyleSheet } from 'react-native-unistyles';
 
@@ -7,6 +7,7 @@ import { BlogCard } from '@/features/blog/blog-card';
 import { useBlogList } from '@/features/blog/use-blog-list';
 import { useBoardStore } from '@/features/boards/store';
 import type { Board } from '@/features/boards/types';
+import { usePullRefresh } from '@/hooks/use-pull-refresh';
 
 const PAGE_SIZE = 10;
 
@@ -27,11 +28,14 @@ export default function BlogScreen() {
     }
   }, [boardsLoaded, boards, selectedBoardId]);
 
-  const { data, total, loading, error, reload } = useBlogList({
+  const { data, total, loading, error, reload, refresh } = useBlogList({
     boardId: selectedBoardId,
     page,
     size: PAGE_SIZE,
   });
+  const refreshBoards = useBoardStore((s) => s.refresh);
+  // 당겨서 새로고침: 게시판 목록(이름·순서 변경 반영)과 현재 게시판 글을 함께 다시 가져온다
+  const { refreshing, onRefresh } = usePullRefresh(() => Promise.all([refreshBoards(), refresh()]));
 
   const handleSelectBoard = (boardId: number) => {
     if (boardId === selectedBoardId) return;
@@ -74,31 +78,37 @@ export default function BlogScreen() {
     <View style={[styles.screen, { paddingTop: insets.top }]}>
       <BoardTabs boards={boards} selectedBoardId={selectedBoardId} onSelect={handleSelectBoard} />
 
-      {loading ? (
+      {/* 처음 불러올 때만 전체 로딩. 빈 상태·오류도 목록 안에 둬서 당겨서 새로고침이 되게 한다 */}
+      {loading && data.length === 0 ? (
         <View style={styles.center}>
           <ActivityIndicator />
           <Text style={styles.hint}>불러오는 중…</Text>
         </View>
-      ) : error ? (
-        <View style={styles.center}>
-          <Text style={styles.errorTitle}>커뮤니티를 불러오지 못했습니다</Text>
-          <Text style={styles.hint}>{error}</Text>
-          <Pressable style={styles.retry} onPress={reload}>
-            <Text style={styles.retryText}>다시 시도</Text>
-          </Pressable>
-        </View>
-      ) : data.length === 0 ? (
-        <View style={styles.center}>
-          <Text style={styles.hint}>아직 글이 없습니다</Text>
-        </View>
       ) : (
         <FlatList
           style={styles.list}
-          contentContainerStyle={styles.listContent}
+          contentContainerStyle={[styles.listContent, data.length === 0 && styles.grow]}
           data={data}
           keyExtractor={(item) => String(item.id)}
           renderItem={({ item }) => <BlogCard post={item} />}
           ItemSeparatorComponent={() => <View style={styles.sep} />}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+          ListEmptyComponent={
+            error ? (
+              <View style={styles.center}>
+                <Text style={styles.errorTitle}>커뮤니티를 불러오지 못했습니다</Text>
+                <Text style={styles.hint}>{error}</Text>
+                <Pressable style={styles.retry} onPress={reload}>
+                  <Text style={styles.retryText}>다시 시도</Text>
+                </Pressable>
+              </View>
+            ) : (
+              <View style={styles.center}>
+                <Text style={styles.hint}>아직 글이 없습니다</Text>
+                <Text style={styles.hint}>화면을 아래로 당기면 새로고침돼요</Text>
+              </View>
+            )
+          }
           ListFooterComponent={
             total > PAGE_SIZE ? (
               <Pagination page={page} totalPages={totalPages} onChange={setPage} />
@@ -281,5 +291,8 @@ const styles = StyleSheet.create((theme) => ({
   pageStatus: {
     fontSize: 13,
     color: theme.colors.textSecondary,
+  },
+  grow: {
+    flexGrow: 1,
   },
 }));

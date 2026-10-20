@@ -1,11 +1,12 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Redirect, Stack, useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, Pressable, RefreshControl, ScrollView, Text, TextInput, View } from 'react-native';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
 import { useAuthStore } from '@/features/auth/store';
 import { fundRefresher } from '@/features/fund/auto-refresh';
+import { usePullRefresh } from '@/hooks/use-pull-refresh';
 import {
   addFund,
   displayName,
@@ -35,6 +36,8 @@ export default function FundListScreen() {
   const [loadError, setLoadError] = useState('');
   const status = useAutoRefreshStatus(fundRefresher);
   const [lines, setLines] = useState<Record<string, string>>({});
+  // 당겨서 새로고침: 등록된 펀드 리포트를 지금 바로 모두 다시 받는다(끝나면 status.version 이 바뀌어 목록 줄 갱신)
+  const { refreshing, onRefresh } = usePullRefresh(() => fundRefresher.run({ force: true }));
 
   // 목록 한 줄(기준일·확인 시각) — 목록이 바뀌거나 자동 갱신이 끝날 때마다 캐시를 다시 읽는다
   useEffect(() => {
@@ -111,7 +114,11 @@ export default function FundListScreen() {
   };
 
   return (
-    <ScrollView style={styles.flex} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+    <ScrollView
+      style={styles.flex}
+      contentContainerStyle={styles.content}
+      keyboardShouldPersistTaps="handled"
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
       <Stack.Screen
         options={{
           headerRight: () => (

@@ -1,6 +1,6 @@
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { Pressable, RefreshControl, ScrollView, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
@@ -10,6 +10,7 @@ import { socialErrorMessage } from '@/features/auth/return-url';
 import { startSocialLogin } from '@/features/auth/social';
 import { SocialButton } from '@/features/auth/social-button';
 import { useAuthStore } from '@/features/auth/store';
+import { usePullRefresh } from '@/hooks/use-pull-refresh';
 import { ENV } from '@/lib/env';
 import { Button, Card, ListRow, showToast } from '@/ui';
 
@@ -88,13 +89,23 @@ export default function ProfileScreen() {
     showToast('탈퇴가 완료됐어요');
   };
 
+  // 당겨서 새로고침: 로그인 상태면 서버에 세션·내 정보를 다시 확인, 아니면 간편 로그인 공급자를 다시 조회
+  const { refreshing, onRefresh } = usePullRefresh(async () => {
+    if (user) {
+      await useAuthStore.getState().validateSession(true);
+      return;
+    }
+    setProviders(await getSocialProviders());
+  });
+
   const visibleProviders = SOCIAL_PROVIDERS.filter((p) => providers?.[p] === true);
 
   if (user) {
     return (
       <ScrollView
         style={styles.flex}
-        contentContainerStyle={[styles.content, { paddingTop: insets.top + 24 }]}>
+        contentContainerStyle={[styles.content, { paddingTop: insets.top + 24 }]}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
         <Text style={styles.screenTitle}>내정보</Text>
         <Card>
           <Text style={styles.nickname}>{user.nickname}</Text>
@@ -140,7 +151,8 @@ export default function ProfileScreen() {
   return (
     <ScrollView
       style={styles.flex}
-      contentContainerStyle={[styles.content, { paddingTop: insets.top + 24 }]}>
+      contentContainerStyle={[styles.content, { paddingTop: insets.top + 24 }]}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
       <Text style={styles.screenTitle}>내정보</Text>
       <Text style={styles.subtitle}>간편 로그인으로 시작해 보세요.</Text>
       {visibleProviders.map((p) => (
