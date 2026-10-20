@@ -32,7 +32,14 @@ export function GroupSection({ kind, onOpenGroup }: { kind: GroupKind; onOpenGro
           contentContainerStyle={[styles.list, r.items.length === 0 && styles.grow]}
           data={r.items}
           keyExtractor={(it) => it.id}
-          renderItem={({ item }) => <GroupRow item={item} onPress={() => onOpenGroup(kind, item.id)} />}
+          renderItem={({ item, index }) => (
+            <GroupRow
+              item={item}
+              // 서버 순위는 1일·등락률 기준 — 다른 조건에선 줄 번호(웹과 같음)
+              order={r.period === '1d' && r.sort === 'chg' ? undefined : index + 1}
+              onPress={() => onOpenGroup(kind, item.id)}
+            />
+          )}
           ItemSeparatorComponent={() => <View style={styles.line} />}
           refreshControl={<RefreshControl refreshing={refreshing || (r.loading && r.items.length > 0)} onRefresh={onRefresh} />}
           onEndReached={() => { if (!r.moreFailed) void r.loadMore(); }}

@@ -5,12 +5,16 @@ import { formatChg, toneOf } from '../format';
 import type { GroupItem } from '../types';
 import { BreadthBar } from './breadth-bar';
 
-/** 테마·업종 순위 한 줄 — 순위·이름·연속 상위·등락률·상승/하락 막대·대장주. 누르면 onPress */
-export function GroupRow({ item, onPress }: { item: GroupItem; onPress: () => void }) {
+/**
+ * 테마·업종 순위 한 줄 — 순위·이름·연속 상위·등락률·상승/하락 막대·대장주. 누르면 onPress.
+ * 서버 rank 는 "1일·등락률" 기준이라, 다른 기간·정렬에서는 order(줄 번호)를 넘겨 그걸 보여 준다(웹 GroupTab 과 같음).
+ */
+export function GroupRow({ item, onPress, order }: { item: GroupItem; onPress: () => void; order?: number }) {
   const tone = toneOf(item.chg);
+  const rank = order ?? item.rank;
   // 라벨이 자식 글자를 덮으므로 화면 낭독기가 들을 값을 모두 담는다
   const label = [
-    `${item.rank ? `${item.rank}위 ` : ''}${item.name}`,
+    `${rank ? `${rank}위 ` : ''}${item.name}`,
     formatChg(item.chg),
     `상승 ${item.up} 보합 ${item.flat} 하락 ${item.down}`,
     item.leader ? `대장 ${item.leader.name} ${formatChg(item.leader.chg)}` : '',
@@ -19,7 +23,7 @@ export function GroupRow({ item, onPress }: { item: GroupItem; onPress: () => vo
     .join(', ');
   return (
     <Pressable style={styles.row} onPress={onPress} accessibilityRole="button" accessibilityLabel={label} accessibilityHint="상세 보기">
-      <Text style={styles.rank}>{item.rank || '–'}</Text>
+      <Text style={styles.rank}>{rank || '–'}</Text>
       <View style={styles.body}>
         <View style={styles.line}>
           <Text style={styles.name} numberOfLines={1}>{item.name}</Text>
