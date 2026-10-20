@@ -1,8 +1,10 @@
 /**
  * Unistyles v3 전역 설정 — 앱 진입 전에 1회 실행되어야 한다(index.ts에서 import).
- * 테마는 OS 라이트/다크에 자동 대응(adaptiveThemes)한다.
+ * 테마는 OS 라이트/다크를 따른다 — 시작 값은 여기서, 이후 변경은 src/hooks/use-system-theme 이 맞춘다
+ * (adaptiveThemes 는 Android 에서 한 단계 늦은 테마가 적용돼 쓰지 않음).
  * 팔레트: 파스텔 C안(라벤더 바탕 + 흰 카드, 핑크는 포인트·블루는 배너) — docs/superpowers/specs/2026-10-14-pastel-theme-design.md
  */
+import { Appearance } from 'react-native';
 import { StyleSheet } from 'react-native-unistyles';
 
 // 모든 테마 공유값. gap(1)=8, gap(2)=16 ...
@@ -74,7 +76,8 @@ declare module 'react-native-unistyles' {
 
 StyleSheet.configure({
   settings: {
-    adaptiveThemes: true, // OS 색상 모드에 따라 light/dark 자동 전환
+    // 시작 테마 = OS 색상 모드. 실행 중 변경은 useSystemTheme(루트 레이아웃)이 setTheme 으로 반영
+    initialTheme: () => (Appearance.getColorScheme() === 'dark' ? 'dark' : 'light'),
   },
   breakpoints,
   themes: appThemes,

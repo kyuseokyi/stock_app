@@ -1,14 +1,16 @@
-import { Stack } from 'expo-router';
+import { Stack, ThemeProvider } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
 import { AppState } from 'react-native';
 
 import { useAuthStore } from '@/features/auth/store';
 import { useFundAutoRefresh } from '@/features/fund/auto-refresh';
+import { useSystemTheme } from '@/hooks/use-system-theme';
 import { ApiProgressBar, AppToaster } from '@/ui';
 
 export default function RootLayout() {
   useFundAutoRefresh(); // 실행·복귀 시 등록 펀드 자동 갱신(로그인 상태일 때만)
+  const navTheme = useSystemTheme(); // OS 라이트/다크 → 앱 테마·헤더 색
   // 앱 시작 시 1회, SecureStore에 저장된 토큰/유저를 복원한다. 복원 전에는 로그아웃 상태로 렌더링된다.
   useEffect(() => {
     // 복원 후 세션 확인(실행 시 1회), 이후 포그라운드 복귀마다(60초 간격 제한) — 만료·다른 기기 로그인 반영
@@ -23,7 +25,7 @@ export default function RootLayout() {
   }, []);
 
   return (
-    <>
+    <ThemeProvider value={navTheme}>
       <StatusBar style="auto" />
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="(tabs)" />
@@ -36,6 +38,6 @@ export default function RootLayout() {
       </Stack>
       <AppToaster />
       <ApiProgressBar />
-    </>
+    </ThemeProvider>
   );
 }
