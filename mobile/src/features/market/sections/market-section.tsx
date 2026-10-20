@@ -29,7 +29,7 @@ export function MarketSection({ onMore, onOpenGroup }: Props) {
   const macro = data?.overview.macro ?? [];
   return (
     <ScrollView
-      contentContainerStyle={[styles.content, !data && styles.grow]}
+      contentContainerStyle={[styles.content, (!data || indices.length === 0) && styles.grow]}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
     >
       {error ? (
@@ -58,7 +58,7 @@ export function MarketSection({ onMore, onOpenGroup }: Props) {
               <EventList events={data.events} today={today} />
             </View>
           ) : null}
-          <BasisNote date={data?.date ?? null} />
+          <BasisNote date={data?.date ?? indices[0]?.date ?? null} />
         </>
       )}
     </ScrollView>
@@ -69,7 +69,7 @@ function SectionHead({ title, onMore }: { title: string; onMore: () => void }) {
   return (
     <View style={styles.head}>
       <Text style={styles.headTitle}>{title}</Text>
-      <Pressable onPress={onMore} hitSlop={8} accessibilityRole="button">
+      <Pressable onPress={onMore} hitSlop={8} accessibilityRole="button" accessibilityLabel={`${title} 더 보기`}>
         <Text style={styles.more}>더 보기</Text>
       </Pressable>
     </View>

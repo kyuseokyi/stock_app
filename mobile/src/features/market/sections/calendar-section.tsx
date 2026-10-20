@@ -27,7 +27,7 @@ export function CalendarSection() {
       ) : (
         <ScrollView
           contentContainerStyle={[styles.content, c.upcoming.length === 0 && styles.grow]}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+          refreshControl={<RefreshControl refreshing={refreshing || (c.loading && c.upcoming.length + c.past.length > 0)} onRefresh={onRefresh} />}
         >
           {c.error ? (
             <ListState mode="error" title="일정을 불러오지 못했어요" hint={`잠시 후 다시 시도해 주세요 (오류: ${c.error})`} onRetry={c.reload} />
@@ -35,7 +35,12 @@ export function CalendarSection() {
             <>
               {c.past.length > 0 ? (
                 <View style={styles.card}>
-                  <Pressable onPress={() => setShowPast((v) => !v)} accessibilityRole="button">
+                  <Pressable
+                    onPress={() => setShowPast((v) => !v)}
+                    accessibilityRole="button"
+                    accessibilityState={{ expanded: showPast }}
+                    accessibilityLabel={showPast ? '지난 일정 접기' : `지난 7일 일정 ${c.past.length}개 보기`}
+                  >
                     <Text style={styles.toggle}>{showPast ? '지난 일정 접기 ▲' : `지난 7일 일정 ${c.past.length}개 보기 ▼`}</Text>
                   </Pressable>
                   {showPast ? <View style={styles.past}><EventList events={c.past} today={c.today} /></View> : null}

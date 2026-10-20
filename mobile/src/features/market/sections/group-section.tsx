@@ -34,8 +34,8 @@ export function GroupSection({ kind, onOpenGroup }: { kind: GroupKind; onOpenGro
           keyExtractor={(it) => it.id}
           renderItem={({ item }) => <GroupRow item={item} onPress={() => onOpenGroup(kind, item.id)} />}
           ItemSeparatorComponent={() => <View style={styles.line} />}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-          onEndReached={() => void r.loadMore()}
+          refreshControl={<RefreshControl refreshing={refreshing || (r.loading && r.items.length > 0)} onRefresh={onRefresh} />}
+          onEndReached={() => { if (!r.moreFailed) void r.loadMore(); }}
           onEndReachedThreshold={0.4}
           ListEmptyComponent={
             r.error ? (

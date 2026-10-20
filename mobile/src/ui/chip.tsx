@@ -10,7 +10,7 @@ type Props = {
 /** pill 칩. 선택 시 primarySoft 배경 + primary 글씨. 보드/비중/배율 선택에 사용. */
 export function Chip({ label, selected = false, onPress }: Props) {
   return (
-    <Pressable onPress={onPress} style={[styles.chip, selected && styles.chipOn]}>
+    <Pressable onPress={onPress} accessibilityRole="button" accessibilityState={{ selected }} style={[styles.chip, selected && styles.chipOn]}>
       <Text style={[styles.label, selected && styles.labelOn]}>{label}</Text>
     </Pressable>
   );
