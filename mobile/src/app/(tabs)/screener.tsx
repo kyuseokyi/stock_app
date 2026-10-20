@@ -1,4 +1,4 @@
-import { type Href, useRouter } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -20,7 +20,7 @@ export default function ScreenerScreen() {
   const [tab, setTab] = useState<Tab>('market');
 
   const openGroup = (kind: GroupKind, id: string) =>
-    router.push(`/market/${kind}/${encodeURIComponent(id)}` as Href);
+    router.push({ pathname: '/market/[kind]/[id]', params: { kind, id } });
 
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}>

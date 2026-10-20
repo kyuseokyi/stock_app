@@ -21,10 +21,12 @@ export default function GroupDetailScreen() {
 
 function NotFound() {
   const router = useRouter();
+  // 딥링크로 들어와 스택이 이 화면뿐이면 back() 이 동작하지 않으므로 스크리너 탭으로 보낸다
+  const goBack = () => (router.canGoBack() ? router.back() : router.replace('/screener'));
   return (
     <View style={styles.center}>
       <ListState mode="empty" emoji="🔍" title="이 그룹 정보를 찾을 수 없어요" hint="목록이 바뀌었을 수 있어요" />
-      <Button label="뒤로 가기" variant="secondary" fullWidth={false} onPress={() => router.back()} />
+      <Button label="뒤로 가기" variant="secondary" fullWidth={false} onPress={goBack} />
     </View>
   );
 }
@@ -40,7 +42,7 @@ function GroupDetailBody({ kind, id }: { kind: GroupKind; id: string }) {
   }
 
   return (
-    <ScrollView contentContainerStyle={styles.content} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
+    <ScrollView style={styles.flex} contentContainerStyle={styles.content} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
       <Stack.Screen options={{ title: data.name }} />
       <View style={styles.card}>
         <Text style={styles.kind}>{kind === 'theme' ? '테마' : '업종'} · {data.rank ? `${data.rank}위` : '순위 없음'}</Text>
@@ -64,9 +66,10 @@ function GroupDetailBody({ kind, id }: { kind: GroupKind; id: string }) {
         {data.stocks.map((s) => (
           <View key={s.ticker} style={styles.stock}>
             <View style={styles.stockMain}>
-              <Text style={styles.stockName} numberOfLines={1}>
-                {s.name}{s.isLeader ? <Text style={styles.leader}>  대장주</Text> : null}
-              </Text>
+              <View style={styles.nameRow}>
+                <Text style={styles.stockName} numberOfLines={1}>{s.name}</Text>
+                {s.isLeader ? <Text style={styles.leader}>대장주</Text> : null}
+              </View>
               {s.reason ? <Text style={styles.reason} numberOfLines={2}>{s.reason}</Text> : null}
             </View>
             <View style={styles.stockNums}>
@@ -84,7 +87,8 @@ function GroupDetailBody({ kind, id }: { kind: GroupKind; id: string }) {
 
 const styles = StyleSheet.create((theme) => ({
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: theme.gap(2), backgroundColor: theme.colors.background },
-  content: { padding: theme.gap(2), gap: theme.gap(1.5), backgroundColor: theme.colors.background },
+  flex: { flex: 1, backgroundColor: theme.colors.background },
+  content: { padding: theme.gap(2), gap: theme.gap(1.5) },
   card: { backgroundColor: theme.colors.surface, borderRadius: theme.radius.card, padding: theme.gap(2), gap: theme.gap(1) },
   kind: { fontSize: 13, fontWeight: '600', color: theme.colors.textSecondary },
   desc: { fontSize: 14, color: theme.colors.text },
@@ -97,7 +101,8 @@ const styles = StyleSheet.create((theme) => ({
   section: { fontSize: 16, fontWeight: '700', color: theme.colors.text },
   stock: { flexDirection: 'row', gap: theme.gap(1), paddingVertical: theme.gap(1), borderTopWidth: 1, borderTopColor: theme.colors.border },
   stockMain: { flex: 1, gap: 2 },
-  stockName: { fontSize: 15, fontWeight: '600', color: theme.colors.text },
+  nameRow: { flexDirection: 'row', alignItems: 'center', gap: theme.gap(0.75) },
+  stockName: { flexShrink: 1, fontSize: 15, fontWeight: '600', color: theme.colors.text },
   leader: { fontSize: 11, fontWeight: '700', color: theme.colors.up },
   reason: { fontSize: 12, color: theme.colors.textSecondary },
   stockNums: { alignItems: 'flex-end', gap: 2 },
