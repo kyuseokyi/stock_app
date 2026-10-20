@@ -575,7 +575,8 @@ from apps.collector import intraday_indices as intraday
 
 ```python
 # ---------------------------------------------------------------- 장중 지수(30초)
-@celery_app.task(name="collector.poll_intraday_indices")
+# ignore_result — 30초마다 돌아 결과를 Redis 결과 백엔드에 남기면 하루 2,880건이 쌓인다(아무도 읽지 않음)
+@celery_app.task(name="collector.poll_intraday_indices", ignore_result=True)
 def poll_intraday_indices() -> dict:
     """장중 국내 지수 3개·원/달러 → Redis market:intraday(30초 beat). 꺼짐·장 밖이면 KIS 를 부르지 않고 바로 끝.
 
@@ -832,6 +833,7 @@ def test_intraday_specs_are_three_kr_indices():
 같은 파일 `test_poll_writes_all_four_with_ttl` 에서 `assert saved["FX:USDKRW"]["value"] == 1385.2` 줄을 지우고, `and ("X", "FX@KRW", "20261020", "20261020") in c.calls` 부분을 지운다.
 `test_poll_all_fail_does_not_touch_redis` 의 `len(out["failed"]) == 4` 를 `== 3` 으로 바꾼다.
 `test_poll_uses_injected_fetch` 의 `len(out["failed"]) == 3` 을 `== 2` 로 바꾼다.
+4-B 를 이미 적용했다면 `test_poll_counts_missing_today_bar_as_failure` 의 기대값을 `{"ok": ["KR:0001", "KR:1001", "KR:2001"], "failed": []}` 로 바꾼다(환율이 대상에서 빠졌으므로).
 
 Run: `cd backend && uv run pytest tests/test_intraday_indices.py tests/test_market_tasks.py -q -p no:warnings`
 Expected: 모두 passed
