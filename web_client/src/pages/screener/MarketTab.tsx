@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import Card from '../../components/ui/Card'
 import EmptyState from '../../components/ui/EmptyState'
@@ -7,6 +7,8 @@ import EventList from '../../components/market/EventList'
 import { IndexCards, MacroCards } from '../../components/market/IndexCards'
 import Treemap from '../../components/market/Treemap'
 import { getMarketCalendar, getMarketGroups, getMarketOverview, getMarketTreemap } from '../../api/market'
+import { useVisibleInterval } from '../../hooks/useVisibleInterval'
+import { MARKET_REFRESH_MS } from '../../lib/marketLive'
 import { formatPct, kstDateString, pnlClass } from '../../lib/format'
 import type { CalendarEvent, GroupItem, MarketOverview, TreemapGroup } from '../../types/market'
 
@@ -31,8 +33,13 @@ export default function MarketTab() {
   const [date, setDate] = useState<string | null>(null)
   const [state, setState] = useState<'loading' | 'ready'>('loading')
 
+  // 개요 요청 번호 — 초기 로드와 30초 자동 새로고침이 겹쳐도 늦게 온 옛 응답이 최신 값을 덮지 않게 한다.
+  const ovSeq = useRef(0)
+  const ovBusy = useRef(false)
+
   useEffect(() => {
     let cancelled = false
+    const ovId = ++ovSeq.current
     Promise.allSettled([
       getMarketOverview(),
       getMarketGroups('theme', '1d', 'chg', 0, 5),
@@ -40,7 +47,7 @@ export default function MarketTab() {
       getMarketCalendar(today, addDays(today, 60)),
     ]).then(([ov, th, tm, ev]) => {
       if (cancelled) return
-      if (ov.status === 'fulfilled') setOverview(ov.value)
+      if (ov.status === 'fulfilled' && ovId === ovSeq.current) setOverview(ov.value)
       if (th.status === 'fulfilled') {
         setThemes(th.value.items)
         setDate(th.value.date)
@@ -53,6 +60,22 @@ export default function MarketTab() {
       cancelled = true
     }
   }, [today])
+
+  // 장중 지수 — 탭이 보이는 동안 30초마다 개요(지수·거시)만 조용히 다시 받는다.
+  // 실패는 무시(다음 주기에 재시도), 앞 요청이 끝나기 전에는 건너뛰고, 늦게 온 옛 응답은 번호로 버린다.
+  useVisibleInterval(() => {
+    if (ovBusy.current) return
+    ovBusy.current = true
+    const id = ++ovSeq.current
+    getMarketOverview()
+      .then((ov) => {
+        if (id === ovSeq.current) setOverview(ov)
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        ovBusy.current = false
+      })
+  }, MARKET_REFRESH_MS, state === 'ready')
 
   if (state === 'loading') return <p className="py-10 text-center text-sm text-ink-muted">불러오는 중…</p>
 

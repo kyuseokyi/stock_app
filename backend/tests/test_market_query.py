@@ -451,3 +451,10 @@ def test_mobile_overview_requests_live_fields():
 
     q = _overview_query("mobile/src/features/market/api.ts")
     assert re.search(r"\blive\b", q) and re.search(r"\basOf\b", q)
+
+
+def test_web_overview_requests_live_fields():
+    import re
+
+    q = _overview_query("web_client/src/api/market.ts")
+    assert re.search(r"\blive\b", q) and re.search(r"\basOf\b", q)

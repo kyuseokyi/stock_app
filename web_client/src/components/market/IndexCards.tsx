@@ -1,4 +1,5 @@
 import { formatPct, pnlClass } from '../../lib/format'
+import { indexBadge } from '../../lib/marketLive'
 import { THEME } from '../../lib/themeColors'
 import type { MacroValue, MarketIndex } from '../../types/market'
 
@@ -19,23 +20,29 @@ function Spark({ values, up }: { values: number[]; up: boolean }) {
 }
 
 const fmtIndex = (n: number) => n.toLocaleString('ko-KR', { maximumFractionDigits: 2 })
-const shortDate = (d: string) => `${Number(d.slice(5, 7))}/${Number(d.slice(8, 10))}`
 
 export function IndexCards({ indices }: { indices: MarketIndex[] }) {
   if (!indices.length) return null
   return (
     <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
-      {indices.map((ix) => (
-        <div key={ix.code} className="rounded-card bg-surface p-3">
-          <div className="flex items-baseline justify-between gap-1">
-            <span className="truncate text-sm font-medium text-ink">{ix.name}</span>
-            <span className="shrink-0 text-[11px] text-ink-muted">{ix.region === 'KR' ? '' : shortDate(ix.date)}</span>
+      {indices.map((ix) => {
+        const badge = indexBadge(ix)
+        return (
+          <div key={ix.code} className="rounded-card bg-surface p-3">
+            <div className="flex items-baseline justify-between gap-1">
+              <span className="truncate text-sm font-medium text-ink">{ix.name}</span>
+              {badge?.live ? (
+                <span className="shrink-0 rounded-full bg-brand-soft px-1.5 text-[11px] font-semibold text-brand">{badge.text}</span>
+              ) : (
+                <span className="shrink-0 text-[11px] text-ink-muted">{badge?.text ?? ''}</span>
+              )}
+            </div>
+            <div className="mt-1 text-lg font-bold text-ink">{fmtIndex(ix.close)}</div>
+            <div className={`text-sm font-medium ${pnlClass(ix.chg1d)}`}>{ix.chg1d == null ? '—' : formatPct(ix.chg1d)}</div>
+            <Spark values={ix.spark} up={(ix.spark[ix.spark.length - 1] ?? 0) >= (ix.spark[0] ?? 0)} />
           </div>
-          <div className="mt-1 text-lg font-bold text-ink">{fmtIndex(ix.close)}</div>
-          <div className={`text-sm font-medium ${pnlClass(ix.chg1d)}`}>{ix.chg1d == null ? '—' : formatPct(ix.chg1d)}</div>
-          <Spark values={ix.spark} up={(ix.spark[ix.spark.length - 1] ?? 0) >= (ix.spark[0] ?? 0)} />
-        </div>
-      ))}
+        )
+      })}
     </div>
   )
 }
