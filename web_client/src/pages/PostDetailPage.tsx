@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom'
 import { createComment, getBlog, listComments } from '../api/blog'
 import { useBoardStore } from '../store/boards'
 import { useAuthStore } from '../store/auth'
+import { withErrorCode } from '../lib/errorCode'
 import LoginModal from '../components/LoginModal'
 import Card from '../components/ui/Card'
 import Button from '../components/ui/Button'
@@ -30,7 +31,7 @@ export default function PostDetailPage() {
         setPost(p)
         setComments(c)
       })
-      .catch(() => setError('게시글을 불러오지 못했습니다.'))
+      .catch((err) => setError(withErrorCode('게시글을 불러오지 못했습니다.', err)))
       .finally(() => setLoading(false))
   }, [id])
 

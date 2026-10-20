@@ -1,6 +1,7 @@
 import { type FormEvent, useEffect, useState } from 'react'
 import { getSocialProviders, socialStartUrl } from '../api/auth'
 import { ENABLE_GUEST_LOGIN } from '../config'
+import { errorCode, withErrorCode } from '../lib/errorCode'
 import { prepareSocialVerifier, rememberLoginReturn } from '../lib/socialLogin'
 import { useAuthStore } from '../store/auth'
 import type { SocialProvider, SocialProviders } from '../types/api'
@@ -11,7 +12,10 @@ interface LoginModalProps {
   onSuccess?: () => void
 }
 
-type ProvidersState = { status: 'loading' } | { status: 'ready'; providers: SocialProviders } | { status: 'error' }
+type ProvidersState =
+  | { status: 'loading' }
+  | { status: 'ready'; providers: SocialProviders }
+  | { status: 'error'; code: string }
 
 const SOCIAL_BUTTONS: { provider: SocialProvider; label: string; className: string }[] = [
   { provider: 'kakao', label: '카카오로 시작하기', className: 'bg-kakao text-black' },
@@ -36,8 +40,8 @@ export default function LoginModal({ open, onClose, onSuccess }: LoginModalProps
       .then((providers) => {
         if (alive) setProvidersState({ status: 'ready', providers })
       })
-      .catch(() => {
-        if (alive) setProvidersState({ status: 'error' })
+      .catch((err) => {
+        if (alive) setProvidersState({ status: 'error', code: errorCode(err) })
       })
     return () => {
       alive = false
@@ -80,8 +84,8 @@ export default function LoginModal({ open, onClose, onSuccess }: LoginModalProps
       setNickname('')
       onSuccess?.()
       onClose()
-    } catch {
-      setError('로그인에 실패했습니다. (auth 서버 8001 확인)')
+    } catch (err) {
+      setError(withErrorCode('로그인에 실패했어요. 잠시 후 다시 시도해 주세요.', err))
     } finally {
       setLoading(false)
     }
@@ -119,12 +123,13 @@ export default function LoginModal({ open, onClose, onSuccess }: LoginModalProps
             </button>
           ))}
           {socialError && <p className="text-center text-sm text-up">{socialError}</p>}
-          {noOptions && (
-            <p className="py-2 text-center text-sm text-ink-muted">
-              {providersState.status === 'error'
-                ? '로그인 서버에 연결할 수 없어요. 잠시 후 다시 시도해 주세요.'
-                : '로그인을 준비하고 있어요.'}
+          {/* 공급자 조회 실패는 닉네임 로그인이 있어도 보인다 — 오류 코드로 원인 확인용 */}
+          {providersState.status === 'error' ? (
+            <p className="py-2 text-center text-sm text-up">
+              로그인 서버에 연결할 수 없어요. 잠시 후 다시 시도해 주세요. (오류: {providersState.code})
             </p>
+          ) : (
+            noOptions && <p className="py-2 text-center text-sm text-ink-muted">로그인을 준비하고 있어요.</p>
           )}
         </div>
 

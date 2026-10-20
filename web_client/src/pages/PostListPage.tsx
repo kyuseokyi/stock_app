@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { listBlogs } from '../api/blog'
 import { useBoardStore } from '../store/boards'
+import { withErrorCode } from '../lib/errorCode'
 import type { BlogListOut } from '../types/api'
 
 const PAGE_SIZE = 10
@@ -28,7 +29,7 @@ export default function PostListPage() {
     setLoading(true)
     listBlogs({ boardId: Number(boardId), page, size: PAGE_SIZE })
       .then(setData)
-      .catch(() => setError('게시글을 불러오지 못했습니다.'))
+      .catch((err) => setError(withErrorCode('게시글을 불러오지 못했습니다.', err)))
       .finally(() => setLoading(false))
   }, [boardId, page])
 

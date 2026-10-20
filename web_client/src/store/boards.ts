@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { listBoards } from '../api/blog'
+import { withErrorCode } from '../lib/errorCode'
 import type { BoardOut } from '../types/api'
 
 interface BoardState {
@@ -20,8 +21,8 @@ export const useBoardStore = create<BoardState>()((set, get) => ({
     try {
       const boards = await listBoards()
       set({ boards, loaded: true, error: '' })
-    } catch {
-      set({ error: '게시판을 불러오지 못했습니다. 백엔드(8000)가 실행 중인지 확인하세요.' })
+    } catch (err) {
+      set({ error: withErrorCode('게시판을 불러오지 못했어요. 잠시 후 다시 시도해 주세요.', err) })
     }
   },
   boardName: (id) => get().boards.find((b) => b.id === id)?.name ?? '',

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { listBlogs } from '../api/blog'
+import { withErrorCode } from '../lib/errorCode'
 import type { BlogListOut } from '../types/api'
 
 // 홈(/) — 📌 추천 글(관리자가 고른 글, featured_at 최신순). 앱 홈 탭과 같은 내용.
@@ -17,7 +18,7 @@ export default function HomePage() {
   useEffect(() => {
     listBlogs({ featured: true, size: 20 })
       .then((res) => setItems(res.items))
-      .catch(() => setError('추천 글을 불러오지 못했습니다.'))
+      .catch((err) => setError(withErrorCode('추천 글을 불러오지 못했습니다.', err)))
       .finally(() => setLoading(false))
   }, [])
 
