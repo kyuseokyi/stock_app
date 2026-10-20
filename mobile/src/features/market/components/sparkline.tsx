@@ -10,7 +10,7 @@ export function Sparkline({ values }: { values: number[] }) {
   if (!points) return null;
   const color = sparkTone(values) === 'up' ? theme.colors.up : theme.colors.down;
   return (
-    <Svg width="100%" height={32} viewBox="0 0 100 30" preserveAspectRatio="none" accessibilityElementsHidden>
+    <Svg width="100%" height={32} viewBox="0 0 100 30" preserveAspectRatio="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
       <Polyline points={points} fill="none" stroke={color} strokeWidth={1.6} strokeLinejoin="round" strokeLinecap="round" />
     </Svg>
   );

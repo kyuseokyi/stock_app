@@ -54,6 +54,20 @@ export function formatMacro(v: number, unit: string): string {
   return unit === '천 명' ? `${withComma(v)}천 명` : `${v.toFixed(2)}${unit}`;
 }
 
+/**
+ * 거시 지표 직전 대비 → '+1,234' · '-0.13' · '0.00', 없으면 ''.
+ * 천 명 단위는 정수, 그 밖은 소수 두 자리. 먼저 반올림 → 그 값으로 부호 결정(0 이면 부호 없음).
+ */
+export function formatMacroDiff(diff: number | null | undefined, unit: string): string {
+  if (diff == null) return '';
+  const digits = unit === '천 명' ? 0 : 2;
+  const scale = 10 ** digits;
+  const r = Math.sign(diff) * Math.round(Math.abs(diff) * scale) / scale || 0; // -0 은 0
+  const [int, frac] = Math.abs(r).toFixed(digits).split('.');
+  const body = `${withComma(Number(int))}${frac ? `.${frac}` : ''}`;
+  return `${r > 0 ? '+' : r < 0 ? '-' : ''}${body}`;
+}
+
 /** 미니 추세선 좌표(viewBox 0 0 100 30, 위아래 2 여백). 점 2개 미만이면 null */
 export function sparkPoints(values: number[], width = 100, height = 30): string | null {
   if (values.length < 2) return null;

@@ -7,6 +7,7 @@ import {
   formatChg,
   formatIndex,
   formatMacro,
+  formatMacroDiff,
   groupByDate,
   hasMoreGroups,
   mergeGroupPage,
@@ -68,6 +69,28 @@ describe('금액·등락률·지수 표시', () => {
   it('거시 지표 — 천 명 단위는 정수 콤마, 나머지는 소수 두 자리', () => {
     expect(formatMacro(256_123.4, '천 명')).toBe('256,123천 명');
     expect(formatMacro(4.1234, '%')).toBe('4.12%');
+  });
+});
+
+describe('거시 지표 직전 대비', () => {
+  it('null 이면 빈 문자열', () => {
+    expect(formatMacroDiff(null, '%')).toBe('');
+  });
+  it('반올림해 0 이 되면 부호 없이 0.00 (음수 0 없음)', () => {
+    expect(formatMacroDiff(-0.001, '%')).toBe('0.00');
+    expect(formatMacroDiff(0.001, '%')).toBe('0.00');
+    expect(formatMacroDiff(-0.4, '천 명')).toBe('0');
+  });
+  it('양수는 + 부호, 음수는 - 부호', () => {
+    expect(formatMacroDiff(0.126, '%')).toBe('+0.13');
+    expect(formatMacroDiff(-0.126, '%')).toBe('-0.13');
+  });
+  it('천 명 단위는 정수 콤마', () => {
+    expect(formatMacroDiff(1234.4, '천 명')).toBe('+1,234');
+    expect(formatMacroDiff(-12345.6, '천 명')).toBe('-12,346');
+  });
+  it('그 밖 단위도 정수부에 콤마', () => {
+    expect(formatMacroDiff(1234.567, '')).toBe('+1,234.57');
   });
 });
 
