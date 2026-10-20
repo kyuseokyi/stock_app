@@ -1,4 +1,5 @@
 """시장 탭 조회 — 지수·거시 요약, 순위(기간·정렬·연속 상위), 트리맵('기타'), 그룹 상세, 일정(가짜 CH·PG)."""
+import asyncio
 from datetime import date, datetime
 
 import pytest
@@ -202,6 +203,45 @@ def test_overlay_keeps_confirmed(item, live):
     assert o == {**item, "live": False, "as_of": None}
 
 
+@pytest.mark.parametrize("bad", [float("nan"), float("inf"), 0, 0.0, -5.0, "x", None])
+def test_overlay_rejects_non_positive_finite_value(bad):
+    live = {"KR:0001": {"value": bad, "date": "2026-10-20", "ts": TS}}
+    item = _ix()
+    (o,) = mq.overlay_intraday([item], live, TODAY)
+    assert o == {**item, "live": False, "as_of": None}
+
+
+def test_overview_uses_kst_date_not_ch_today(ch, monkeypatch):
+    # CH 기준 _today 는 10-19, KST 는 10-20 08:00 → 장중 date 10-20 이면 덧씌우고 10-19 면 안 된다
+    monkeypatch.setattr(mq, "_today", lambda: date(2026, 10, 19))
+    monkeypatch.setattr(mq, "_now_kst", lambda: datetime(2026, 10, 20, 8, 0, tzinfo=KST))
+    rows = [("KR:0001", date(2026, 10, 15), 2500.0), ("KR:0001", D, 2550.0)]
+    ch([rows, []])
+    monkeypatch.setattr(mq, "_intraday", lambda: {"KR:0001": {"value": 2601.0, "date": "2026-10-20", "ts": TS}})
+    assert mq.overview()["indices"][0]["live"] is True
+    mq._CACHE.clear()
+    ch([rows, []])
+    monkeypatch.setattr(mq, "_intraday", lambda: {"KR:0001": {"value": 2601.0, "date": "2026-10-19", "ts": TS}})
+    assert mq.overview()["indices"][0]["live"] is False
+
+
+def test_market_overview_resolver_runs_in_threadpool(monkeypatch):
+    import threading
+
+    from apps.stock_api.graphql.schema import schema
+
+    seen = {}
+
+    def fake():
+        seen["thread"] = threading.current_thread()
+        return {"indices": [], "macro": []}
+
+    monkeypatch.setattr(mq, "overview", fake)
+    res = asyncio.run(schema.execute("{ marketOverview { indices { code } } }"))
+    assert res.errors is None and res.data == {"marketOverview": {"indices": []}}
+    assert seen["thread"] is not threading.main_thread()  # 이벤트 루프(메인 스레드)를 막지 않는다
+
+
 def test_overview_overlays_intraday_and_caches_ch(ch, monkeypatch):
     fake = ch([[("KR:0001", date(2026, 10, 15), 2500.0), ("KR:0001", D, 2550.0)], []])
     monkeypatch.setattr(mq, "_now_kst", lambda: datetime(2026, 10, 20, 14, 33, tzinfo=KST))
@@ -212,6 +252,8 @@ def test_overview_overlays_intraday_and_caches_ch(ch, monkeypatch):
                         lambda: {"KR:0001": {"value": 2610.0, "date": "2026-10-20", "ts": TS + 60}})
     second = mq.overview()["indices"][0]
     assert second["close"] == 2610.0 and second["as_of"] == "14:33"  # 장중 값은 매번 새로 읽는다
+    # 캐시된 행이 덧씌우기로 오염되지 않았는지 — 추세선은 확정 2점 + 새 장중 값 1점
+    assert second["spark"] == [2500.0, 2550.0, 2610.0] and len(second["spark"]) == 3
     assert len(fake.queries) == 2  # 지수·거시 각 1번 — 두 번째 호출은 CH 캐시
 
 
@@ -262,7 +304,7 @@ def test_graphql_market_index_live_fields(monkeypatch):
         {**_ix(), "live": True, "as_of": "14:32"},
         _ix(code="US:SPX"),  # 옛 형태(live·as_of 없음)도 기본값으로 — 하위 호환
     ], "macro": []})
-    res = schema.execute_sync("{ marketOverview { indices { code live asOf } } }")
+    res = asyncio.run(schema.execute("{ marketOverview { indices { code live asOf } } }"))
     assert res.errors is None, res.errors
     assert res.data["marketOverview"]["indices"] == [
         {"code": "KR:0001", "live": True, "asOf": "14:32"},
@@ -309,11 +351,11 @@ def test_graphql_wiring(monkeypatch):
     monkeypatch.setattr(mq, "calendar", lambda s, e, c: [
         {"date": "2026-10-20", "title": "에이 청약", "category": "공모주", "ticker": "AAA", "name": "에이",
          "detail": "공모가 25,000원"}])
-    res = schema.execute_sync("""{ marketOverview { indices { code chg1d spark } macro { seriesId unit } }
+    res = asyncio.run(schema.execute("""{ marketOverview { indices { code chg1d spark } macro { seriesId unit } }
       marketGroups(kind: "theme") { total items { id leader { ticker } streak } }
       marketTreemap { groups { id stocks { ticker name } } }
       marketGroup(kind: "theme", id: "404") { id }
-      marketCalendar(start: "2026-10-16", end: "2026-12-15") { date detail } }""")
+      marketCalendar(start: "2026-10-16", end: "2026-12-15") { date detail } }"""))
     assert res.errors is None, res.errors
     assert res.data["marketOverview"]["macro"] == [{"seriesId": "UNRATE", "unit": "%"}]
     assert res.data["marketGroups"]["items"][0] == {"id": "7", "leader": None, "streak": 2}
@@ -356,7 +398,7 @@ def _run_query_contract(monkeypatch, rel_path: str, expected: set[str]) -> None:
         "CALENDAR_QUERY": {"start": "2026-10-16", "end": "2026-12-15", "category": None},
     }
     for name, query in queries.items():
-        res = schema.execute_sync(query, variable_values=variables[name])
+        res = asyncio.run(schema.execute(query, variable_values=variables[name]))
         assert res.errors is None, (rel_path, name, res.errors)
     assert seen["groups"] == {"kind": "theme", "period": "5d", "sort": "value", "limit": 30, "offset": 0}
     assert seen["calendar"] == ("2026-10-16", "2026-12-15", None)

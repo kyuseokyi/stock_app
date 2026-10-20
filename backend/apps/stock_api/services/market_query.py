@@ -8,7 +8,7 @@ from __future__ import annotations
 import time
 from datetime import date, datetime, timedelta
 
-from apps.collector.intraday_indices import KST, load_intraday
+from apps.collector.intraday_indices import KST, load_intraday, valid_value
 from apps.collector.market_indices import _BASE as INDEX_SPECS
 from shared import market_repo
 from shared.clickhouse_schema import CLICKHOUSE_DB, get_client
@@ -148,7 +148,10 @@ def _live_point(cur, today_iso: str) -> tuple[float, str] | None:
     if not isinstance(cur, dict) or cur.get("date") != today_iso:
         return None
     try:
-        return float(cur["value"]), datetime.fromtimestamp(float(cur["ts"]), KST).strftime("%H:%M")
+        value = valid_value(cur["value"])  # 유한한 양수만 — NaN·0·문자열이 GraphQL Float 직렬화를 깨지 않게
+        if value is None:
+            return None
+        return value, datetime.fromtimestamp(float(cur["ts"]), KST).strftime("%H:%M")
     except (KeyError, TypeError, ValueError, OverflowError, OSError):
         return None
 

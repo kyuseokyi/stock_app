@@ -106,13 +106,16 @@ def load_intraday(redis, now_ts: float | None = None) -> dict:
     return merge_intraday(data, {}, _time.time() if now_ts is None else now_ts)
 
 
-def _valid(value) -> float | None:
+def valid_value(value) -> float | None:
     """유한한 양수만 값으로 인정. None·변환 실패·NaN·inf·0 이하는 None(= 실패)."""
     try:
         v = float(value)
     except (TypeError, ValueError):
         return None
     return v if math.isfinite(v) and v > 0 else None
+
+
+_valid = valid_value  # 기존 이름 유지 — 동작 불변
 
 
 def poll(client, redis, now: datetime, fetch=None) -> dict:

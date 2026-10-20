@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import date, timedelta
 
 import strawberry
+from fastapi.concurrency import run_in_threadpool
 
 from apps.stock_api.graphql.types import (
     BollingerBand,
@@ -200,8 +201,9 @@ class Query:
 
     # ------------------------------------------------------------ 시장 탭 (공개)
     @strawberry.field(description="시장 요약 — 국내·미국 지수(20일 스파크라인)·미국 거시 지표")
-    def market_overview(self) -> MarketOverview:
-        out = market_query.overview()
+    async def market_overview(self) -> MarketOverview:
+        # 동기 함수(CH·Redis 접속, Redis 무응답 시 최대 3초)를 스레드풀에서 — 이벤트 루프를 막지 않는다
+        out = await run_in_threadpool(market_query.overview)
         return MarketOverview(indices=[MarketIndex(**i) for i in out["indices"]],
                               macro=[MacroValue(**m) for m in out["macro"]])
 
