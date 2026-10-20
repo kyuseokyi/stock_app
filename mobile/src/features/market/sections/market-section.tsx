@@ -58,7 +58,8 @@ export function MarketSection({ onMore, onOpenGroup }: Props) {
               <EventList events={data.events} today={today} />
             </View>
           ) : null}
-          <BasisNote date={data?.date ?? indices[0]?.date ?? null} />
+          {/* 주도 테마가 실패해도 기준일이 남게 국내 지수 날짜로 대체(미국·환율은 거래일이 다름) */}
+          <BasisNote date={data?.date ?? indices.find((ix) => ix.region === 'KR')?.date ?? null} />
         </>
       )}
     </ScrollView>
