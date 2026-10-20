@@ -13,6 +13,8 @@ import { UnistylesRuntime, useUnistyles } from 'react-native-unistyles';
 export function useSystemTheme() {
   const scheme = useColorScheme();
   const { theme } = useUnistyles();
+  // theme 은 렌더마다 새 Proxy 라 의존성으로 쓰지 않고 색 문자열만 쓴다(렌더 중 읽어 테마 변경 구독은 유지)
+  const { primary, background, surface: card, text, border } = theme.colors;
 
   useEffect(() => {
     UnistylesRuntime.setTheme(scheme === 'dark' ? 'dark' : 'light');
@@ -20,16 +22,6 @@ export function useSystemTheme() {
 
   return useMemo(() => {
     const base = scheme === 'dark' ? DarkTheme : DefaultTheme;
-    return {
-      ...base,
-      colors: {
-        ...base.colors,
-        primary: theme.colors.primary,
-        background: theme.colors.background,
-        card: theme.colors.surface,
-        text: theme.colors.text,
-        border: theme.colors.border,
-      },
-    };
-  }, [scheme, theme]);
+    return { ...base, colors: { ...base.colors, primary, background, card, text, border } };
+  }, [scheme, primary, background, card, text, border]);
 }
