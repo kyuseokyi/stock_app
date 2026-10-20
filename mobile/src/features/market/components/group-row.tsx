@@ -8,8 +8,17 @@ import { BreadthBar } from './breadth-bar';
 /** 테마·업종 순위 한 줄 — 순위·이름·연속 상위·등락률·상승/하락 막대·대장주. 누르면 onPress */
 export function GroupRow({ item, onPress }: { item: GroupItem; onPress: () => void }) {
   const tone = toneOf(item.chg);
+  // 라벨이 자식 글자를 덮으므로 화면 낭독기가 들을 값을 모두 담는다
+  const label = [
+    `${item.rank ? `${item.rank}위 ` : ''}${item.name}`,
+    formatChg(item.chg),
+    `상승 ${item.up} 보합 ${item.flat} 하락 ${item.down}`,
+    item.leader ? `대장 ${item.leader.name} ${formatChg(item.leader.chg)}` : '',
+  ]
+    .filter(Boolean)
+    .join(', ');
   return (
-    <Pressable style={styles.row} onPress={onPress} accessibilityRole="button" accessibilityLabel={`${item.name} 상세`}>
+    <Pressable style={styles.row} onPress={onPress} accessibilityRole="button" accessibilityLabel={label} accessibilityHint="상세 보기">
       <Text style={styles.rank}>{item.rank || '–'}</Text>
       <View style={styles.body}>
         <View style={styles.line}>
