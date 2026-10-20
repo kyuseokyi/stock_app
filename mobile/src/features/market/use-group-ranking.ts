@@ -54,8 +54,13 @@ export function useGroupRanking(kind: GroupKind) {
     try {
       first = await fetchFirst();
     } catch (e) {
-      // 번호를 올려 무시하게 된 진행 중 reload·loadMore 의 표시가 남지 않게 끈다
-      if (gate.isLatest(id)) setState((s) => ({ ...s, loading: false, loadingMore: false }));
+      // 더 새 요청에 밀렸으면 그쪽이 상태를 정한다
+      if (!gate.isLatest(id)) return;
+      // 무시하게 된 진행 중 reload 를 대신 끝맺을 때는 reload 실패와 같게(옛 조건 목록·빈 상태 문구 방지),
+      // loadMore 만 무시했으면 목록은 두고 표시만 끈다
+      setState((s) =>
+        s.loading ? { ...INITIAL, loading: false, error: errorCode(e) } : { ...s, loadingMore: false },
+      );
       throw e;
     }
     if (!gate.isLatest(id)) return;

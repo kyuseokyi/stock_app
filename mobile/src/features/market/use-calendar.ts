@@ -46,8 +46,10 @@ export function useCalendar() {
     try {
       r = await fetchSplit();
     } catch (e) {
-      // 번호를 올려 무시하게 된 진행 중 reload 의 로딩 표시가 남지 않게 끈다
-      if (gate.isLatest(id)) setState((s) => ({ ...s, loading: false }));
+      // 더 새 요청에 밀렸으면 그쪽이 상태를 정한다
+      if (!gate.isLatest(id)) return;
+      // 무시하게 된 진행 중 reload 를 대신 끝맺을 때는 reload 실패와 같게(옛 분류 일정·빈 상태 문구 방지)
+      setState((s) => (s.loading ? { past: [], upcoming: [], loading: false, error: errorCode(e) } : s));
       throw e;
     }
     if (!gate.isLatest(id)) return;
