@@ -7,29 +7,38 @@ export type Tone = 'up' | 'down' | 'flat';
 
 /** 정수 콤마: 3456 → '3,456' (Intl 없이 — 기기·테스트에서 같은 결과) */
 function withComma(n: number): string {
-  const s = String(Math.abs(Math.round(n))).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-  return n < 0 ? `-${s}` : s;
+  const r = Math.round(n);
+  const s = String(Math.abs(r)).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  return r < 0 ? `-${s}` : s; // 부호는 반올림한 값으로 — '-0' 방지
 }
 
 /** 큰 금액(원) → '1.2조' · '3,456억' · '98,765원' */
 export function formatAmount(won: number): string {
-  if (Math.abs(won) >= 1e12) return `${(won / 1e12).toFixed(1)}조`;
+  // 억으로 반올림해 1만억(=1조)에 닿으면 조로 넘긴다 — '10,000억' 대신 '1.0조'
+  if (Math.abs(Math.round(won / 1e8)) >= 10_000) return `${(won / 1e12).toFixed(1)}조`;
   if (Math.abs(won) >= 1e8) return `${withComma(won / 1e8)}억`;
   return `${withComma(won)}원`;
+}
+
+/** 소수 한 자리 반올림(0 기준 대칭: -0.05 → -0.1), -0 은 0 으로 */
+function round1(n: number): number {
+  return Math.sign(n) * Math.round(Math.abs(n) * 10) / 10 || 0;
 }
 
 /** 등락률 → '+1.2%' · '-0.1%' · '0.0%', 없으면 '–' */
 export function formatChg(n: number | null | undefined): string {
   if (n == null) return '–';
-  const r = Math.round(n * 10) / 10;
+  const r = round1(n);
   if (r === 0) return '0.0%';
   return `${r > 0 ? '+' : ''}${r.toFixed(1)}%`;
 }
 
-/** 등락 색 구분(0·없음은 flat) */
+/** 등락 색 구분 — 보이는 글자(소수 한 자리 반올림)와 같게, 0·없음은 flat */
 export function toneOf(n: number | null | undefined): Tone {
-  if (n == null || n === 0) return 'flat';
-  return n > 0 ? 'up' : 'down';
+  if (n == null) return 'flat';
+  const r = round1(n);
+  if (r === 0) return 'flat';
+  return r > 0 ? 'up' : 'down';
 }
 
 /** 지수 종가 → '2,601.5' (소수 최대 두 자리, 뒤 0 생략) */
@@ -113,8 +122,14 @@ export function hasMoreGroups(loaded: number, total: number, lastPageSize: numbe
   return lastPageSize >= GROUP_PAGE && loaded < total;
 }
 
-/** 오류 → 짧은 코드('HTTP 502' · 'NETWORK') — 캡처 한 장으로 원인 구분 */
+/**
+ * 오류 → 짧은 코드('GRAPHQL' · 'HTTP 502' · 'NETWORK') — 캡처 한 장으로 원인 구분.
+ * graphql-request 의 ClientError 는 HTTP 200 이어도 응답에 errors 가 있으면 던진다(서버 리졸버 예외).
+ */
 export function errorCode(e: unknown): string {
-  const status = (e as { response?: { status?: number } } | null)?.response?.status;
-  return typeof status === 'number' ? `HTTP ${status}` : 'NETWORK';
+  const res = (e as { response?: { status?: number; errors?: unknown[] } } | null)?.response;
+  if (Array.isArray(res?.errors) && res.errors.length > 0) return 'GRAPHQL';
+  const status = res?.status;
+  if (typeof status === 'number' && (status < 200 || status >= 300)) return `HTTP ${status}`;
+  return 'NETWORK';
 }

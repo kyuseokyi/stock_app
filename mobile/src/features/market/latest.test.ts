@@ -15,4 +15,12 @@ describe('요청 번호', () => {
     gate.next();
     expect(gate.isLatest(a)).toBe(false);
   });
+  it('current 로 받은 번호는 next 전까지 최신', () => {
+    const gate = createLatest();
+    gate.next();
+    const c = gate.current();
+    expect(gate.isLatest(c)).toBe(true);
+    gate.next();
+    expect(gate.isLatest(c)).toBe(false);
+  });
 });

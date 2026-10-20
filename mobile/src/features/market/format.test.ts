@@ -1,3 +1,5 @@
+import { ClientError } from 'graphql-request';
+
 import {
   dayLabel,
   errorCode,
@@ -29,17 +31,34 @@ describe('금액·등락률·지수 표시', () => {
     expect(formatAmount(345_600_000_000)).toBe('3,456억');
     expect(formatAmount(98_765)).toBe('98,765원');
   });
+  it('억으로 반올림해 1만억이 되면 조로 넘긴다', () => {
+    expect(formatAmount(999_960_000_000)).toBe('1.0조');
+  });
+  it('반올림해 0 이 되는 음수는 -0원이 아니라 0원', () => {
+    expect(formatAmount(-0.4)).toBe('0원');
+  });
   it('등락률은 소수 한 자리·부호, 없으면 –', () => {
     expect(formatChg(1.234)).toBe('+1.2%');
     expect(formatChg(-0.06)).toBe('-0.1%');
     expect(formatChg(0.04)).toBe('0.0%');
     expect(formatChg(null)).toBe('–');
   });
+  it('반올림은 0 기준 대칭, -0.0% 는 나오지 않는다', () => {
+    expect(formatChg(-0.05)).toBe('-0.1%');
+    expect(formatChg(0.05)).toBe('+0.1%');
+    expect(formatChg(-0.03)).toBe('0.0%');
+    expect(formatChg(-0)).toBe('0.0%');
+  });
   it('등락 색 구분', () => {
     expect(toneOf(2)).toBe('up');
     expect(toneOf(-1)).toBe('down');
     expect(toneOf(0)).toBe('flat');
     expect(toneOf(null)).toBe('flat');
+  });
+  it('색은 보이는 글자(소수 한 자리 반올림)와 같다', () => {
+    expect(toneOf(0.04)).toBe('flat');
+    expect(toneOf(-0.03)).toBe('flat');
+    expect(toneOf(-0.05)).toBe('down');
   });
   it('지수는 콤마 + 소수 최대 두 자리(뒤 0 생략)', () => {
     expect(formatIndex(2601.5)).toBe('2,601.5');
@@ -105,8 +124,17 @@ describe('순위 더 불러오기', () => {
 });
 
 describe('오류 코드', () => {
-  it('HTTP 상태가 있으면 HTTP nnn, 없으면 NETWORK', () => {
-    expect(errorCode({ response: { status: 502 } })).toBe('HTTP 502');
-    expect(errorCode(new Error('Network request failed'))).toBe('NETWORK');
+  const res = (status: number, errors?: { message: string }[]) =>
+    ({ status, errors, headers: {} as Headers }) as ConstructorParameters<typeof ClientError>[0];
+  const req = { query: '{ x }' };
+  it('응답 errors 가 있으면 HTTP 200 이어도 GRAPHQL', () => {
+    expect(errorCode(new ClientError(res(200, [{ message: 'boom' }]), req))).toBe('GRAPHQL');
+  });
+  it('2xx 가 아닌 HTTP 상태는 HTTP nnn', () => {
+    expect(errorCode(new ClientError(res(502), req))).toBe('HTTP 502');
+  });
+  it('그 밖(네트워크 실패·null)은 NETWORK', () => {
+    expect(errorCode(new TypeError('Network request failed'))).toBe('NETWORK');
+    expect(errorCode(null)).toBe('NETWORK');
   });
 });
