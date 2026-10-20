@@ -178,7 +178,7 @@ npm run build -- --mode development    # 빌드 검증(테스트 러너 없음 �
 - **중복 로그인(플랫폼별 단일 세션)**: 같은 계정은 web·app·admin 마다 마지막 로그인 1곳만 유효(`user_sessions`, 마이그레이션 `e7f8a9b0c1d2`). 플랫폼은 `/login`=admin, `/guest` 바디 `platform`(web|app, 기본 web), 간편 로그인은 시작 `client` 로 서버가 정한다. 밀려난 기기는 REST 401 `detail.code=SESSION_REPLACED` / 게임 WS 4401(reason `SESSION_REPLACED`, 즉시)로 로그아웃되고 "다른 기기에서 로그인되어 로그아웃됐어요" 안내. 웹·앱은 시작·복귀 시 `GET /api/v1/auth/me` 로 확인(복귀는 60초 간격). sid 없는 배포 전 토큰은 만료(최대 12h)까지 허용. 즉시 끊기는 auth·trading_game 이 같은 Redis(`REDIS_URL`, 채널 `auth:session:replaced`)를 써야 동작(실패해도 다음 요청에서 차단).
 
 ### 5. 모바일 앱 (Expo / React Native)
-Expo SDK 57 · React Native 0.86 · expo-router(하단 4탭: 홈/블로그/게임/내정보 — 스크리너·관심종목 탭은 제거됨) · **Unistyles v3**(테마 스타일링) · zustand.
+Expo SDK 57 · React Native 0.86 · expo-router(하단 5탭: 홈/커뮤니티/게임/스크리너/내정보 — 스크리너는 시장·테마·업종·일정, 설계 `docs/superpowers/specs/2026-10-20-mobile-screener-design.md`) · **Unistyles v3**(테마 스타일링) · zustand.
 > 📦 기기 설치·빌드 종류별(개발용 / 단독 실행 APK / 스토어 배포용) 절차: [`docs/local_build_guide.md`](docs/local_build_guide.md)
 >
 > ⚠️ **Unistyles는 네이티브 코드라 Expo Go에서 실행되지 않습니다.** 반드시 **개발 빌드(dev build)** 로 실행하세요. 스타일 없이 UI 구조만 빠르게 볼 때는 웹(`npm run web`)이 가장 가볍습니다.
