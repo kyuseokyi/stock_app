@@ -207,16 +207,16 @@ def test_graphql_wiring(monkeypatch):
     assert res.data["marketCalendar"] == [{"date": "2026-10-20", "detail": "공모가 25,000원"}]
 
 
-def test_web_queries_match_schema(monkeypatch):
-    """web_client/src/api/market.ts 의 쿼리 문자열을 그대로 꺼내 실제 스키마로 실행(웹↔API 계약)."""
+def _run_query_contract(monkeypatch, rel_path: str, expected: set[str]) -> None:
+    """프론트 파일의 쿼리 문자열을 그대로 꺼내 실제 스키마로 실행(프론트↔API 계약)."""
     import pathlib
     import re
 
     from apps.stock_api.graphql.schema import schema
 
-    ts = (pathlib.Path(__file__).resolve().parents[2] / "web_client/src/api/market.ts").read_text(encoding="utf-8")
+    ts = (pathlib.Path(__file__).resolve().parents[2] / rel_path).read_text(encoding="utf-8")
     queries = dict(re.findall(r"export const (\w+_QUERY) = `([^`]+)`", ts))
-    assert set(queries) == {"OVERVIEW_QUERY", "GROUPS_QUERY", "TREEMAP_QUERY", "GROUP_QUERY", "CALENDAR_QUERY"}
+    assert set(queries) == expected
 
     seen = {}
     monkeypatch.setattr(mq, "overview", lambda: {"indices": [], "macro": []})
@@ -242,10 +242,22 @@ def test_web_queries_match_schema(monkeypatch):
     }
     for name, query in queries.items():
         res = schema.execute_sync(query, variable_values=variables[name])
-        assert res.errors is None, (name, res.errors)
+        assert res.errors is None, (rel_path, name, res.errors)
     assert seen["groups"] == {"kind": "theme", "period": "5d", "sort": "value", "limit": 30, "offset": 0}
-    assert seen["treemap"] == {"kind": "sector", "size": "mcap", "period": "1d"}
     assert seen["calendar"] == ("2026-10-16", "2026-12-15", None)
+    if "TREEMAP_QUERY" in expected:
+        assert seen["treemap"] == {"kind": "sector", "size": "mcap", "period": "1d"}
+
+
+def test_web_queries_match_schema(monkeypatch):
+    _run_query_contract(monkeypatch, "web_client/src/api/market.ts",
+                        {"OVERVIEW_QUERY", "GROUPS_QUERY", "TREEMAP_QUERY", "GROUP_QUERY", "CALENDAR_QUERY"})
+
+
+def test_mobile_queries_match_schema(monkeypatch):
+    # 모바일 스크리너(트리맵 없음)도 같은 계약 — 쿼리를 고치면 여기서 바로 깨진다
+    _run_query_contract(monkeypatch, "mobile/src/features/market/api.ts",
+                        {"OVERVIEW_QUERY", "GROUPS_QUERY", "GROUP_QUERY", "CALENDAR_QUERY"})
 
 
 def test_calendar_ipo_name_falls_back_to_payload(monkeypatch):
