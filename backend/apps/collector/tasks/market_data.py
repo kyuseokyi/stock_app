@@ -114,7 +114,9 @@ def collect_ipo_events(today: date | None = None) -> dict:
     parsed = mp.parse_ipo(rows)
     names = _names(sorted({e["ticker"] for e in parsed}))
     label = {"subscr": "공모주 청약", "listing": "신규 상장"}
-    events = [{"event_date": e["event_date"], "title": f"{names.get(e['ticker'], e['ticker'])} {label[e['kind']]}",
+    # 이름: 응답의 종목명(상장 전 공모주) → 종목 마스터 → 티커
+    events = [{"event_date": e["event_date"],
+               "title": f"{e.get('name') or names.get(e['ticker']) or e['ticker']} {label[e['kind']]}",
                "category": "공모주", "ticker": e["ticker"], "source": "kis",
                "source_key": f"ipo:{e['ticker']}:{e['kind']}", "payload": e["payload"]} for e in parsed]
     n = _save_events(events) if events else 0

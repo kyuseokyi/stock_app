@@ -89,3 +89,11 @@ def test_client_request_shapes():
     assert c.calls[2][2] == {"FID_COND_MRKT_DIV_CODE": "UN", "FID_INPUT_ISCD": "005930"}
     assert c.calls[3][2] == {"FID_DIV_CLS_CODE": "1", "fid_cond_mrkt_div_code": "J", "fid_input_iscd": "005930"}
     assert c.calls[4][2] == {"SHT_CD": "", "CTS": "", "F_DT": "20261011", "T_DT": "20261217"}
+
+
+def test_ipo_name_from_isin_name():
+    # 상장 전 공모주는 종목 마스터에 없다 → KIS 응답의 종목명(isin_name)을 이벤트에 싣는다
+    rows = [{"sht_cd": "123450", "isin_name": " 신규기업 ", "subscr_dt": "20261027", "list_dt": "20261105"},
+            {"sht_cd": "777770", "subscr_dt": "20261102"}]
+    evs = mp.parse_ipo(rows)
+    assert [(e["ticker"], e["name"]) for e in evs] == [("123450", "신규기업"), ("123450", "신규기업"), ("777770", "")]

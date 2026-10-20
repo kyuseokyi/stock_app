@@ -230,3 +230,20 @@ def test_daily_pipeline_result_unchanged_when_redis_client_fails(monkeypatch):
     out = md.daily_market_pipeline()
     assert out == {"daily": {"ok": 1}, "indices_kr": {"ok": ["KOSPI"]}, "investor": {"ok": 3},
                    "canslim": {"rows": 10}, "market_groups": {"error": "no bars"}}
+
+
+def test_ipo_title_uses_response_name_when_master_missing(monkeypatch):
+    class C:
+        def get_ipo_schedule(self, f, t):
+            return [{"sht_cd": "123450", "isin_name": "신규기업", "subscr_dt": "20261027"},
+                    {"sht_cd": "999990", "subscr_dt": "20261028"}]
+
+        def close(self):
+            pass
+
+    saved = {}
+    monkeypatch.setattr(md, "_kis_client", lambda: C())
+    monkeypatch.setattr(md, "_names", lambda tickers: {})  # 마스터에 없음(상장 전)
+    monkeypatch.setattr(md, "_save_events", lambda evs: saved.setdefault("evs", evs) and len(evs))
+    md.collect_ipo_events(today=date(2026, 10, 18))
+    assert [e["title"] for e in saved["evs"]] == ["신규기업 공모주 청약", "999990 공모주 청약"]

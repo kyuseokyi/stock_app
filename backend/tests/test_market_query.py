@@ -246,3 +246,23 @@ def test_web_queries_match_schema(monkeypatch):
     assert seen["groups"] == {"kind": "theme", "period": "5d", "sort": "value", "limit": 30, "offset": 0}
     assert seen["treemap"] == {"kind": "sector", "size": "mcap", "period": "1d"}
     assert seen["calendar"] == ("2026-10-16", "2026-12-15", None)
+
+
+def test_calendar_ipo_name_falls_back_to_payload(monkeypatch):
+    monkeypatch.setattr(mq, "_events", lambda s, e, c: [
+        (date(2026, 10, 20), "123450 공모주 청약", "공모주", "123450", {"isin_name": "신규기업"}),
+        (date(2026, 10, 21), "999990 공모주 청약", "공모주", "999990", {})])
+    monkeypatch.setattr(mq, "_names", lambda tickers: {})
+    monkeypatch.setattr(mq, "_today", lambda: D)
+    out = mq.calendar(None, None, "공모주")
+    assert [o["name"] for o in out] == ["신규기업", None]
+
+
+def test_calendar_old_ticker_title_gets_name(monkeypatch):
+    # 이름 없이 저장된 예전 제목도 종목명으로 보여 준다
+    monkeypatch.setattr(mq, "_events", lambda s, e, c: [
+        (date(2026, 10, 20), "123450 공모주 청약", "공모주", "123450", {"isin_name": "신규기업"}),
+        (date(2026, 10, 21), "999990 신규 상장", "공모주", "999990", {})])
+    monkeypatch.setattr(mq, "_names", lambda tickers: {})
+    monkeypatch.setattr(mq, "_today", lambda: D)
+    assert [o["title"] for o in mq.calendar(None, None, "공모주")] == ["신규기업 공모주 청약", "999990 신규 상장"]

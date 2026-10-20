@@ -36,7 +36,7 @@ export default function EventList({ events, today }: { events: CalendarEvent[]; 
                   <div className="text-sm font-medium text-ink">{e.title}</div>
                   {(e.detail || e.ticker) && (
                     <div className="text-xs text-ink-muted">
-                      {[e.name && e.ticker ? `${e.name} ${e.ticker}` : e.ticker, e.detail].filter(Boolean).join(' · ')}
+                      {[e.name && e.ticker ? `${e.name} (${e.ticker})` : e.ticker, e.detail].filter(Boolean).join(' · ')}
                     </div>
                   )}
                 </div>

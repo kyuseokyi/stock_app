@@ -85,9 +85,11 @@ def parse_ipo(rows) -> list[dict]:
         if not ticker:
             continue
         payload = {k: str(v) for k, v in r.items()}
+        # 종목명(isin_name) — 상장 전이라 종목 마스터에 없으므로 응답의 이름을 쓴다
+        name = str(r.get("isin_name") or "").strip()
         subscr, listing = _d(r.get("subscr_dt")), _d(r.get("list_dt"))
         if subscr:
-            events.append({"kind": "subscr", "event_date": subscr, "ticker": ticker, "payload": payload})
+            events.append({"kind": "subscr", "event_date": subscr, "ticker": ticker, "name": name, "payload": payload})
         if listing:
-            events.append({"kind": "listing", "event_date": listing, "ticker": ticker, "payload": payload})
+            events.append({"kind": "listing", "event_date": listing, "ticker": ticker, "name": name, "payload": payload})
     return events

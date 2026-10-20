@@ -330,7 +330,13 @@ def calendar(start: str | None, end: str | None, category: str | None = None) ->
     e = min(max(e, s), s + timedelta(days=CALENDAR_MAX_DAYS))
     rows = _events(s, e, category if category in CATEGORIES else None)
     names = _names([r[3] for r in rows if r[3]])
-    return [{"date": d.isoformat(), "title": title, "category": cat, "ticker": ticker,
-             "name": names.get(ticker) if ticker else None,
-             "detail": _ipo_detail(payload) if cat == "공모주" else "발표 예정"}
-            for d, title, cat, ticker, payload in rows]
+    out = []
+    for d, title, cat, ticker, payload in rows:
+        # 상장 전 공모주는 종목 마스터에 없다 → 수집 때 저장한 KIS 응답(payload)의 종목명(isin_name)으로
+        name = (names.get(ticker) or str((payload or {}).get("isin_name") or "").strip() or None) if ticker else None
+        # 이름 없이 저장된 예전 제목("123450 공모주 청약")은 앞의 티커를 종목명으로 바꿔 보여 준다
+        if name and ticker and title.startswith(f"{ticker} "):
+            title = f"{name}{title[len(ticker):]}"
+        out.append({"date": d.isoformat(), "title": title, "category": cat, "ticker": ticker, "name": name,
+                    "detail": _ipo_detail(payload) if cat == "공모주" else "발표 예정"})
+    return out
