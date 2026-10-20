@@ -6,6 +6,7 @@
 > - 로컬 상세(포트·기능별 조합·DB 접속정보): [`../README.md`](../README.md)
 > - Windows 환경 개발 셋업 가이드: [`windows_setup.md`](./windows_setup.md)
 > - 로컬 빌드(모바일 개발용·단독 실행·배포용, 웹 배포 이미지): [`local_build_guide.md`](./local_build_guide.md)
+> - 푸시 알림 설정(Firebase·EAS·FCM 키, 서버 PUSH_BACKEND): [`push_notification_setup.md`](./push_notification_setup.md)
 > - 서버 **최초 1회** 부트스트랩(러너 등록·시크릿·Cloudflare·스키마): [`server_setup.md`](./server_setup.md)
 > - SSH 터널(cloudflared·Termius): [`cloudflare_termius_guide.md`](./cloudflare_termius_guide.md)
 > - DB 접속(DataGrip/DBeaver, 개발서버 터널 포함): [`db_access.md`](./db_access.md)

@@ -1,7 +1,8 @@
 # 로컬 빌드 가이드 (모바일 앱 · 웹)
 
 맥에서 직접 빌드해 기기에 설치하거나 배포 이미지를 확인하는 방법을 종류별로 정리한다.
-서버 배포(GitHub Actions)는 [`run_and_deploy.md`](run_and_deploy.md), 로컬 개발 서버 실행은 루트 `README.md` 를 본다.
+서버 배포(GitHub Actions)는 [`run_and_deploy.md`](run_and_deploy.md), 로컬 개발 서버 실행은 루트 `README.md`,
+푸시 알림 키·연결은 [`push_notification_setup.md`](push_notification_setup.md) 를 본다.
 
 > 검증 상태(2026-10-20): **개발용 앱** 절차는 실기기(SM-A536N)에서 확인했다. **단독 실행(release)·배포용(EAS)** 절차는
 > `package.json` 스크립트·`eas.json` 기준으로 정리했고 이번에 직접 돌려 보지는 않았다 — 처음 할 때 결과를 이 문서에 보태 줄 것.
