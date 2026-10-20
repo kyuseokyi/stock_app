@@ -14,7 +14,8 @@
 | 서버 설정 `PUSH_BACKEND` | `mock` | `backend/.env.example` 기본값. 실제 발송 안 함 |
 | 앱 패키지 `expo-notifications` | 없음 | 설치·네이티브 재빌드 필요 |
 | 앱 설정 `app.config.js` | 없음 | EAS `projectId`·`googleServicesFile`·알림 플러그인 연결 전 |
-| 키 파일 git 제외 규칙 | **없음** | 키를 받기 전에 4장의 규칙부터 추가할 것 |
+| 키 파일 git 제외 규칙 | ✅ 있음 | 루트 `.gitignore`(`**/secrets/`, `google-services*.json` 등) — 2026-10-20 추가 |
+| `google-services.json` | ✅ 준비됨 | `mobile/secrets/google-services.json` — **한 파일에 `com.stockapp.dev`·`com.stockapp` 두 앱 포함** |
 
 👉 **이 문서의 1~4장(계정·키 준비)은 지금 바로 할 수 있다.** 5~7장(연결·확인)은 푸시 구현(설계 문서 12장 순서)이 끝난 뒤 진행한다.
 
@@ -49,6 +50,11 @@ Expo Push 서비스 (무료)
    - 앱 닉네임은 자유, SHA-1 은 푸시에는 필요 없다(비워 둠).
 3. 두 앱을 다 등록한 뒤 **프로젝트 설정 → 일반 → 내 앱**에서 `google-services.json` 을 내려받는다.
    - 두 앱을 모두 등록한 **뒤에** 받은 파일 하나에 두 패키지 정보가 함께 들어 있다(먼저 받았다면 다시 받기).
+   - **이 파일 하나로 개발용·운영용 빌드를 모두 처리한다.** 안드로이드 빌드가 앱 패키지(`applicationId`)와 같은 항목을 골라 쓴다.
+     해당 패키지가 파일에 없으면 빌드 중 `No matching client found for package name` 오류가 난다.
+   - 받은 뒤 두 패키지가 다 들어 있는지 확인(키 값은 보지 않고 이름만):
+     `grep -o '"package_name": *"[^"]*"' mobile/secrets/google-services.json | sort -u`
+   - Downloads 에 같은 이름 파일이 여러 개 쌓이기 쉽다(`google-services (1).json`…). 다른 프로젝트 파일과 섞이지 않게 위 명령으로 패키지를 꼭 확인할 것.
 
 ### 2-2. FCM V1 서비스 계정 키 (Expo 가 FCM 으로 보낼 때 쓰는 키)
 1. **프로젝트 설정 → 서비스 계정** 탭 → **새 비공개 키 생성** → JSON 파일이 내려받아진다.
@@ -86,14 +92,16 @@ eas credentials
 
 ## 4. 키 파일 보관 규칙 (git 에 절대 올리지 않기)
 
-현재 `.gitignore` 에 키 파일 규칙이 없다. **키를 받기 전에** 루트 `.gitignore` 에 아래를 추가한다:
+루트 `.gitignore` 에 아래 규칙이 들어 있다(2026-10-20 추가). 새 키 파일 형식이 생기면 여기에 보탠다:
 ```gitignore
-# 푸시 알림 키 (Firebase·FCM 서비스 계정)
+# 푸시 알림 키(Firebase·FCM 서비스 계정)
+**/secrets/
 google-services*.json
 GoogleService-Info*.plist
-**/secrets/
 *service-account*.json
+*firebase-adminsdk*.json
 ```
+확인: `git check-ignore -v mobile/secrets/google-services.json` → `.gitignore:…:**/secrets/` 가 나오면 제외되고 있는 것.
 보관 위치(권장):
 | 파일 | 어디에 | 비고 |
 |---|---|---|
@@ -174,9 +182,9 @@ PUSH_BACKEND=expo            # mock(기본, 로그만) → expo(실발송)
 
 ## 10. 체크리스트
 
-- [ ] 루트 `.gitignore` 에 키 파일 규칙 추가(4장)
-- [ ] Firebase 프로젝트 생성, Android 앱 `com.stockapp.dev`·`com.stockapp` 등록(2-1)
-- [ ] `google-services.json` 내려받아 `mobile/secrets/` 에 보관(2-1, 4장)
+- [x] 루트 `.gitignore` 에 키 파일 규칙 추가(4장) — 2026-10-20
+- [x] Firebase 프로젝트 생성, Android 앱 `com.stockapp.dev`·`com.stockapp` 등록(2-1)
+- [x] `google-services.json`(두 앱 포함) → `mobile/secrets/google-services.json` 보관(2-1, 4장) — 2026-10-20
 - [ ] FCM V1 서비스 계정 키 발급(2-2)
 - [ ] `eas login` → `eas init` → projectId 기록(3장)
 - [ ] `eas credentials` 로 두 패키지에 FCM V1 키 업로드(3장)

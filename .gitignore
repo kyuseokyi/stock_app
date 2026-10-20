@@ -54,3 +54,10 @@ deploy/k8s/**/*.secret.env
 
 # TypeScript 증분 빌드 캐시(tsc -b) — 커밋 금지
 *.tsbuildinfo
+
+# 푸시 알림 키(Firebase·FCM 서비스 계정) — 커밋 금지. 보관 위치 mobile/secrets/ (docs/push_notification_setup.md 4장)
+**/secrets/
+google-services*.json
+GoogleService-Info*.plist
+*service-account*.json
+*firebase-adminsdk*.json
