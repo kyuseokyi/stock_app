@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from shared.market_models import Sector, StockEvent, StockProfile, Theme, ThemeStock
 from shared.models import StockMeta
+from shared.sector_group import sector_group_code
 
 log = logging.getLogger(__name__)
 _CHUNK = 1000  # 한 INSERT 의 파라미터가 PG 상한(65535)을 넘지 않게
@@ -102,10 +103,14 @@ def profile_map(session: Session) -> dict[str, tuple[str, int | None]]:
 
 
 def group_profile_map(session: Session) -> dict[str, tuple[str, str, int | None, bool]]:
-    """{ticker: (시장, 업종 중분류, 상장주식수(천 주), 거래정지)} — 시장 그룹 집계용."""
-    rows = session.execute(select(StockProfile.ticker, StockProfile.market, StockProfile.sector_m,
-                                  StockProfile.listed_shares_k, StockProfile.is_halted)).all()
-    return {t: (m, s, k, bool(h)) for t, m, s, k, h in rows}
+    """{ticker: (시장, 업종 그룹 코드, 상장주식수(천 주), 거래정지)} — 시장 그룹 집계용.
+
+    업종 그룹 코드는 shared.sector_group.sector_group_code 규칙(중분류 없으면 대분류, 제조·"0000" 은 빈 값).
+    CANSLIM 은 profile_map(중분류 그대로)을 쓰므로 영향 없다.
+    """
+    rows = session.execute(select(StockProfile.ticker, StockProfile.market, StockProfile.sector_l,
+                                  StockProfile.sector_m, StockProfile.listed_shares_k, StockProfile.is_halted)).all()
+    return {t: (m, sector_group_code(sl, sm), k, bool(h)) for t, m, sl, sm, k, h in rows}
 
 
 def theme_groups(session: Session) -> dict[str, tuple[str, list[str]]]:

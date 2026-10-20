@@ -51,11 +51,18 @@ def _run_day(as_of: date, universe, profiles, sector_names, themes: dict | None)
     if themes is not None:
         current = {r["group_id"] for r in group_rows if r["kind"] == "theme"}
         removed = cg.tombstones(as_of, "theme", cg.existing_group_ids(as_of, "theme"), current)
+    # 업종도 사라진 그룹(예: 옛 "0000" 업종)을 숨김 행으로 덮어쓴다. 이번 업종이 0개면(프로필이 빈 경우 등)
+    # 전체를 숨기는 사고를 막으려고 건너뛴다.
+    current_sectors = {r["group_id"] for r in group_rows if r["kind"] == "sector"}
+    removed_sectors: list[dict] = []
+    if current_sectors:
+        removed_sectors = cg.tombstones(as_of, "sector", cg.existing_group_ids(as_of, "sector"), current_sectors)
     cg.upsert_stocks(stock_rows)
-    cg.upsert_groups(group_rows + removed)
+    cg.upsert_groups(group_rows + removed + removed_sectors)
     return {"date": as_of.isoformat(), "stocks": len(stock_rows),
             "themes": sum(1 for r in group_rows if r["kind"] == "theme"),
-            "sectors": sum(1 for r in group_rows if r["kind"] == "sector"), "removed_themes": len(removed)}
+            "sectors": len(current_sectors), "removed_themes": len(removed),
+            "removed_sectors": len(removed_sectors)}
 
 
 def _prepare():

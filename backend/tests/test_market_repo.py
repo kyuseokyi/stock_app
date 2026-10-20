@@ -116,10 +116,15 @@ def test_profile_map(db):
 
 
 def test_group_profile_map(db):
+    """두 번째 값은 업종 그룹 코드 — 중분류 있으면 중분류, "0000" 이면 대분류, 제조 대분류뿐이면 빈 값."""
     repo.sync_profiles(db, [_p("005930"), _p("247540", market="KOSDAQ", sector_m="1028", listed_shares_k=None,
-                                              is_halted=True)])
+                                              is_halted=True),
+                            _p("105560", sector_l="0021", sector_m="0000"),
+                            _p("999990", sector_l="0027", sector_m="0000")])
     assert repo.group_profile_map(db) == {"005930": ("KOSPI", "0013", 100, False),
-                                          "247540": ("KOSDAQ", "1028", None, True)}
+                                          "247540": ("KOSDAQ", "1028", None, True),
+                                          "105560": ("KOSPI", "0021", 100, False),
+                                          "999990": ("KOSPI", "", 100, False)}
 
 
 def test_theme_groups_skip_hidden_and_excluded(db):
