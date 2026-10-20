@@ -54,7 +54,7 @@ uv run uvicorn apps.trading_game.main:app --reload --port 8003 --workers 1  # �
 
 # 데이터 수집/알림 워커 (Celery)
 uv run celery -A apps.collector.celery_app worker --loglevel=info
-uv run celery -A apps.collector.celery_app beat   --loglevel=info   # 스케줄러(매일 20:30 전종목 수집 · 20:40 시즌 정산 · 21:00 퀴즈 풀 보충 · 월 08:50 주간 랭킹 마감 · 매월 1일 08:55 월간 랭킹 마감)
+uv run celery -A apps.collector.celery_app beat   --loglevel=info   # 스케줄러(매일 20:30 전종목 수집 · 20:40 시즌 정산 · 21:00 퀴즈 풀 보충 · 월 08:50 주간 랭킹 마감 · 매월 1일 08:55 월간 랭킹 마감 · 평일 장중 30초 국내 지수·환율)
 
 # 국내 주식 데이터 수집 — 수동 트리거 (워커 실행 중일 때)
 # 전종목 일봉(겹침창) 수집:      collector.collect_all_daily
@@ -484,6 +484,7 @@ uv run python -c "from apps.collector.tasks.universe import backfill_all_daily; 
 |---|---|---|
 | 화~토 06:30 (+07:30 안전망) | 미국 지수(S&P500·나스닥·나스닥100·SOX·VIX·다우)·원/달러·대표 종목 — 미국 장 마감(서머타임 05:00 / 그 외 06:00) 뒤 | CH `market_index_daily` |
 | 평일 15:40 | 국내 지수(KOSPI·KOSDAQ·KOSPI200) — KRX 정규장 마감 15:30 뒤 바로(20:30 파이프라인의 지수 단계는 안전망으로 유지). 설계 `docs/superpowers/specs/2026-10-20-market-close-schedule-design.md` | CH `market_index_daily` |
+| 평일 09:00~15:35 30초마다 | 장중 국내 지수(KOSPI·KOSDAQ·KOSPI200)·원/달러 현재값 — `collector.poll_intraday_indices`(expires 25초), 시장 칩 "● HH:MM" 배지(스크린 리더는 "장중 HH:MM"). 휴장일·장 밖에는 KIS 를 부르지 않음. 0·NaN·음수 값은 실패로 보고 이전 값 유지. 끄기 `INTRADAY_INDICES_ENABLED=false`. 설계 `docs/superpowers/specs/2026-10-20-intraday-index-design.md` | Redis `market:intraday`(TTL 10분, 읽을 때도 10분 지난 항목 제외, CH 에는 안 씀) |
 | 08:00 | FRED 거시 지표(CPI·근원CPI·PCE·실업률·고용·기준금리·국채) + CPI·고용·PCE 발표 예정일 — 키 있을 때만 | CH `macro_series`, PG `stock_events` |
 | 20:30 | `collector.daily_market_pipeline`: 전종목 일봉 → 국내 지수(KOSPI·KOSDAQ·KOSPI200) → 투자자별 순매수(보통주만) | CH `daily_prices`·`market_index_daily`·`investor_daily` |
 | 20:30 (마스터 동기화 때) | 종목 프로필(업종·시총·상장주식·ETF/스팩/우선주·관리/정지)·업종명·KIS 테마 | PG `stock_profile`·`sectors`·`themes`·`theme_stocks` |
@@ -521,7 +522,7 @@ cd backend && uv run --with pykrx python -m apps.collector.verify.spot_check --n
 설계 `docs/superpowers/specs/2026-10-19-market-dashboard-design.md`. 웹 `/screener/market|themes|sectors|calendar|leaders`(`/screener` → 시장 탭, 비로그인 공개).
 - **계산**: `collector.compute_market_groups` — 20:30 일일 파이프라인 맨 끝(CANSLIM 뒤). 보통주의 1·5·20일 등락·거래대금(종가×거래량)·시총(종가×상장주식수)을 CH `market_stock_daily`, 테마·업종 단순 평균·대장주·순위를 `market_group_daily` 에 저장. 관리자 테마 보정 API 가 바꿀 때마다 최신 기준일만 다시 계산(`send_task`).
 - **처음 한 번**: 순위 추이·'n일째 상위'용 60거래일 — `uv run celery -A apps.collector.celery_app call collector.backfill_market_groups` (과거 날짜도 현재 테마 소속 기준).
-- **API(stock_api GraphQL)**: `marketOverview`(지수·FRED 거시), `marketGroups(kind, period, sort, limit, offset)`, `marketTreemap(kind, size, period)`, `marketGroup(kind, id)`, `marketCalendar(start, end, category)`.
+- **API(stock_api GraphQL)**: `marketOverview`(지수·FRED 거시 — 장중엔 Redis 장중 값을 덧씌워 `MarketIndex.live`·`asOf`, 지수·거시 CH 조회 30초 메모리 캐시, resolver 는 스레드풀 실행), `marketGroups(kind, period, sort, limit, offset)`, `marketTreemap(kind, size, period)`, `marketGroup(kind, id)`, `marketCalendar(start, end, category)`.
 - 기준값(테마 최소 3종목·상위 10위 연속)은 `apps/collector/market_groups/compute.py` 상수, 트리맵 색 상한(1일 ±5%·5일 ±10%·20일 ±20%)은 `web_client/src/lib/treemap.ts`.
 
 ### 🔎 CANSLIM 스크리너 (스크리너 프로젝트 2) — 화면 이름 '주도주'

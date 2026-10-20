@@ -268,6 +268,13 @@ KIS 시세 상한은 **20 TPS**. 우리는 8/s(=40%)로 도는데도 대량 순�
 
 **시장 데이터(2026-10-18)**: 배포 때 alembic 이 PG `stock_profile`·`sectors`·`themes`·`theme_stocks`·`stock_events` 를 만들고, CH 테이블 4개(`market_index_daily`·`investor_daily`·`fundamentals_periodic`·`macro_series`)는 각 수집 태스크가 처음 돌 때 자동 생성한다. 20:30 beat 는 이제 `collector.daily_market_pipeline`(일봉 → 국내 지수 → 투자자)이고, 07:30 미국 지수(2026-10-20 부터 화~토 06:30 + 07:30 안전망, 국내 지수는 평일 15:40 별도 수집)·08:00 FRED·21:30 공모주·토 10:00 재무가 추가됐다(배포가 celery_beat 를 함께 재기동). 미국 거시 지표는 `.env.production` 에 `FRED_API_KEY` 를 넣어야 시작된다(없으면 건너뜀 로그만). 재무를 토요일 전에 채우려면 `docker exec stock_celery_worker celery -A apps.collector.celery_app call collector.collect_fundamentals`.
 
+**장중 지수(2026-10-20)**: celery beat 가 30초마다 `collector.poll_intraday_indices`(expires 25초, 결과 저장 안 함)를 보낸다 — 거래일 09:00~15:35 KST 에만 KIS 를 4건(국내 지수 3 + 원/달러, 전용 초당 2건) 부르고 Redis `market:intraday`(TTL 10분, 읽을 때도 10분 지난 항목은 거름)에 둔다. 0·NaN·음수 값은 실패로 보고 이전 값을 유지한다. ClickHouse 에는 쓰지 않으므로 15:40 확정 수집이 실패해도 장중 값이 종가로 남지 않는다. 배포가 celery_beat 를 함께 재기동하므로 따로 할 일 없음. 장중 확인(Swarm·compose 공통, Redis 접속 정보는 worker 환경을 그대로 사용):
+```bash
+docker exec $(docker ps -qf name=stock_celery_worker -f status=running | head -1) \
+  python -c "from shared.sync_redis import get_sync_redis as g; r=g(); print(r.get('market:intraday'), r.ttl('market:intraday'))"
+```
+값이 비어 있으면 worker 로그(`docker logs … | grep 장중`)를 본다. 앱·웹 시장 칩에 "● HH:MM" 배지(스크린 리더는 "장중 HH:MM")가 보이면 정상이고, 15:40 이후에는 사라지고 확정 값으로 바뀐다. 끄기: `.env.production` 에 `INTRADAY_INDICES_ENABLED=false` 후 worker 재기동(태스크가 바로 끝나고 화면은 확정 종가).
+
 **병렬 수집(2026-10-17)**: 스레드 `KIS_WORKERS`개가 종목을 나눠 수집하고, 레이트리미터 하나를 공유해 전체 초당 호출을 `KIS_RATE_PER_SEC` 이하로 지킨다. 연속 연결실패 카운터·쿨다운도 공유 — 쿨다운 중엔 모든 스레드가 멈춘다. 종료 로그에 소요 초가 찍힌다(`전종목 작업 종료: … N초`). 문제가 보이면 `KIS_WORKERS=1`(기존 순차)로 즉시 되돌릴 수 있다.
 
 **⚠️ 검증 순서(중요)**: 전종목 재시도 전 **20종목 프로브**부터.
