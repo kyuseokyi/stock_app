@@ -48,8 +48,9 @@ export const CALENDAR_QUERY = `query MarketCalendar($start: String!, $end: Strin
 
 export const GROUP_PAGE = 30
 
-export async function getMarketOverview(): Promise<MarketOverview> {
-  return (await gql<{ marketOverview: MarketOverview }>(OVERVIEW_QUERY, {})).marketOverview
+/** timeoutMs 를 주면 그 시간 안에 응답이 없을 때 실패 처리(자동 새로고침이 멈춘 요청에 갇히지 않게) */
+export async function getMarketOverview(timeoutMs?: number): Promise<MarketOverview> {
+  return (await gql<{ marketOverview: MarketOverview }>(OVERVIEW_QUERY, {}, timeoutMs)).marketOverview
 }
 
 export async function getMarketGroups(

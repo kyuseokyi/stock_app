@@ -8,7 +8,7 @@ import { IndexCards, MacroCards } from '../../components/market/IndexCards'
 import Treemap from '../../components/market/Treemap'
 import { getMarketCalendar, getMarketGroups, getMarketOverview, getMarketTreemap } from '../../api/market'
 import { useVisibleInterval } from '../../hooks/useVisibleInterval'
-import { MARKET_REFRESH_MS } from '../../lib/marketLive'
+import { MARKET_REFRESH_MS, MARKET_REQUEST_TIMEOUT_MS } from '../../lib/marketLive'
 import { formatPct, kstDateString, pnlClass } from '../../lib/format'
 import type { CalendarEvent, GroupItem, MarketOverview, TreemapGroup } from '../../types/market'
 
@@ -62,12 +62,13 @@ export default function MarketTab() {
   }, [today])
 
   // 장중 지수 — 탭이 보이는 동안 30초마다 개요(지수·거시)만 조용히 다시 받는다.
-  // 실패는 무시(다음 주기에 재시도), 앞 요청이 끝나기 전에는 건너뛰고, 늦게 온 옛 응답은 번호로 버린다.
+  // 첫 로드가 실패했거나 데이터가 없어도 같은 주기로 계속 시도한다(의도 — 자동 복구). 탭이 다시 보이면 즉시 1회.
+  // 실패는 무시(다음 주기에 재시도), 요청은 10초 제한(멈춘 요청이 영구 정지시키지 않게), 앞 요청이 끝나기 전에는 건너뛰고, 늦게 온 옛 응답은 번호로 버린다.
   useVisibleInterval(() => {
     if (ovBusy.current) return
     ovBusy.current = true
     const id = ++ovSeq.current
-    getMarketOverview()
+    getMarketOverview(MARKET_REQUEST_TIMEOUT_MS)
       .then((ov) => {
         if (id === ovSeq.current) setOverview(ov)
       })
@@ -75,7 +76,7 @@ export default function MarketTab() {
       .finally(() => {
         ovBusy.current = false
       })
-  }, MARKET_REFRESH_MS, state === 'ready')
+  }, MARKET_REFRESH_MS, state === 'ready', { runOnVisible: true })
 
   if (state === 'loading') return <p className="py-10 text-center text-sm text-ink-muted">불러오는 중…</p>
 
