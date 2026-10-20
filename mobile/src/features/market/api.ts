@@ -8,7 +8,7 @@ import type { CalendarEvent, GroupDetail, GroupKind, GroupRanking, GroupSort, Ma
 
 export const OVERVIEW_QUERY = `query MarketOverview {
   marketOverview {
-    indices { code name region date close chg1d spark }
+    indices { code name region date close chg1d spark live asOf }
     macro { seriesId name unit date value prev }
   }
 }`;

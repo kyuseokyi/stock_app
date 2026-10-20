@@ -1,4 +1,4 @@
-import type { CalendarEvent, GroupItem } from './types';
+import type { CalendarEvent, GroupItem, MarketIndex } from './types';
 
 /** 테마·업종 순위 한 번에 불러오는 개수 */
 export const GROUP_PAGE = 30;
@@ -39,6 +39,15 @@ export function toneOf(n: number | null | undefined): Tone {
   const r = round1(n);
   if (r === 0) return 'flat';
   return r > 0 ? 'up' : 'down';
+}
+
+/** 지수 카드 날짜 자리 — 장중이면 '장중 14:32'(live), 국내 확정이면 없음, 해외·환율은 MM/DD */
+export function indexBadge(
+  ix: Pick<MarketIndex, 'region' | 'date' | 'live' | 'asOf'>,
+): { text: string; live: boolean } | null {
+  if (ix.live && ix.asOf) return { text: `장중 ${ix.asOf}`, live: true };
+  if (ix.region === 'KR') return null;
+  return { text: ix.date.slice(5).replace('-', '/'), live: false };
 }
 
 /** 지수 종가 → '2,601.5' (소수 최대 두 자리, 뒤 0 생략) */

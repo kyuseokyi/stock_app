@@ -393,3 +393,19 @@ def test_calendar_old_ticker_title_gets_name(monkeypatch):
     monkeypatch.setattr(mq, "_names", lambda tickers: {})
     monkeypatch.setattr(mq, "_today", lambda: D)
     assert [o["title"] for o in mq.calendar(None, None, "공모주")] == ["신규기업 공모주 청약", "999990 신규 상장"]
+
+
+def _overview_query(rel_path: str) -> str:
+    """프론트 파일의 OVERVIEW_QUERY 문자열."""
+    import pathlib
+    import re
+
+    ts = (pathlib.Path(__file__).resolve().parents[2] / rel_path).read_text(encoding="utf-8")
+    return dict(re.findall(r"export const (\w+_QUERY) = `([^`]+)`", ts))["OVERVIEW_QUERY"]
+
+
+def test_mobile_overview_requests_live_fields():
+    import re
+
+    q = _overview_query("mobile/src/features/market/api.ts")
+    assert re.search(r"\blive\b", q) and re.search(r"\basOf\b", q)
