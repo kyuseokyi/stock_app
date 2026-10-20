@@ -276,7 +276,9 @@ def groups(kind: str = "theme", period: str = "1d", sort: str = "chg", limit: in
     kind = _pick(kind, KINDS, "theme")
     col = PERIODS[_pick(period, PERIODS, "1d")]
     where = "date = %(d)s AND kind = %(kind)s AND members > 0" + (" AND rank > 0" if kind == "theme" else "")
-    order = "value DESC" if sort == "value" else f"{col} DESC NULLS LAST, value DESC"
+    # 순위 없는 그룹(구성 MIN_MEMBERS 미만, rank 0 — 업종만 해당)은 정렬과 상관없이 맨 아래.
+    # 30개씩 나눠 받으므로 화면이 아니라 SQL 에서 정해야 전체 순서가 맞다
+    order = "rank = 0, " + ("value DESC" if sort == "value" else f"{col} DESC NULLS LAST, value DESC")
     params = {"d": d, "kind": kind, "limit": max(1, min(int(limit), MAX_LIMIT)), "offset": max(0, int(offset))}
     total = int(_query(f"SELECT count() FROM {CLICKHOUSE_DB}.market_group_daily FINAL WHERE {where}", params)[0][0])
     rows = _query(f"SELECT group_id, name, members, {col}, value, up, down, flat, leader_ticker, leader_chg, rank "

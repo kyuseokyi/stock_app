@@ -73,7 +73,7 @@ def test_groups_bad_inputs_fall_back(ch):
     fake = ch([[(D,)], [(0,)], []])
     mq.groups(kind="x; DROP", period="99d", sort="value")
     sql, params = fake.queries[2]
-    assert "DROP" not in sql and params["kind"] == "theme" and "ORDER BY value DESC" in sql
+    assert "DROP" not in sql and params["kind"] == "theme" and "ORDER BY rank = 0, value DESC" in sql
     assert "chg_1d" in sql
 
 
@@ -81,6 +81,15 @@ def test_sector_groups_include_small_groups(ch):
     fake = ch([[(D,)], [(0,)], []])
     mq.groups(kind="sector")
     assert "rank > 0" not in fake.queries[1][0]
+
+
+@pytest.mark.parametrize("sort", ["chg", "value"])
+def test_groups_put_unranked_last(ch, sort):
+    """순위 없는 그룹(구성 3종목 미만, rank 0)은 정렬 기준과 상관없이 맨 아래 — 30개씩 나눠 받아도 끝에 모이게 SQL 에서."""
+    fake = ch([[(D,)], [(0,)], []])
+    mq.groups(kind="sector", sort=sort)
+    sql, _ = fake.queries[2]
+    assert "ORDER BY rank = 0, " in sql
 
 
 def test_treemap_sector_with_etc_tile(ch, monkeypatch):
