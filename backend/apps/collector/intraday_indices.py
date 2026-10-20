@@ -11,7 +11,9 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import os
+import time as _time
 from datetime import date, datetime, time, timedelta, timezone
 
 from apps.collector.market_indices import IndexSpec, _fetch, index_specs
@@ -40,8 +42,16 @@ def now_kst() -> datetime:
     return datetime.now(KST)
 
 
+def _to_kst(now: datetime) -> datetime:
+    """aware 시각을 KST 로 변환. naive 는 시간대를 알 수 없어 ValueError."""
+    if now.tzinfo is None:
+        raise ValueError("now 는 시간대가 있는 datetime 이어야 한다(naive 불가)")
+    return now.astimezone(KST)
+
+
 def in_intraday_window(now: datetime) -> bool:
-    """KST 거래일(주말·공휴일·KRX 연말 휴장·수동 휴장 제외)이고 09:00 ≤ 시각 < 15:35."""
+    """KST 거래일(주말·공휴일·KRX 연말 휴장·수동 휴장 제외)이고 09:00 ≤ 시각 < 15:35. now 는 aware(UTC 등 가능)."""
+    now = _to_kst(now)
     if not market_calendar.is_trading_day(now.date()):
         return False
     start, end = INTRADAY_WINDOW
@@ -73,15 +83,17 @@ def merge_intraday(prev: dict, fresh: dict, now_ts: float) -> dict:
     kept = {}
     for code, item in prev.items():
         try:
-            if now_ts - float(item["ts"]) <= INTRADAY_TTL:
+            if 0 <= now_ts - float(item["ts"]) <= INTRADAY_TTL:  # 시계 역행으로 미래 ts 가 된 항목도 버린다
                 kept[code] = item
         except (KeyError, TypeError, ValueError):
             continue  # 형식이 깨진 항목은 버린다
     return {**kept, **fresh}
 
 
-def load_intraday(redis) -> dict:
-    """Redis 장중 값 — 없거나 JSON 이 깨졌으면 빈 dict. (Redis 연결 오류는 호출한 쪽이 처리)"""
+def load_intraday(redis, now_ts: float | None = None) -> dict:
+    """Redis 장중 값 — 없거나 JSON 이 깨졌으면 빈 dict. 읽을 때도 INTRADAY_TTL 보다 오래된 항목은 거른다
+    (키 TTL 은 쓸 때마다 늘어나므로 일부 코드만 성공하면 낡은 값이 최대 약 2배 남을 수 있다).
+    (Redis 연결 오류는 호출한 쪽이 처리)"""
     raw = redis.get(INTRADAY_KEY)
     if not raw:
         return {}
@@ -89,7 +101,18 @@ def load_intraday(redis) -> dict:
         data = json.loads(raw)
     except ValueError:
         return {}
-    return data if isinstance(data, dict) else {}
+    if not isinstance(data, dict):
+        return {}
+    return merge_intraday(data, {}, _time.time() if now_ts is None else now_ts)
+
+
+def _valid(value) -> float | None:
+    """유한한 양수만 값으로 인정. None·변환 실패·NaN·inf·0 이하는 None(= 실패)."""
+    try:
+        v = float(value)
+    except (TypeError, ValueError):
+        return None
+    return v if math.isfinite(v) and v > 0 else None
 
 
 def poll(client, redis, now: datetime, fetch=None) -> dict:
@@ -98,12 +121,13 @@ def poll(client, redis, now: datetime, fetch=None) -> dict:
     fetch(spec, client, today) -> float | None — 기본 fetch_today. 조회 TR 을 바꿀 때 이것만 바꿔 끼운다.
     """
     fetch = fetch or fetch_today
+    now = _to_kst(now)
     today, ts = now.date(), now.timestamp()
     fresh: dict[str, dict] = {}
     failed: list[str] = []
     for spec in intraday_specs():
         try:
-            value = fetch(spec, client, today)
+            value = _valid(fetch(spec, client, today))
         except Exception as e:  # noqa: BLE001 — 코드 하나 실패가 나머지를 막지 않게
             log.warning("장중 지수 조회 실패 %s(%s): %s", spec.code, spec.name, str(e)[:160])
             value = None
@@ -114,6 +138,6 @@ def poll(client, redis, now: datetime, fetch=None) -> dict:
     if not fresh:
         log.warning("장중 지수 전부 실패 — Redis 는 그대로(10분 뒤 확정 종가로 돌아감): %s", failed)
         return {"ok": [], "failed": failed}
-    merged = merge_intraday(load_intraday(redis), fresh, ts)
-    redis.set(INTRADAY_KEY, json.dumps(merged), ex=INTRADAY_TTL)
+    merged = merge_intraday(load_intraday(redis, ts), fresh, ts)
+    redis.set(INTRADAY_KEY, json.dumps(merged, allow_nan=False), ex=INTRADAY_TTL)
     return {"ok": sorted(fresh), "failed": failed}
