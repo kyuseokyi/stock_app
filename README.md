@@ -482,7 +482,8 @@ uv run python -c "from apps.collector.tasks.universe import backfill_all_daily; 
 
 | 시각(KST) | 작업 | 저장 |
 |---|---|---|
-| 07:30 | 미국 지수(S&P500·나스닥·나스닥100·SOX·VIX·다우)·원/달러·대표 종목 | CH `market_index_daily` |
+| 화~토 06:30 (+07:30 안전망) | 미국 지수(S&P500·나스닥·나스닥100·SOX·VIX·다우)·원/달러·대표 종목 — 미국 장 마감(서머타임 05:00 / 그 외 06:00) 뒤 | CH `market_index_daily` |
+| 평일 15:40 | 국내 지수(KOSPI·KOSDAQ·KOSPI200) — KRX 정규장 마감 15:30 뒤 바로(20:30 파이프라인의 지수 단계는 안전망으로 유지). 설계 `docs/superpowers/specs/2026-10-20-market-close-schedule-design.md` | CH `market_index_daily` |
 | 08:00 | FRED 거시 지표(CPI·근원CPI·PCE·실업률·고용·기준금리·국채) + CPI·고용·PCE 발표 예정일 — 키 있을 때만 | CH `macro_series`, PG `stock_events` |
 | 20:30 | `collector.daily_market_pipeline`: 전종목 일봉 → 국내 지수(KOSPI·KOSDAQ·KOSPI200) → 투자자별 순매수(보통주만) | CH `daily_prices`·`market_index_daily`·`investor_daily` |
 | 20:30 (마스터 동기화 때) | 종목 프로필(업종·시총·상장주식·ETF/스팩/우선주·관리/정지)·업종명·KIS 테마 | PG `stock_profile`·`sectors`·`themes`·`theme_stocks` |

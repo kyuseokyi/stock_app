@@ -266,7 +266,7 @@ KIS 시세 상한은 **20 TPS**. 우리는 8/s(=40%)로 도는데도 대량 순�
 
 튜닝 env(선택, `.env.production`): `KIS_RATE_PER_SEC`(기본 prod 15 / vps 8, HTTP 요청마다), `KIS_WORKERS`(병렬 스레드, 기본 4 · `1`=순차), `KIS_COOLDOWN_THRESHOLD`(5), `KIS_COOLDOWN_BASE_SEC`(60), `KIS_COOLDOWN_MAX_SEC`(600).
 
-**시장 데이터(2026-10-18)**: 배포 때 alembic 이 PG `stock_profile`·`sectors`·`themes`·`theme_stocks`·`stock_events` 를 만들고, CH 테이블 4개(`market_index_daily`·`investor_daily`·`fundamentals_periodic`·`macro_series`)는 각 수집 태스크가 처음 돌 때 자동 생성한다. 20:30 beat 는 이제 `collector.daily_market_pipeline`(일봉 → 국내 지수 → 투자자)이고, 07:30 미국 지수·08:00 FRED·21:30 공모주·토 10:00 재무가 추가됐다(배포가 celery_beat 를 함께 재기동). 미국 거시 지표는 `.env.production` 에 `FRED_API_KEY` 를 넣어야 시작된다(없으면 건너뜀 로그만). 재무를 토요일 전에 채우려면 `docker exec stock_celery_worker celery -A apps.collector.celery_app call collector.collect_fundamentals`.
+**시장 데이터(2026-10-18)**: 배포 때 alembic 이 PG `stock_profile`·`sectors`·`themes`·`theme_stocks`·`stock_events` 를 만들고, CH 테이블 4개(`market_index_daily`·`investor_daily`·`fundamentals_periodic`·`macro_series`)는 각 수집 태스크가 처음 돌 때 자동 생성한다. 20:30 beat 는 이제 `collector.daily_market_pipeline`(일봉 → 국내 지수 → 투자자)이고, 07:30 미국 지수(2026-10-20 부터 화~토 06:30 + 07:30 안전망, 국내 지수는 평일 15:40 별도 수집)·08:00 FRED·21:30 공모주·토 10:00 재무가 추가됐다(배포가 celery_beat 를 함께 재기동). 미국 거시 지표는 `.env.production` 에 `FRED_API_KEY` 를 넣어야 시작된다(없으면 건너뜀 로그만). 재무를 토요일 전에 채우려면 `docker exec stock_celery_worker celery -A apps.collector.celery_app call collector.collect_fundamentals`.
 
 **병렬 수집(2026-10-17)**: 스레드 `KIS_WORKERS`개가 종목을 나눠 수집하고, 레이트리미터 하나를 공유해 전체 초당 호출을 `KIS_RATE_PER_SEC` 이하로 지킨다. 연속 연결실패 카운터·쿨다운도 공유 — 쿨다운 중엔 모든 스레드가 멈춘다. 종료 로그에 소요 초가 찍힌다(`전종목 작업 종료: … N초`). 문제가 보이면 `KIS_WORKERS=1`(기존 순차)로 즉시 되돌릴 수 있다.
 

@@ -179,6 +179,16 @@ def test_beat_schedule_entries():
     for key in ("collect-macro-series", "collect-ipo-events", "collect-fundamentals"):
         assert beat[key]["task"].startswith("collector.")
     assert "apps.collector.tasks.market_data" in celery_app.conf.include
+    # 장 마감 시간에 맞춘 지표 갱신(2026-10-20): 국내 지수 15:40 평일, 미국 06:30 + 07:30 안전망(화~토)
+    kr = beat["collect-kr-indices"]
+    assert kr["task"] == "collector.collect_market_indices" and kr["kwargs"] == {"region": "KR"}
+    assert kr["schedule"].hour == {15} and kr["schedule"].minute == {40}
+    assert kr["schedule"].day_of_week == {1, 2, 3, 4, 5}
+    for key, hour in (("collect-us-indices", 6), ("collect-us-indices-retry", 7)):
+        us = beat[key]
+        assert us["task"] == "collector.collect_market_indices" and us["kwargs"] == {"region": "US"}
+        assert us["schedule"].hour == {hour} and us["schedule"].minute == {30}
+        assert us["schedule"].day_of_week == {2, 3, 4, 5, 6}
 
 
 def _stub_steps(monkeypatch, daily=None):

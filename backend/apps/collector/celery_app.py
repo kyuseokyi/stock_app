@@ -56,10 +56,23 @@ celery_app.conf.beat_schedule = {
         "task": "collector.daily_market_pipeline",
         "schedule": crontab(hour=20, minute=30),
     },
-    # 미국 지수·환율·대표 종목 — 미국 장 마감(한국 05~06시) 뒤
+    # 국내 지수 — KRX 정규장 마감(15:30) 10분 뒤. 지수는 NXT 와 무관하게 15:30 종가로 확정.
+    # 20:30 일일 파이프라인의 국내 지수 단계는 안전망으로 그대로 둔다(같은 날짜 덮어쓰기).
+    "collect-kr-indices": {
+        "task": "collector.collect_market_indices",
+        "schedule": crontab(hour=15, minute=40, day_of_week="mon-fri"),
+        "kwargs": {"region": "KR"},
+    },
+    # 미국 지수·환율·대표 종목 — 미국 장 마감(서머타임 05:00 / 그 외 06:00 KST) 뒤. 미국 월~금 → 한국 화~토 아침
     "collect-us-indices": {
         "task": "collector.collect_market_indices",
-        "schedule": crontab(hour=7, minute=30),
+        "schedule": crontab(hour=6, minute=30, day_of_week="tue-sat"),
+        "kwargs": {"region": "US"},
+    },
+    # 안전망 — 06:30 이 실패했거나 종가가 늦게 확정된 날을 메꾼다(멱등)
+    "collect-us-indices-retry": {
+        "task": "collector.collect_market_indices",
+        "schedule": crontab(hour=7, minute=30, day_of_week="tue-sat"),
         "kwargs": {"region": "US"},
     },
     # 미국 거시 지표(FRED) — FRED_API_KEY 없으면 건너뜀
