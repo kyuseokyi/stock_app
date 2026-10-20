@@ -417,12 +417,19 @@ uv run pytest tests/test_universe_cooldown.py    # 특정 파일
 | 티어 | 프론트 API URL 주입 | 백엔드 API 위치 | CORS |
 |---|---|---|---|
 | **local** | `npm run dev`(vite serve) — 값 없으면 `src/config.js` 의 localhost 폴백 | 로컬 uvicorn(8000/8001/8002) | `shared/cors.py` 의 localhost 기본 허용 |
-| **develop** | `docker-compose.prod.yml` 의 **build args**(haezean 터널 URL) | 미니PC(Cloudflare 터널) | admin/app.haezean.com 이 `shared/cors.py` 에 코드로 포함 |
+| **develop** | `docker-compose.prod.yml` 의 **build args**(admin_web: haezean 터널 URL, web_client: 같은 도메인 `/_api/…` 상대 경로) | 미니PC(Cloudflare 터널) | admin/app.haezean.com 이 `shared/cors.py` 에 코드로 포함(web_client 는 같은 도메인이라 CORS 불필요) |
 | **product** | 실서버 도메인 확정 시 build args 로 주입 | (미정) | 도메인 확정 시 `CORS_ORIGINS` env 로 추가 |
 
 > **🔒 fail-fast (green-but-broken 차단)**: 배포 빌드(`vite build`)에서 `VITE_*` 가 비면 **localhost 로 폴백하지 않고 빌드가 실패**한다(`vite.config.js` + `src/config.js`). 과거 admin.haezean.com 이 localhost 를 부르던 류의 'green-but-broken' 배포를 원천 차단. dev serve(`npm run dev`)에서만 localhost 폴백을 허용한다.
 >
 > **CORS**: 프론트는 auth·blog·stock 3개 API를 모두 호출하므로 세 서비스가 동일 CORS 정책(`shared/cors.py`)을 공유한다. develop 도메인은 코드에 포함돼 서버 env 를 깜빡해도 CORS 가 동작한다.
+>
+> **🔀 web_client 는 같은 도메인 프록시(develop, 2026-10-20~)**: 카카오톡 인앱 브라우저(안드로이드 WebView)에서 `app.haezean.com` 은 뜨는데 다른 서브도메인(blog·api·auth) 요청만 응답 없이 실패(`NETWORK`)했다(같은 폰 크롬은 정상). 그래서 web_client 는 다른 도메인을 부르지 않는다.
+> - 브라우저 → `app.haezean.com/_api/{blog,auth,stock,game}/…` → 웹 컨테이너(`web_client/server.cjs`)가 접두사를 떼고 `blog_api:8003`·`auth_api:8001`·`stock_api:8002`·`trading_game:8004`(WebSocket 포함)로 전달. compose·Swarm 모두 같은 서비스 이름.
+> - build args 는 상대 경로(`/_api/blog/api/v1` 등, `docker-compose.prod.yml`). admin_web·모바일 앱은 기존처럼 각 서브도메인 직접 호출.
+> - 정적 파일은 serve-handler 가 `public/serve.json` 규칙 그대로(이전 `serve dist` 와 같은 엔진). 백엔드가 내려가 있으면 프록시는 502 → 클라이언트 조회 재시도. 캐시 헤더 없는 API 응답엔 `no-store`.
+> - 로컬 점검: 이미지를 상대 경로 build args 로 빌드 후 `docker run -p 4010:3000 -e PROXY_CHANGE_ORIGIN=1 -e BLOG_UPSTREAM=https://blog.haezean.com -e AUTH_UPSTREAM=https://auth.haezean.com -e STOCK_UPSTREAM=https://api.haezean.com -e GAME_UPSTREAM=https://game.haezean.com <이미지>`.
+> - 화면 오류 문구 끝의 `(오류: NETWORK · app.haezean.com/_api/blog)` 는 요청 대상·원인 구분용(`web_client/src/lib/errorCode.ts`).
 
 ### 로컬 개발 → 개발서버(미니PC) DB 사용 (SSH 터널)
 

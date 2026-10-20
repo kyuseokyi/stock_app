@@ -12,7 +12,10 @@ const CAPACITY_INITIAL_MS = 5_000
 
 /** 게임 WS URL. 토큰이 없으면 token 파라미터 자체를 생략(공개 연결) — 빈 `?token=` 은 서버가 4401 로 거부한다. */
 export function buildGameWsUrl(baseUrl: string, token: string | null): string {
-  const base = `${baseUrl.replace(/\/+$/, '').replace(/^http/, 'ws')}/ws/game/stream`
+  // baseUrl 은 절대(https://game…) 또는 같은 도메인 상대(/_api/game) — 현재 페이지 기준으로 절대 주소로 만든 뒤 ws(s) 로
+  const u = new URL(`${baseUrl.replace(/\/+$/, '')}/ws/game/stream`, window.location.href)
+  u.protocol = u.protocol === 'https:' ? 'wss:' : 'ws:'
+  const base = u.toString()
   return token ? `${base}?token=${encodeURIComponent(token)}` : base
 }
 

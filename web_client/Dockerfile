@@ -19,11 +19,13 @@ ENV VITE_API_BASE_URL=$VITE_API_BASE_URL \
     VITE_ENABLE_GUEST_LOGIN=$VITE_ENABLE_GUEST_LOGIN
 RUN npm run build
 
-# ---- serve stage (정적 SPA 서버 — nginx 미사용) ----
+# ---- serve stage (정적 SPA + 같은 도메인 API 프록시 — server.cjs) ----
+# /_api/{blog,auth,stock,game}/* 는 백엔드 서비스로 넘기고, 나머지는 serve-handler(serve CLI 와 같은 엔진)가
+# dist/serve.json 규칙(/assets/ 밖 경로만 index.html, 없는 /assets/ 는 404, index.html no-cache)으로 응답.
 FROM node:20-alpine
 WORKDIR /app
-RUN npm install -g serve@14.2.6
+RUN npm init -y >/dev/null && npm install --omit=dev serve-handler@6.1.7 http-proxy@1.18.1
 COPY --from=build /app/dist ./dist
+COPY server.cjs ./
 EXPOSE 3000
-# SPA 폴백·캐시는 dist/serve.json(public/serve.json): /assets/ 밖 경로만 index.html, 없는 /assets/ 는 404, index.html no-cache
-CMD ["serve", "dist", "-l", "3000"]
+CMD ["node", "server.cjs"]

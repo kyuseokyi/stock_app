@@ -190,10 +190,12 @@ services:
     build:
       context: ./web_client
       args:
-        VITE_API_BASE_URL: https://blog.haezean.com/api/v1
-        VITE_AUTH_BASE_URL: https://auth.haezean.com/api/v1
-        VITE_GAME_API_URL: https://game.haezean.com
-        VITE_STOCK_API_URL: https://api.haezean.com/graphql
+        # 같은 도메인 프록시(web_client/server.cjs): 브라우저는 app.haezean.com/_api/… 로만 요청하고
+        # 웹 컨테이너가 백엔드 서비스로 넘긴다. 카카오톡 인앱 브라우저에서 다른 서브도메인 요청만 실패하던 문제 대응.
+        VITE_API_BASE_URL: /_api/blog/api/v1
+        VITE_AUTH_BASE_URL: /_api/auth/api/v1
+        VITE_GAME_API_URL: /_api/game
+        VITE_STOCK_API_URL: /_api/stock/graphql
         # 개발 서버 테스트용 게스트 로그인 노출 — product 도입 시 "false"
         VITE_ENABLE_GUEST_LOGIN: "true"
     container_name: stock_web_client

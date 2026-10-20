@@ -24,9 +24,17 @@ export function withErrorCode(message: string, err: unknown): string {
   return `${message} (오류: ${errorCode(err)})`
 }
 
+/** 요청 대상 표시 — 다른 도메인이면 호스트, 같은 도메인 프록시(/_api/blog…)면 "호스트/_api/blog" */
 function requestHost(baseURL?: string, url?: string): string {
   try {
-    return new URL(url ?? '', baseURL || window.location.href).host
+    // axios 처럼 baseURL 뒤에 url 을 이어 붙인다(url 이 절대 주소면 그대로). 상대 baseURL 은 현재 페이지 기준.
+    const joined =
+      url && /^https?:\/\//.test(url)
+        ? url
+        : `${(baseURL ?? '').replace(/\/+$/, '')}/${(url ?? '').replace(/^\/+/, '')}`
+    const u = new URL(joined, window.location.href)
+    const prefix = /^\/_api\/[^/]+/.exec(u.pathname)?.[0] ?? ''
+    return u.host + prefix
   } catch {
     return ''
   }
