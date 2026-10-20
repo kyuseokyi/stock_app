@@ -5,9 +5,15 @@
 
 실행:
     cd backend
-    uv run python -m apps.blog.seed_dev_posts
+    uv run python -m apps.blog.seed_dev_posts            # 넣기(멱등)
+    uv run python -m apps.blog.seed_dev_posts --delete   # 이 스크립트가 넣은 글·댓글 지우기
 
-주의: 운영 DB에는 절대 실행하지 말 것. 로컬(stock_db)에서만 사용한다.
+개발 서버(haezean, 미니PC — 개발용)에서는 blog 컨테이너 안에서:
+    docker exec $(docker ps -qf name=stock_blog_api -f status=running | head -1) \
+      python -m apps.blog.seed_dev_posts
+
+게시판 이름이 맞는 글만 들어간다(없는 게시판은 건너뜀). 개발 서버 기본 게시판은 '오늘의 시황'.
+주의: 실제 사용자가 쓰는 product DB에는 실행하지 말 것.
 """
 
 from __future__ import annotations
@@ -20,8 +26,58 @@ from sqlalchemy import select
 from shared.database import AsyncSessionLocal
 from shared.models import Board, BlogComment, BlogPost, User
 
+SAMPLE_NOTE = "<p><small>※ 화면 확인용 샘플 글입니다. 실제 시세·투자 정보가 아닙니다.</small></p>"
+
 # 게시판 이름 -> 샘플 글 목록. (title, content_html, featured)
 POSTS: dict[str, list[tuple[str, str, bool]]] = {
+    # 개발 서버(haezean) 기본 게시판
+    "오늘의 시황": [
+        (
+            "장 마감 브리핑: 반도체 강세, 지수 상승 마감",
+            "<h2>오늘의 흐름</h2>"
+            "<p>외국인 매수가 반도체 대형주로 몰리며 지수가 상승 마감했습니다. "
+            "업종별로는 <strong>반도체·조선</strong>이 강했고, 2차전지·바이오는 쉬어 가는 모습이었습니다.</p>"
+            "<ul><li>강세: 반도체, 조선, 방산</li><li>약세: 2차전지, 바이오</li></ul>"
+            "<p>내일은 미국 물가 지표 발표가 있어 장 초반 변동성에 유의하세요.</p>" + SAMPLE_NOTE,
+            True,
+        ),
+        (
+            "이번 주 공모주 일정 한눈에 보기",
+            "<p>이번 주에는 공모주 청약 2건과 신규 상장 1건이 예정되어 있습니다. "
+            "스크리너의 <strong>일정</strong> 탭에서 청약일·상장일과 공모가, 주관사를 함께 볼 수 있어요.</p>"
+            "<p>청약 전에는 공모가 밴드, 기관 수요예측 경쟁률, 의무보유 확약 비율을 꼭 확인하세요.</p>" + SAMPLE_NOTE,
+            True,
+        ),
+        (
+            "트레이딩 게임 1기 중간 점검 — 상위권은 어떻게 했나",
+            "<p>시즌 1기가 반환점을 지났습니다. 상위권 참가자들의 공통점은 "
+            "<strong>손절 기준을 미리 정하고</strong> 레버리지를 낮게 유지했다는 점입니다.</p>"
+            "<ul><li>분할 진입으로 평균 단가 관리</li><li>장 초반 급등락 구간은 관망</li>"
+            "<li>퀴즈·퀘스트 보상으로 자본금 보충</li></ul>" + SAMPLE_NOTE,
+            True,
+        ),
+        (
+            "환율 1,330원대 — 수출주와 내수주 어디에 주목할까",
+            "<p>원/달러 환율이 1,330원대에서 움직이고 있습니다. 환율이 오르면 수출 비중이 큰 기업에 "
+            "<strong>단기적으로 우호적</strong>이고, 원자재 수입 비중이 큰 기업에는 부담이 됩니다.</p>"
+            "<p>업종별 민감도가 다르니 한쪽에 몰기보다 나눠 보는 편이 안전합니다.</p>" + SAMPLE_NOTE,
+            False,
+        ),
+        (
+            "테마 순위 읽는 법: 1일·5일·20일 등락을 같이 보세요",
+            "<p>스크리너 <strong>테마</strong> 탭의 순위는 하루 등락만 보면 착시가 생깁니다. "
+            "5일·20일 등락이 함께 오르는 테마가 추세가 붙은 테마일 가능성이 큽니다.</p>"
+            "<p>거래대금이 같이 늘어나는지도 확인해 보세요.</p>" + SAMPLE_NOTE,
+            False,
+        ),
+        (
+            "처음 오신 분들께 — 해전(StockApp) 둘러보기",
+            "<p>홈에서는 추천 글을, 커뮤니티에서는 시황 글을, 게임에서는 모의 트레이딩을, "
+            "스크리너에서는 지수·테마·업종·일정을 볼 수 있어요.</p>"
+            "<p>간편 로그인 후 댓글과 게임에 참여해 보세요.</p>" + SAMPLE_NOTE,
+            False,
+        ),
+    ],
     "시황분석": [
         (
             "코스피, 외국인 순매수 전환… 반도체가 끌었다",
@@ -81,6 +137,13 @@ POSTS: dict[str, list[tuple[str, str, bool]]] = {
 
 # 댓글은 '댓글 허용' 게시판 글에만 단다. (글 제목 -> 댓글 내용 목록)
 COMMENTS: dict[str, list[str]] = {
+    "장 마감 브리핑: 반도체 강세, 지수 상승 마감": [
+        "반도체 비중 다시 늘려야 하나 고민되네요.",
+        "내일 물가 지표 발표 전엔 관망하려고요.",
+    ],
+    "트레이딩 게임 1기 중간 점검 — 상위권은 어떻게 했나": [
+        "손절 기준 먼저 정하는 거 진짜 중요하네요 👍",
+    ],
     "넥스트레이드(NXT) 통합 시세, MTS와 왜 다르게 보일까": [
         "오 이거 때문에 한참 헤맸는데 정리 감사합니다 👍",
         "UN 미상장 종목은 J로 폴백해야 하는 것도 주의해야겠네요.",
@@ -166,5 +229,28 @@ async def seed() -> None:
         )
 
 
+async def delete() -> None:
+    """이 스크립트의 제목과 같은 글(과 그 글의 댓글)만 지운다."""
+    titles = [t for entries in POSTS.values() for t, _, _ in entries]
+    async with AsyncSessionLocal() as db:
+        posts = (await db.execute(select(BlogPost).where(BlogPost.title.in_(titles)))).scalars().all()
+        ids = [p.id for p in posts]
+        n_comments = 0
+        if ids:
+            comments = (
+                await db.execute(select(BlogComment).where(BlogComment.post_id.in_(ids)))
+            ).scalars().all()
+            n_comments = len(comments)
+            for c in comments:
+                await db.delete(c)
+            await db.flush()
+            for p in posts:
+                await db.delete(p)
+        await db.commit()
+        print(f"[seed_dev_posts] deleted posts {len(ids)}, comments {n_comments}")
+
+
 if __name__ == "__main__":
-    asyncio.run(seed())
+    import sys
+
+    asyncio.run(delete() if "--delete" in sys.argv[1:] else seed())
