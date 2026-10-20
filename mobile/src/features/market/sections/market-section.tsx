@@ -10,6 +10,7 @@ import { EventList } from '../components/event-list';
 import { GroupRow } from '../components/group-row';
 import { IndexCard, MacroCard } from '../components/index-card';
 import type { GroupKind } from '../types';
+import { useAutoRefresh } from '../use-auto-refresh';
 import { useMarketOverview } from '../use-market-overview';
 
 type Props = {
@@ -19,8 +20,10 @@ type Props = {
 
 /** 시장 칩 — 지수 카드·거시 지표·주도 테마 Top 5·다가오는 일정 3건 */
 export function MarketSection({ onMore, onOpenGroup }: Props) {
-  const { data, loading, error, reload, refresh } = useMarketOverview();
+  const { data, loading, error, reload, refresh, silentRefresh } = useMarketOverview();
   const { refreshing, onRefresh } = usePullRefresh(refresh);
+  // 시장 칩이 보이고 앱이 앞에 있을 때만 30초마다 지수·거시만 조용히 갱신(칩을 바꾸면 이 컴포넌트가 사라져 멈춤)
+  useAutoRefresh(silentRefresh);
   const today = kstDateString();
 
   if (loading && !data) return <ListState mode="loading" />;
