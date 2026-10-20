@@ -1,10 +1,11 @@
 """시장 데이터 Celery 태스크 — 투자자 UN→J 폴백, 재무 연간·분기, 공모주 일정, FRED 키 없음, 일일 파이프라인."""
-from datetime import date
+from datetime import date, datetime
 
 import fakeredis
 import pytest
 import requests
 
+from apps.collector import intraday_indices as ii
 from apps.collector.kis.master import MasterStock
 from apps.collector.tasks import market_data as md
 from apps.collector.tasks import universe
@@ -189,6 +190,10 @@ def test_beat_schedule_entries():
         assert us["task"] == "collector.collect_market_indices" and us["kwargs"] == {"region": "US"}
         assert us["schedule"].hour == {hour} and us["schedule"].minute == {30}
         assert us["schedule"].day_of_week == {2, 3, 4, 5, 6}
+    # 장중 지수 30초(2026-10-20) — 밀린 실행은 25초 뒤 버림. 끄기는 태스크 안의 env 스위치
+    live = beat["poll-intraday-indices"]
+    assert live["task"] == "collector.poll_intraday_indices"
+    assert live["schedule"] == 30.0 and live["options"] == {"expires": 25}
 
 
 def _stub_steps(monkeypatch, daily=None):
@@ -257,3 +262,69 @@ def test_ipo_title_uses_response_name_when_master_missing(monkeypatch):
     monkeypatch.setattr(md, "_save_events", lambda evs: saved.setdefault("evs", evs) and len(evs))
     md.collect_ipo_events(today=date(2026, 10, 18))
     assert [e["title"] for e in saved["evs"]] == ["신규기업 공모주 청약", "999990 공모주 청약"]
+
+
+class _IntradayClient:
+    def __init__(self):
+        self.closed = False
+
+    def get_domestic_index_daily(self, code, s, e):
+        return [{"stck_bsop_date": s, "bstp_nmix_prpr": "2601.5"}]
+
+    def get_overseas_daily(self, mrkt, symbol, s, e):
+        return [{"stck_bsop_date": s, "ovrs_nmix_prpr": "1385.2"}]
+
+    def close(self):
+        self.closed = True
+
+
+def _no_kis(*a, **k):
+    raise AssertionError("장 밖·꺼짐에서는 KIS 클라이언트를 만들면 안 된다")
+
+
+def test_poll_intraday_skips_without_kis(monkeypatch):
+    monkeypatch.delenv("TRADING_DAYS", raising=False)
+    monkeypatch.delenv("MARKET_HOLIDAYS", raising=False)
+    monkeypatch.setattr(md, "KISClient", _no_kis)
+    monkeypatch.setenv("INTRADAY_INDICES_ENABLED", "false")
+    assert md.poll_intraday_indices() == {"skipped": "disabled"}
+    monkeypatch.delenv("INTRADAY_INDICES_ENABLED")
+    monkeypatch.setattr(md.intraday, "now_kst", lambda: datetime(2026, 10, 17, 10, 0, tzinfo=ii.KST))  # 토요일
+    assert md.poll_intraday_indices() == {"skipped": "closed"}
+    monkeypatch.setattr(md.intraday, "now_kst", lambda: datetime(2026, 10, 20, 15, 35, tzinfo=ii.KST))  # 장 끝
+    assert md.poll_intraday_indices() == {"skipped": "closed"}
+
+
+def test_poll_intraday_runs_in_window(monkeypatch):
+    monkeypatch.delenv("TRADING_DAYS", raising=False)
+    monkeypatch.delenv("MARKET_HOLIDAYS", raising=False)
+    monkeypatch.delenv("INTRADAY_INDICES_ENABLED", raising=False)
+    fake = fakeredis.FakeRedis(decode_responses=True)
+    made = {}
+
+    def make_client(limiter=None):
+        made["limiter"], made["client"] = limiter, _IntradayClient()
+        return made["client"]
+
+    monkeypatch.setattr(md, "KISClient", make_client)
+    monkeypatch.setattr(md, "get_sync_redis", lambda: fake)
+    monkeypatch.setattr(md.intraday, "now_kst", lambda: datetime(2026, 10, 20, 14, 32, tzinfo=ii.KST))
+    out = md.poll_intraday_indices()
+    assert out["ok"] == sorted(ii.INTRADAY_CODES) and out["failed"] == []
+    assert made["limiter"]._min_interval == pytest.approx(1 / ii.INTRADAY_RATE)  # 전용 초당 2건
+    assert made["client"].closed is True
+    assert fake.get(ii.INTRADAY_KEY) is not None
+
+
+def test_poll_intraday_logs_kis_setup_error(monkeypatch):
+    monkeypatch.delenv("TRADING_DAYS", raising=False)
+    monkeypatch.delenv("MARKET_HOLIDAYS", raising=False)
+    monkeypatch.delenv("INTRADAY_INDICES_ENABLED", raising=False)
+
+    def no_creds(limiter=None):
+        raise RuntimeError("KIS 자격증명 없음")
+
+    monkeypatch.setattr(md, "KISClient", no_creds)
+    monkeypatch.setattr(md.intraday, "now_kst", lambda: datetime(2026, 10, 20, 10, 0, tzinfo=ii.KST))
+    out = md.poll_intraday_indices()
+    assert "KIS 자격증명 없음" in out["error"]

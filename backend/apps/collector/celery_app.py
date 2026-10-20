@@ -63,6 +63,14 @@ celery_app.conf.beat_schedule = {
         "schedule": crontab(hour=15, minute=40, day_of_week="mon-fri"),
         "kwargs": {"region": "KR"},
     },
+    # 장중 국내 지수·원/달러 30초 갱신(Redis market:intraday) — 거래일 09:00~15:35 KST 만 KIS 호출,
+    # 그 밖에는 태스크가 바로 끝난다. 워커가 바빠 밀린 실행은 25초 뒤 버린다(몰아서 실행 방지).
+    # 끄기: INTRADAY_INDICES_ENABLED=false. 설계 docs/superpowers/specs/2026-10-20-intraday-index-design.md
+    "poll-intraday-indices": {
+        "task": "collector.poll_intraday_indices",
+        "schedule": 30.0,
+        "options": {"expires": 25},
+    },
     # 미국 지수·환율·대표 종목 — 미국 장 마감(서머타임 05:00 / 그 외 06:00 KST) 뒤. 미국 월~금 → 한국 화~토 아침
     "collect-us-indices": {
         "task": "collector.collect_market_indices",

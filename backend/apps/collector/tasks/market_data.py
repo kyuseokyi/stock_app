@@ -12,6 +12,7 @@ from datetime import date, datetime, timedelta, timezone
 import requests
 
 from apps.collector import fred
+from apps.collector import intraday_indices as intraday
 from apps.collector import market_parsers as mp
 from apps.collector.celery_app import celery_app
 from apps.collector.kis.client import KRX_MARKET_CODE, KISClient
@@ -64,6 +65,32 @@ def collect_market_indices(region: str = "KR") -> dict:
         return collect_indices(index_specs(region), client)
     finally:
         client.close()
+
+
+# ---------------------------------------------------------------- 장중 지수(30초)
+# ignore_result — 30초마다 돌아 결과를 Redis 결과 백엔드에 남기면 하루 2,880건이 쌓인다(아무도 읽지 않음)
+@celery_app.task(name="collector.poll_intraday_indices", ignore_result=True)
+def poll_intraday_indices() -> dict:
+    """장중 국내 지수 3개·원/달러 → Redis market:intraday(30초 beat). 꺼짐·장 밖이면 KIS 를 부르지 않고 바로 끝.
+
+    순서: env 스위치 → 거래일·시간 → (그때만) KIS 클라이언트 생성. 클라이언트 생성은 자격증명·Redis·세션을
+    쓰므로 장 밖 30초마다 만들지 않는다. KIS·Redis 장애는 로그만 남기고 다음 주기에 다시 시도한다.
+    """
+    if not intraday.enabled():
+        return {"skipped": "disabled"}
+    now = intraday.now_kst()  # 시간대 있는(aware) 시각 — naive 는 in_intraday_window·poll 이 거부한다
+    if not intraday.in_intraday_window(now):
+        return {"skipped": "closed"}
+    client = None
+    try:
+        client = KISClient(limiter=RateLimiter(intraday.INTRADAY_RATE))
+        return intraday.poll(client, get_sync_redis(), now)
+    except Exception as e:  # noqa: BLE001 — 장중 갱신 실패가 워커를 흔들지 않게(화면은 확정 종가로)
+        log.warning("장중 지수 갱신 실패: %s", str(e)[:200])
+        return {"error": repr(e)[:300]}
+    finally:
+        if client is not None:
+            client.close()
 
 
 # ---------------------------------------------------------------- 투자자별 순매수
