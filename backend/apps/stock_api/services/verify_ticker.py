@@ -19,6 +19,7 @@ from shared.clickhouse_schema import CLICKHOUSE_DB as DB
 from shared.clickhouse_schema import get_client
 from shared.database import SyncSessionLocal
 from shared.market_models import Sector, StockProfile
+from shared.sector_group import sector_group_code
 from shared.models import StockMeta
 
 log = logging.getLogger(__name__)
@@ -69,7 +70,8 @@ def _stock_info(ticker: str) -> dict | None:
         if meta is None:
             return None
         prof = db.get(StockProfile, ticker)
-        code = prof.sector_m if prof is not None and prof.sector_m else None
+        # 시장 그룹 계산과 같은 규칙(중분류, 없으면 대분류 — 제조·"0000" 제외)으로 소속 업종을 찾는다
+        code = (sector_group_code(prof.sector_l, prof.sector_m) or None) if prof is not None else None
         sector = db.get(Sector, code) if code else None
         market = meta.market.value if hasattr(meta.market, "value") else str(meta.market)
         return {"name": meta.name, "market": market, "is_active": bool(meta.is_active),
