@@ -82,7 +82,7 @@
 - [ ] 정배열/역배열·매물대의 CH 컬럼 영속화(스크리너 성능용)
 
 ### Phase 2 — 스크리너
-- [x] **CANSLIM 스크리너(프로젝트 2)** — 7항목 판정·점수 매일 사전 계산(`canslim_daily`), GraphQL `canslimMarket·canslimScreen·canslimScore`, 웹 `/screener`(시장 방향·필터·목록·차트·점수표·추이). C 는 재무 형식 확인 뒤 `FUNDAMENTALS_Q_CUMULATIVE` 로 켬. 스펙 `docs/superpowers/specs/2026-10-18-canslim-design.md` (2026-10-18). 앱 화면은 다음
+- [x] **CANSLIM 스크리너(프로젝트 2)** — 7항목 판정·점수 매일 사전 계산(`canslim_daily`), GraphQL `canslimMarket·canslimScreen·canslimScore`, 웹 `/screener`(시장 방향·필터·목록·차트·점수표·추이). C 는 재무 형식 확인 뒤 `FUNDAMENTALS_Q_CUMULATIVE` 로 켬. 스펙 `docs/superpowers/specs/2026-10-18-canslim-design.md` (2026-10-18). 앱 화면은 2026-10-21(모바일 '주도주' 칩·종목 상세)
 - [x] **스크리너 탭 — 시장·테마·업종·일정(프로젝트 3, 주달 화면)** — 메뉴 '스크리너' 안 탭(시장·테마·업종·일정·주도주), 종가 기준 하루 1회 사전 계산(`market_stock_daily`·`market_group_daily`) + 관리자 테마 보정 시 최신일 재계산, 테마/업종 순위·트리맵(시총/거래대금)·상세(순위 추이·대장주)·일정(공모주·경제지표), CANSLIM 탭 이름 '주도주'. 스펙 `docs/superpowers/specs/2026-10-19-market-dashboard-design.md` (2026-10-19). 다음: 관리자 테마 보정 UI, 뉴스·AI 요약(네이버 키·Ollama), 앱 화면
 - [x] 관리자 테마 보정 UI(admin_web) — `MarketThemes.tsx`(시장 지표 목록·정렬·숨김, 이름·설명 수정, 종목 검색 추가·제외·복구)
 - [ ] 차트 패턴(컵·컵핸들·쌍바닥·플랫 베이스·HTF)·베이스 카운트·돌파 리포트 — 참고: 기존 `ams/workspace/api` 의 `app/services/chart_pattern/`(MarketSurge 맞춤 기준값)
@@ -103,7 +103,8 @@
 - [x] 앱 셋업 — Expo SDK 57/RN 0.86, **Unistyles v3** 테마(상승=빨강/하락=파랑, adaptiveThemes), zustand. `app.config.js` dev/prod 앱이름·bundleId 분리, `eas.json` 프로필, `EXPO_PUBLIC_*` env 분리
 - [x] **토스 디자인 전체 적용 + 네비 재편** — 하단 4탭(홈/블로그/게임/내정보, 스크리너·관심종목 탭 제거), 블로그(목록/상세/댓글)·홈 추천글·게임 스켈레톤 동작. 에뮬레이터 육안 검증 완료
 - [x] 스크리너 탭 — 하단 탭 '스크리너'(시장·테마·업종·일정 칩, 그룹 상세, 상단 "실시간 시세 아님" 안내)
-- [ ] 종목 차트 상세 + 차트 드로잉(앱) · 주도주(CANSLIM) 칩
+- [x] 주도주(CANSLIM) 칩 + 범용 종목 상세 `/stock/[ticker]`(점수표·일봉 50일선·52주 고점·점수 추이, 테마·업종 구성 종목에서도 진입) — 2026-10-21, 설계 `docs/superpowers/specs/2026-10-21-mobile-leaders-design.md`. 실기기 확인 대기
+- [ ] 차트 드로잉(앱)
 - [x] 실제 푸시 — Expo Push(→FCM/APNs) 발송기, 펀드 리포트 알림·새 글 알림 적용(2026-10-21). 새 글은 push_devices.post_notice·내정보 스위치
 
 ### Phase 5 — 실시간 트레이딩 게임 (Trading Game) & 에듀테인먼트

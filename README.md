@@ -178,7 +178,7 @@ npm run build -- --mode development    # 빌드 검증(테스트 러너 없음 �
 - **중복 로그인(플랫폼별 단일 세션)**: 같은 계정은 web·app·admin 마다 마지막 로그인 1곳만 유효(`user_sessions`, 마이그레이션 `e7f8a9b0c1d2`). 플랫폼은 `/login`=admin, `/guest` 바디 `platform`(web|app, 기본 web), 간편 로그인은 시작 `client` 로 서버가 정한다. 밀려난 기기는 REST 401 `detail.code=SESSION_REPLACED` / 게임 WS 4401(reason `SESSION_REPLACED`, 즉시)로 로그아웃되고 "다른 기기에서 로그인되어 로그아웃됐어요" 안내. 웹·앱은 시작·복귀 시 `GET /api/v1/auth/me` 로 확인(복귀는 60초 간격). sid 없는 배포 전 토큰은 만료(최대 12h)까지 허용. 즉시 끊기는 auth·trading_game 이 같은 Redis(`REDIS_URL`, 채널 `auth:session:replaced`)를 써야 동작(실패해도 다음 요청에서 차단).
 
 ### 5. 모바일 앱 (Expo / React Native)
-Expo SDK 57 · React Native 0.86 · expo-router(하단 5탭: 홈/커뮤니티/게임/스크리너/내정보 — 스크리너는 시장·테마·업종·일정, 설계 `docs/superpowers/specs/2026-10-20-mobile-screener-design.md`) · **Unistyles v3**(테마 스타일링) · zustand.
+Expo SDK 57 · React Native 0.86 · expo-router(하단 5탭: 홈/커뮤니티/게임/스크리너/내정보 — 스크리너는 시장·테마·업종·일정·주도주, 설계 `docs/superpowers/specs/2026-10-20-mobile-screener-design.md` · 주도주·종목 상세 `docs/superpowers/specs/2026-10-21-mobile-leaders-design.md`. 종목 상세 `/stock/[ticker]`(점수표·일봉 차트 50일선·52주 고점·점수 추이)는 주도주 목록과 테마·업종 상세의 구성 종목에서 들어간다) · **Unistyles v3**(테마 스타일링) · zustand.
 > 📦 기기 설치·빌드 종류별(개발용 / 단독 실행 APK / 스토어 배포용) 절차: [`docs/local_build_guide.md`](docs/local_build_guide.md)
 >
 > ⚠️ **Unistyles는 네이티브 코드라 Expo Go에서 실행되지 않습니다.** 반드시 **개발 빌드(dev build)** 로 실행하세요. 스타일 없이 UI 구조만 빠르게 볼 때는 웹(`npm run web`)이 가장 가볍습니다.
@@ -553,7 +553,8 @@ cd backend && uv run --with pykrx python -m apps.collector.verify.spot_check --n
 - 기준값(테마 최소 3종목·상위 10위 연속)은 `apps/collector/market_groups/compute.py` 상수, 트리맵 색 상한(1일 ±5%·5일 ±10%·20일 ±20%)은 `web_client/src/lib/treemap.ts`.
 
 ### 🔎 CANSLIM 스크리너 (스크리너 프로젝트 2) — 화면 이름 '주도주'
-설계 `docs/superpowers/specs/2026-10-18-canslim-design.md`. 웹 `/screener/leaders`(스크리너 탭 '주도주', `?ticker=` 로 종목 바로 열기, 비로그인 공개).
+설계 `docs/superpowers/specs/2026-10-18-canslim-design.md`. 웹 `/screener/leaders`(스크리너 탭 '주도주', `?ticker=` 로 종목 바로 열기, 비로그인 공개). 앱은 스크리너 탭 '주도주' 칩(시장 방향 줄·정렬·필터 바텀시트·50개씩 더 불러오기) + 종목 상세 `/stock/[ticker]`(같은 GraphQL, 서버 변경 없음 — 쿼리는 `mobile/src/features/leaders/api.ts`, 계약 테스트 `backend/tests/test_market_query.py`).
+- **앱↔웹 알려진 차이**: 50일선 색이 다르다(앱 청록, 웹 주황). 분석 비대상 종목(ETF 등)의 일봉 차트는 가짜 캔들일 수 있다. 앱의 typedRoutes 타입 파일은 새 환경에서 dev 서버(`npx expo start`)를 한 번 띄워야 생성된다.
 - **계산**: `collector.compute_canslim` — 20:30 일일 파이프라인 마지막 단계(일봉 → 국내 지수 → 투자자 → CANSLIM)와 토 10:40(재무 수집 뒤). 보통주 전체의 7항목 판정·0~100 점수를 CH `canslim_daily`·`canslim_market` 에 저장(같은 날 재계산은 멱등).
 - **처음 한 번**: 점수 추이용 60거래일 채우기 — `uv run celery -A apps.collector.celery_app call collector.backfill_canslim` (과거 날짜도 실적은 최신값 사용).
 - **API(stock_api GraphQL)**: `canslimMarket`, `canslimScreen(market, minPass, required, sort, liquidOnly, limit, offset)`, `canslimScore(ticker)`.
