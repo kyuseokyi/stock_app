@@ -166,8 +166,9 @@ def test_daily_pipeline_continues_after_failure(monkeypatch):
     monkeypatch.setattr(md, "collect_investor_daily", lambda: order.append("investor") or {"ok": 0})
     monkeypatch.setattr(md, "compute_canslim", lambda: order.append("canslim") or {})
     monkeypatch.setattr(md, "compute_market_groups", lambda: order.append("groups") or {})
+    monkeypatch.setattr(md, "compute_screener", lambda: order.append("screener") or {})
     out = md.daily_market_pipeline()
-    assert order == ["daily", "idx:KR", "investor", "canslim", "groups"]
+    assert order == ["daily", "idx:KR", "investor", "canslim", "groups", "screener"]
     assert "error" in out["daily"] and out["investor"] == {"ok": 0}
 
 
@@ -202,6 +203,7 @@ def _stub_steps(monkeypatch, daily=None):
     monkeypatch.setattr(md, "collect_investor_daily", lambda: {"ok": 3})
     monkeypatch.setattr(md, "compute_canslim", lambda: {"rows": 10})
     monkeypatch.setattr(md, "compute_market_groups", lambda: {"error": "no bars"})
+    monkeypatch.setattr(md, "compute_screener", lambda: {"rows": 5})
 
 
 def test_daily_pipeline_records_steps(monkeypatch):
@@ -213,12 +215,12 @@ def test_daily_pipeline_records_steps(monkeypatch):
 
     _stub_steps(monkeypatch, daily=boom)
     out = md.daily_market_pipeline()
-    assert list(out) == ["daily", "indices_kr", "investor", "canslim", "market_groups"]
+    assert list(out) == ["daily", "indices_kr", "investor", "canslim", "market_groups", "screener"]
     assert out["investor"] == {"ok": 3} and "error" in out["daily"]
     rec = pipeline_record.load(fake)
     assert [s["name"] for s in rec["steps"]] == list(out)
     # 예외로 끝난 단계와 결과에 error 가 담긴 단계는 실패로 기록
-    assert [s["ok"] for s in rec["steps"]] == [False, True, True, True, False]
+    assert [s["ok"] for s in rec["steps"]] == [False, True, True, True, False, True]
     assert "master down" in rec["steps"][0]["summary"]
     assert all(isinstance(s["seconds"], float) and s["seconds"] >= 0 for s in rec["steps"])
     assert rec["started_at"] <= rec["finished_at"]
@@ -233,7 +235,7 @@ def test_daily_pipeline_result_unchanged_when_redis_down(monkeypatch):
     _stub_steps(monkeypatch)
     out = md.daily_market_pipeline()
     assert out == {"daily": {"ok": 1}, "indices_kr": {"ok": ["KOSPI"]}, "investor": {"ok": 3},
-                   "canslim": {"rows": 10}, "market_groups": {"error": "no bars"}}
+                   "canslim": {"rows": 10}, "market_groups": {"error": "no bars"}, "screener": {"rows": 5}}
 
 
 def test_daily_pipeline_result_unchanged_when_redis_client_fails(monkeypatch):
@@ -244,7 +246,7 @@ def test_daily_pipeline_result_unchanged_when_redis_client_fails(monkeypatch):
     _stub_steps(monkeypatch)
     out = md.daily_market_pipeline()
     assert out == {"daily": {"ok": 1}, "indices_kr": {"ok": ["KOSPI"]}, "investor": {"ok": 3},
-                   "canslim": {"rows": 10}, "market_groups": {"error": "no bars"}}
+                   "canslim": {"rows": 10}, "market_groups": {"error": "no bars"}, "screener": {"rows": 5}}
 
 
 def test_ipo_title_uses_response_name_when_master_missing(monkeypatch):

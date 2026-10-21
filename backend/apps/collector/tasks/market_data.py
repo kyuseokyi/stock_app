@@ -23,6 +23,7 @@ from apps.collector.repositories import clickhouse_market as chm
 from apps.collector.rate_limit import RateLimiter
 from apps.collector.tasks.canslim import compute_canslim
 from apps.collector.tasks.market_groups import compute_market_groups
+from apps.collector.tasks.screener import compute_screener
 from apps.collector.tasks.universe import _DEFAULT_RATE, _run_universe, collect_all_daily
 from shared import market_repo, pipeline_record
 from shared.sync_redis import get_sync_redis
@@ -219,7 +220,7 @@ def _daily_ohlcv() -> dict:
 
 @celery_app.task(name="collector.daily_market_pipeline")
 def daily_market_pipeline() -> dict:
-    """20:30 — 전종목 일봉 → 국내 지수 → 투자자별 순매수 → CANSLIM → 시장 그룹(차례로, 앞 단계 예외와 무관하게 진행).
+    """20:30 — 전종목 일봉 → 국내 지수 → 투자자별 순매수 → CANSLIM → 시장 그룹 → 스크리너(차례로, 앞 단계 예외와 무관하게 진행).
 
     끝나면 단계별 성공·걸린 시간·요약을 Redis 에 남긴다(관리자 데이터 현황). 기록 실패는 결과에 영향 없음.
     """
@@ -228,7 +229,7 @@ def daily_market_pipeline() -> dict:
     started = datetime.now(timezone.utc)
     steps = (("daily", _daily_ohlcv), ("indices_kr", lambda: collect_market_indices("KR")),
              ("investor", lambda: collect_investor_daily()), ("canslim", lambda: compute_canslim()),
-             ("market_groups", lambda: compute_market_groups()))
+             ("market_groups", lambda: compute_market_groups()), ("screener", lambda: compute_screener()))
     for name, step in steps:
         t0 = time.monotonic()
         try:
