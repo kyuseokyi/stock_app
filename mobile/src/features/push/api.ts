@@ -1,7 +1,7 @@
 // 푸시 기기 토큰 API — fetch 직접 호출: 백그라운드 등록에 상단 진행바를 띄우지 않고, 로그아웃 직전 토큰을 인자로 받기 위해
 import { ENV } from '@/lib/env';
 
-import { PUSH_TIMEOUT_MS } from './registration-core';
+import { PUSH_TIMEOUT_MS, type PushFlags } from './registration-core';
 
 const BASE = `${ENV.blogApiUrl}/api/v1/push-devices`;
 
@@ -16,11 +16,21 @@ async function timedFetch(url: string, init: RequestInit): Promise<Response> {
   }
 }
 
-export async function putPushDevice(authToken: string, pushToken: string, platform: 'android' | 'ios'): Promise<void> {
+export async function putPushDevice(
+  authToken: string,
+  pushToken: string,
+  platform: 'android' | 'ios',
+  flags: PushFlags,
+): Promise<void> {
   const res = await timedFetch(BASE, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken}` },
-    body: JSON.stringify({ token: pushToken, platform, fund_notice: true }),
+    body: JSON.stringify({
+      token: pushToken,
+      platform,
+      fund_notice: flags.fundNotice,
+      post_notice: flags.postNotice,
+    }),
   });
   if (!res.ok) throw new Error(`push-devices PUT ${res.status}`);
 }

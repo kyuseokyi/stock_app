@@ -140,7 +140,7 @@ export default function FundListScreen() {
             deleteCache(f.id);
             deleteHistory(f.id);
             setFunds(next);
-            void syncPushRegistration(); // 마지막 펀드를 지우면 알림 해제
+            void syncPushRegistration(); // 마지막 펀드를 지우면 펀드 알림만 끔(fund_notice=false) — 새 글 알림 등록은 유지
             void syncBackgroundTasks();
           });
         },
