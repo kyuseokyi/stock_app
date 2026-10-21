@@ -61,6 +61,20 @@ async def _devices(maker) -> list[PushDevice]:
         return list((await s.execute(select(PushDevice))).scalars())
 
 
+async def test_no_auth_returns_401(maker):
+    async def _db():
+        async with maker() as s:
+            yield s
+
+    app.dependency_overrides[get_db] = _db
+    try:
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+            r = await client.put("/api/v1/push-devices", json={"token": TOKEN, "platform": "android"})
+            assert r.status_code == 401
+    finally:
+        app.dependency_overrides.clear()
+
+
 async def test_put_creates_then_updates(api, maker):
     client, state = api
     a, _ = await _users(maker)

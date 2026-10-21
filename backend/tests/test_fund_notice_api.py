@@ -99,6 +99,21 @@ async def test_non_admin_forbidden(api, maker):
     assert (await client.post("/api/v1/admin/push-templates", json={"title": "t", "body": "b"})).status_code == 403
 
 
+async def test_no_auth_returns_401(maker):
+    # get_current_user 를 덮어쓰지 않고 토큰 없이 호출 — HTTPBearer(auto_error=False) 후 직접 401
+    async def _db():
+        async with maker() as s:
+            yield s
+
+    app.dependency_overrides[get_db] = _db
+    try:
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+            assert (await client.post("/api/v1/admin/fund-notices", json=_body())).status_code == 401
+            assert (await client.get("/api/v1/admin/push-sends")).status_code == 401
+    finally:
+        app.dependency_overrides.clear()
+
+
 async def test_blank_title_rejected(api, maker):
     client, state = api
     admin, _ = await _seed(maker)
