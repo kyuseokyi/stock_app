@@ -37,7 +37,8 @@ def test_run_sends_whitelisted_task_and_records(env):
     assert env.sent == [("collector.backfill_market_groups", {"days": 60}, out["task_id"])]
     assert 0 < env.redis.ttl("admin:job:backfill_market_groups") <= 3600
     ov = aj.overview()
-    assert [j["key"] for j in ov["jobs"]] == ["canslim", "market_groups", "backfill_canslim", "backfill_market_groups"]
+    assert [j["key"] for j in ov["jobs"]] == ["canslim", "market_groups", "backfill_canslim", "backfill_market_groups",
+                                         "screener", "backfill_screener"]
     job = _job(ov, "backfill_market_groups")
     assert job["status"] == "queued" and job["task_id"] == out["task_id"]
     assert _job(ov, "canslim")["status"] == "idle"
