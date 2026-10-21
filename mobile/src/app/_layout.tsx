@@ -41,6 +41,7 @@ export default function RootLayout() {
         <Stack.Screen name="fund/history/[id]" options={{ headerShown: true, title: '수익 히스토리' }} />
         <Stack.Screen name="fund/backup" options={{ headerShown: true, title: '기록 백업' }} />
         <Stack.Screen name="market/[kind]/[id]" options={{ headerShown: true, title: '그룹 상세' }} />
+        <Stack.Screen name="stock/[ticker]" options={{ headerShown: true, title: '종목 상세' }} />
       </Stack>
       <AppToaster />
       <ApiProgressBar />
