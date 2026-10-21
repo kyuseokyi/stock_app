@@ -28,6 +28,9 @@ from apps.stock_api.graphql.types import (
     MacroValue,
     MarketIndex,
     MarketOverview,
+    ScreenerFilterInput,
+    ScreenerItem,
+    ScreenerScreen,
     Stock,
     Treemap,
     TreemapGroup,
@@ -37,6 +40,7 @@ from apps.stock_api.graphql.types import (
 from apps.stock_api.seed_catalog import search as catalog_search
 from apps.stock_api.services import canslim_query
 from apps.stock_api.services import market_query
+from apps.stock_api.services import screener_query
 from apps.stock_api.services import chart as chart_service
 from apps.stock_api.services import clickhouse_source as ch_source
 from shared import stock_meta_repo
@@ -198,6 +202,22 @@ class Query:
             **{**out, "letters": [CanslimLetter(**x) for x in out["letters"]],
                "history": [CanslimHistoryPoint(**h) for h in out["history"]]}
         )
+
+    # ------------------------------------------------------------ 조건검색 (공개)
+    @strawberry.field(description="조건검색 — 프리셋(volume_surge·golden_cross·oversold·new_high)과 필터(AND), "
+                                  "최신 기준일. sort: value|chg|vol_ratio|rsi|mcap|vp_above")
+    def screener_screen(
+        self,
+        preset: str | None = None,
+        filters: ScreenerFilterInput | None = None,
+        sort: str = "value",
+        limit: int = 50,
+        offset: int = 0,
+    ) -> ScreenerScreen:
+        out = screener_query.screen(preset=preset, filters=dict(vars(filters)) if filters else {}, sort=sort,
+                                    limit=limit, offset=offset)
+        return ScreenerScreen(date=out["date"], total=out["total"], bb_sigma=out["bb_sigma"],
+                              items=[ScreenerItem(**it) for it in out["items"]])
 
     # ------------------------------------------------------------ 시장 탭 (공개)
     @strawberry.field(description="시장 요약 — 국내·미국 지수(20일 스파크라인)·미국 거시 지표")

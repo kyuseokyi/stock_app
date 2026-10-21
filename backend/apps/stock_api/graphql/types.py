@@ -150,6 +150,63 @@ class CanslimScore:
     market_status: str | None
 
 
+@strawberry.input(description="조건검색 필터 — 모두 선택. 금액은 억 원, 비율은 %(거래량 비율은 배)")
+class ScreenerFilterInput:
+    market: str | None = None  # ALL | KOSPI | KOSDAQ
+    price_min: float | None = None
+    price_max: float | None = None
+    mcap_min: float | None = None
+    mcap_max: float | None = None
+    value_min: float | None = None
+    liquid_only: bool = True  # 20일 평균 거래대금 10억·종가 1,000원 이상만
+    vol_ratio_min: float | None = None
+    rsi_min: float | None = None
+    rsi_max: float | None = None
+    ma_order: str | None = None  # PERFECT | REVERSE
+    bb_sigma: float | None = None  # 1 · 1.5 · 2 · 2.5 · 3 (그 밖은 2)
+    bb_position: str | None = None  # ABOVE | BELOW | INSIDE
+    bb_width_max: float | None = None
+    vp_above_max: float | None = None
+    roe_min: float | None = None
+    per_min: float | None = None
+    per_max: float | None = None
+    pbr_min: float | None = None
+    pbr_max: float | None = None
+    debt_ratio_max: float | None = None
+    sales_growth_min: float | None = None
+
+
+@strawberry.type
+class ScreenerItem:
+    ticker: str
+    name: str
+    market: str
+    sector_name: str | None
+    close: float
+    chg_1d: float | None
+    value: float  # 거래대금(원, 종가×거래량 근사)
+    mcap: float | None  # 시가총액(원)
+    vol_ratio20: float | None  # 당일 거래량 / 직전 20일 평균
+    rsi14: float | None
+    ma_order: int  # 1 정배열 · -1 역배열 · 0 혼합
+    is_new_high: bool
+    gc_days: int | None  # 골든크로스(20/60) 뒤 지난 거래일 0~2
+    vp_above_pct: float | None  # 현재가 위 매물 비율(%)
+    per: float | None
+    pbr: float | None
+    roe: float | None
+    bb_position: str | None  # 요청 σ 기준 ABOVE | BELOW | INSIDE
+    bb_width_pct: float | None
+
+
+@strawberry.type
+class ScreenerScreen:
+    date: str | None  # 계산된 날이 없으면 null(준비 중)
+    total: int
+    bb_sigma: float  # 볼린저 위치·폭에 쓴 σ
+    items: list[ScreenerItem]
+
+
 # ---------------------------------------------------------------- 시장 탭(지수·테마·업종·일정)
 @strawberry.type
 class MarketIndex:
