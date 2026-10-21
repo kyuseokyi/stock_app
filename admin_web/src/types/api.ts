@@ -95,3 +95,63 @@ export interface CommentOut {
   created_at: string
   updated_at: string
 }
+
+// ── 펀드 리포트 알림(blog /api/v1/admin) ──
+export type PushSendMode = 'now' | 'test' | 'scheduled'
+export type PushSendStatus = 'scheduled' | 'sending' | 'done' | 'failed' | 'cancelled'
+
+export interface PushSendOut {
+  id: number
+  kind: string
+  mode: PushSendMode
+  ref_date: string
+  title: string
+  body: string
+  status: PushSendStatus
+  scheduled_at: string | null
+  started_at: string | null
+  finished_at: string | null
+  target_count: number
+  success_count: number
+  failure_count: number
+  template_id: number | null
+  created_by: number | null
+  created_by_nickname: string | null
+  created_at: string
+}
+
+export interface PushSendListOut {
+  items: PushSendOut[]
+  total: number
+}
+
+export interface FundNoticePreviewOut {
+  target_count: number
+  my_device_count: number
+  already_sent: boolean
+  last_send: PushSendOut | null
+}
+
+export interface FundNoticeCreate {
+  date: string
+  title: string
+  body: string
+  mode: PushSendMode
+  scheduled_at?: string
+  template_id?: number | null
+  force?: boolean
+}
+
+export interface PushTemplateOut {
+  id: number
+  title: string
+  body: string
+  last_sent_at: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface PushTemplateIn {
+  title: string
+  body: string
+}

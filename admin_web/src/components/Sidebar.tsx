@@ -38,6 +38,10 @@ const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
+    title: '알림',
+    items: [{ to: '/fund-notices', label: '펀드 리포트 알림', icon: '📣' }],
+  },
+  {
     title: '회원 관리',
     items: [{ to: '/members', label: '회원 목록', icon: '👥' }],
   },
