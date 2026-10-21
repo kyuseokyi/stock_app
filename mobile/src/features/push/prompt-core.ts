@@ -7,3 +7,13 @@ export function shouldOfferPrompt(s: {
 }): boolean {
   return s.configured && !s.prompted && s.prevCount === 0 && s.nextCount > 0;
 }
+
+/** 펀드 화면 진입 시: 펀드가 이미 있고 한 번도 안 물어봤으며 OS 권한이 미결정일 때만 안내 시트를 띄운다 */
+export function shouldPromptOnEnter(s: {
+  fundCount: number;
+  prompted: boolean;
+  permission: string;
+  configured: boolean;
+}): boolean {
+  return s.configured && s.fundCount >= 1 && !s.prompted && s.permission === 'undetermined';
+}

@@ -232,7 +232,7 @@ npm run build:android:devapk  # → android/app/build/outputs/apk/release/app-re
 - **자동 갱신**: 앱 실행·앱 복귀·웹 접속·탭 복귀 때 등록한 펀드를 모두 다시 가져온다(로그인 상태, 10분 이내 확인한 펀드는 건너뜀, 동시 2개). 앱은 리포트를 열지 않아도 히스토리가 쌓인다. 목록에 `기준일 · 확인 시각` 표시.
   설계: `docs/superpowers/specs/2026-10-19-fund-auto-refresh-design.md` (로직은 core `refresh-all.ts`)
 - **리포트 알림(푸시·SSE)**: 관리자 웹 `/fund-notices`(사이드바 "펀드 리포트 알림")에서 문구를 쓰고 **테스트(내 기기만)·즉시·예약** 발송한다. 서버가 기기 토큰으로 Expo Push → FCM 을 거쳐 보내고, 같은 때 SSE `fund_report_updated` 를 발행한다.
-  - 앱: 펀드를 처음 등록하면 안내 시트 후 알림 권한을 묻고, 로그인 + 펀드 1개 이상 + 권한 허용일 때만 토큰을 서버에 등록한다(조건이 깨지면 해제). 알림을 탭하면 펀드 화면으로 이동해 갱신한다. 권한을 거부했으면 펀드 목록 위에 안내 배너.
+  - 앱: 펀드를 처음 등록하면(이미 펀드가 있으면 펀드 화면 진입 시 1회) 안내 시트 후 알림 권한을 묻고, 로그인 + 펀드 1개 이상 + 권한 허용일 때만 토큰을 서버에 등록한다(조건이 깨지면 해제). 알림을 탭하면 펀드 화면으로 이동해 갱신한다. 권한을 거부했으면 펀드 목록 위에 안내 배너.
   - 앱이 열려 있을 때는 SSE 신호를 받아 0~30초 뒤 자동 갱신(웹도 같음, 토스트 표시).
   - 푸시 설정이 없으면(`EAS_PROJECT_ID` 미설정) 푸시만 꺼지고 SSE·자동 갱신은 정상 동작.
   - 푸시를 쓰려면 `expo-notifications` 가 들어간 **새 dev build 가 필요**하다. 키·계정 준비 절차: `docs/push_notification_setup.md`. 설계: `docs/superpowers/specs/2026-10-19-fund-report-notice-design.md`

@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
+import * as Notifications from 'expo-notifications';
 import { Redirect, Stack, useFocusEffect, useRouter } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, RefreshControl, ScrollView, Text, TextInput, View } from 'react-native';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
@@ -27,7 +28,7 @@ import { Button, Card, ListRow, ListState, showToast } from '@/ui';
 import { isPushConfigured } from '@/features/push/config';
 import { PushPermissionBanner } from '@/features/push/permission-banner';
 import { wasPrompted } from '@/features/push/prompt';
-import { shouldOfferPrompt } from '@/features/push/prompt-core';
+import { shouldOfferPrompt, shouldPromptOnEnter } from '@/features/push/prompt-core';
 import { PushPromptSheet } from '@/features/push/push-prompt-sheet';
 import { syncPushRegistration } from '@/features/push/registration';
 
@@ -44,6 +45,8 @@ export default function FundListScreen() {
   const status = useAutoRefreshStatus(fundRefresher);
   const [lines, setLines] = useState<Record<string, string>>({});
   const [promptOpen, setPromptOpen] = useState(false);
+  const promptOpenRef = useRef(false); // 진입 경로와 첫 추가(0→1) 경로가 같은 시트를 두 번 열지 않게
+  promptOpenRef.current = promptOpen;
   // 당겨서 새로고침: 등록된 펀드 리포트를 지금 바로 모두 다시 받는다(끝나면 status.version 이 바뀌어 목록 줄 갱신)
   const { refreshing, onRefresh } = usePullRefresh(() => fundRefresher.run({ force: true }));
 
@@ -73,6 +76,16 @@ export default function FundListScreen() {
           if (alive) {
             setFunds(l);
             setLoadError('');
+          }
+          return l;
+        })
+        .then(async (l) => {
+          // 이미 펀드가 있는 기존 사용자: 시트를 한 번도 못 봤으면 진입 시 1회 안내(2026-10-21 결정)
+          if (!l.length || !isPushConfigured()) return;
+          const [prompted, perm] = await Promise.all([wasPrompted(), Notifications.getPermissionsAsync()]);
+          if (!alive || promptOpenRef.current) return;
+          if (shouldPromptOnEnter({ fundCount: l.length, prompted, permission: perm.status, configured: true })) {
+            setPromptOpen(true);
           }
         })
         .catch(() => {
