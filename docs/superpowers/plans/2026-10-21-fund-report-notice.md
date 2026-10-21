@@ -12,6 +12,22 @@
 
 ---
 
+## 보충 계획과 합친 실행 순서
+
+설계 문서가 10-21 에 "백그라운드 기록·빈 날 표시"(§7.1·§7.2, §5 깨우기용 메시지, §12-9~11)로 늘어났고, 그 부분은 보충 계획 [`2026-10-21-fund-background-record.md`](2026-10-21-fund-background-record.md)(S1~S6)이 맡는다. 두 계획을 아래 순서로 **한 흐름**으로 실행한다.
+
+| 순서 | 작업 | 비고 |
+|---|---|---|
+| 1 | 이 계획 작업 1~7 | 서버·관리자·웹·앱 SSE |
+| 2 | 보충 S2(빈 날 표시) | 선행 없음 — 작업 8 의 재빌드 전에 끝내 두면 좋다 |
+| 3 | 이 계획 작업 8(모바일 푸시) | **시작 전** 설계 §12-8: 무음 push 수신 조건(Android 데이터 전용·iOS content-available·앱 종료 상태)을 Expo 문서로 확인 |
+| 4 | 보충 S1(서버 깨우기용 메시지) | 작업 3 이후면 언제든 |
+| 5 | 보충 S3·S4·S5(백그라운드 기록·백업 보류·태스크 등록) | `expo-background-task`·`expo-task-manager` 설치(사용자, S3-1) → **재빌드는 S5 에서 한 번** — 작업 8-10 재빌드와 합쳐도 된다 |
+| 6 | 이 계획 작업 9 + 보충 S6(문서) | 한 커밋으로 묶어도 된다 |
+
+- 테스트 파일 이름은 보충 계획과 맞춰 `backend/tests/test_expo_push.py` 로 한다(작업 2).
+- `PushMessage` 는 작업 2 에서 `title: str, body: str` 로 만들고, S1 이 `str | None = None` 으로 바꾼다(기존 키워드 호출 그대로 동작).
+
 ## 설계와 다르게 정한 것 (코드 조사 결과 반영)
 
 | 설계 | 실제 코드 | 이 계획 |
@@ -494,7 +510,7 @@ git commit -m "feat(blog): 푸시 기기 토큰 등록·해제 API + push_device
 - 수정: `backend/apps/collector/push/base.py`, `backend/apps/collector/push/__init__.py`
 - 생성: `backend/apps/collector/push/expo.py`, `backend/shared/push_text.py`
 - 수정: `backend/.env.example`(69~71행)
-- 테스트: `backend/tests/test_expo_push_sender.py`, `backend/tests/test_push_text.py`
+- 테스트: `backend/tests/test_expo_push.py`, `backend/tests/test_push_text.py`
 
 - [ ] **2-1. 실패하는 테스트** — `backend/tests/test_push_text.py`
 
@@ -512,7 +528,7 @@ def test_text_without_placeholder_unchanged():
     assert render_push_text("공지", date(2026, 10, 21)) == "공지"
 ```
 
-`backend/tests/test_expo_push_sender.py`:
+`backend/tests/test_expo_push.py`:
 
 ```python
 """ExpoPushSender — 100개 분할·Bearer·DeviceNotRegistered·네트워크 오류(httpx.MockTransport)."""
@@ -618,7 +634,7 @@ def test_factory_returns_expo(monkeypatch):
 
 - [ ] **2-2. 실패 확인**
 
-실행: `cd backend && uv run pytest -p no:warnings tests/test_push_text.py tests/test_expo_push_sender.py`
+실행: `cd backend && uv run pytest -p no:warnings tests/test_push_text.py tests/test_expo_push.py`
 예상: `ModuleNotFoundError: No module named 'shared.push_text'` 와 `apps.collector.push.expo`
 
 - [ ] **2-3. 구현** — `backend/shared/push_text.py`
@@ -781,14 +797,14 @@ PUSH_BACKEND=mock
 
 - [ ] **2-4. 통과 확인**
 
-실행: `cd backend && uv run pytest -p no:warnings tests/test_push_text.py tests/test_expo_push_sender.py`
+실행: `cd backend && uv run pytest -p no:warnings tests/test_push_text.py tests/test_expo_push.py`
 예상: `11 passed`. 이어서 전체 `uv run pytest -p no:warnings` 실패 0(새 글 알림 테스트 포함 — `send_multicast` 그대로).
 
 - [ ] **2-5. 커밋**
 
 ```bash
 git add backend/shared/push_text.py backend/apps/collector/push/base.py backend/apps/collector/push/__init__.py \
-  backend/apps/collector/push/expo.py backend/.env.example backend/tests/test_push_text.py backend/tests/test_expo_push_sender.py
+  backend/apps/collector/push/expo.py backend/.env.example backend/tests/test_push_text.py backend/tests/test_expo_push.py
 git commit -m "feat(collector): Expo Push 발송기(PUSH_BACKEND=expo) + send_batch·무효 토큰 판별
 
 (끝 두 줄 규칙 적용)"
