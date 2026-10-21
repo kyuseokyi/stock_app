@@ -334,11 +334,15 @@ const DAY_MS = 86_400_000;
 type DailyVars = { symbol: string; startDate: string; endDate: string };
 type DailyResponse = { getChartData: { candles: DailyCandle[] } | null };
 
-/** 최근 약 180일 일봉. GraphQL 오류(graphql-request 가 throw)·빈 응답이면 throw(차트만 오류 표시) */
-export async function getDailyCandles(ticker: string, now: Date = new Date()): Promise<DailyCandle[]> {
+/** 최근 약 180일 일봉(lookbackDays 로 늘릴 수 있음 — 종목 상세는 1년 + 50일선 워밍업). GraphQL 오류·빈 응답이면 throw(차트만 오류 표시) */
+export async function getDailyCandles(
+  ticker: string,
+  now: Date = new Date(),
+  lookbackDays: number = LOOKBACK_DAYS,
+): Promise<DailyCandle[]> {
   const data = await stockRequest<DailyResponse, DailyVars>(DAILY_QUERY, {
     symbol: ticker,
-    startDate: kstDateString(new Date(now.getTime() - LOOKBACK_DAYS * DAY_MS)),
+    startDate: kstDateString(new Date(now.getTime() - lookbackDays * DAY_MS)),
     endDate: kstDateString(now),
   });
   const candles = data.getChartData?.candles;

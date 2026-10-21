@@ -109,3 +109,46 @@ describe('fitPrices', () => {
     expect(fitPrices([], 'day')).toEqual([]);
   });
 });
+
+describe('이동평균 기간·첫 화면 일수 인자(종목 상세용)', () => {
+  // 2026-01-01 부터 60일, 종가 1..60
+  const iso = (i: number) => new Date(Date.UTC(2026, 0, 1 + i)).toISOString().slice(0, 10);
+  const rows = Array.from({ length: 60 }, (_, i) => day(iso(i), i + 1));
+  const NOW = Date.UTC(2026, 2, 1, 3); // KST 2026-03-01 12:00 = 마지막 봉 날짜
+
+  it('기본값은 5·20·60 을 명시한 것과 같다(게임 화면 그대로)', () => {
+    expect(loadMessage({ kind: 'day', rows }, false, NOW)).toEqual(
+      loadMessage({ kind: 'day', rows }, false, NOW, { maPeriods: [5, 20, 60] }),
+    );
+  });
+  it('[50] 이면 첫째 칸(ma5)에 50일선만, 둘째·셋째 칸은 빈 배열', () => {
+    const msg = loadMessage({ kind: 'day', rows }, false, NOW, { maPeriods: [50] });
+    if (msg.type !== 'load') throw new Error('load 아님');
+    expect(msg.ind.ma5).toHaveLength(11);
+    expect(msg.ind.ma5[0]).toEqual({ time: iso(49), value: 25.5 });
+    expect(msg.ind.ma5[10]).toEqual({ time: iso(59), value: 35.5 });
+    expect(msg.ind.ma20).toEqual([]);
+    expect(msg.ind.ma60).toEqual([]);
+    expect(msg.ind.bbUpper.length).toBeGreaterThan(0); // 볼린저는 그대로 계산(표시는 vis 로 끔)
+  });
+  it('마지막 값·틱도 같은 기간을 쓴다', () => {
+    const bars = toBars({ kind: 'day', rows });
+    const v = lastIndicatorValues(bars, [50]);
+    expect(v.ma5).toBe(35.5);
+    expect(v).not.toHaveProperty('ma20');
+    expect(v).not.toHaveProperty('ma60');
+    const tick = tickMessage({ kind: 'day', rows }, [50]);
+    if (tick?.type !== 'tick') throw new Error('tick 아님');
+    expect(tick.ind.ma5).toBe(35.5);
+  });
+  it('첫 화면 일수 — 기본 180일이면 전체 맞춤, 10일이면 최근 10일부터', () => {
+    const bars = toBars({ kind: 'day', rows });
+    expect(initialRange('day', bars, NOW)).toBe('fit');
+    expect(initialRange('day', bars, NOW, 10)).toEqual({ from: 49, to: 59 }); // 2026-02-19 부터
+  });
+  it('loadMessage 도 visibleDays 를 첫 화면에 쓴다', () => {
+    const msg = loadMessage({ kind: 'day', rows }, false, NOW, { visibleDays: 10 });
+    if (msg.type !== 'load') throw new Error('load 아님');
+    expect(msg.range).toEqual({ from: 49, to: 59 });
+  });
+});

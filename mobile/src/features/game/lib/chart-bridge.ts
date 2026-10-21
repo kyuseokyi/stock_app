@@ -19,6 +19,7 @@ export interface LinePoint {
   time: BarTime;
   value: number;
 }
+// ma5·ma20·ma60 은 "첫째·둘째·셋째 이동평균 칸" 이름이다(기본 5·20·60일, maPeriods 로 기간을 바꿔도 칸 이름은 그대로)
 export type IndicatorKey = 'ma5' | 'ma20' | 'ma60' | 'bbUpper' | 'bbMiddle' | 'bbLower';
 export type IndicatorData = Record<IndicatorKey, LinePoint[]>;
 
@@ -61,6 +62,14 @@ export type ChartMessage =
   | { type: 'lines'; lines: ChartLine[] }
   | { type: 'vis'; ma: boolean; bb: boolean };
 
+/** 이동평균 기간(최대 3칸, 앞에서부터 ma5·ma20·ma60 칸에 들어감). 기본은 게임과 같은 MA_PERIODS(5·20·60) */
+export type MaPeriods = readonly number[];
+/** 전체 로드 선택 인자 — 종목 상세는 [50]·365일, 게임은 생략(기본값) */
+export interface LoadOptions {
+  maPeriods?: MaPeriods;
+  visibleDays?: number;
+}
+
 export const DAILY_VISIBLE_DAYS = 180; // 일봉 첫 화면(앞쪽은 지표 워밍업 — 왼쪽으로 끌면 보임). 웹과 같은 값
 export const INTRADAY_VISIBLE_BARS = 120; // 분봉 첫 화면 캔들 수. 웹과 같은 값
 
@@ -80,17 +89,20 @@ export function toBars(data: ChartRows): Bar[] {
     .map((c) => ({ time: c.t, open: c.open, high: c.high, low: c.low, close: c.close }));
 }
 
-/** 종가로 지표 전체 계산(값이 없는 앞 구간은 점을 빼서 선이 그 지점부터 시작) */
-export function indicatorData(bars: Bar[]): IndicatorData {
+/** 종가로 지표 전체 계산(값이 없는 앞 구간은 점을 빼서 선이 그 지점부터 시작). 기간이 없는 칸은 빈 배열 */
+export function indicatorData(bars: Bar[], maPeriods: MaPeriods = MA_PERIODS): IndicatorData {
   const closes = bars.map((b) => b.close);
   const line = (values: (number | null)[]): LinePoint[] =>
     values.flatMap((v, i) => (v === null ? [] : [{ time: bars[i].time, value: v }]));
+  const ma = (slot: number): LinePoint[] => {
+    const p = maPeriods[slot];
+    return p ? line(sma(closes, p)) : [];
+  };
   const bands = bollinger(closes);
-  const [p5, p20, p60] = MA_PERIODS;
   return {
-    ma5: line(sma(closes, p5)),
-    ma20: line(sma(closes, p20)),
-    ma60: line(sma(closes, p60)),
+    ma5: ma(0),
+    ma20: ma(1),
+    ma60: ma(2),
     bbUpper: line(bands.map((b) => b?.upper ?? null)),
     bbMiddle: line(bands.map((b) => b?.middle ?? null)),
     bbLower: line(bands.map((b) => b?.lower ?? null)),
@@ -98,18 +110,21 @@ export function indicatorData(bars: Bar[]): IndicatorData {
 }
 
 /** 마지막 막대의 지표 값만(틱마다 전체 setData 대신 update — 스크롤 위치가 흔들리지 않게) */
-export function lastIndicatorValues(bars: Bar[]): Partial<Record<IndicatorKey, number>> {
+export function lastIndicatorValues(bars: Bar[], maPeriods: MaPeriods = MA_PERIODS): Partial<Record<IndicatorKey, number>> {
   const n = bars.length;
   if (n === 0) return {};
   const closes = bars.map((b) => b.close);
   const out: Partial<Record<IndicatorKey, number>> = {};
-  const [p5, p20, p60] = MA_PERIODS;
   const pick = (k: IndicatorKey, v: number | null | undefined) => {
     if (v != null) out[k] = v;
   };
-  pick('ma5', sma(closes, p5)[n - 1]);
-  pick('ma20', sma(closes, p20)[n - 1]);
-  pick('ma60', sma(closes, p60)[n - 1]);
+  const maAt = (slot: number): number | null => {
+    const p = maPeriods[slot];
+    return p ? sma(closes, p)[n - 1] : null;
+  };
+  pick('ma5', maAt(0));
+  pick('ma20', maAt(1));
+  pick('ma60', maAt(2));
   const b = bollinger(closes)[n - 1];
   pick('bbUpper', b?.upper);
   pick('bbMiddle', b?.middle);
@@ -117,12 +132,17 @@ export function lastIndicatorValues(bars: Bar[]): Partial<Record<IndicatorKey, n
   return out;
 }
 
-/** 첫 화면 구간 — 일봉: 최근 180일, 분봉: 최근 120개(웹 TradingChart 와 같은 규칙) */
-export function initialRange(mode: ChartMode, bars: Bar[], nowMs: number = Date.now()): VisibleRange {
+/** 첫 화면 구간 — 일봉: 최근 visibleDays 일(기본 180), 분봉: 최근 120개(웹 TradingChart 와 같은 규칙) */
+export function initialRange(
+  mode: ChartMode,
+  bars: Bar[],
+  nowMs: number = Date.now(),
+  visibleDays: number = DAILY_VISIBLE_DAYS,
+): VisibleRange {
   const n = bars.length;
   if (n === 0) return null;
   if (mode === 'day') {
-    const from = kstDateString(new Date(nowMs - DAILY_VISIBLE_DAYS * 86_400_000));
+    const from = kstDateString(new Date(nowMs - visibleDays * 86_400_000));
     const hidden = bars.findIndex((b) => String(b.time) >= from);
     return hidden > 0 ? { from: hidden, to: n - 1 } : 'fit';
   }
@@ -130,16 +150,28 @@ export function initialRange(mode: ChartMode, bars: Bar[], nowMs: number = Date.
 }
 
 /** 전체 로드 메시지. keepView=true 면(같은 단위 재조회) 사용자가 보던 위치 유지 */
-export function loadMessage(data: ChartRows, keepView: boolean, nowMs: number = Date.now()): ChartMessage {
+export function loadMessage(
+  data: ChartRows,
+  keepView: boolean,
+  nowMs: number = Date.now(),
+  opts: LoadOptions = {},
+): ChartMessage {
   const bars = toBars(data);
-  return { type: 'load', mode: data.kind, bars, ind: indicatorData(bars), range: initialRange(data.kind, bars, nowMs), keepView };
+  return {
+    type: 'load',
+    mode: data.kind,
+    bars,
+    ind: indicatorData(bars, opts.maPeriods),
+    range: initialRange(data.kind, bars, nowMs, opts.visibleDays),
+    keepView,
+  };
 }
 
 /** 틱 메시지 — 마지막 막대 + 그 지표 값. 데이터가 없으면 null */
-export function tickMessage(data: ChartRows): ChartMessage | null {
+export function tickMessage(data: ChartRows, maPeriods: MaPeriods = MA_PERIODS): ChartMessage | null {
   const bars = toBars(data);
   if (bars.length === 0) return null;
-  return { type: 'tick', bar: bars[bars.length - 1], ind: lastIndicatorValues(bars) };
+  return { type: 'tick', bar: bars[bars.length - 1], ind: lastIndicatorValues(bars, maPeriods) };
 }
 
 /** 지지/저항/진입가/손절/익절 가격선(웹 TradingChart 와 같은 색·굵기·점선) */
