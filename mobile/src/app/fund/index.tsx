@@ -82,8 +82,10 @@ export default function FundListScreen() {
         .then(async (l) => {
           // 이미 펀드가 있는 기존 사용자: 시트를 한 번도 못 봤으면 진입 시 1회 안내(2026-10-21 결정)
           if (!l.length || !isPushConfigured()) return;
-          const [prompted, perm] = await Promise.all([wasPrompted(), Notifications.getPermissionsAsync()]);
-          if (!alive || promptOpenRef.current) return;
+          // 안내 판단 실패는 목록 읽기 실패가 아니다 — 아래 catch(loadError)로 새지 않게 여기서 삼킨다
+          const r = await Promise.all([wasPrompted(), Notifications.getPermissionsAsync()]).catch(() => null);
+          if (!r || !alive || promptOpenRef.current) return;
+          const [prompted, perm] = r;
           if (shouldPromptOnEnter({ fundCount: l.length, prompted, permission: perm.status, configured: true })) {
             setPromptOpen(true);
           }
