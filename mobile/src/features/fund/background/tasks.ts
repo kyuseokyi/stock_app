@@ -5,7 +5,7 @@ import * as BackgroundTask from 'expo-background-task';
 import * as Notifications from 'expo-notifications';
 import * as TaskManager from 'expo-task-manager';
 import { useEffect } from 'react';
-import { AppState } from 'react-native';
+import { AppRegistry, AppState, LogBox, Platform } from 'react-native';
 
 import { registerBeforeLogout } from '@/features/auth/logout-hooks';
 import { useAuthStore } from '@/features/auth/store';
@@ -16,7 +16,21 @@ import { loadFunds } from '../fund-store';
 import { enterBackgroundRun } from './background-mode';
 import { createPeriodicSyncer } from './periodic-core';
 import { pushTypeOf } from './push-payload';
-import { backgroundRecordWith, type RunReason } from './run-core';
+import { BACKGROUND_TIMEOUT_MS, backgroundRecordWith, type RunReason } from './run-core';
+
+// [Android 콜드 시작 보정] expo-task-manager(57.0.21) 는 태스크 이벤트 때 네이티브에서 headless 작업 'expo-task-manager' 를
+// 시작해 JS 타이머를 살려 두려 하지만, JS 쪽에 즉시 끝나는 no-op(async () => {}) 을 등록해 두어 RN 이 그 작업을 바로 끝낸다
+// → JavaTimerManager 가 다시 멈춰, 화면이 한 번도 안 뜬 콜드 시작에서는 setTimeout(지터·25초 한도·fetch 타임아웃)이 영영 안 돈다.
+// 실기기(2026-10-21, Android 16, release·dev 둘 다)에서 앱을 밀어 닫고 무음 push → 태스크가 3분 넘게 안 끝남, 앱을 열자 2초 만에 끝남.
+// → 같은 키를 우리 한도보다 조금 긴 시간 동안 끝나지 않는 provider 로 덮어쓴다. 실제 종료는 Expo 네이티브(maybeFinishHeadlessTask)가 한다.
+//   이 import 순서(위에서 expo-task-manager 먼저 평가)여야 덮어쓴다. 이미 끝난 작업을 다시 끝내면 RN 은 경고 로그만 남긴다.
+const HEADLESS_HOLD_MS = BACKGROUND_TIMEOUT_MS + 5_000;
+if (Platform.OS === 'android') {
+  LogBox.ignoreLogs([`called multiple times for same key 'expo-task-manager'`]); // 의도한 덮어쓰기
+  AppRegistry.registerHeadlessTask('expo-task-manager', () => () =>
+    new Promise<void>((resolve) => setTimeout(resolve, HEADLESS_HOLD_MS)),
+  );
+}
 
 export const PUSH_TASK = 'fund-refresh-push';
 export const PERIODIC_TASK = 'fund-refresh-periodic';
