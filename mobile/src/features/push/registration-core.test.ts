@@ -1,4 +1,4 @@
-import { createPushRegistrar, syncPushRegistrationWith, unregisterWith, type SyncDeps } from './registration-core';
+import { createPushRegistrar, syncPushRegistrationWith, unregisterWith, withTimeout, type SyncDeps } from './registration-core';
 
 const mk = (over: Partial<SyncDeps> = {}) => {
   const saved = { v: null as string | null };
@@ -106,5 +106,51 @@ describe('createPushRegistrar (직렬화)', () => {
     saved.v = 'ExponentPushToken[a]';
     await reg.unregister('jwt');
     expect(saved.v).toBeNull();
+  });
+});
+
+describe('withTimeout', () => {
+  beforeEach(() => jest.useFakeTimers());
+  afterEach(() => jest.useRealTimers());
+
+  it('시간 안에 안 끝나면 reject', async () => {
+    const p = withTimeout(new Promise<void>(() => {}), 1000);
+    const assertion = expect(p).rejects.toThrow('timeout');
+    jest.advanceTimersByTime(1000);
+    await assertion;
+  });
+
+  it('끝나면 값을 돌려주고 타이머를 정리한다', async () => {
+    await expect(withTimeout(Promise.resolve(7), 1000)).resolves.toBe(7);
+    expect(jest.getTimerCount()).toBe(0);
+  });
+
+  it('원본이 reject 되면 그대로 전달하고 타이머를 정리한다', async () => {
+    await expect(withTimeout(Promise.reject(new Error('x')), 1000)).rejects.toThrow('x');
+    expect(jest.getTimerCount()).toBe(0);
+  });
+
+  it('토큰 조회가 멈춰 timeout 되면 sync 는 failed 로 끝난다', async () => {
+    const { d } = mk({ getPushToken: () => withTimeout(new Promise<string>(() => {}), 1000) });
+    const r = syncPushRegistrationWith(d);
+    await jest.advanceTimersByTimeAsync(1000);
+    await expect(r).resolves.toBe('failed');
+  });
+});
+
+describe('createPushRegistrar 합치기', () => {
+  it('대기 중인 sync 가 있으면 새 sync 요청을 합친다', async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    const { d } = mk({ put: jest.fn(() => gate) });
+    const reg = createPushRegistrar(d);
+    const s1 = reg.sync(); // 실행 시작(put 대기)
+    await Promise.resolve();
+    const s2 = reg.sync(); // 큐에서 대기
+    const s3 = reg.sync(); // s2 와 합쳐짐
+    expect(s3).toBe(s2);
+    release();
+    await Promise.all([s1, s2]);
+    expect(d.put).toHaveBeenCalledTimes(1); // 두 번째는 토큰 같아 unchanged
   });
 });

@@ -9,7 +9,7 @@ import { loadFunds } from '@/features/fund/fund-store';
 
 import { deletePushDevice, putPushDevice } from './api';
 import { getProjectId, isPushConfigured } from './config';
-import { createPushRegistrar, type PushPermission, type SyncDeps } from './registration-core';
+import { createPushRegistrar, PUSH_TIMEOUT_MS, withTimeout, type PushPermission, type SyncDeps } from './registration-core';
 
 const SAVED_KEY = 'push_device_v1';
 const platform = Platform.OS === 'ios' ? 'ios' : 'android';
@@ -19,7 +19,8 @@ const deps: SyncDeps = {
   authToken: () => useAuthStore.getState().token,
   countFunds: async () => (await loadFunds()).length,
   permission: async () => (await Notifications.getPermissionsAsync()).status as PushPermission,
-  getPushToken: async () => (await Notifications.getExpoPushTokenAsync({ projectId: getProjectId() })).data,
+  getPushToken: async () =>
+    (await withTimeout(Notifications.getExpoPushTokenAsync({ projectId: getProjectId() }), PUSH_TIMEOUT_MS, 'push token')).data,
   loadSaved: () => SecureStore.getItemAsync(SAVED_KEY),
   saveToken: (t) => (t ? SecureStore.setItemAsync(SAVED_KEY, t) : SecureStore.deleteItemAsync(SAVED_KEY)),
   put: (auth, token) => putPushDevice(auth, token, platform),

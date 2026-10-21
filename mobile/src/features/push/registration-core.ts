@@ -60,11 +60,39 @@ export async function unregisterWith(
   await d.saveToken(null).catch(() => {});
 }
 
+export const PUSH_TIMEOUT_MS = 10_000;
+
+/** ms 안에 안 끝나면 reject(끝나면 타이머 정리) — 멈춘 네트워크가 직렬화 큐를 막지 않게 */
+export function withTimeout<T>(task: Promise<T>, ms: number, label = 'push'): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`${label} timeout`)), ms);
+    task.then(
+      (v) => {
+        clearTimeout(timer);
+        resolve(v);
+      },
+      (e) => {
+        clearTimeout(timer);
+        reject(e);
+      },
+    );
+  });
+}
+
 /** 동기화와 해제를 한 큐로 직렬화 — 진행 중인 put 이 끝난 뒤 해제가 실행돼 "로그아웃 후 등록 잔존"이 없다 */
 export function createPushRegistrar(d: SyncDeps) {
   const enqueue = createSerialQueue();
+  let pendingSync: Promise<SyncResult> | null = null;
   return {
-    sync: () => enqueue(() => syncPushRegistrationWith(d)),
+    // 아직 시작 전인 sync 가 큐에 있으면 새 요청은 그 결과를 공유(합치기). unregister 는 합치지 않는다
+    sync: () => {
+      if (pendingSync) return pendingSync;
+      pendingSync = enqueue(() => {
+        pendingSync = null;
+        return syncPushRegistrationWith(d);
+      });
+      return pendingSync;
+    },
     unregister: (authToken: string) => enqueue(() => unregisterWith(d, authToken)),
   };
 }
