@@ -123,6 +123,8 @@ GOOGLE_SERVICES_JSON=./secrets/google-services.json
 `app.config.js` 가 `extra.eas.projectId`(← `EAS_PROJECT_ID`), `android.googleServicesFile`(← `GOOGLE_SERVICES_JSON`, 없으면 생략), `expo-notifications` 플러그인을 이미 반영한다(구현됨).
 `projectId` 가 없으면 푸시만 꺼지고 나머지 기능은 정상(`isPushConfigured()`).
 
+`expo-background-task`·`expo-task-manager`(백그라운드 기록용)도 **같은 재빌드에 포함**돼 있어 한 번만 빌드하면 된다.
+
 **네이티브가 바뀌므로 앱을 다시 빌드해야 한다** — [`local_build_guide.md` 2-1](local_build_guide.md):
 ```bash
 cd mobile
@@ -169,8 +171,20 @@ PUSH_BACKEND=expo            # mock(기본, 로그만) → expo(실발송)
 ## 8-1. 앱을 열지 않은 날의 기록(백그라운드) — 현재 상태
 
 - 서버는 알림 메시지 뒤에 제목·본문 없는 깨우기용 무음 메시지(`data.type = fund_refresh`, Android `priority: high`, iOS `contentAvailable`)를 한 번 더 보낸다. 이 메시지는 발송 이력 수치(성공·실패 수)에 넣지 않고, 만료 토큰 정리에만 반영한다. 서버 쪽은 구현됨.
-- 앱 쪽은 순수 로직(payload 해석·25초 한도·정기 작업 판단·백업 보류)까지만 구현돼 있다. **백그라운드 태스크 정의와 6시간 안팎 정기 작업 등록은 아직 구현 전**이며(`expo-background-task`·`expo-task-manager` 설치와 `app.config.js` 플러그인 설정 필요), 패키지 설치·재빌드 이후에야 동작한다. 실기기에서 확인한 결과는 아직 없다.
-- 그 전까지 앱이 꺼져 있으면 깨우기용 메시지는 무시되고, 앱을 열 때(실행·복귀) 일반 자동 갱신이 기록한다.
+- 앱 쪽은 구현됨(S5): 태스크 정의, 6시간 안팎 정기 작업 등록(`expo-background-task`·`expo-task-manager`).
+- 실기기 확인(2026-10-21, 갤럭시 A53 / Android, 개발 앱 재빌드 후):
+
+| 항목 | 상태 | 비고 |
+|---|---|---|
+| 정기 작업 등록 | ✅ | 로그인 + 펀드 1개 이상이면 `[fund-bg] periodic sync registered`, `dumpsys jobscheduler` 에 WorkManager `SystemJobService` 작업 생성 |
+| OS 가 JS 를 깨움 | ✅ | 앱을 홈으로 보낸 뒤 `adb shell cmd jobscheduler run -f com.stockapp.dev <작업번호>` → `periodic start` |
+| 히스토리에 실제 기록 | 확인 대기 | 함정 1 때문에 10분 넘게 지난 펀드로 확인해야 함 |
+| 무음 push(`fund_refresh`) 수신·payload 모양 | 확인 대기 | 이 문서 1~3장의 푸시 설정(EAS projectId, FCM V1 키) 후 확인 |
+
+- 함정 1: 직전 10분 안에 받은 펀드는 다시 받지 않는다(`AUTO_REFRESH_MIN_AGE_MS`). 추가 직후 강제 실행하면 갱신이 없는 것이 정상. 구분: `adb shell "run-as com.stockapp.dev stat -c '%y %n' files/fund-history-*.json"`
+- 함정 2: 첫 실행 뒤에는 WorkManager 가 주기(약 6시간)를 관리해 jobscheduler 강제 실행이 무시되고 작업 번호도 바뀐다(0 → 1). `dumpsys` 의 `Minimum latency` 로 남은 시간을 본다. 다시 하려면 펀드를 모두 지웠다 추가하거나 로그아웃 후 재로그인(이때도 10분 넘게 기다림).
+- 로그 확인: `adb logcat -s ReactNativeJS | grep fund-bg`
+- 푸시 설정이 없는 동안은 정기 작업만 동작한다(정기 작업은 푸시와 무관). 앱이 꺼져 있을 때 깨우기용 메시지는 받지 못하고, 앱을 열 때(실행·복귀) 일반 자동 갱신이 기록한다.
 
 ---
 

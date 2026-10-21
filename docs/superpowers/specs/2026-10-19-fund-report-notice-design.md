@@ -107,7 +107,7 @@ SSE 이벤트: `{"type": "fund_report_updated", "date": "YYYY-MM-DD"}` — 제�
   - 앱이 다시 `active` 가 되면(`useFundAutoRefresh` 의 기존 복귀 처리) 이 값이 있으면 `maybeAutoBackup()` → 시도 후 지운다(하루 1회 규칙은 `maybeAutoBackup` 그대로).
   - 보류 표시를 메모리가 아니라 파일에 두는 이유: Android 는 앱이 종료된 상태에서 태스크만 따로 실행될 수 있어 다음 실행과 메모리를 공유하지 않는다.
 - `tasks.ts`(push): `TaskManager.defineTask('fund-refresh-push', …)` + `Notifications.registerTaskAsync` — 푸시가 설정됐으면 모듈 최상위에서 항상 등록(Expo 문서 요구, 서버가 펀드 등록 기기에만 보내므로 결과는 같음). 받은 데이터가 `type==='fund_refresh'` 일 때만 `backgroundRecord('push')`. 다른 type 은 무시.
-  - 태스크가 받는 payload 모양은 Expo 문서에 정의가 없다(2026-10-21 확인) → `push-payload.ts` 의 방어적 파서 `pushTypeOf(payload)` 가 `data.data`(객체), `data.data.body`·`data.body`(JSON 문자열), `data.dataString` 을 모두 본다. 실제 모양은 수동 확인 때 로그로 남겨 여기에 적는다.
+  - 태스크가 받는 payload 모양은 Expo 문서에 정의가 없다(2026-10-21 확인) → `push-payload.ts` 의 방어적 파서 `pushTypeOf(payload)` 가 `data.data`(객체), `data.data.body`·`data.body`(JSON 문자열), `data.dataString` 을 모두 본다. 실제 Android payload 모양은 **미확인(푸시 설정 후 확인)** — 확인되면 로그로 남겨 여기에 적는다.
 - config 플러그인: `expo-notifications` 를 `['expo-notifications', { enableBackgroundRemoteNotifications: true }]` 로, `expo-background-task` 추가(iOS `UIBackgroundModes: processing` 을 플러그인이 넣는지 prebuild 결과로 확인).
 - Expo 문서 확인(2026-10-21): 앱 코드를 깨우는 push 는 제목·본문 없이 `data` 만 + iOS `contentAvailable: true`. 태스크는 앱이 일찍 읽는 모듈 최상위에서 정의·등록. 사용자가 앱을 강제 종료하면 정기 작업은 멈췄다가 다음 실행 때 재개.
 - `tasks.ts`(정기): `TaskManager.defineTask('fund-refresh-periodic', …)` → `backgroundRecord('periodic')`. 최소 간격 6시간(`minimumInterval: 360`) — 실제 시각은 OS 가 정한다.
@@ -115,6 +115,14 @@ SSE 이벤트: `{"type": "fund_report_updated", "date": "YYYY-MM-DD"}` — 제�
 - 등록·해제 `syncBackgroundTasks()`(판단은 `periodic-core.ts`): 로그인 + 펀드 ≥1 이면 정기 작업 등록, 아니면 해제. 호출 시점은 `syncPushRegistration()` 과 같다(앱 실행, 펀드 추가·삭제, 로그인 직후, 로그아웃 직전).
   - 정기 작업은 **푸시 설정·권한과 무관**하게 등록(푸시를 거부해도 안전망은 동작). push 태스크는 푸시가 설정된 경우만.
 - 포그라운드에서 깨우기용 push 가 오면: SSE 가 이미 같은 일을 하므로 무시(중복 갱신 방지). `fund_report_updated` SSE 와 겹쳐도 single-flight 라 한 번만 실행된다.
+
+#### 실기기 관찰 (2026-10-21, Android)
+갤럭시 A53, 개발 앱(`com.stockapp.dev`) 재빌드 후 확인.
+1. 로그인 + 펀드 1개 이상이면 `[fund-bg] periodic sync registered` 가 찍히고, `adb shell dumpsys jobscheduler` 에 `com.stockapp.dev/androidx.work.impl.background.systemjob.SystemJobService` 작업이 생긴다(WorkManager). 조건이 안 되면 `unchanged` 이고 작업이 없다.
+2. 앱을 홈으로 보낸 뒤 `adb shell cmd jobscheduler run -f com.stockapp.dev <작업번호>` 로 강제 실행하면 `[fund-bg] periodic start` 가 찍힌다. **OS 가 백그라운드에서 JS 를 깨우는 것이 확인됐다.**
+3. 함정 1 — 직전 10분 안에 받은 펀드는 다시 받지 않는다(`AUTO_REFRESH_MIN_AGE_MS`, `core/refresh-all.ts`). 펀드를 추가한 직후 강제 실행하면 갱신이 일어나지 않는 것이 정상이다. 기록 파일 수정 시각으로 구분한다: `adb shell "run-as com.stockapp.dev stat -c '%y %n' files/fund-history-*.json"`
+4. 함정 2 — 첫 실행 뒤에는 WorkManager 가 주기(약 6시간)를 직접 관리한다. 주기 안에서 jobscheduler 로 강제 실행해도 무시되어 JS 가 깨어나지 않고, 작업 번호도 실행할 때마다 바뀐다(0 → 1). `dumpsys` 의 `Minimum latency` 로 다음 실행까지 남은 시간을 본다. 다시 강제 실행하려면 등록을 새로 해야 한다 — 펀드를 모두 지웠다가 다시 추가하거나, 로그아웃 후 다시 로그인한다. 이때도 함정 1 때문에 10분 넘게 기다려야 갱신이 일어난다.
+5. **아직 확인하지 못한 것**: 백그라운드 갱신이 히스토리에 실제로 기록되는지, 무음 push(`fund_refresh`) 수신과 payload 모양(미확인, 푸시 설정 후 확인). 푸시 설정(EAS projectId, FCM V1 키)이 아직 없어 푸시 기능이 꺼져 있다.
 
 ### 7.2 빈 날 표시 — core `history-view.ts`
 - 메우지 않는다(앞뒤 값으로 보간하면 실제와 다른 수익률이 생긴다).

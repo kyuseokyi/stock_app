@@ -237,7 +237,13 @@ npm run build:android:devapk  # → android/app/build/outputs/apk/release/app-re
   - 푸시 설정이 없으면(`EAS_PROJECT_ID` 미설정) 푸시만 꺼지고 SSE·자동 갱신은 정상 동작.
   - 푸시를 쓰려면 `expo-notifications` 가 들어간 **새 dev build 가 필요**하다. 키·계정 준비 절차: `docs/push_notification_setup.md`. 설계: `docs/superpowers/specs/2026-10-19-fund-report-notice-design.md`
 - **앱을 열지 않은 날의 기록(백그라운드)**: 서버가 알림 뒤에 제목·본문 없는 깨우기용 무음 메시지(`type: fund_refresh`)를 한 번 더 보내고(이력 수치에는 안 셈), 앱이 이를 받아 백그라운드에서 갱신·히스토리 기록을 하게 하는 구조다(Android 위주, iOS 는 OS 재량·강제 종료·잠금 중 불가). 백그라운드에서 생긴 새 기록의 Drive 백업은 다음에 앱을 열 때 한다.
-  - **현재 구현 범위**: 서버 깨우기 발송, 앱의 순수 로직(payload 해석·25초 한도·정기 작업 판단·백업 보류)까지. **백그라운드 태스크 정의·정기 작업 등록(`expo-background-task`·`expo-task-manager`)은 아직 구현 전**이라 패키지 설치와 재빌드 이후에야 실제로 동작한다. 실기기에서 확인한 결과는 아직 없다.
+  - **현재 상태**: 구현됨(S5) — 서버 깨우기 발송, 앱의 태스크 정의·정기 작업 등록(`expo-background-task`·`expo-task-manager`). Android 에서 정기 작업이 OS 에 의해 깨어나는 것까지 확인했다(2026-10-21). **백그라운드 기록이 히스토리에 남는지와 무음 push 수신은 확인 대기**(푸시 설정 EAS projectId·FCM V1 키 필요).
+  - 실기기 확인 절차(Android, 개발 앱):
+    - 로그: `adb logcat -s ReactNativeJS | grep fund-bg` — 로그인 + 펀드 1개 이상이면 `periodic sync registered`.
+    - 강제 실행: 앱을 홈으로 보낸 뒤 `adb shell dumpsys jobscheduler` 로 작업 번호를 찾아 `adb shell cmd jobscheduler run -f com.stockapp.dev <작업번호>` → `periodic start` 확인.
+    - 함정 1: 직전 10분 안에 받은 펀드는 다시 받지 않는다(방금 추가한 펀드는 갱신 안 됨, 정상). 기록 파일(`files/fund-history-*.json`) 수정 시각으로 구분한다.
+    - 함정 2: 첫 실행 뒤에는 WorkManager 가 주기(약 6시간)를 관리해 강제 실행이 무시된다(작업 번호도 바뀜). 다시 하려면 펀드를 모두 지웠다 추가하거나 로그아웃 후 재로그인(그래도 10분 넘게 기다려야 갱신).
+    - 자세한 관찰: 설계 §7.1 "실기기 관찰"
 - 히스토리에서 빠진 평일은 날짜 옆에 "이전 기록 M.D" 로 표시한다(값을 메우지는 않음).
 - 설계: `docs/superpowers/specs/2026-10-18-fund-report-viewer-design.md`
 
