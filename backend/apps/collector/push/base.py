@@ -15,6 +15,15 @@ class PushMessage:
     title: str
     body: str
     data: dict = field(default_factory=dict)  # 딥링크 등 부가 데이터
+    channel_id: str | None = None  # Android 알림 채널(Expo channelId)
+    sound: str | None = None
+
+
+@dataclass
+class BatchResult:
+    success: int = 0
+    failure: int = 0
+    invalid_tokens: list[str] = field(default_factory=list)  # 앱 삭제 등으로 무효가 된 토큰(서버가 지운다)
 
 
 class PushSender(ABC):
@@ -28,3 +37,13 @@ class PushSender(ABC):
     def send_multicast(self, tokens: list[str], message: PushMessage) -> int:
         """다건 발송. 성공 건수를 반환한다. (기본은 단건 반복)"""
         return sum(1 for t in tokens if self.send(t, message))
+
+    def send_batch(self, tokens: list[str], message: PushMessage) -> BatchResult:
+        """다건 발송 + 성공·실패·무효 토큰. 기본은 단건 반복(무효 토큰 판별 없음)."""
+        result = BatchResult()
+        for t in tokens:
+            if self.send(t, message):
+                result.success += 1
+            else:
+                result.failure += 1
+        return result
