@@ -107,7 +107,12 @@ SSE 이벤트: `{"type": "fund_report_updated", "date": "YYYY-MM-DD"}` — 제�
   - 앱이 다시 `active` 가 되면(`useFundAutoRefresh` 의 기존 복귀 처리) 이 값이 있으면 `maybeAutoBackup()` → 시도 후 지운다(하루 1회 규칙은 `maybeAutoBackup` 그대로).
   - 보류 표시를 메모리가 아니라 파일에 두는 이유: Android 는 앱이 종료된 상태에서 태스크만 따로 실행될 수 있어 다음 실행과 메모리를 공유하지 않는다.
 - `tasks.ts`(push): `TaskManager.defineTask('fund-refresh-push', …)` + `Notifications.registerTaskAsync` — 푸시가 설정됐으면 모듈 최상위에서 항상 등록(Expo 문서 요구, 서버가 펀드 등록 기기에만 보내므로 결과는 같음). 받은 데이터가 `type==='fund_refresh'` 일 때만 `backgroundRecord('push')`. 다른 type 은 무시.
-  - 태스크가 받는 payload 모양은 Expo 문서에 정의가 없다(2026-10-21 확인) → `push-payload.ts` 의 방어적 파서 `pushTypeOf(payload)` 가 `data.data`(객체), `data.data.body`·`data.body`(JSON 문자열), `data.dataString` 을 모두 본다. 실제 Android payload 모양은 **미확인(푸시 설정 후 확인)** — 확인되면 로그로 남겨 여기에 적는다.
+  - 태스크가 받는 payload 모양은 Expo 문서에 정의가 없다(2026-10-21 확인) → `push-payload.ts` 의 방어적 파서 `pushTypeOf(payload)` 가 `data.data`(객체), `data.data.body`·`data.body`(JSON 문자열), `data.dataString` 을 모두 본다. 실제 Android 무음 push 의 태스크 콜백 `data`(2026-10-21 실기기 확인):
+    ```
+    { data: { dataString: '<JSON 문자열>', body: '<같은 JSON 문자열>', scopeKey, experienceId, projectId },
+      notification: null, priority: 1, originalPriority: 1, ttl, from, messageId, sentTime }
+    ```
+    `type` 은 `data.dataString` 과 `data.body` 안의 JSON 문자열에 들어 있다. `pushTypeOf` 가 이 둘로 인식한다.
 - config 플러그인: `expo-notifications` 를 `['expo-notifications', { enableBackgroundRemoteNotifications: true }]` 로, `expo-background-task` 추가(iOS `UIBackgroundModes: processing` 을 플러그인이 넣는지 prebuild 결과로 확인).
 - Expo 문서 확인(2026-10-21): 앱 코드를 깨우는 push 는 제목·본문 없이 `data` 만 + iOS `contentAvailable: true`. 태스크는 앱이 일찍 읽는 모듈 최상위에서 정의·등록. 사용자가 앱을 강제 종료하면 정기 작업은 멈췄다가 다음 실행 때 재개.
 - `tasks.ts`(정기): `TaskManager.defineTask('fund-refresh-periodic', …)` → `backgroundRecord('periodic')`. 최소 간격 6시간(`minimumInterval: 360`) — 실제 시각은 OS 가 정한다.
@@ -122,7 +127,23 @@ SSE 이벤트: `{"type": "fund_report_updated", "date": "YYYY-MM-DD"}` — 제�
 2. 앱을 홈으로 보낸 뒤 `adb shell cmd jobscheduler run -f com.stockapp.dev <작업번호>` 로 강제 실행하면 `[fund-bg] periodic start` 가 찍힌다. **OS 가 백그라운드에서 JS 를 깨우는 것이 확인됐다.**
 3. 함정 1 — 직전 10분 안에 받은 펀드는 다시 받지 않는다(`AUTO_REFRESH_MIN_AGE_MS`, `core/refresh-all.ts`). 펀드를 추가한 직후 강제 실행하면 갱신이 일어나지 않는 것이 정상이다. 기록 파일 수정 시각으로 구분한다: `adb shell "run-as com.stockapp.dev stat -c '%y %n' files/fund-history-*.json"`
 4. 함정 2 — 첫 실행 뒤에는 WorkManager 가 주기(약 6시간)를 직접 관리한다. 주기 안에서 jobscheduler 로 강제 실행해도 무시되어 JS 가 깨어나지 않고, 작업 번호도 실행할 때마다 바뀐다(0 → 1). `dumpsys` 의 `Minimum latency` 로 다음 실행까지 남은 시간을 본다. 다시 강제 실행하려면 등록을 새로 해야 한다 — 펀드를 모두 지웠다가 다시 추가하거나, 로그아웃 후 다시 로그인한다. 이때도 함정 1 때문에 10분 넘게 기다려야 갱신이 일어난다.
-5. **아직 확인하지 못한 것**: 백그라운드 갱신이 히스토리에 실제로 기록되는지, 무음 push(`fund_refresh`) 수신과 payload 모양(미확인, 푸시 설정 후 확인). 푸시 설정(EAS projectId, FCM V1 키)이 아직 없어 푸시 기능이 꺼져 있다.
+5. 알림 권한(Android 13+): Expo `getPermissionsAsync()` 는 한 번도 묻지 않은 POST_NOTIFICATIONS 도 `status: 'denied'`, `canAskAgain: true` 로 돌려준다(`areNotificationsEnabled()=false` 이면 무조건 denied). 그래서 `effectivePermission`(`mobile/src/features/push/prompt-core.ts`)으로 보정한다(커밋 6de5940).
+6. 푸시 설정을 마친 뒤의 검증 결과(같은 기기, Android 16):
+
+   | 항목 | 결과 |
+   |---|---|
+   | 관리자 즉시 발송 → Expo → 기기 알림 | ✅ |
+   | 알림 탭 → 펀드 화면 | ✅ 백그라운드, 콜드 스타트 모두 |
+   | 앱이 백그라운드(프로세스 살아 있음)일 때 무음 push | ✅ 8초 뒤 히스토리 기록 |
+   | 앱을 밀어 닫은 상태(콜드)에서 무음 push | ✅ 태스크가 화면 없이 11초에 종료(우회 적용 후) |
+   | 앱이 앞에 있을 때 무음 push | `[fund-bg] skip: foreground` — 의도대로 앞 화면 갱신이 처리 |
+   | 정기 작업 | 등록과 JS 깨어남 ✅. 콜드 정기 실행은 같은 원인·같은 수정이 적용되는 경로지만 6시간 주기라 실측 못 함 — 실측 대기 |
+
+7. **Expo 버그와 우회**(커밋 bb7a24f, `mobile/src/features/fund/background/tasks.ts` 상단): expo-task-manager 57.0.21 은 콜드 시작 때 JS 타이머를 살리려고 headless 작업 `'expo-task-manager'` 를 시작한다. 그런데 JS 에 즉시 끝나는 no-op provider 를 등록해 두어서 RN 이 그 작업을 바로 끝내고, JavaTimerManager 가 다시 멈춘다.
+   - 증상: 수정 전 release 와 dev 모두 3분 넘게 끝나지 않았고, 앱을 열자 2초 만에 끝났다.
+   - 우회: 같은 키를 30초 동안 끝나지 않는 provider 로 덮어쓴다.
+   - **expo-task-manager 를 업그레이드하면 이 우회가 아직 필요한지 다시 확인해야 한다.**
+8. 워커 DB 연결: Celery 동기 엔진에 `pool_pre_ping=True` 를 넣었다(커밋 6cfbb84, `backend/shared/database.py`). 워커가 오래 쉬는 사이 끊긴 연결을 꺼내 써서 `send_fund_notice` 가 "server closed the connection unexpectedly" 로 실패하고 이력이 `sending` 에 멈췄었다(이후 15분 STALE 정리로 failed 처리).
 
 ### 7.2 빈 날 표시 — core `history-view.ts`
 - 메우지 않는다(앞뒤 값으로 보간하면 실제와 다른 수익률이 생긴다).

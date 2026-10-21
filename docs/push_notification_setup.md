@@ -74,6 +74,11 @@ eas init                      # 이 앱을 Expo 프로젝트에 연결 → proje
 - 나온 **projectId** 를 기록해 둔다 → 앱 설정의 `EAS_PROJECT_ID`(5장). 기기 토큰을 받을 때 꼭 필요하다.
 - `eas init` 이 `app.json`/`app.config.js` 를 고치겠다고 물으면, 이 프로젝트는 `app.config.js` 가 env 로 값을 읽는 구조이므로
   **직접 고치지 말고** 값만 기록한 뒤 5장 방식(env)으로 넣는다.
+- 함정 1: `eas init`·`eas credentials` 는 `.env.development.local` 을 읽지 않는다. `app.config.js` 가 동적이라 projectId 가 비어 보인다. 실행할 때 셸 환경변수로 넘긴다:
+  ```bash
+  EAS_PROJECT_ID=<EAS 프로젝트 projectId> eas credentials -p android
+  ```
+- 함정 2: `!` 로 실행하면 대화형 질문을 받을 수 없다. 이때는 `eas init --force` 를 쓴다.
 
 ### FCM 키 업로드
 ```bash
@@ -87,6 +92,7 @@ eas credentials
    **Set up / Upload a new service account key**
 3. 2-2 에서 받은 JSON 파일 경로를 입력 → 완료.
 - 패키지(`com.stockapp.dev` / `com.stockapp`)마다 자격 증명이 따로라서 **두 패키지 모두** 올려야 개발용·운영용 앱 둘 다 받는다.
+- 위 함정 1 때문에 `eas credentials` 도 `EAS_PROJECT_ID=<EAS 프로젝트 projectId>` 를 앞에 붙여 실행한다. (2026-10-21: EAS 프로젝트 생성과 두 패키지 키 업로드 완료)
 
 ---
 
@@ -172,19 +178,36 @@ PUSH_BACKEND=expo            # mock(기본, 로그만) → expo(실발송)
 
 - 서버는 알림 메시지 뒤에 제목·본문 없는 깨우기용 무음 메시지(`data.type = fund_refresh`, Android `priority: high`, iOS `contentAvailable`)를 한 번 더 보낸다. 이 메시지는 발송 이력 수치(성공·실패 수)에 넣지 않고, 만료 토큰 정리에만 반영한다. 서버 쪽은 구현됨.
 - 앱 쪽은 구현됨(S5): 태스크 정의, 6시간 안팎 정기 작업 등록(`expo-background-task`·`expo-task-manager`).
-- 실기기 확인(2026-10-21, 갤럭시 A53 / Android, 개발 앱 재빌드 후):
+- 실기기 확인(2026-10-21, 갤럭시 A53 / Android 16, 개발 앱):
 
 | 항목 | 상태 | 비고 |
 |---|---|---|
-| 정기 작업 등록 | ✅ | 로그인 + 펀드 1개 이상이면 `[fund-bg] periodic sync registered`, `dumpsys jobscheduler` 에 WorkManager `SystemJobService` 작업 생성 |
-| OS 가 JS 를 깨움 | ✅ | 앱을 홈으로 보낸 뒤 `adb shell cmd jobscheduler run -f com.stockapp.dev <작업번호>` → `periodic start` |
-| 히스토리에 실제 기록 | 확인 대기 | 함정 1 때문에 10분 넘게 지난 펀드로 확인해야 함 |
-| 무음 push(`fund_refresh`) 수신·payload 모양 | 확인 대기 | 이 문서 1~3장의 푸시 설정(EAS projectId, FCM V1 키) 후 확인 |
+| 관리자 즉시 발송 → Expo → 기기 알림 | ✅ | |
+| 알림 탭 → 펀드 화면 | ✅ | 백그라운드, 콜드 스타트 모두 |
+| 앱이 백그라운드(프로세스 살아 있음)일 때 무음 push | ✅ | 8초 뒤 히스토리 기록 |
+| 앱을 밀어 닫은 상태(콜드)에서 무음 push | ✅ | 태스크가 화면 없이 11초에 종료(우회 적용 후) |
+| 앱이 앞에 있을 때 무음 push | ✅ 의도대로 | `[fund-bg] skip: foreground` — 앞 화면 갱신이 처리 |
+| 정기 작업 등록·JS 깨어남 | ✅ | `[fund-bg] periodic sync registered`, `jobscheduler run -f` → `periodic start` |
+| 콜드 정기 실행 | 실측 대기 | 같은 원인·같은 수정이 적용되는 경로, 6시간 주기라 실측 못 함 |
+
+- 무음 push payload 모양은 설계 §7.1 에 적었다(`type` 은 `data.dataString`·`data.body` 의 JSON 문자열 안).
+- Expo 버그 우회: expo-task-manager 57.0.21 의 no-op headless provider 때문에 콜드 시작 때 JS 타이머가 멈춘다(수정 전 3분 넘게 종료 안 됨). `mobile/src/features/fund/background/tasks.ts` 상단에서 같은 키를 30초 provider 로 덮어쓴다. **expo-task-manager 업그레이드 시 우회가 아직 필요한지 다시 확인한다.**
+- Android 13+ 권한: `getPermissionsAsync()` 가 묻지 않은 알림 권한도 `denied`(`canAskAgain: true`)로 준다 → `effectivePermission`(`prompt-core.ts`)으로 보정.
+- 워커 DB 연결: Celery 동기 엔진에 `pool_pre_ping=True`(`backend/shared/database.py`). 없을 때는 오래 쉰 워커가 끊긴 연결로 `send_fund_notice` 를 실패시켜 이력이 `sending` 에 멈췄다.
+- 콜드 판정: release 빌드는 `[fund-bg]` 로그가 없으므로 네이티브 `TaskService: Finished task 'fund-refresh-push'` 시각으로 본다.
+
+### 로컬 E2E 발송 (서버 env 를 건드리지 않음)
+1. 개발 DB 터널을 켠다(`scripts/dev-db-tunnel.sh`).
+2. 로컬 blog 와 Celery 워커를 아래 env 로 띄운다. **반드시 Redis DB 5** — DB 0 에는 예전 세션의 미처리 수집 작업이 남아 실행될 수 있다.
+   ```bash
+   REDIS_URL=redis://localhost:6379/5 PUSH_BACKEND=expo
+   ```
+3. 로컬 admin_web 에서 즉시 발송한다. 테스트 발송은 관리자 계정 기기에만 간다.
 
 - 함정 1: 직전 10분 안에 받은 펀드는 다시 받지 않는다(`AUTO_REFRESH_MIN_AGE_MS`). 추가 직후 강제 실행하면 갱신이 없는 것이 정상. 구분: `adb shell "run-as com.stockapp.dev stat -c '%y %n' files/fund-history-*.json"`
 - 함정 2: 첫 실행 뒤에는 WorkManager 가 주기(약 6시간)를 관리해 jobscheduler 강제 실행이 무시되고 작업 번호도 바뀐다(0 → 1). `dumpsys` 의 `Minimum latency` 로 남은 시간을 본다. 다시 하려면 펀드를 모두 지웠다 추가하거나 로그아웃 후 재로그인(이때도 10분 넘게 기다림).
 - 로그 확인: `adb logcat -s ReactNativeJS | grep fund-bg`
-- 푸시 설정이 없는 동안은 정기 작업만 동작한다(정기 작업은 푸시와 무관). 앱이 꺼져 있을 때 깨우기용 메시지는 받지 못하고, 앱을 열 때(실행·복귀) 일반 자동 갱신이 기록한다.
+- 정기 작업은 푸시 설정과 무관하게 동작한다(안전망). 푸시 설정이 없으면 앱이 꺼져 있을 때 깨우기용 메시지는 받지 못하고, 앱을 열 때(실행·복귀) 일반 자동 갱신이 기록한다.
 
 ---
 
@@ -206,9 +229,9 @@ PUSH_BACKEND=expo            # mock(기본, 로그만) → expo(실발송)
 - [x] 루트 `.gitignore` 에 키 파일 규칙 추가(4장) — 2026-10-20
 - [x] Firebase 프로젝트 생성, Android 앱 `com.stockapp.dev`·`com.stockapp` 등록(2-1)
 - [x] `google-services.json`(두 앱 포함) → `mobile/secrets/google-services.json` 보관(2-1, 4장) — 2026-10-20
-- [ ] FCM V1 서비스 계정 키 발급(2-2)
-- [ ] `eas login` → `eas init` → projectId 기록(3장)
-- [ ] `eas credentials` 로 두 패키지에 FCM V1 키 업로드(3장)
+- [x] FCM V1 서비스 계정 키 발급(2-2) — 2026-10-21
+- [x] `eas login` → `eas init` → projectId 기록(3장) — 2026-10-21
+- [x] `eas credentials` 로 두 패키지에 FCM V1 키 업로드(3장) — 2026-10-21
 - [ ] 앱 env `EAS_PROJECT_ID`·`GOOGLE_SERVICES_JSON` → 재빌드(5장)
 - [ ] 서버 `PUSH_BACKEND=expo` → 재배포(6장)
 - [ ] Expo 도구로 단독 발송 확인 → 관리자 테스트 발송 확인(7장)
