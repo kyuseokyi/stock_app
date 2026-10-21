@@ -22,6 +22,7 @@ export default function BlogEditorPage() {
   const [loading, setLoading] = useState(isEdit)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [notify, setNotify] = useState(false) // 앱 알림 보내기(작성 때만, 기본 꺼짐)
   const submittingRef = useRef(false) // 중복 제출 방지(렌더 타이밍·Enter 제출 무관)
 
   useEffect(() => {
@@ -64,9 +65,9 @@ export default function BlogEditorPage() {
         content: form.content,
       }
       if (isEdit) {
-        await updateBlog(id!, payload) // isEdit 분기 → id 존재
+        await updateBlog(id!, payload) // isEdit 분기 → id 존재. 수정은 알림을 보내지 않는다
       } else {
-        await createBlog(payload)
+        await createBlog({ ...payload, notify })
       }
       showToast(isEdit ? '게시글을 수정했습니다.' : '게시글을 등록했습니다.', { icon: '✅' })
       navigate('/blogs')
@@ -132,6 +133,21 @@ export default function BlogEditorPage() {
             onChange={(html) => setForm((f) => ({ ...f, content: html }))}
           />
         </div>
+
+        {!isEdit && (
+          <label className="flex items-center gap-2 text-sm text-slate-600">
+            <input
+              type="checkbox"
+              checked={notify}
+              onChange={(e) => setNotify(e.target.checked)}
+              className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+            />
+            앱 알림 보내기
+            <span className="text-xs text-slate-400">
+              (새 글 알림을 켠 앱 기기에 푸시를 보냅니다. 웹 실시간 알림은 체크와 상관없이 나갑니다)
+            </span>
+          </label>
+        )}
 
         <div className="flex justify-end gap-2">
           <button

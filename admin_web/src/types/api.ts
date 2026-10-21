@@ -68,6 +68,7 @@ export interface BlogCreate {
   content: string
   thumbnail_url?: string | null
   author_id?: number | null
+  notify?: boolean // 요청 전용 — 참이면 앱 새 글 푸시(작성 때만, 수정에는 없음)
 }
 
 export interface BlogUpdate {
