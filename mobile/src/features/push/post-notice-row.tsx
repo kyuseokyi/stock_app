@@ -6,7 +6,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Alert, AppState, Linking, Switch, Text } from 'react-native';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
-import { ListRow } from '@/ui';
+import { ListRow, showToast } from '@/ui';
 
 import { isPushConfigured } from './config';
 import { ensureFundChannel } from './handlers';
@@ -62,8 +62,14 @@ export function PostNoticeRow() {
   const toggle = async (next: boolean) => {
     setBusy(true);
     setOn(next);
+    let saved = false;
     try {
-      await savePostNotice(next);
+      saved = await savePostNotice(next);
+      if (!saved) {
+        if (mounted.current) setOn(!next); // 저장 실패 — 표시값을 원래대로
+        showToast('설정을 저장하지 못했어요. 다시 시도해 주세요');
+        return;
+      }
       if (next) {
         const action = postNoticeEnableAction(effectivePermission(await Notifications.getPermissionsAsync()));
         if (action === 'request') {
@@ -84,7 +90,7 @@ export function PostNoticeRow() {
         setBusy(false);
         refresh(); // 권한 요청 결과(거부 등)를 스위치에 반영
       }
-      void syncPushRegistration();
+      if (saved) void syncPushRegistration(); // 저장이 확인된 뒤에만 동기화
     }
   };
 

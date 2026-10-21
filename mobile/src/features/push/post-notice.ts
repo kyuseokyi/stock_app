@@ -14,5 +14,9 @@ export async function loadPostNotice(): Promise<boolean> {
   }
 }
 
-export const savePostNotice = (on: boolean): Promise<void> =>
-  SecureStore.setItemAsync(POST_NOTICE_KEY, on ? '1' : '0').catch(() => {});
+/** 저장 성공 여부를 돌려준다 — 실패하면 호출부가 표시값을 되돌리고 동기화하지 않는다 */
+export const savePostNotice = (on: boolean): Promise<boolean> =>
+  SecureStore.setItemAsync(POST_NOTICE_KEY, on ? '1' : '0').then(
+    () => true,
+    () => false,
+  );
