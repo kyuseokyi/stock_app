@@ -93,6 +93,10 @@ async def test_non_admin_forbidden(api, maker):
     state["user"] = user
     assert (await client.post("/api/v1/admin/fund-notices", json=_body())).status_code == 403
     assert (await client.get("/api/v1/admin/push-sends")).status_code == 403
+    assert (await client.get("/api/v1/admin/fund-notices/preview", params={"date": TODAY.isoformat()})).status_code == 403
+    assert (await client.post("/api/v1/admin/push-sends/1/cancel")).status_code == 403
+    assert (await client.get("/api/v1/admin/push-templates")).status_code == 403
+    assert (await client.post("/api/v1/admin/push-templates", json={"title": "t", "body": "b"})).status_code == 403
 
 
 async def test_blank_title_rejected(api, maker):
@@ -206,3 +210,17 @@ async def test_templates_crud_and_unknown_template_rejected(api, maker):
     assert (await client.delete(f"/api/v1/admin/push-templates/{t['id']}")).status_code == 204
     async with maker() as s:
         assert (await s.execute(select(PushTemplate))).scalars().all() == []
+
+
+async def test_sse_failure_does_not_block_dispatch(api, maker, spies, monkeypatch):
+    client, state = api
+    admin, _ = await _seed(maker)
+    state["user"] = admin
+
+    async def _boom(ev):
+        raise RuntimeError("redis down")
+
+    monkeypatch.setattr(fund_notice, "publish_event", _boom)
+    r = await client.post("/api/v1/admin/fund-notices", json=_body())
+    assert r.status_code == 201
+    assert len(spies["dispatched"]) == 1

@@ -139,3 +139,18 @@ def test_template_last_sent_at_updated(maker, monkeypatch):
     with maker() as db:
         tpl = db.get(PushTemplate, db.get(PushSend, sid).template_id)
         assert tpl.last_sent_at is not None
+
+
+def test_unexpected_exception_marks_failed_not_stuck(maker, monkeypatch):
+    monkeypatch.setattr(push_sends, "get_push_sender", lambda: FakeSender())
+
+    def boom(*a, **k):
+        raise RuntimeError("render")
+
+    monkeypatch.setattr(push_sends, "render_push_text", boom)
+    sid = _seed(maker)
+    out = push_sends.send_fund_notice(sid)
+    assert out["status"] == "failed"
+    with maker() as db:
+        s = db.get(PushSend, sid)
+        assert s.status == "failed" and s.finished_at is not None

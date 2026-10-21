@@ -1,6 +1,7 @@
 """펀드 리포트 알림 — 미리보기·발송 규칙(now/test/scheduled)·취소·템플릿."""
 from __future__ import annotations
 
+import logging
 from datetime import date, datetime, timedelta, timezone
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -11,6 +12,8 @@ from .. import push_dispatch
 from ..events import publish_event
 from ..push_schemas import FundNoticeIn, PushSendOut, PushTemplateIn
 from ..repositories import push_repo
+
+logger = logging.getLogger("blog.fund_notice")
 
 MIN_SCHEDULE_LEAD = timedelta(minutes=1)
 
@@ -79,8 +82,11 @@ async def create_notice(db: AsyncSession, *, admin: User, payload: FundNoticeIn)
         return await push_repo.create_send(db, status="scheduled", scheduled_at=scheduled_at, **base)
 
     send = await push_repo.create_send(db, status="sending", started_at=now, **base)
-    await publish_event(fund_event(payload.date))
     push_dispatch.dispatch_fund_notice(send.id)
+    try:  # SSE 실패가 발송을 막지 않게
+        await publish_event(fund_event(payload.date))
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("펀드 알림 SSE 발행 실패(%s): %s", payload.date, exc)
     return send
 
 

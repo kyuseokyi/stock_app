@@ -43,41 +43,59 @@ def send_fund_notice(send_id: int) -> dict:
         send = db.get(PushSend, send_id)
         if send is None or send.status != "sending":
             return {"send_id": send_id, "status": "skipped"}
-        q = select(PushDevice.token)
-        if send.mode == "test":
-            q = q.where(PushDevice.user_id == send.created_by)
-        else:
-            q = q.where(PushDevice.fund_notice.is_(True))
-        tokens = list(db.execute(q).scalars())
-        send.target_count = len(tokens)
-        db.commit()
-
-        message = PushMessage(
-            title=render_push_text(send.title, send.ref_date),
-            body=render_push_text(send.body, send.ref_date),
-            data={"type": "fund_report", "date": send.ref_date.isoformat()},
-            channel_id=FUND_CHANNEL_ID,
-            sound="default",
-        )
         try:
-            result = get_push_sender().send_batch(tokens, message)
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("send_fund_notice: 발송기 오류(send_id=%s): %s", send_id, exc)
-            result = BatchResult(failure=len(tokens))
+            return _run_send(db, send, send_id)
+        except Exception:  # noqa: BLE001
+            # 재 raise 하지 않는다 — Celery 재시도로 중복 발송되지 않게. sending 고착(재발송 409)만 막는다.
+            logger.exception("send_fund_notice: 처리 중 예외(send_id=%s)", send_id)
+            try:
+                db.rollback()
+                failed = db.get(PushSend, send_id)
+                if failed is not None:
+                    failed.status = "failed"
+                    failed.finished_at = _now()
+                    db.commit()
+            except Exception:  # noqa: BLE001
+                logger.exception("send_fund_notice: failed 표시 실패(send_id=%s)", send_id)
+            return {"send_id": send_id, "status": "failed"}
 
-        if result.invalid_tokens:
-            db.execute(delete(PushDevice).where(PushDevice.token.in_(result.invalid_tokens)))
-        send.success_count = result.success
-        send.failure_count = result.failure
-        send.status = "failed" if tokens and result.success == 0 else "done"
-        send.finished_at = _now()
-        if send.template_id is not None:
-            tpl = db.get(PushTemplate, send.template_id)
-            if tpl is not None:
-                tpl.last_sent_at = send.finished_at
-        db.commit()
-        logger.info(
-            "send_fund_notice: id=%s mode=%s target=%s ok=%s fail=%s invalid=%s",
-            send_id, send.mode, len(tokens), result.success, result.failure, len(result.invalid_tokens),
-        )
-        return {"send_id": send_id, "status": send.status, "target": len(tokens), "success": result.success}
+
+def _run_send(db, send: PushSend, send_id: int) -> dict:
+    q = select(PushDevice.token)
+    if send.mode == "test":
+        q = q.where(PushDevice.user_id == send.created_by)
+    else:
+        q = q.where(PushDevice.fund_notice.is_(True))
+    tokens = list(db.execute(q).scalars())
+    send.target_count = len(tokens)
+    db.commit()
+
+    message = PushMessage(
+        title=render_push_text(send.title, send.ref_date),
+        body=render_push_text(send.body, send.ref_date),
+        data={"type": "fund_report", "date": send.ref_date.isoformat()},
+        channel_id=FUND_CHANNEL_ID,
+        sound="default",
+    )
+    try:
+        result = get_push_sender().send_batch(tokens, message)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("send_fund_notice: 발송기 오류(send_id=%s): %s", send_id, exc)
+        result = BatchResult(failure=len(tokens))
+
+    if result.invalid_tokens:
+        db.execute(delete(PushDevice).where(PushDevice.token.in_(result.invalid_tokens)))
+    send.success_count = result.success
+    send.failure_count = result.failure
+    send.status = "failed" if tokens and result.success == 0 else "done"
+    send.finished_at = _now()
+    if send.template_id is not None:
+        tpl = db.get(PushTemplate, send.template_id)
+        if tpl is not None:
+            tpl.last_sent_at = send.finished_at
+    db.commit()
+    logger.info(
+        "send_fund_notice: id=%s mode=%s target=%s ok=%s fail=%s invalid=%s",
+        send_id, send.mode, len(tokens), result.success, result.failure, len(result.invalid_tokens),
+    )
+    return {"send_id": send_id, "status": send.status, "target": len(tokens), "success": result.success}
