@@ -154,9 +154,30 @@ def dispatch_scheduled_pushes() -> dict:
             if _claim(db, send_id, now):
                 claimed.append((send_id, ref_date))
         db.commit()
+    delegated = 0
     for send_id, ref_date in claimed:
-        publish_fund_event(ref_date)
-        send_fund_notice.delay(send_id)
+        # 건별 격리 — 한 건의 위임 실패가 남은 건을 막지 않게, 실패 건은 즉시 failed 로 확정
+        try:
+            publish_fund_event(ref_date)
+            send_fund_notice.delay(send_id)
+            delegated += 1
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("dispatch_scheduled_pushes: 발송 위임 실패(send_id=%s): %s", send_id, exc)
+            _mark_failed(send_id)
     if claimed:
-        logger.info("dispatch_scheduled_pushes: %s건 발송 시작", len(claimed))
+        logger.info("dispatch_scheduled_pushes: %s건 발송 시작(위임 %s건)", len(claimed), delegated)
     return {"claimed": len(claimed), "stale_failed": stale or 0}
+
+
+def _mark_failed(send_id: int) -> None:
+    """위임 실패 건을 failed 로 — sending 일 때만(이미 워커가 처리했으면 건드리지 않는다)."""
+    try:
+        with SyncSessionLocal() as db:
+            db.execute(
+                update(PushSend)
+                .where(PushSend.id == send_id, PushSend.status == "sending")
+                .values(status="failed", finished_at=_now())
+            )
+            db.commit()
+    except Exception:  # noqa: BLE001
+        logger.exception("dispatch_scheduled_pushes: failed 표시 실패(send_id=%s)", send_id)

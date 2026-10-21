@@ -185,6 +185,28 @@ def test_dispatch_claims_due_once_publishes_and_queues(maker, monkeypatch):
         assert db.get(PushSend, later).status == "scheduled"
 
 
+def test_dispatch_delegate_failure_isolated_per_send(maker, monkeypatch):
+    queued = []
+
+    def delay(sid):
+        if not queued and not failed:
+            failed.append(sid)
+            raise RuntimeError("broker down")
+        queued.append(sid)
+
+    failed: list[int] = []
+    monkeypatch.setattr(push_sends.send_fund_notice, "delay", delay)
+    monkeypatch.setattr(push_sends, "publish_fund_event", lambda d: None)
+    first = _scheduled(maker, -2)
+    second = _scheduled(maker, -1)
+    assert push_sends.dispatch_scheduled_pushes()["claimed"] == 2
+    assert failed == [first] and queued == [second]
+    with maker() as db:
+        f = db.get(PushSend, first)
+        assert f.status == "failed" and f.finished_at is not None
+        assert db.get(PushSend, second).status == "sending"
+
+
 def test_dispatch_skips_cancelled(maker, monkeypatch):
     queued = []
     monkeypatch.setattr(push_sends.send_fund_notice, "delay", lambda sid: queued.append(sid))
