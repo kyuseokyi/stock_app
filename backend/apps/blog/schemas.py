@@ -54,6 +54,8 @@ class BlogBase(BaseModel):
 
 class BlogCreate(BlogBase):
     author_id: int | None = Field(None, description="작성자 ID (선택)")
+    # 요청 전용(DB 에 저장하지 않음) — 참이면 앱 새 글 푸시를 보낸다. 웹 SSE 는 이 값과 무관하게 발행
+    notify: bool = Field(False, description="앱 알림 보내기")
 
 
 class BlogUpdate(BaseModel):

@@ -92,7 +92,7 @@ async def get_blog(db: AsyncSession, blog_id: int) -> BlogPost | None:
 
 
 async def create_blog(db: AsyncSession, data: schemas.BlogCreate) -> BlogPost:
-    post = BlogPost(**data.model_dump())
+    post = BlogPost(**data.model_dump(exclude={"notify"}))  # notify 는 요청 전용 — 컬럼이 아니다
     db.add(post)
     await db.commit()
     await db.refresh(post)

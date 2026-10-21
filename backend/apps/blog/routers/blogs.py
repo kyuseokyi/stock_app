@@ -43,8 +43,9 @@ async def create_blog(
     # 작성자는 항상 인증된 관리자로 연결한다.
     payload.author_id = admin.id
     post = await crud.create_blog(db, payload)
-    # (모바일) 새 글 알림을 Celery 워커로 위임 — FCM 발송
-    notify_new_post(post.id)
+    # (모바일) 관리자가 "앱 알림 보내기"를 고른 글만 Celery 워커로 위임 — Expo 푸시
+    if payload.notify:
+        notify_new_post(post.id)
     # (웹) SSE 스트림으로 즉시 알림 이벤트 발행
     await publish_event(
         {
