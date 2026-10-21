@@ -168,10 +168,11 @@ async def test_upsert_race_retries_on_integrity_error(maker, monkeypatch):
 
     monkeypatch.setattr(push_repo, "_find_by_token", fake_find)
     async with maker() as s:
-        await push_repo.upsert_device(s, token=TOKEN, user_id=b.id, platform="ios", fund_notice=False)
+        await push_repo.upsert_device(s, token=TOKEN, user_id=b.id, platform="ios", fund_notice=False, post_notice=False)
     devs = await _devices(maker)
     assert len(devs) == 1 and devs[0].user_id == b.id and devs[0].platform == "ios"
     assert devs[0].fund_notice is False
+    assert devs[0].post_notice is False  # IntegrityError 재시도 경로에서도 post_notice 반영
 
 
 async def test_put_token_with_trailing_newline_422(api, maker):
@@ -229,3 +230,21 @@ async def test_model_default_post_notice_true(maker):
         s.add(PushDevice(token=TOKEN, user_id=a.id, platform="android", fund_notice=True))
         await s.commit()
     assert (await _devices(maker))[0].post_notice is True
+
+
+async def test_put_twice_same_token_updates_both_flags(api, maker):
+    client, state = api
+    a, _ = await _users(maker)
+    state["user"] = a
+    await client.put(
+        "/api/v1/push-devices",
+        json={"token": TOKEN, "platform": "android", "fund_notice": True, "post_notice": False},
+    )
+    r = await client.put(
+        "/api/v1/push-devices",
+        json={"token": TOKEN, "platform": "android", "fund_notice": False, "post_notice": True},
+    )
+    assert r.status_code == 204
+    devs = await _devices(maker)
+    assert len(devs) == 1
+    assert (devs[0].fund_notice, devs[0].post_notice) == (False, True)
