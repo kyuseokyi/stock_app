@@ -1,6 +1,6 @@
 // 주도주(CANSLIM) 화면용 순수 함수 — 웹 web_client/src/lib/canslim.ts 이식(색은 클래스 대신 테마 키) +
 // 목록 페이지 병합·화면 상태 판정·점수 추이 좌표.
-import type { CanslimHistoryPoint, CanslimItem, LetterKey, LetterStatus, ScreenFilters } from './types';
+import type { CanslimHistoryPoint, LetterKey, LetterStatus, ScreenFilters } from './types';
 
 /** 목록 한 번에 받는 개수(서버 MAX_LIMIT 200 이하여야 더 불러오기 판정이 맞다) */
 export const LEADERS_PAGE = 50;
@@ -87,8 +87,8 @@ export function activeFilterCount(f: ScreenFilters): number {
   );
 }
 
-/** 다음 페이지 이어 붙이기 — 같은 티커는 한 번만(순위가 밀려 겹쳐 와도 중복 행 없음) */
-export function mergeLeaderPage(prev: CanslimItem[], next: CanslimItem[]): CanslimItem[] {
+/** 다음 페이지 이어 붙이기 — 같은 티커는 한 번만(순위가 밀려 겹쳐 와도 중복 행 없음). 주도주·조건검색 공용 */
+export function mergeLeaderPage<T extends { ticker: string }>(prev: T[], next: T[]): T[] {
   const seen = new Set(prev.map((x) => x.ticker));
   return [...prev, ...next.filter((x) => !seen.has(x.ticker))];
 }
