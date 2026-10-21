@@ -19,6 +19,7 @@ const CSS = `
 .hrow { padding:9px 0; border-top:1px solid var(--line); }
 .hrow .line { display:flex; justify-content:space-between; align-items:baseline; gap:16px; }
 .hrow .k { color:var(--text-2); font-size:14px; }
+.hrow .gap { margin-left:6px; font-size:11px; color:var(--text-2); }
 .hrow .v { font-weight:600; white-space:pre; }
 .hrow .sub { margin-top:2px; text-align:right; font-size:13px; white-space:nowrap; }
 .empty { text-align:center; color:var(--text-2); padding:48px 0; }
@@ -61,8 +62,10 @@ const PAGE_SCRIPT = String.raw`
   }
 
   function row(r) {
+    var date = [h('span', 'num', [r.date])];
+    if (r.gapFrom) date.push(h('span', 'gap', ['이전 기록 ' + r.gapFrom]));
     return h('div', 'hrow', [
-      h('div', 'line', [h('div', 'k num', [r.date]), val(r.value, 'v', 'div')]),
+      h('div', 'line', [h('div', 'k', date), val(r.value, 'v', 'div')]),
       h('div', 'sub', [h('span', 'muted', ['당일 ']), val(r.day), h('span', 'muted', [' · 월 ']), val(r.month)])
     ]);
   }
