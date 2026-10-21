@@ -95,3 +95,21 @@ def test_slice_bars_matches_per_day_load():
     for off in (10, 45, 59):
         d = base + timedelta(days=off)
         assert cs.slice_bars(whole, d, 30) == cs.load_bars(d, days=30, client=fake_for(d, 30))
+
+
+def test_load_fundamentals_skips_partial_year_for_flow_fields():
+    """KIS 연간 최신 행(202606 = 상반기 누적)은 EPS·ROE·성장률에 쓰지 않고, BPS·부채비율(시점 값)에만 쓴다."""
+    ch = _FakeCH([[("AAA", "202412", 4950.0, 57981.0, 9.03, 16.2, 3.0, 26.0),
+                   ("AAA", "202512", 6564.0, 63997.0, 10.85, 10.88, 4.0, 29.9),
+                   ("AAA", "202606", 17687.0, 86052.0, 31.39, 98.67, 50.0, 31.1)]])
+    assert cs.load_fundamentals(ch)["AAA"] == {"yymm": "202512", "eps": 6564.0, "bps": 86052.0, "roe": 10.85,
+                                               "sales_growth": 10.88, "op_growth": 4.0, "debt_ratio": 31.1}
+
+
+def test_load_fundamentals_non_december_settlement():
+    """3월 결산사는 03 이 결산월 — 202509(진행 중) 는 기간 값에서 빠진다."""
+    ch = _FakeCH([[("BBB", "202403", 10.0, 100.0, 5.0, 1.0, 1.0, 50.0),
+                   ("BBB", "202503", 12.0, 110.0, 6.0, 2.0, 2.0, 55.0),
+                   ("BBB", "202509", 7.0, 120.0, 3.0, 9.0, 9.0, 60.0)]])
+    out = cs.load_fundamentals(ch)["BBB"]
+    assert (out["yymm"], out["eps"], out["roe"], out["bps"], out["debt_ratio"]) == ("202503", 12.0, 6.0, 120.0, 60.0)

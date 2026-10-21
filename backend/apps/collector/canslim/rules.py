@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 from bisect import bisect_left, bisect_right
+from collections import Counter
 from dataclasses import dataclass, field
 
 PASS, FAIL, NA, PENDING = 1, 0, -1, -2
@@ -89,9 +90,21 @@ def eval_c(rows, settle_month: int | None, cumulative: bool | None) -> Verdict:
     return Verdict(FAIL, None, extra)
 
 
+def closed_years(rows) -> list:
+    """연간(Y) 행 중 결산이 끝난 해만. rows[i][0] = 결산년월, 오름차순.
+
+    KIS 연간 재무비율은 진행 중인 해의 누적 값(예: 12월 결산사의 202606 = 상반기 누적)을 최신 행으로 붙인다.
+    결산월 = 최신 행을 뺀 나머지 행에서 가장 많은 월. 행이 하나뿐이면 판단할 수 없어 그대로 둔다."""
+    rows = list(rows)
+    if len(rows) < 2:
+        return rows
+    fy_month = Counter(r[0][4:6] for r in rows[:-1]).most_common(1)[0][0]
+    return [r for r in rows if r[0][4:6] == fy_month]
+
+
 def eval_a(rows) -> Verdict:
-    """rows: (결산년월, EPS, ROE). 최근 4개 연도로 3년 성장."""
-    valid = sorted((r for r in rows if r[1] is not None), key=lambda r: r[0])
+    """rows: (결산년월, EPS, ROE). 결산이 끝난 최근 4개 연도로 3년 성장(진행 중인 해의 누적 행은 뺀다)."""
+    valid = [r for r in closed_years(sorted(rows, key=lambda r: r[0])) if r[1] is not None]
     if len(valid) < 4:
         return Verdict(NA)
     last4 = valid[-4:]

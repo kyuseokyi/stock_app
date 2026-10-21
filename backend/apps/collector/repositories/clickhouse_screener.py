@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from datetime import date
 
+from apps.collector.canslim.rules import closed_years
 from apps.collector.repositories.clickhouse_canslim import _since, latest_trading_date, trading_dates  # noqa: F401
 from shared.clickhouse_schema import CLICKHOUSE_DB, get_client
 
@@ -57,6 +58,8 @@ ORDER BY (date, ticker)
 """
 
 _FIN_FIELDS = ("eps", "bps", "roe", "sales_growth", "op_growth", "debt_ratio")
+_FLOW_FIELDS = frozenset({"eps", "roe", "sales_growth", "op_growth"})  # 한 해 동안의 값 — 결산이 끝난 해만
+_STOCK_FIELDS = frozenset({"bps", "debt_ratio"})                     # 시점 값 — 최신 행까지
 
 
 def ensure_screener_table(client=None) -> None:
@@ -99,18 +102,27 @@ def slice_bars(bars: dict[str, list[tuple]], as_of: date, days: int = 400) -> di
 
 def load_fundamentals(client=None) -> dict[str, dict]:
     """{ticker: {yymm, eps, bps, roe, sales_growth, op_growth, debt_ratio}} — 연간(Y), 필드별로 null 이 아닌 가장 최근 값.
-    yymm 은 가장 최근 결산월. 최신 행의 일부 값이 비어도 이전 결산 값으로 채운다(PER·ROE 가 통째로 NULL 되는 것 방지).
-    분기(Q) 누적 여부가 확인되지 않아 연간만 쓴다. 과거 기준일 백필도 최신 값을 쓴다."""
+
+    KIS 연간 응답의 최신 행은 진행 중인 해의 누적(예: 202606 = 상반기)이라 그대로 쓰면 PER 이 약 2배가 된다.
+    → 기간 값(EPS·ROE·매출·영업이익 성장)은 결산이 끝난 해만(`rules.closed_years`), 시점 값(BPS·부채비율)은
+    재무상태표 기준이라 최신 행까지 쓴다. yymm 은 결산이 끝난 가장 최근 해. 최신 행의 일부 값이 비면 이전 값으로 채운다.
+    분기(Q)는 누적 여부가 확인되지 않아 쓰지 않는다. 과거 기준일 백필도 최신 값을 쓴다."""
     rows = _rows(f"SELECT ticker, stac_yymm, eps, bps, roe, sales_growth, op_growth, debt_ratio "
                  f"FROM {CLICKHOUSE_DB}.fundamentals_periodic FINAL WHERE period = 'Y' ORDER BY ticker, stac_yymm",
                  None, client)
+    by_ticker: dict[str, list[tuple]] = {}
+    for r in rows:
+        by_ticker.setdefault(r[0], []).append(tuple(r[1:]))
     out: dict[str, dict] = {}
-    for ticker, ym, *vals in rows:  # 오름차순이라 뒤 행이 최신 — null 이 아닌 값만 덮어쓴다
-        cur = out.setdefault(ticker, {"yymm": ym, **dict.fromkeys(_FIN_FIELDS)})
-        cur["yymm"] = ym
-        for k, v in zip(_FIN_FIELDS, vals):
-            if v is not None:
-                cur[k] = v
+    for ticker, trows in by_ticker.items():
+        closed = closed_years(trows)
+        cur = {"yymm": (closed or trows)[-1][0], **dict.fromkeys(_FIN_FIELDS)}
+        for src, fields in ((closed, _FLOW_FIELDS), (trows, _STOCK_FIELDS)):
+            for ym, *vals in src:  # 오름차순이라 뒤 행이 최신 — null 이 아닌 값만 덮어쓴다
+                for k, v in zip(_FIN_FIELDS, vals):
+                    if k in fields and v is not None:
+                        cur[k] = v
+        out[ticker] = cur
     return out
 
 

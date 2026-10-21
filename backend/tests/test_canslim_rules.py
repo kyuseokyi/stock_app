@@ -61,6 +61,20 @@ def test_eval_a_pass_and_boundaries():
     assert r.eval_a([("202212", -5.0, 1.0)] + rows[1:]).status == r.FAIL                # 기준 연도 적자
 
 
+
+def test_closed_years_drops_partial_latest_row():
+    rows = [("202312", 1.0), ("202412", 2.0), ("202512", 3.0), ("202606", 9.0)]
+    assert r.closed_years(rows) == rows[:3]                          # 진행 중인 해(상반기 누적) 제외
+    assert r.closed_years(rows[:3]) == rows[:3]                      # 최신 행이 결산월이면 그대로
+    assert r.closed_years([("202606", 9.0)]) == [("202606", 9.0)]    # 한 행뿐이면 판단 불가 — 그대로
+    assert r.closed_years([("202403", 1.0), ("202503", 2.0), ("202509", 3.0)]) == [("202403", 1.0), ("202503", 2.0)]
+
+
+def test_eval_a_ignores_partial_year():
+    rows = [("202212", 100.0, 20.0), ("202312", 130.0, 20.0), ("202412", 160.0, 20.0), ("202512", 200.0, 18.0)]
+    v = r.eval_a(rows + [("202606", 50.0, 9.0)])                     # 상반기 누적이 최신 행으로 붙어도
+    assert v.status == r.PASS and v.extra["years"][-1] == "202512" and v.extra["roe"] == 18.0
+
 # ---------------------------------------------------------------- N·S
 def test_eval_n():
     highs = [100.0] * 60
