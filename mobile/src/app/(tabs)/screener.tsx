@@ -4,6 +4,7 @@ import { ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StyleSheet } from 'react-native-unistyles';
 
+import { FinderSection } from '@/features/finder/sections/finder-section';
 import { LeadersSection } from '@/features/leaders/sections/leaders-section';
 import { CalendarSection } from '@/features/market/sections/calendar-section';
 import { GroupSection } from '@/features/market/sections/group-section';
@@ -11,16 +12,17 @@ import { MarketSection } from '@/features/market/sections/market-section';
 import type { GroupKind } from '@/features/market/types';
 import { Chip } from '@/ui';
 
-type Tab = 'market' | 'theme' | 'sector' | 'calendar' | 'leaders';
+type Tab = 'market' | 'theme' | 'sector' | 'calendar' | 'leaders' | 'finder';
 const TABS: [Tab, string][] = [
   ['market', '시장'],
   ['theme', '테마'],
   ['sector', '업종'],
   ['calendar', '일정'],
   ['leaders', '주도주'],
+  ['finder', '조건검색'],
 ];
 
-/** 스크리너 탭 — 위쪽 칩(시장·테마·업종·일정·주도주, 웹 탭 순서와 같음)으로 아래 내용을 바꾼다 */
+/** 스크리너 탭 — 위쪽 칩(시장·테마·업종·일정·주도주·조건검색, 웹 탭 순서와 같음)으로 아래 내용을 바꾼다 */
 export default function ScreenerScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -42,6 +44,7 @@ export default function ScreenerScreen() {
       {tab === 'sector' ? <GroupSection key="sector" kind="sector" onOpenGroup={openGroup} /> : null}
       {tab === 'calendar' ? <CalendarSection /> : null}
       {tab === 'leaders' ? <LeadersSection onOpenStock={openStock} /> : null}
+      {tab === 'finder' ? <FinderSection onOpenStock={openStock} /> : null}
     </View>
   );
 }
