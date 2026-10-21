@@ -1,5 +1,5 @@
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
-import { RefreshControl, ScrollView, Text, View } from 'react-native';
+import { Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
 import { StyleSheet } from 'react-native-unistyles';
 
 import { BasisNote } from '@/features/market/components/basis-note';
@@ -32,6 +32,7 @@ function NotFound() {
 }
 
 function GroupDetailBody({ kind, id }: { kind: GroupKind; id: string }) {
+  const router = useRouter();
   const { data, loading, error, notFound, reload, refresh } = useGroupDetail(kind, id);
   const { refreshing, onRefresh } = usePullRefresh(refresh);
 
@@ -64,7 +65,14 @@ function GroupDetailBody({ kind, id }: { kind: GroupKind; id: string }) {
       <View style={styles.card}>
         <Text style={styles.section}>구성 종목 {data.stocks.length}</Text>
         {data.stocks.map((s) => (
-          <View key={s.ticker} style={styles.stock}>
+          <Pressable
+            key={s.ticker}
+            style={({ pressed }) => [styles.stock, pressed && styles.pressed]}
+            onPress={() => router.push({ pathname: '/stock/[ticker]', params: { ticker: s.ticker, name: s.name } })}
+            accessibilityRole="button"
+            accessibilityLabel={`${s.name}${s.isLeader ? ' 대장주' : ''}, ${formatIndex(s.close)}, 1일 ${formatChg(s.chg1d)}, 5일 ${formatChg(s.chg5d)}`}
+            accessibilityHint="종목 상세 보기"
+          >
             <View style={styles.stockMain}>
               <View style={styles.nameRow}>
                 <Text style={styles.stockName} numberOfLines={1}>{s.name}</Text>
@@ -77,7 +85,7 @@ function GroupDetailBody({ kind, id }: { kind: GroupKind; id: string }) {
               <Text style={[styles.small, styles[toneOf(s.chg1d)]]}>1일 {formatChg(s.chg1d)}</Text>
               <Text style={[styles.small, styles[toneOf(s.chg5d)]]}>5일 {formatChg(s.chg5d)}</Text>
             </View>
-          </View>
+          </Pressable>
         ))}
       </View>
       <BasisNote date={data.date} />
@@ -100,6 +108,7 @@ const styles = StyleSheet.create((theme) => ({
   breadth: { flexDirection: 'row', alignItems: 'center', gap: theme.gap(1) },
   section: { fontSize: 16, fontWeight: '700', color: theme.colors.text },
   stock: { flexDirection: 'row', gap: theme.gap(1), paddingVertical: theme.gap(1), borderTopWidth: 1, borderTopColor: theme.colors.border },
+  pressed: { opacity: 0.6 },
   stockMain: { flex: 1, gap: 2 },
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: theme.gap(0.75) },
   stockName: { flexShrink: 1, fontSize: 15, fontWeight: '600', color: theme.colors.text },
