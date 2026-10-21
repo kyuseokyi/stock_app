@@ -10,19 +10,22 @@
 from __future__ import annotations
 
 import enum
-from datetime import datetime
+from datetime import date, datetime
 
 from sqlalchemy import (
     Boolean,
     CheckConstraint,
+    Date,
     DateTime,
     Enum as SAEnum,
     ForeignKey,
+    Index,
     Integer,
     String,
     Text,
     UniqueConstraint,
     func,
+    true,
 )
 from sqlalchemy.orm import (
     DeclarativeBase,
@@ -231,3 +234,53 @@ class StockMeta(Base, TimestampMixin):
         SAEnum(MarketType, name="market_type"), nullable=False
     )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+
+
+class PushDevice(Base, TimestampMixin):
+    """기기 단위 Expo 푸시 토큰. 펀드 알림은 기기 조건(펀드 등록 기기)이라 users.fcm_token 과 별개."""
+
+    __tablename__ = "push_devices"
+    __table_args__ = (
+        CheckConstraint("platform IN ('android', 'ios')", name="ck_push_devices_platform"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    token: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    platform: Mapped[str] = mapped_column(String(16), nullable=False)
+    fund_notice: Mapped[bool] = mapped_column(
+        Boolean, default=True, server_default=true(), nullable=False
+    )
+
+
+class PushSend(Base):
+    """관리자 푸시 발송 1건(즉시·테스트·예약). 상태: scheduled → sending → done|failed, scheduled → cancelled."""
+
+    __tablename__ = "push_sends"
+    __table_args__ = (
+        Index("ix_push_sends_status_scheduled_at", "status", "scheduled_at"),
+        Index("ix_push_sends_kind_ref_date", "kind", "ref_date"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    mode: Mapped[str] = mapped_column(String(16), nullable=False)
+    ref_date: Mapped[date] = mapped_column(Date, nullable=False)
+    title: Mapped[str] = mapped_column(String(100), nullable=False)
+    body: Mapped[str] = mapped_column(String(500), nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False)
+    scheduled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    target_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0", nullable=False)
+    success_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0", nullable=False)
+    failure_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0", nullable=False)
+    template_id: Mapped[int | None] = mapped_column(
+        ForeignKey("push_templates.id", ondelete="SET NULL")
+    )
+    created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
