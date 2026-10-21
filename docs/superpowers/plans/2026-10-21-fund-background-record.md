@@ -371,7 +371,7 @@ function md(iso: string): string {
 - [ ] **S2-5. 통과 확인 + web 복사**
 
 실행: `cd mobile && npx jest src/features/fund/core/history-view.test.ts src/features/fund/history-web` → PASS
-실행: `cd mobile && npm run typecheck` → 오류 0
+실행: `cd mobile && npm run typecheck` → 오류 0 (`gapFrom` 은 필수 필드 — 오류가 나면 `grep -rn "HistoryRowView\|rows: \[" mobile/src` 로 찾은 리터럴에 `gapFrom: null` 추가)
 실행(저장소 루트): `scripts/check-fund-core-sync.sh --write` → `fund core: in sync`
 실행: `cd web_client && npx tsc --noEmit` → 오류 0(웹은 `gapFrom` 을 쓰지 않음, 타입만 늘어남)
 
@@ -443,6 +443,8 @@ const deps = (over: Partial<RunDeps> = {}) => {
     run: jest.fn(async () => {}),
     enter: jest.fn(() => leave),
     timeoutMs: 50,
+    random: () => 0,
+    sleep: jest.fn(async () => {}),
     leave,
     ...over,
   };
@@ -486,6 +488,15 @@ it('한도를 넘으면 timeout 으로 돌아오지만, 표시는 실행이 실�
   finish();
   await new Promise((r) => setTimeout(r, 0));
   expect(d.leave).toHaveBeenCalledTimes(1);
+});
+
+it('push 는 0~10초 무작위로 기다린 뒤 가져온다(모든 기기가 한꺼번에 원본을 치지 않게), 정기 작업은 바로', async () => {
+  const a = deps({ random: () => 0.5 });
+  await backgroundRecordWith('push', a);
+  expect(a.sleep).toHaveBeenCalledWith(5_000);
+  const b = deps({ random: () => 0.5 });
+  await backgroundRecordWith('periodic', b);
+  expect(b.sleep).not.toHaveBeenCalled();
 });
 
 it('실행이 실패해도 표시를 끄고 done', async () => {
@@ -612,9 +623,15 @@ export type RunDeps = {
   run: (opts: { force: boolean }) => Promise<void>;
   enter: () => () => void; // 백그라운드 표시 켜기 → 끄기 함수
   timeoutMs?: number;
+  random?: () => number;
+  sleep?: (ms: number) => Promise<void>;
 };
 
 export const BACKGROUND_TIMEOUT_MS = 25_000; // iOS 는 약 30초 안에 끝내야 한다
+// 관리자 발송 한 번에 모든 기기가 깨어나므로 원본 사이트 부하를 나눈다(SSE 는 0~30초, 여기선 25초 한도 안에서 0~10초)
+export const PUSH_JITTER_MS = 10_000;
+
+const defaultSleep = (ms: number) => new Promise<void>((res) => setTimeout(res, ms));
 
 export async function backgroundRecordWith(
   reason: RunReason,
@@ -628,9 +645,10 @@ export async function backgroundRecordWith(
   if (!d.isLoggedIn()) return 'skipped';
 
   const leave = d.enter();
+  const jitter = reason === 'push' ? Math.floor((d.random ?? Math.random)() * PUSH_JITTER_MS) : 0;
   // 표시는 한도 시점이 아니라 실행이 실제로 끝날 때 끈다 — 늦게 끝난 실행이 백그라운드에서 백업하지 않게
-  const work = d
-    .run({ force: reason === 'push' })
+  const work = (jitter > 0 ? (d.sleep ?? defaultSleep)(jitter) : Promise.resolve())
+    .then(() => d.run({ force: reason === 'push' }))
     .catch(() => {})
     .finally(leave)
     .then(() => 'done' as const);
@@ -679,7 +697,7 @@ export async function syncPeriodicTaskWith(d: PeriodicDeps): Promise<PeriodicRes
 
 - [ ] **S3-5. 통과 확인**
 
-실행: `cd mobile && npx jest src/features/fund/background` → `17 passed`
+실행: `cd mobile && npx jest src/features/fund/background` → `18 passed`
 실행: `cd mobile && npm run typecheck` → 오류 0
 
 - [ ] **S3-6. 커밋**
@@ -951,8 +969,17 @@ export function useBackgroundTasks(): void {
 
 - [ ] **S5-2. 화면 연결**
 
+`mobile/index.ts`(앱 엔트리, `package.json` `"main": "index.ts"`) — 현재 `import './unistyles';` 다음 `import 'expo-router/entry';` 두 줄이다. 그 사이에 넣는다:
+```ts
+// Unistyles를 먼저 초기화(StyleSheet.configure)한 뒤 앱을 부팅한다.
+import './unistyles';
+// 백그라운드 태스크 정의 — 화면 없이 깨어날 때(앱 종료 상태의 무음 push·정기 작업)는 라우트(_layout)가 평가되지 않으므로 엔트리에서
+import './src/features/fund/background/tasks';
+import 'expo-router/entry';
+```
+(`_layout.tsx` 에는 side-effect import 를 두지 않는다 — Expo 문서: "앱이 일찍 require 하는 모듈(예: index.ts)의 최상위에서 정의·등록".)
+
 `mobile/src/app/_layout.tsx`:
-- **맨 첫 import 줄 위**에 `import '@/features/fund/background/tasks'; // 백그라운드 태스크 정의(모듈 최상위 — 화면 없이 깨어날 때도 필요)`
 - import 에 `import { useBackgroundTasks } from '@/features/fund/background/tasks';`
 - `usePushSetup();` 다음 줄에 `useBackgroundTasks(); // 정기 백그라운드 기록 등록·해제`
 
@@ -988,7 +1015,7 @@ plugins 배열의 `'expo-notifications',` 를:
 - [ ] **S5-5. 커밋**
 
 ```bash
-git add mobile/src/features/fund/background/tasks.ts mobile/src/app/_layout.tsx mobile/src/app/fund/index.tsx mobile/app.config.js
+git add mobile/index.ts mobile/src/features/fund/background/tasks.ts mobile/src/app/_layout.tsx mobile/src/app/fund/index.tsx mobile/app.config.js
 git commit -m "feat(mobile): 펀드 백그라운드 기록 태스크(무음 push·정기 작업) 연결"
 ```
 
@@ -996,7 +1023,7 @@ git commit -m "feat(mobile): 펀드 백그라운드 기록 태스크(무음 push
 
 사용자에게 안내(하위 에이전트는 실행하지 않음):
 1. 새 dev build: `cd mobile && eas build --profile development --platform android --local` (또는 `npm run build:android:devapk`) 후 설치.
-2. **무음 push**: 앱에 로그인 + 펀드 1개 이상 + 알림 허용 → 앱을 최근 앱 목록에서 스와이프로 종료 → admin_web 에서 [테스트 발송] → 앱을 열지 않고 `adb logcat -s ReactNativeJS | grep fund-bg` 로 `[fund-bg] push payload ...` 확인 → 앱을 열어 수익 히스토리에 오늘 기록이 있는지.
+2. **무음 push**: 앱에 로그인 + 펀드 1개 이상 + 알림 허용 → 앱을 최근 앱 목록에서 스와이프로 종료 → admin_web 에서 [테스트 발송] → 앱을 열지 않고 `adb logcat -s ReactNativeJS | grep fund-bg` 로 `[fund-bg] push payload ...` 확인 → 앱을 열어 수익 히스토리에 오늘 기록이 있는지. **로그가 아예 안 찍히면** 태스크 정의 위치 문제(엔트리 `index.ts` 의 import 확인)이거나 Android 가 데이터 전용 메시지를 앱에 넘기지 않은 것 — 알림용 메시지는 왔는지와 함께 보고.
 3. **정기 작업**: `adb shell dumpsys jobscheduler | grep -B2 -A8 com.stockapp.dev` 로 WorkManager 작업 번호를 찾아 `adb shell cmd jobscheduler run -f com.stockapp.dev <번호>` → 로그·히스토리 확인.
 4. 기록이 안 생기면: 기기 설정 → 앱 → 배터리 → "제한 없음"으로 바꿔 다시 확인(사용자에게 강제하지 않는 확인용 설정).
 5. 2번 로그에 찍힌 payload 모양(`data` 안의 어디에 `type` 이 있었는지)을 알려 달라고 요청.
@@ -1035,4 +1062,6 @@ git commit -m "docs: 펀드 백그라운드 기록·빈 날 표시 안내"
 
 - 스펙 대응: §1 백그라운드 기록 목표(S3~S5) · §5 깨우기용 메시지·이력은 알림용 기준·test 도 2개(S1) · §7.1 hydrate·force 구분·25초·백업 보류(파일)·표시는 실제 종료 시 해제·push 태스크 type 필터·포그라운드 무시·모듈 최상위 정의·정기 작업은 푸시 무관·등록 시점(S3~S5) · §7.2 gapFrom·날짜 옆 표시·web 복사(S2) · §9 강제 종료·시간 초과·보류·로그아웃·iOS 잠금(설계상 처리, 문서화 S6) · §10 jest·pytest 항목(S1~S4), 수동 확인(S5-6).
 - 처음 스펙과 달라진 점(스펙 §7.1 에 이미 반영): push 태스크 등록은 "펀드 ≥1 일 때만"이 아니라 푸시 설정 시 항상(Expo 문서가 모듈 최상위 등록을 요구, 서버가 펀드 등록 기기에만 보내므로 결과는 같음). 파일 이름은 `run-core.ts`·`periodic-core.ts`·`tasks.ts`.
+- push 깨우기는 0~10초 무작위 지연(`PUSH_JITTER_MS`) — SSE 의 0~30초와 같은 목적(원본 사이트 동시 요청 분산), 25초 한도 안.
+- 태스크 정의는 엔트리 `mobile/index.ts` 에서 import(라우트 `_layout` 은 화면 없이 깨어날 때 평가되지 않을 수 있음).
 - 이름 일치: `backgroundRecordWith`·`RunDeps`·`enterBackgroundRun`·`isBackgroundRun`·`markBackupPending`·`takeBackupPending`·`flushPendingBackup`·`syncPeriodicTaskWith`·`syncBackgroundTasks`·`useBackgroundTasks`·`PUSH_TASK`·`PERIODIC_TASK` — 정의한 태스크와 쓰는 태스크가 같다.

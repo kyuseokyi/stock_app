@@ -99,7 +99,7 @@ SSE 이벤트: `{"type": "fund_report_updated", "date": "YYYY-MM-DD"}` — 제�
 - 의존성 추가: `expo-background-task`, `expo-task-manager`(config plugin, 같은 새 dev build). `expo-notifications` 는 위와 공유.
 - `run-core.ts`: `backgroundRecordWith(reason: 'push' | 'periodic', deps)` — 두 태스크가 공유하는 본문(`tasks.ts` 가 실제 의존성을 넣은 `backgroundRecord`).
   1. `useAuthStore.getState().hydrate()` 대기 → 로그아웃이면 종료(화면 없이 실행돼 저장소가 아직 안 읽혔을 수 있음).
-  2. `fundRefresher.run({ force: reason === 'push' })` — 1단계 자동 갱신과 **같은 함수**(10분 건너뛰기·동시 2개·single-flight·지운 펀드 처리 그대로). 정기 작업은 force 없이(10분 이내 확인한 펀드는 건너뜀).
+  2. (push 만) 0~10초 무작위 대기 — 한 번에 깨어난 기기들이 원본을 동시에 치지 않게. 그다음 `fundRefresher.run({ force: reason === 'push' })` — 1단계 자동 갱신과 **같은 함수**(10분 건너뛰기·동시 2개·single-flight·지운 펀드 처리 그대로). 정기 작업은 force 없이(10분 이내 확인한 펀드는 건너뜀).
   3. 실행 시간 한도(iOS 약 30초)를 넘기지 않게 전체를 25초 타임아웃으로 감싼다. 시간이 다 되면 그때까지 기록한 것만 남긴다.
 - **백업은 백그라운드에서 하지 않는다**(구글 토큰 갱신이 화면 없이 실패할 수 있고 시간이 짧다).
   - `background-mode.ts`: 백그라운드 실행 중 플래그. `auto-refresh.ts` 의 실행 끝 구독은 이 플래그가 켜져 있으면 `maybeAutoBackup()` 대신 보류 파일 `Paths.document/fund-backup-pending.json` 만 쓴다(SecureStore 는 iOS 잠금 중 못 읽을 수 있어 파일).
@@ -111,7 +111,7 @@ SSE 이벤트: `{"type": "fund_report_updated", "date": "YYYY-MM-DD"}` — 제�
 - config 플러그인: `expo-notifications` 를 `['expo-notifications', { enableBackgroundRemoteNotifications: true }]` 로, `expo-background-task` 추가(iOS `UIBackgroundModes: processing` 을 플러그인이 넣는지 prebuild 결과로 확인).
 - Expo 문서 확인(2026-10-21): 앱 코드를 깨우는 push 는 제목·본문 없이 `data` 만 + iOS `contentAvailable: true`. 태스크는 앱이 일찍 읽는 모듈 최상위에서 정의·등록. 사용자가 앱을 강제 종료하면 정기 작업은 멈췄다가 다음 실행 때 재개.
 - `tasks.ts`(정기): `TaskManager.defineTask('fund-refresh-periodic', …)` → `backgroundRecord('periodic')`. 최소 간격 6시간(`minimumInterval: 360`) — 실제 시각은 OS 가 정한다.
-- 태스크 정의(`defineTask`)는 **컴포넌트가 아닌 모듈 최상위**에서 해야 한다(화면 없이 깨어날 때도 등록돼 있어야 함) → `background/tasks.ts` 를 `app/_layout.tsx` 맨 위에서 import.
+- 태스크 정의(`defineTask`)는 **컴포넌트가 아닌 모듈 최상위**에서 해야 한다(화면 없이 깨어날 때도 등록돼 있어야 함) → `background/tasks.ts` 를 앱 엔트리 `mobile/index.ts` 에서 import(라우트 `_layout` 은 화면 없이 깨어날 때 평가되지 않을 수 있음).
 - 등록·해제 `syncBackgroundTasks()`(판단은 `periodic-core.ts`): 로그인 + 펀드 ≥1 이면 정기 작업 등록, 아니면 해제. 호출 시점은 `syncPushRegistration()` 과 같다(앱 실행, 펀드 추가·삭제, 로그인 직후, 로그아웃 직전).
   - 정기 작업은 **푸시 설정·권한과 무관**하게 등록(푸시를 거부해도 안전망은 동작). push 태스크는 푸시가 설정된 경우만.
 - 포그라운드에서 깨우기용 push 가 오면: SSE 가 이미 같은 일을 하므로 무시(중복 갱신 방지). `fund_report_updated` SSE 와 겹쳐도 single-flight 라 한 번만 실행된다.
