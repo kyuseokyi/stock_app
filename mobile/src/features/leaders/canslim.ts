@@ -25,6 +25,22 @@ export const DEFAULT_FILTERS: ScreenFilters = {
   liquidOnly: true,
 };
 
+/** 두 필터 조건이 같은지 — 같으면 다시 조회할 필요가 없다. required 는 순서와 무관 */
+export function sameFilters(a: ScreenFilters, b: ScreenFilters): boolean {
+  if (a.market !== b.market || a.minPass !== b.minPass || a.sort !== b.sort || a.liquidOnly !== b.liquidOnly) return false;
+  if (a.required.length !== b.required.length) return false;
+  return a.required.every((k) => b.required.includes(k));
+}
+
+const TICKER_PATTERN = /^[A-Za-z0-9.:-]+$/;
+
+/** 라우트 ticker 파라미터 → 조회할 코드. 배열이면 첫 요소, 비었거나 영숫자·. : - 외 문자가 있으면 null(NotFound) */
+export function resolveTickerParam(raw: string | string[] | undefined): string | null {
+  const first = Array.isArray(raw) ? raw[0] : raw;
+  const t = typeof first === 'string' ? first.trim() : '';
+  return t && TICKER_PATTERN.test(t) ? t : null;
+}
+
 /** 배지 색 구분 — pass=primary 바탕, fail=fill 바탕, none(부족·준비 중)=점선 테두리 */
 export type LetterTone = 'pass' | 'fail' | 'none';
 

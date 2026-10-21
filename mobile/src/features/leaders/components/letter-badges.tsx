@@ -44,7 +44,7 @@ const styles = StyleSheet.create((theme) => ({
   pass: { backgroundColor: theme.colors.primary },
   fail: { backgroundColor: theme.colors.fill },
   none: { borderWidth: 1, borderStyle: 'dashed', borderColor: theme.colors.textSecondary },
-  passText: { color: '#ffffff' },
+  passText: { color: theme.colors.onPrimary },
   failText: { color: theme.colors.textSecondary },
   noneText: { color: theme.colors.textSecondary },
 }));

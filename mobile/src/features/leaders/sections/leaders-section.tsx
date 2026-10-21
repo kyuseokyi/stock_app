@@ -125,7 +125,7 @@ const styles = StyleSheet.create((theme) => ({
     minWidth: 18, height: 18, borderRadius: 9, paddingHorizontal: 4,
     alignItems: 'center', justifyContent: 'center', backgroundColor: theme.colors.accent,
   },
-  badgeText: { fontSize: 11, fontWeight: '800', color: '#ffffff' },
+  badgeText: { fontSize: 11, fontWeight: '800', color: theme.colors.onPrimary },
   list: { paddingHorizontal: theme.gap(2), paddingBottom: theme.gap(2) },
   grow: { flexGrow: 1 },
   header: { gap: theme.gap(1), paddingBottom: theme.gap(1) },

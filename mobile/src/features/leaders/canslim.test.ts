@@ -10,6 +10,8 @@ import {
   listView,
   marketTone,
   mergeLeaderPage,
+  resolveTickerParam,
+  sameFilters,
   scoreView,
   toggleRequired,
 } from './canslim';
@@ -130,5 +132,45 @@ describe('점수 추이 좌표', () => {
   it('점이 2개 미만이면 null', () => {
     expect(historyPoints([])).toBeNull();
     expect(historyPoints([{ date: 'd', score: 10, passCount: 1 }])).toBeNull();
+  });
+});
+
+describe('sameFilters — 조건 동일 판정', () => {
+  it('값이 같으면 true, required 는 순서 무관', () => {
+    expect(sameFilters(DEFAULT_FILTERS, { ...DEFAULT_FILTERS })).toBe(true);
+    const a = { ...DEFAULT_FILTERS, required: ['c', 'n'] as ('c' | 'n')[] };
+    const b = { ...DEFAULT_FILTERS, required: ['n', 'c'] as ('c' | 'n')[] };
+    expect(sameFilters(a, b)).toBe(true);
+  });
+  it('하나라도 다르면 false', () => {
+    expect(sameFilters(DEFAULT_FILTERS, { ...DEFAULT_FILTERS, sort: 'rs' })).toBe(false);
+    expect(sameFilters(DEFAULT_FILTERS, { ...DEFAULT_FILTERS, market: 'KOSPI' })).toBe(false);
+    expect(sameFilters(DEFAULT_FILTERS, { ...DEFAULT_FILTERS, minPass: 3 })).toBe(false);
+    expect(sameFilters(DEFAULT_FILTERS, { ...DEFAULT_FILTERS, liquidOnly: false })).toBe(false);
+    expect(sameFilters(DEFAULT_FILTERS, { ...DEFAULT_FILTERS, required: ['c'] })).toBe(false);
+    expect(sameFilters({ ...DEFAULT_FILTERS, required: ['c', 'a'] }, { ...DEFAULT_FILTERS, required: ['c', 'n'] })).toBe(false);
+  });
+});
+
+describe('resolveTickerParam — 라우트 ticker 검증', () => {
+  it('정상 코드는 그대로(공백 제거)', () => {
+    expect(resolveTickerParam('005930')).toBe('005930');
+    expect(resolveTickerParam(' 005930 ')).toBe('005930');
+    expect(resolveTickerParam('US:SPX')).toBe('US:SPX');
+    expect(resolveTickerParam('BRK.B')).toBe('BRK.B');
+    expect(resolveTickerParam('A-1')).toBe('A-1');
+  });
+  it('배열이면 첫 요소', () => {
+    expect(resolveTickerParam(['005930', '000660'])).toBe('005930');
+  });
+  it('빈 값·허용 외 문자는 null', () => {
+    expect(resolveTickerParam(undefined)).toBeNull();
+    expect(resolveTickerParam('')).toBeNull();
+    expect(resolveTickerParam('  ')).toBeNull();
+    expect(resolveTickerParam([])).toBeNull();
+    expect(resolveTickerParam('../x')).toBeNull();
+    expect(resolveTickerParam('a b')).toBeNull();
+    expect(resolveTickerParam('005930?x=1')).toBeNull();
+    expect(resolveTickerParam('삼성')).toBeNull();
   });
 });

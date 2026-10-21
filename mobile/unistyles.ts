@@ -24,6 +24,7 @@ const lightTheme = {
     textSecondary: '#8e8aa6',
     primary: '#6f8ef0', // 파스텔 블루(CTA·선택·링크)
     primarySoft: '#e2ecff', // 선택 칩·내 행 배경
+    onPrimary: '#ffffff', // primary·accent 바탕 위 글자
     accent: '#e88ab0', // 핑크 포인트(탭바 선택·배지)
     up: '#c93a6c', // 상승/수익 글자 = 핑크레드 (국내 관례)
     upSoft: '#fbd6e4', // BUY 버튼·수익 배지 배경
@@ -44,6 +45,7 @@ const darkTheme = {
     textSecondary: '#a6a1bd',
     primary: '#9fb4f7',
     primarySoft: '#2a3150',
+    onPrimary: '#ffffff',
     accent: '#f0a0c0',
     up: '#ff7aa2',
     upSoft: '#3d2230',
