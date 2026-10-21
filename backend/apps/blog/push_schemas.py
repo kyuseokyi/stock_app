@@ -6,7 +6,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-EXPO_TOKEN_PATTERN = r"^Expo(nent)?PushToken\[.+\]$"
+EXPO_TOKEN_PATTERN = r"^Expo(nent)?PushToken\[[A-Za-z0-9_\-]+\]$"  # pydantic(Rust regex)의 $ 는 개행 앞에서 매치하지 않음(\Z 미지원)
 
 
 class PushDeviceIn(BaseModel):

@@ -7,6 +7,7 @@ from sqlalchemy import event, select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from apps.blog.main import app
+from apps.blog.repositories import push_repo
 from shared.auth import get_current_user
 from shared.database import get_db
 from shared.models import Base, PushDevice, User, UserRole
@@ -111,3 +112,60 @@ async def test_delete_missing_is_204(api, maker):
     a, _ = await _users(maker)
     state["user"] = a
     assert (await client.delete("/api/v1/push-devices/ExponentPushToken[none]")).status_code == 204
+
+
+async def test_put_invalid_platform_422(api, maker):
+    client, state = api
+    a, _ = await _users(maker)
+    state["user"] = a
+    r = await client.put("/api/v1/push-devices", json={"token": TOKEN, "platform": "web"})
+    assert r.status_code == 422
+
+
+async def test_put_default_fund_notice_true(api, maker):
+    client, state = api
+    a, _ = await _users(maker)
+    state["user"] = a
+    await client.put("/api/v1/push-devices", json={"token": TOKEN, "platform": "ios"})
+    devs = await _devices(maker)
+    assert len(devs) == 1 and devs[0].fund_notice is True
+
+
+async def test_put_token_with_slash_422(api, maker):
+    client, state = api
+    a, _ = await _users(maker)
+    state["user"] = a
+    r = await client.put("/api/v1/push-devices", json={"token": "ExponentPushToken[a/b]", "platform": "android"})
+    assert r.status_code == 422
+
+
+async def test_upsert_race_retries_on_integrity_error(maker, monkeypatch):
+    a, b = await _users(maker)
+    async with maker() as s:  # 다른 요청이 먼저 같은 token 을 넣은 상태
+        s.add(PushDevice(token=TOKEN, user_id=a.id, platform="android", fund_notice=True))
+        await s.commit()
+
+    real = push_repo._find_by_token
+    calls = {"n": 0}
+
+    async def fake_find(db, token):
+        calls["n"] += 1
+        return None if calls["n"] == 1 else await real(db, token)  # 첫 select 는 경합으로 못 본 상황
+
+    monkeypatch.setattr(push_repo, "_find_by_token", fake_find)
+    async with maker() as s:
+        dev = await push_repo.upsert_device(
+            s, token=TOKEN, user_id=b.id, platform="ios", fund_notice=False
+        )
+    assert dev.user_id == b.id
+    devs = await _devices(maker)
+    assert len(devs) == 1 and devs[0].user_id == b.id and devs[0].platform == "ios"
+    assert devs[0].fund_notice is False
+
+
+async def test_put_token_with_trailing_newline_422(api, maker):
+    client, state = api
+    a, _ = await _users(maker)
+    state["user"] = a
+    r = await client.put("/api/v1/push-devices", json={"token": TOKEN + "\n", "platform": "android"})
+    assert r.status_code == 422
