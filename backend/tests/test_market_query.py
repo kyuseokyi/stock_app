@@ -467,3 +467,54 @@ def test_web_overview_requests_live_fields():
 
     q = _overview_query("web_client/src/api/market.ts")
     assert re.search(r"\blive\b", q) and re.search(r"\basOf\b", q)
+
+
+def test_mobile_leaders_queries_match_schema(monkeypatch):
+    """모바일 주도주(mobile/src/features/leaders/api.ts) 쿼리를 그대로 꺼내 실제 스키마로 실행(앱↔API 계약)."""
+    import pathlib
+    import re
+
+    from apps.stock_api.graphql.schema import schema
+    from apps.stock_api.services import canslim_query as cq
+
+    ts = (pathlib.Path(__file__).resolve().parents[2] / "mobile/src/features/leaders/api.ts").read_text(encoding="utf-8")
+    queries = dict(re.findall(r"export const (\w+_QUERY) = `([^`]+)`", ts))
+    assert set(queries) == {"SCREEN_QUERY", "SCORE_QUERY"}
+    assert "${" not in queries["SCREEN_QUERY"] and "${" not in queries["SCORE_QUERY"]
+
+    seen = {}
+
+    def fake_screen(**kw):
+        seen.update(kw)
+        return {"date": "2026-10-16", "total": 1, "items": [
+            {"ticker": "AAA", "name": "에이", "market": "KOSDAQ", "sector_name": None, "close": 1.0, "score": 70,
+             "pass_count": 5, "liquid": False, "letters": {k: 1 for k in "canslim"}, "rs": None,
+             "pct_from_high": None}]}
+
+    monkeypatch.setattr(cq, "markets", lambda: [{"market": "KOSPI", "date": "2026-10-16", "status": "조정", "close": 1.0,
+                                                 "ma50": 1.0, "ma200": 1.0, "distribution_days": 4}])
+    monkeypatch.setattr(cq, "screen", fake_screen)
+    variables = {"market": "KOSDAQ", "minPass": 3, "required": ["c", "l"], "sort": "rs", "liquidOnly": False,
+                 "limit": 50, "offset": 50}
+    res = asyncio.run(schema.execute(queries["SCREEN_QUERY"], variable_values=variables))
+    assert res.errors is None, res.errors
+    assert res.data["canslimMarket"][0]["distributionDays"] == 4
+    assert res.data["canslimScreen"]["items"][0]["letters"] == {k: 1 for k in "canslim"}
+    assert res.data["canslimScreen"]["items"][0]["pctFromHigh"] is None
+    assert seen == {"market": "KOSDAQ", "min_pass": 3, "required": ["c", "l"], "sort": "rs", "liquid_only": False,
+                    "limit": 50, "offset": 50}
+
+    monkeypatch.setattr(cq, "score", lambda ticker: None if ticker == "ETF1" else {
+        "date": "2026-10-16", "ticker": ticker, "name": "에이", "market": "KOSPI", "sector_name": "전기·전자",
+        "close": 1.0, "score": 80, "pass_count": 6, "market_status": "상승 추세",
+        "letters": [{"key": "n", "status": 1, "value": -3.5, "display": "고점 대비 -3.5%", "threshold": "t",
+                     "label": "신고가", "explanation": "e"}],
+        "history": [{"date": "2026-10-16", "score": 80, "pass_count": 6}]})
+    res = asyncio.run(schema.execute(queries["SCORE_QUERY"], variable_values={"ticker": "AAA"}))
+    assert res.errors is None, res.errors
+    assert res.data["canslimScore"]["letters"][0] == {"key": "n", "status": 1, "value": -3.5,
+                                                      "display": "고점 대비 -3.5%", "threshold": "t",
+                                                      "label": "신고가", "explanation": "e"}
+    assert res.data["canslimScore"]["history"][0]["passCount"] == 6
+    res = asyncio.run(schema.execute(queries["SCORE_QUERY"], variable_values={"ticker": "ETF1"}))
+    assert res.errors is None and res.data["canslimScore"] is None  # 비대상은 null(앱이 "분석 대상 아님" 표시)
