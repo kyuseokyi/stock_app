@@ -42,7 +42,9 @@ SYNC_DATABASE_URL = os.getenv(
     "postgresql+psycopg2://stock_user:stock_password@localhost:5432/stock_db",
 )
 
-sync_engine = create_engine(SYNC_DATABASE_URL, echo=False, future=True)
+# pool_pre_ping: 워커가 오래 쉬는 사이 끊긴 풀 연결(DB 재시작·유휴 정리·SSH 터널)을 꺼내 쓰다
+# "server closed the connection unexpectedly" 로 태스크가 실패하지 않게, 꺼낼 때 한 번 확인하고 끊겼으면 새로 연다.
+sync_engine = create_engine(SYNC_DATABASE_URL, echo=False, future=True, pool_pre_ping=True)
 SyncSessionLocal = sessionmaker(
     sync_engine, class_=Session, expire_on_commit=False
 )
