@@ -13,6 +13,8 @@ class PushDeviceIn(BaseModel):
     token: str = Field(min_length=1, max_length=255, pattern=EXPO_TOKEN_PATTERN)
     platform: Literal["android", "ios"]
     fund_notice: bool = True
+    # 새 글 알림. 생략 시 true — 구버전 앱(펀드 기기만 등록, 이 필드 없음) 호환(설계 §6)
+    post_notice: bool = True
 
 
 class FundNoticeIn(BaseModel):

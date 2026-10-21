@@ -180,3 +180,52 @@ async def test_put_token_with_trailing_newline_422(api, maker):
     state["user"] = a
     r = await client.put("/api/v1/push-devices", json={"token": TOKEN + "\n", "platform": "android"})
     assert r.status_code == 422
+
+
+async def test_put_saves_post_notice(api, maker):
+    client, state = api
+    a, _ = await _users(maker)
+    state["user"] = a
+    r = await client.put(
+        "/api/v1/push-devices",
+        json={"token": TOKEN, "platform": "android", "fund_notice": False, "post_notice": False},
+    )
+    assert r.status_code == 204
+    devs = await _devices(maker)
+    assert len(devs) == 1
+    assert (devs[0].fund_notice, devs[0].post_notice) == (False, False)
+
+
+async def test_put_without_post_notice_defaults_true(api, maker):
+    """구버전 앱(post_notice 를 안 보냄) 호환 — 생략하면 true 로 저장(설계 §6)."""
+    client, state = api
+    a, _ = await _users(maker)
+    state["user"] = a
+    await client.put(
+        "/api/v1/push-devices",
+        json={"token": TOKEN, "platform": "android", "fund_notice": True, "post_notice": False},
+    )
+    assert (await _devices(maker))[0].post_notice is False
+    r = await client.put("/api/v1/push-devices", json={"token": TOKEN, "platform": "android", "fund_notice": True})
+    assert r.status_code == 204
+    devs = await _devices(maker)
+    assert len(devs) == 1 and devs[0].post_notice is True and devs[0].fund_notice is True
+
+
+async def test_put_rejects_non_bool_post_notice(api, maker):
+    client, state = api
+    a, _ = await _users(maker)
+    state["user"] = a
+    r = await client.put(
+        "/api/v1/push-devices", json={"token": TOKEN, "platform": "android", "post_notice": "yes please"}
+    )
+    assert r.status_code == 422
+
+
+async def test_model_default_post_notice_true(maker):
+    """post_notice 를 지정하지 않은 행(기존 코드·테스트 경로)은 true."""
+    a, _ = await _users(maker)
+    async with maker() as s:
+        s.add(PushDevice(token=TOKEN, user_id=a.id, platform="android", fund_notice=True))
+        await s.commit()
+    assert (await _devices(maker))[0].post_notice is True

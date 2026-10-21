@@ -19,23 +19,31 @@ async def _find_by_token(db: AsyncSession, token: str) -> PushDevice | None:
     return (await db.execute(select(PushDevice).where(PushDevice.token == token))).scalar_one_or_none()
 
 
-def _apply(dev: PushDevice, *, user_id: int, platform: str, fund_notice: bool) -> None:
+def _apply(dev: PushDevice, *, user_id: int, platform: str, fund_notice: bool, post_notice: bool) -> None:
     dev.user_id = user_id
     dev.platform = platform
     dev.fund_notice = fund_notice
+    dev.post_notice = post_notice
     dev.updated_at = func.now()  # 값이 같아도 마지막 등록 시각 갱신(오래된 토큰 정리용)
 
 
 async def upsert_device(
-    db: AsyncSession, *, token: str, user_id: int, platform: str, fund_notice: bool
+    db: AsyncSession,
+    *,
+    token: str,
+    user_id: int,
+    platform: str,
+    fund_notice: bool,
+    post_notice: bool = True,
 ) -> None:
     """token 기준 upsert — 다른 사용자 토큰이면 소유자를 바꾼다(같은 기기에서 계정을 바꾼 경우).
 
     같은 token 의 PUT 이 겹쳐 insert 가 UNIQUE 위반이 나면 롤백 후 기존 행을 갱신한다(1회 재시도).
     """
+    fields = {"user_id": user_id, "platform": platform, "fund_notice": fund_notice, "post_notice": post_notice}
     dev = await _find_by_token(db, token)
     if dev is None:
-        db.add(PushDevice(token=token, user_id=user_id, platform=platform, fund_notice=fund_notice))
+        db.add(PushDevice(token=token, **fields))
         try:
             await db.commit()
         except IntegrityError:
@@ -43,10 +51,10 @@ async def upsert_device(
             dev = await _find_by_token(db, token)
             if dev is None:
                 raise
-            _apply(dev, user_id=user_id, platform=platform, fund_notice=fund_notice)
+            _apply(dev, **fields)
             await db.commit()
     else:
-        _apply(dev, user_id=user_id, platform=platform, fund_notice=fund_notice)
+        _apply(dev, **fields)
         await db.commit()
 
 

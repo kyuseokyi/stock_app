@@ -237,7 +237,7 @@ class StockMeta(Base, TimestampMixin):
 
 
 class PushDevice(Base, TimestampMixin):
-    """기기 단위 Expo 푸시 토큰. 펀드 알림은 기기 조건(펀드 등록 기기)이라 users.fcm_token 과 별개."""
+    """기기 단위 Expo 푸시 토큰. 알림 종류별 수신 여부(fund_notice·post_notice)를 기기마다 둔다(users.fcm_token 과 별개)."""
 
     __tablename__ = "push_devices"
     __table_args__ = (
@@ -251,6 +251,10 @@ class PushDevice(Base, TimestampMixin):
     )
     platform: Mapped[str] = mapped_column(String(16), nullable=False)
     fund_notice: Mapped[bool] = mapped_column(
+        Boolean, default=True, server_default=true(), nullable=False
+    )
+    # 새 글 알림 수신(앱 내정보 스위치). 구버전 앱은 보내지 않으므로 기본 true
+    post_notice: Mapped[bool] = mapped_column(
         Boolean, default=True, server_default=true(), nullable=False
     )
 

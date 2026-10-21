@@ -9,7 +9,12 @@ from ..repositories import push_repo
 
 async def register(db: AsyncSession, *, user_id: int, payload: PushDeviceIn) -> None:
     await push_repo.upsert_device(
-        db, token=payload.token, user_id=user_id, platform=payload.platform, fund_notice=payload.fund_notice
+        db,
+        token=payload.token,
+        user_id=user_id,
+        platform=payload.platform,
+        fund_notice=payload.fund_notice,
+        post_notice=payload.post_notice,
     )
 
 
