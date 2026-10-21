@@ -34,7 +34,8 @@
   ```
 - 테스트가 실패하면 커밋하지 않는다.
 - 백엔드 테스트: `cd backend && uv run pytest -p no:warnings`(conda 환경 없음).
-- 모바일 `npm install`·`npx expo install` 은 **사용자가 직접** 실행한다(작업 7-1, 8-1).
+- 모바일 `npm install`·`npx expo install` 은 **사용자가 직접** 실행한다(작업 7-1 에서 두 패키지 한 번에).
+- 하위 에이전트 지시에 넣을 것: 보고·커밋 메시지는 한국어만 / Fact-Forcing Gate 훅이 파일 첫 수정마다 거부하면 요구 사실을 제시하고 같은 호출을 다시 할 것(훅 설정·env 변경 금지) / 패키지 설치 명령 직접 실행 금지 / dev 브랜치·파일 개별 add·끝 두 줄.
 - 실제 env 파일(`.env.development` 등)은 수정하지 않는다. `.env.example` 만.
 - Expo 실서버를 테스트에서 호출하지 않는다(모킹).
 
@@ -327,7 +328,7 @@ def downgrade() -> None:
 ```
 
 head 가 하나인지 확인: `cd backend && grep -rl 'down_revision = "f3a4b5c6d7e8"' alembic/versions` → 이 파일 하나만 나와야 한다.
-`push_templates` 의 `created_at`·`updated_at` 에 서버 기본값이 있는지 확인: `grep -rn "push_templates" alembic/versions | head` 로 생성 마이그레이션을 열어 `server_default` 가 없으면 INSERT 에 `created_at, updated_at` 를 `now()` 로 함께 넣는다.
+(확인 완료: `push_templates` 의 `created_at`·`updated_at` 은 초기 마이그레이션 `3df33e164159` 에서 `server_default=now()` — 시드 INSERT 는 title·body 만 넣으면 된다.)
 
 - [ ] **1-5. 스키마** — `backend/apps/blog/push_schemas.py`
 
@@ -455,6 +456,22 @@ app.include_router(push_devices.router)
 실행: `cd backend && uv run pytest -p no:warnings tests/test_push_devices_api.py`
 예상: `5 passed`
 이어서 전체: `cd backend && uv run pytest -p no:warnings` → 실패 0.
+
+- [ ] **1-9b. 마이그레이션 실제 PostgreSQL 확인(일회용 컨테이너)**
+
+pytest 는 SQLite `create_all` 이라 마이그레이션 파일(`sa.true()`·시드 INSERT·인덱스)을 실행하지 않는다 — 배포 때 처음 돌다 깨지지 않게 여기서 확인한다(메모리 local-smoke-test-isolation 방식).
+
+```bash
+docker run -d --rm --name push-mig-pg -e POSTGRES_PASSWORD=pw -e POSTGRES_DB=mig -p 55432:5432 postgres:16
+for i in $(seq 1 30); do docker exec push-mig-pg pg_isready -U postgres -q && break; perl -e 'select(undef,undef,undef,1)'; done
+cd backend
+export ALEMBIC_DATABASE_URL=postgresql+psycopg2://postgres:pw@localhost:55432/mig
+uv run alembic upgrade head && uv run alembic downgrade -1 && uv run alembic upgrade head
+docker exec push-mig-pg psql -U postgres -d mig -Atc "select count(*) from push_templates; select column_default from information_schema.columns where table_name='push_devices' and column_name='fund_notice';"
+unset ALEMBIC_DATABASE_URL
+docker stop push-mig-pg
+```
+예상: 세 alembic 명령 모두 오류 없음, `push_templates` 1행(시드), `fund_notice` 기본값 `true`. 컨테이너는 `--rm` 이라 stop 으로 사라진다. 실패하면 마이그레이션을 고치고 다시 — 커밋하지 않는다.
 
 - [ ] **1-10. 커밋**
 
@@ -2491,11 +2508,22 @@ git commit -m "feat(web): SSE fund_report_updated — 로그인·펀드 있을 �
 **파일:**
 - 생성: `mobile/src/features/fund/fund-signal-core.ts`, `mobile/src/features/fund/fund-signal-core.test.ts`, `mobile/src/features/fund/fund-signal.ts`
 - 수정: `mobile/src/app/_layout.tsx`
-- 사전: **사용자** 가 `react-native-sse` 설치(순수 JS — 네이티브 재빌드 불필요)
+- 사전: **사용자** 가 `react-native-sse`(순수 JS)·`expo-notifications` 를 한 번에 설치(7-1)
 
-- [ ] **7-1. 사용자에게 의존성 설치 요청**
+- [ ] **7-1. 사용자에게 의존성 설치 요청(작업 8 것까지 한 번에) + 의존성만 따로 커밋**
 
-`! cd mobile && npx expo install react-native-sse` — 끝나면 `mobile/package.json` 에 `react-native-sse` 가 생긴다.
+흐름이 두 번 멈추지 않게 한 번에 요청한다(설치만으로는 앱이 깨지지 않는다 — import 해야 깨진다):
+
+`! cd mobile && npx expo install react-native-sse expo-notifications`
+
+끝나면 확인 후 의존성 커밋을 **먼저 따로** 한다(작업 7·8 커밋에 섞이지 않게):
+```bash
+cd mobile && node -p "['react-native-sse','expo-notifications'].map(p=>p+'@'+require(p+'/package.json').version).join(' ')"
+cd .. && git add mobile/package.json mobile/package-lock.json
+git commit -m "chore(mobile): react-native-sse·expo-notifications 의존성 추가
+
+(끝 두 줄 규칙 적용)"
+```
 
 - [ ] **7-2. 실패하는 테스트** — `mobile/src/features/fund/fund-signal-core.test.ts`
 
@@ -2677,7 +2705,7 @@ export function useFundSignal(): void {
 - [ ] **7-6. 커밋**
 
 ```bash
-git add mobile/package.json mobile/package-lock.json mobile/src/features/fund/fund-signal-core.ts \
+git add mobile/src/features/fund/fund-signal-core.ts \
   mobile/src/features/fund/fund-signal-core.test.ts mobile/src/features/fund/fund-signal.ts mobile/src/app/_layout.tsx
 git commit -m "feat(mobile): 펀드 리포트 갱신 신호 SSE — 로그인·앞 화면·펀드 있을 때만 연결, 0~30초 뒤 갱신
 
@@ -2689,13 +2717,13 @@ git commit -m "feat(mobile): 펀드 리포트 갱신 신호 SSE — 로그인·�
 ### 작업 8: 모바일 푸시(권한·등록·핸들러·채널·config)
 
 **파일:**
-- 사전: **사용자** 가 `expo-notifications` 설치 → **네이티브 재빌드 필요**
+- 사전: 7-1 에서 `expo-notifications` 설치 완료 → **네이티브 재빌드 필요**(8-10)
 - 수정: `mobile/app.config.js`, `mobile/.env.example`, `mobile/src/features/auth/store.ts:64-68`, `mobile/src/app/_layout.tsx`, `mobile/src/app/fund/index.tsx`
 - 생성: `mobile/src/features/auth/logout-hooks.ts`, `mobile/src/features/push/` 아래 `config.ts`, `api.ts`, `registration-core.ts`(+test), `registration.ts`, `handlers-core.ts`(+test), `handlers.ts`, `prompt-core.ts`(+test), `prompt.ts`, `push-prompt-sheet.tsx`, `permission-banner.tsx`
 
-- [ ] **8-1. 사용자에게 설치 요청**
+- [ ] **8-1. 시작 전: Metro 정지(기기 빨간 화면 방지)**
 
-`! cd mobile && npx expo install expo-notifications`
+`expo-notifications` 는 네이티브 모듈이라, 8-8 에서 `_layout.tsx` 가 import 하는 순간 켜져 있는 Metro 가 **옛 바이너리**(기기에 설치된 개발 앱)에 새 번들을 보내 `Cannot find native module 'ExpoPushTokenManager'` 류 빨간 화면이 뜬다. 작업 8 을 시작하기 전에 실행 중인 Metro(8082)를 멈추고 사용자에게 "재빌드(8-10) 전까지 기기 앱은 쓰지 말라"고 알린다. 패키지 설치는 7-1 에서 이미 끝났다.
 
 - [ ] **8-2. 설정** — `mobile/app.config.js`
 
@@ -3081,6 +3109,7 @@ export function installPushLogoutHook(): void {
 // 알림 표시·채널·탭 처리 — 루트 레이아웃에서 usePushSetup() 한 번
 import * as Notifications from 'expo-notifications';
 import { useRouter } from 'expo-router';
+import * as SecureStore from 'expo-secure-store';
 import { useEffect } from 'react';
 import { Platform } from 'react-native';
 
@@ -3090,6 +3119,18 @@ import { fundRefresher } from '@/features/fund/auto-refresh';
 import { isPushConfigured } from './config';
 import { FUND_CHANNEL_ID, handleNotificationResponseWith } from './handlers-core';
 import { installPushLogoutHook, syncPushRegistration } from './registration';
+
+// 같은 알림 응답을 두 번 처리하지 않게(효과 재실행·앱 재실행 때 getLastNotificationResponseAsync 가 같은 응답을 다시 줄 수 있음)
+const HANDLED_KEY = 'push_last_handled_v1';
+let lastHandled: string | null | undefined; // undefined = 아직 SecureStore 에서 안 읽음
+
+async function claimResponse(id: string): Promise<boolean> {
+  if (lastHandled === undefined) lastHandled = await SecureStore.getItemAsync(HANDLED_KEY).catch(() => null);
+  if (lastHandled === id) return false;
+  lastHandled = id;
+  void SecureStore.setItemAsync(HANDLED_KEY, id).catch(() => {});
+  return true;
+}
 
 // 앱이 앞에 있을 때 받은 알림은 배너를 띄우지 않는다(SSE·자동 갱신이 이미 반영) — 알림 목록에는 남김
 Notifications.setNotificationHandler({
@@ -3113,22 +3154,24 @@ export async function ensureFundChannel(): Promise<void> {
 export function usePushSetup(): void {
   const router = useRouter();
   const loggedIn = useAuthStore((s) => s.user !== null);
+  // 로그인 상태 복원(hydrate) 전에 /fund 로 가면 펀드 화면이 user=null 로 보고 /profile 로 튕긴다 → 복원 후에 처리
+  const hydrated = useAuthStore((s) => s.hydrated);
 
   useEffect(() => {
-    if (!isPushConfigured()) return;
+    if (!isPushConfigured() || !hydrated) return;
     installPushLogoutHook();
     void ensureFundChannel();
-    const handle = (r: Notifications.NotificationResponse | null) => {
-      if (!r) return;
+    const handle = async (r: Notifications.NotificationResponse | null) => {
+      if (!r || !(await claimResponse(r.notification.request.identifier))) return;
       handleNotificationResponseWith(r.notification.request.content.data, {
         navigate: (p) => router.push(p),
         refresh: () => void fundRefresher.run({ force: true }),
       });
     };
-    void Notifications.getLastNotificationResponseAsync().then(handle); // 콜드 스타트
-    const sub = Notifications.addNotificationResponseReceivedListener(handle);
+    void Notifications.getLastNotificationResponseAsync().then(handle); // 콜드 스타트(앱이 꺼진 상태에서 탭)
+    const sub = Notifications.addNotificationResponseReceivedListener((r) => void handle(r));
     return () => sub.remove();
-  }, [router]);
+  }, [router, hydrated]);
 
   // 앱 실행·로그인 직후 등록 동기화
   useEffect(() => {
@@ -3322,10 +3365,19 @@ import { syncPushRegistration } from '@/features/push/registration';
 실행: `cd mobile && npx tsc --noEmit && npx jest --silent` → 오류 0, 실패 0.
 `npx expo lint` 는 사용자가 실행.
 
-- [ ] **8-10. 커밋**
+- [ ] **8-10. 개발 앱 재빌드(네이티브 모듈 추가) — 커밋 전에 실행 확인**
+
+푸시 설정값(`EAS_PROJECT_ID`)이 아직 없어도 재빌드한다 — 값이 없으면 푸시만 꺼지고 앱은 정상이어야 한다(이것도 확인 대상).
+```bash
+cd mobile && npm run prebuild:dev:android
+APP_ENV=development npx expo run:android --port 8082
+```
+확인: 앱이 빨간 화면 없이 뜨고, 펀드 화면 진입·펀드 추가가 되며(설정 없으면 안내 시트 안 뜸), 홈·스크리너가 정상. 기기를 다시 연결했다면 `adb reverse tcp:8082 tcp:8082`.
+
+- [ ] **8-11. 커밋**
 
 ```bash
-git add mobile/package.json mobile/package-lock.json mobile/app.config.js mobile/.env.example \
+git add mobile/app.config.js mobile/.env.example \
   mobile/src/features/auth/logout-hooks.ts mobile/src/features/auth/store.ts mobile/src/app/_layout.tsx mobile/src/app/fund/index.tsx \
   mobile/src/features/push/config.ts mobile/src/features/push/api.ts mobile/src/features/push/registration-core.ts \
   mobile/src/features/push/registration-core.test.ts mobile/src/features/push/registration.ts \
@@ -3337,9 +3389,11 @@ git commit -m "feat(mobile): 펀드 리포트 푸시 — 첫 펀드 등록 시 �
 (끝 두 줄 규칙 적용)"
 ```
 
-- [ ] **8-11. 실기기 확인(사용자 준비 후)**
+- [ ] **8-12. 실푸시 확인(사용자 준비 후)**
 
-사용자 준비(가이드 2~3장)가 끝나 projectId 를 알면: 사용자가 `mobile/.env.development.local` 에 `EAS_PROJECT_ID=<UUID>` 와 `GOOGLE_SERVICES_JSON=./secrets/google-services.json` 추가 → `cd mobile && npm run prebuild:dev:android` → `APP_ENV=development npx expo run:android --port 8082`. 확인 순서는 가이드 7장(토큰 등록 → Expo 도구 단독 발송 → 관리자 테스트 발송).
+사용자 준비(가이드 2-2·3장: FCM V1 키 발급 → `eas init` → `eas credentials` 업로드)가 끝나 projectId 를 알면: 사용자가 `mobile/.env.development.local` 에 `EAS_PROJECT_ID=<UUID>` 와 `GOOGLE_SERVICES_JSON=./secrets/google-services.json` 추가(`google-services.json` 은 이미 있음 — 두 패키지 포함 확인 완료) → 8-10 과 같은 명령으로 재빌드. 확인 순서는 가이드 7장(토큰 등록 → Expo 도구 단독 발송 → 관리자 테스트 발송). 앱이 꺼진 상태에서 알림을 탭해 **내정보로 튕기지 않고 펀드 화면으로 가는지**도 확인한다.
+
+> 출시 전 개선 후보(이번 범위 밖): 다른 기기 로그인으로 세션이 교체되면 `expireSession` 의 DELETE 가 401 로 실패해 옛 기기 토큰이 남는다 — 그 기기에 펀드 푸시가 계속 갈 수 있다(데이터 없음, 탭하면 프로필).
 
 ---
 
