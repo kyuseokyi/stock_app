@@ -84,7 +84,7 @@
 ### Phase 2 — 스크리너
 - [x] **CANSLIM 스크리너(프로젝트 2)** — 7항목 판정·점수 매일 사전 계산(`canslim_daily`), GraphQL `canslimMarket·canslimScreen·canslimScore`, 웹 `/screener`(시장 방향·필터·목록·차트·점수표·추이). C 는 재무 형식 확인 뒤 `FUNDAMENTALS_Q_CUMULATIVE` 로 켬. 스펙 `docs/superpowers/specs/2026-10-18-canslim-design.md` (2026-10-18). 앱 화면은 다음
 - [x] **스크리너 탭 — 시장·테마·업종·일정(프로젝트 3, 주달 화면)** — 메뉴 '스크리너' 안 탭(시장·테마·업종·일정·주도주), 종가 기준 하루 1회 사전 계산(`market_stock_daily`·`market_group_daily`) + 관리자 테마 보정 시 최신일 재계산, 테마/업종 순위·트리맵(시총/거래대금)·상세(순위 추이·대장주)·일정(공모주·경제지표), CANSLIM 탭 이름 '주도주'. 스펙 `docs/superpowers/specs/2026-10-19-market-dashboard-design.md` (2026-10-19). 다음: 관리자 테마 보정 UI, 뉴스·AI 요약(네이버 키·Ollama), 앱 화면
-- [ ] 관리자 테마 보정 UI(admin_web) — 보정 API(`/api/v1/admin/themes`)는 있음
+- [x] 관리자 테마 보정 UI(admin_web) — `MarketThemes.tsx`(시장 지표 목록·정렬·숨김, 이름·설명 수정, 종목 검색 추가·제외·복구)
 - [ ] 차트 패턴(컵·컵핸들·쌍바닥·플랫 베이스·HTF)·베이스 카운트·돌파 리포트 — 참고: 기존 `ams/workspace/api` 의 `app/services/chart_pattern/`(MarketSurge 맞춤 기준값)
 - [ ] `stock_api` 스크리너 리졸버/엔드포인트(필터 조합)
 - [ ] 프리셋(거래량급증/골든크로스/과매도/신고가) + 커스텀 필터(볼린저 σ·정/역배열·매물대·거래량·재무)
@@ -102,7 +102,8 @@
 ### Phase 4 — 모바일 앱 (Expo) *(토스 토대·네비 완료)*
 - [x] 앱 셋업 — Expo SDK 57/RN 0.86, **Unistyles v3** 테마(상승=빨강/하락=파랑, adaptiveThemes), zustand. `app.config.js` dev/prod 앱이름·bundleId 분리, `eas.json` 프로필, `EXPO_PUBLIC_*` env 분리
 - [x] **토스 디자인 전체 적용 + 네비 재편** — 하단 4탭(홈/블로그/게임/내정보, 스크리너·관심종목 탭 제거), 블로그(목록/상세/댓글)·홈 추천글·게임 스켈레톤 동작. 에뮬레이터 육안 검증 완료
-- [ ] 스크리너/차트 화면 + 차트 드로잉
+- [x] 스크리너 탭 — 하단 탭 '스크리너'(시장·테마·업종·일정 칩, 그룹 상세, 상단 "실시간 시세 아님" 안내)
+- [ ] 종목 차트 상세 + 차트 드로잉(앱) · 주도주(CANSLIM) 칩
 - [x] 실제 푸시 — Expo Push(→FCM/APNs) 발송기, 펀드 리포트 알림부터 적용(2026-10-21). 새 글 알림은 아직 users.fcm_token·Mock
 
 ### Phase 5 — 실시간 트레이딩 게임 (Trading Game) & 에듀테인먼트
@@ -144,7 +145,8 @@
 - [x] **퀴즈 공개 구간 겹침 방지** — 같은 종목 문제 간격 >= 나중 문제 차트 길이 + 이른 문제 예측 기간(최소 20, `spans_clear`), DB 기존 문제도 길이 반영. 실데이터 200개: 겹치는 쌍 55→0, 생성 수 동일 (2026-10-17)
 - [x] **⑤-1** 연속 출석 마일스톤 보상 — 3·7·14·30일, 시즌마다 마일스톤별 1회 수동 수령(`streak_reward_claims`, web 모달·모바일 시트) (2026-10-13)
 - [x] **⑤-2** 퀴즈/아카데미 문항 어드민 편집 — 아카데미 문항 DB(`academy_questions`)·관리자 CRUD, 퀴즈 활성/비활성·수정·삭제·일괄 생성·직접 출제(종목·기준일), admin_web 🎓 아카데미 문항·🧩 퀴즈 관리 (2026-10-13)
-- [ ] 서버 PUSH_BACKEND=expo 전환 + EAS 에 FCM V1 키 업로드(docs/push_notification_setup.md 3·6장)
+- [x] 서버 PUSH_BACKEND=expo 전환 + EAS 에 FCM V1 키 업로드 — 서버 실발송·알림 탭·무음 push 백그라운드 기록(콜드 포함) 실기기 확인 (2026-10-21)
+- [ ] 펀드 알림 후속: 운영 앱 빌드에 projectId 포함 확인(`unzip -p <apk> assets/app.config | grep -c projectId`)·6시간 정기 작업 콜드 실측·새 글 알림을 Expo 발송기로 이전(현재 users.fcm_token·Mock)
 - [x] **③ 실시간 수평 확장(Redis Pub/Sub 연결 분산)** — WS 전달 Redis Pub/Sub 버스 + 싱글톤 작업 리더 선출 + `/ready`·`*_FILE` env, 배포 설정 Docker Swarm(`deploy/swarm/`)·Kubernetes Kustomize(`deploy/k8s/`), 초보자 가이드 [`docs/deploy/README.md`](deploy/README.md) (스펙 `docs/superpowers/specs/2026-10-14-horizontal-scaling-swarm-k8s-design.md`, 2026-10-14)
 - [x] web_client TypeScript 전환 (서브페이즈 6 직전, admin_web과 동일 방식) — 2026-10-13 strict 전환 완료
 - [x] **trading_game 개발 서버(develop) 배포 구성** — prod compose 에 `trading_game`(호스트 8004)·`game_ws` 추가, web/admin 빌드에 `VITE_GAME_API_URL=https://game.haezean.com` 주입, Deploy Server 에 `alembic upgrade head` 자동 단계 (2026-10-13). **남은 수동 작업**: Cloudflare `game.haezean.com → localhost:8004`, 서버에서 시즌 시드·퀴즈 생성(`docs/server_setup.md` §7-1)
