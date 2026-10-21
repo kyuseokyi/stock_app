@@ -23,7 +23,7 @@
 set -euo pipefail
 
 SSH_PORT="${DEV_SSH_PORT:-2222}"        # cloudflared access tcp 로 열린 로컬 포트
-SSH_USER="${DEV_SSH_USER:-summersnow}"  # 미니PC 우분투 계정
+SSH_USER="${DEV_SSH_USER:-kyuseok}"  # 미니PC 우분투 계정
 SSH_HOST="127.0.0.1"
 
 # 2222 가 안 열려 있으면(=cloudflared 미실행) 바로 안내하고 종료
