@@ -29,6 +29,10 @@ class ExpoPushSender(PushSender):
     def send(self, token: str, message: PushMessage) -> bool:
         return self.send_batch([token], message).success == 1
 
+    def send_multicast(self, tokens: list[str], message: PushMessage) -> int:
+        # 토큰마다 요청하지 않고 100개 묶음으로 보낸다
+        return self.send_batch(tokens, message).success
+
     def send_batch(self, tokens: list[str], message: PushMessage) -> BatchResult:
         result = BatchResult()
         if not tokens:
@@ -42,18 +46,24 @@ class ExpoPushSender(PushSender):
                 try:
                     resp = client.post(EXPO_PUSH_URL, json=[_payload(t, message) for t in chunk], headers=headers)
                     resp.raise_for_status()
-                    tickets = resp.json().get("data") or []
+                    body = resp.json()
+                    tickets = body.get("data") if isinstance(body, dict) else None
+                    if not isinstance(tickets, list):
+                        raise ValueError("응답 형식이 올바르지 않음")
                 except (httpx.HTTPError, ValueError) as exc:
                     # 재시도 없음 — 관리자가 이력의 실패 수를 보고 다시 보낸다
                     logger.warning("expo push 묶음 실패(%s건): %s", len(chunk), exc)
                     result.failure += len(chunk)
                     continue
+                if len(tickets) != len(chunk):
+                    logger.warning("expo push 티켓 수 불일치: 요청 %s건 / 응답 %s건", len(chunk), len(tickets))
                 for token, ticket in zip(chunk, tickets):
-                    if ticket.get("status") == "ok":
+                    if isinstance(ticket, dict) and ticket.get("status") == "ok":
                         result.success += 1
                         continue
                     result.failure += 1
-                    if (ticket.get("details") or {}).get("error") == "DeviceNotRegistered":
+                    details = ticket.get("details") if isinstance(ticket, dict) else None
+                    if isinstance(details, dict) and details.get("error") == "DeviceNotRegistered":
                         result.invalid_tokens.append(token)
                 result.failure += max(0, len(chunk) - len(tickets))
         return result
