@@ -22,7 +22,7 @@
 - [x] 게시판별 댓글 on/off 토글 (`comments_enabled`)
 - [x] TipTap 리치 에디터, 반응형 레이아웃 + 사이드바
 - [x] **admin_web TypeScript(strict) 전환** — 24개 파일, 백엔드 스키마 기반 DTO 타입(`src/types/`), build에 `tsc --noEmit` 포함. 트랜스파일 결과 동일성 검증 + 브라우저 스모크 통과
-- [x] 새 글 실시간 알림: 웹 SSE(Redis pub/sub) + 모바일 FCM(Mock)
+- [x] 새 글 실시간 알림: 웹 SSE(Redis pub/sub) + 모바일 Expo 푸시(관리자가 고른 글만, 2026-10-21 이전)
 
 ### 주식 API (stock_api, GraphQL)
 - [x] `searchStocks`(국내외/지수 통합검색) · `getChartData`(온더플라이 시드 데이터)
@@ -104,7 +104,7 @@
 - [x] **토스 디자인 전체 적용 + 네비 재편** — 하단 4탭(홈/블로그/게임/내정보, 스크리너·관심종목 탭 제거), 블로그(목록/상세/댓글)·홈 추천글·게임 스켈레톤 동작. 에뮬레이터 육안 검증 완료
 - [x] 스크리너 탭 — 하단 탭 '스크리너'(시장·테마·업종·일정 칩, 그룹 상세, 상단 "실시간 시세 아님" 안내)
 - [ ] 종목 차트 상세 + 차트 드로잉(앱) · 주도주(CANSLIM) 칩
-- [x] 실제 푸시 — Expo Push(→FCM/APNs) 발송기, 펀드 리포트 알림부터 적용(2026-10-21). 새 글 알림은 아직 users.fcm_token·Mock
+- [x] 실제 푸시 — Expo Push(→FCM/APNs) 발송기, 펀드 리포트 알림·새 글 알림 적용(2026-10-21). 새 글은 push_devices.post_notice·내정보 스위치
 
 ### Phase 5 — 실시간 트레이딩 게임 (Trading Game) & 에듀테인먼트
 > 마스터 기획·단계 프롬프트 확정(`docs/trading_game_plan.md`, `docs/prompts/trading_game/`). 6개 서브페이즈로 분해.
@@ -146,7 +146,8 @@
 - [x] **⑤-1** 연속 출석 마일스톤 보상 — 3·7·14·30일, 시즌마다 마일스톤별 1회 수동 수령(`streak_reward_claims`, web 모달·모바일 시트) (2026-10-13)
 - [x] **⑤-2** 퀴즈/아카데미 문항 어드민 편집 — 아카데미 문항 DB(`academy_questions`)·관리자 CRUD, 퀴즈 활성/비활성·수정·삭제·일괄 생성·직접 출제(종목·기준일), admin_web 🎓 아카데미 문항·🧩 퀴즈 관리 (2026-10-13)
 - [x] 서버 PUSH_BACKEND=expo 전환 + EAS 에 FCM V1 키 업로드 — 서버 실발송·알림 탭·무음 push 백그라운드 기록(콜드 포함) 실기기 확인 (2026-10-21)
-- [ ] 펀드 알림 후속: 운영 앱 빌드에 projectId 포함 확인(`unzip -p <apk> assets/app.config | grep -c projectId`)·6시간 정기 작업 콜드 실측·새 글 알림을 Expo 발송기로 이전(현재 users.fcm_token·Mock)
+- [ ] 펀드 알림 후속: 운영 앱 빌드에 projectId 포함 확인(`unzip -p <apk> assets/app.config | grep -c projectId`)·6시간 정기 작업 콜드 실측
+- [ ] 새 글 알림 실기기 확인 — 펀드 없는 계정 등록·수신·탭 → 글 상세, 스위치 끄면 미수신(코드 이전은 2026-10-21 완료)
 - [x] **③ 실시간 수평 확장(Redis Pub/Sub 연결 분산)** — WS 전달 Redis Pub/Sub 버스 + 싱글톤 작업 리더 선출 + `/ready`·`*_FILE` env, 배포 설정 Docker Swarm(`deploy/swarm/`)·Kubernetes Kustomize(`deploy/k8s/`), 초보자 가이드 [`docs/deploy/README.md`](deploy/README.md) (스펙 `docs/superpowers/specs/2026-10-14-horizontal-scaling-swarm-k8s-design.md`, 2026-10-14)
 - [x] web_client TypeScript 전환 (서브페이즈 6 직전, admin_web과 동일 방식) — 2026-10-13 strict 전환 완료
 - [x] **trading_game 개발 서버(develop) 배포 구성** — prod compose 에 `trading_game`(호스트 8004)·`game_ws` 추가, web/admin 빌드에 `VITE_GAME_API_URL=https://game.haezean.com` 주입, Deploy Server 에 `alembic upgrade head` 자동 단계 (2026-10-13). **남은 수동 작업**: Cloudflare `game.haezean.com → localhost:8004`, 서버에서 시즌 시드·퀴즈 생성(`docs/server_setup.md` §7-1)

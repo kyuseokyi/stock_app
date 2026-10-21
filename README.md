@@ -11,7 +11,7 @@ backend/
 │   ├── blog/        # 블로그 서비스 — 게시판/게시글/댓글 CRUD, SSE 알림 (포트 8000)
 │   ├── stock_api/   # 주식 API 서비스 — GraphQL 종목검색/차트(온더플라이) (포트 8002)
 │   ├── trading_game/# 트레이딩 게임 — 가상 주문/체결 엔진 + 실시간 WS 게이트웨이 (포트 8003)
-│   └── collector/   # 수집·알림 워커 (Celery) — 새 글 푸시(Mock) · 펀드 리포트 알림(Expo Push)
+│   └── collector/   # 수집·알림 워커 (Celery) — 새 글 알림 · 펀드 리포트 알림(Expo Push)
 ├── shared/          # 공통 DB 모델·세션·JWT 검증·보안
 └── alembic/         # DB 마이그레이션
 admin_web/           # 관리자 웹 (React + Vite + TailwindCSS, TypeScript)  (포트 5173)
@@ -218,7 +218,7 @@ npm run build:android:devapk  # → android/app/build/outputs/apk/release/app-re
   - ⚠️ **dev 앱 스킴이 `stockapp` → `stockapp-dev` 로 바뀌었다**(prod 와 같은 기기 공존 시 복귀 링크 충돌 방지). 기존 dev build 는 **1회 재생성** 필요: `npm run prebuild:dev` 후 `npm run android:dev`/`ios:dev`(또는 EAS dev 빌드). Expo Go 는 Unistyles 로 원래 미지원.
   - 에뮬레이터는 auth 콜백이 브라우저에서 열리므로 `adb reverse tcp:8001 tcp:8001` 이 필요하다(기존 목록에 포함).
 - **게임 탭(트레이딩 게임 6c)**: web 6a+6b 와 동일 기능(헤더·Streak·코치 배너·심리 바·일봉+실시간 차트·포지션/주문·넛지 토스트 + 🏆 랭킹·🎯 퀘스트·🎓 아카데미(5x 해금)·🧩 야간 10초 차트 퀴즈 시트). trading_game(8003)·stock_api(8002, 일봉)·auth(8001) 필요. `EXPO_PUBLIC_GAME_API_URL`은 **선택** — 미설정 시 dev 는 `http://localhost:8003`, production 이면 "시즌을 준비하고 있어요". 차트는 신규 네이티브 의존성 없는 순수 View 렌더(`src/features/game/lib/chart-layout.ts`). 로그인은 내정보 탭(비로그인에서 주문·퀘스트·퀴즈·아카데미 → 내정보 탭 안내). 에뮬레이터는 `adb reverse tcp:8003 tcp:8003` 추가(8000/8001/8002/8082 와 함께).
-- **푸시 알림 빌드 설정**: EAS projectId 는 공개 식별자라 `mobile/app.config.js` 에 **기본값**(`DEFAULT_EAS_PROJECT_ID`)으로 들어 있고, `google-services.json` 은 `mobile/secrets/google-services.json` 파일이 **있으면 자동으로** 쓴다(파일은 git 제외). 그래서 개발 빌드·운영 빌드(`android:prod`, `eas build --local`)·개발 APK 모두 **env 를 따로 설정하지 않아도** 푸시가 켜진다. env `EAS_PROJECT_ID`·`GOOGLE_SERVICES_JSON`(`EXPO_PUBLIC_` 아님, 빌드 시 `app.config.js` 가 읽음)은 **덮어쓸 때만** 쓴다(키 이름은 `mobile/.env.example` 참고). `expo-notifications` 플러그인이 들어 있어 **푸시를 쓰려면 새 dev build 가 필요**하다(`npm run prebuild:dev` 후 `npm run android:dev` 등). 웹(`Platform.OS === 'web'`)에서는 `isPushConfigured()` 가 false 라 푸시를 쓰지 않는다. 코드: `src/features/push/`(토큰 등록·해제 직렬화 큐, 안내 시트, 권한 배너, 알림 탭 → 펀드 화면).
+- **푸시 알림 빌드 설정**: EAS projectId 는 공개 식별자라 `mobile/app.config.js` 에 **기본값**(`DEFAULT_EAS_PROJECT_ID`)으로 들어 있고, `google-services.json` 은 `mobile/secrets/google-services.json` 파일이 **있으면 자동으로** 쓴다(파일은 git 제외). 그래서 개발 빌드·운영 빌드(`android:prod`, `eas build --local`)·개발 APK 모두 **env 를 따로 설정하지 않아도** 푸시가 켜진다. env `EAS_PROJECT_ID`·`GOOGLE_SERVICES_JSON`(`EXPO_PUBLIC_` 아님, 빌드 시 `app.config.js` 가 읽음)은 **덮어쓸 때만** 쓴다(키 이름은 `mobile/.env.example` 참고). `expo-notifications` 플러그인이 들어 있어 **푸시를 쓰려면 새 dev build 가 필요**하다(`npm run prebuild:dev` 후 `npm run android:dev` 등). 웹(`Platform.OS === 'web'`)에서는 `isPushConfigured()` 가 false 라 푸시를 쓰지 않는다. 코드: `src/features/push/`(토큰 등록·해제 직렬화 큐, 안내 시트(홈·펀드), 권한 배너, 내정보 새 글 알림 스위치, 알림 탭 → 펀드 화면·글 상세).
   - **사용자가 직접 할 일(최초 1회)**: ① Firebase 에서 FCM V1 서비스 계정 키 발급 → ② `eas login` → `cd mobile && eas init` 으로 projectId 확인 → ③ `eas credentials` 로 `com.stockapp.dev`·`com.stockapp` 두 패키지에 FCM V1 키 업로드 → ④ 재빌드(env 설정 불필요) → ⑤ 서버 `PUSH_BACKEND=expo`. 자세한 순서: [`docs/push_notification_setup.md`](docs/push_notification_setup.md)
 - **공통 UI**: 공유 컴포넌트는 `mobile/src/ui/`에 있으며 토스 디자인 언어(`docs/mobile_design_language.md`)를 따른다.
 - **테스트/검증**: 순수 로직 단위 테스트는 `cd mobile && npm test`(jest). 화면은 `npx tsc --noEmit`(+ 실기기 확인)로 검증한다. 이 프로젝트에는 eslint가 설정되어 있지 않아 모바일 lint 단계는 없다.
@@ -312,7 +312,7 @@ cd ../web_client && npm run dev   # 유저웹 3000  (blog 8000 + 댓글작성 �
 | 어드민 차트 삽입(종목검색/드로잉) | 위 + stock_api(8002) |
 | 유저 웹 블로그 조회 | Docker(postgres) + blog(8000) + web_client(3000) |
 | 유저 웹 로그인(카카오·네이버/개발용 게스트) + 댓글 작성 | 위 + auth(8001) + Redis(도커, 간편 로그인 state·교환 코드). 키 없이 보려면 auth 를 `SOCIAL_FAKE_PROVIDER=true` 로 |
-| 새 글 실시간 알림(SSE)·푸시(Mock) | 위 + Redis(도커) + celery worker |
+| 새 글 실시간 알림(SSE)·앱 푸시(로컬은 PUSH_BACKEND=mock) | 위 + Redis(도커) + celery worker(REDIS_URL=redis://localhost:6379/5) |
 | 트레이딩 게임(가상 주문/체결·실시간 WS) | Docker(postgres+redis) + auth(8001) + trading_game(8003, `--workers 1`) + 수집 데몬(`run_game_ws`, Mock 가능) + ACTIVE 시즌 시드 |
 
 ### 4. 마이그레이션/시드 (스키마·계정 변경 시에만)
@@ -366,7 +366,7 @@ uv run pytest tests/test_universe_cooldown.py    # 특정 파일
 
 | 테이블 | 용도 | 주요 컬럼 |
 |---|---|---|
-| `users` | 사용자(관리자·게스트·소셜) | email, nickname, provider, provider_id, role, is_active, password_hash, fcm_token |
+| `users` | 사용자(관리자·게스트·소셜) | email, nickname, provider, provider_id, role, is_active, password_hash, fcm_token(미사용 — 푸시는 push_devices) |
 | `boards` | 게시판 | name, order_index, is_active, min_role_required, comments_enabled |
 | `blog_posts` | 게시글 | board_id, author_id, title, content, thumbnail_url, view_count, featured_at(홈 추천 켠 시각) |
 | `blog_comments` | 댓글 | post_id, author_id, content |
@@ -562,7 +562,8 @@ cd backend && uv run --with pykrx python -m apps.collector.verify.spot_check --n
 
 ## 🔔 알림 아키텍처
 - **웹(SSE)**: 블로그 서비스의 `GET /api/v1/notifications/stream` 에 EventSource 로 연결 → 새 글 작성 시 Redis pub/sub 로 즉시 토스트 알림.
-- **모바일(FCM)**: 새 글 작성 시 Celery 워커로 위임(`collector.send_new_post_notification`) → 대상 유저에게 푸시. 현재 발송기는 Mock(로그), `PUSH_BACKEND=fcm` + 자격증명으로 교체 예정.
+- **새 글 앱 알림(Expo 푸시)**: 관리자 웹 글 **작성** 화면의 "앱 알림 보내기"를 체크한 글만(`POST /api/v1/blogs` 의 요청 전용 필드 `notify`) Celery `collector.send_new_post_notification` 에 위임한다. 대상은 `push_devices` ⨝ `users` — 활성 사용자, 역할 등급 ≥ 게시판 `min_role_required`, 기기의 `post_notice=true`(펀드 등록 여부와 무관). 제목 `[게시판] 새 글`, 본문 글 제목, Android 채널 `blog-post`. 무효 토큰은 지우고, 결과는 로그로만 남긴다(발송 이력 없음). 웹 SSE `new_post` 는 체크와 상관없이 모든 새 글에 발행. `users.fcm_token` 은 더 이상 쓰지 않는다(컬럼만 남음).
+  - 앱: 로그인 + 알림 권한이면 펀드가 없어도 기기를 등록한다(`fund_notice`=펀드 ≥1, `post_notice`=내정보 "새 글 알림" 스위치, 기본 켜짐; 저장에 실패하면 스위치를 되돌리고 토스트로 안내). 알림 탭 → 글 상세, 앱이 앞에 있을 때는 새 글만 배너. 권한 안내 시트는 로그인 후 홈 탭·펀드 첫 등록·펀드 화면 진입 중 한 번.
 - **펀드 리포트 알림(푸시 + SSE)**: 관리자 웹 `/fund-notices` → blog 관리자 API(`/api/v1/admin/fund-notices`·`push-sends`·`push-templates`) → Celery `collector.send_fund_notice` 가 `push_devices` 의 토큰으로 `PUSH_BACKEND=expo` 발송기(Expo Push → FCM)를 호출하고 SSE `fund_report_updated` 도 발행한다. 알림 메시지 뒤에 깨우기용 무음 메시지(`fund_refresh`)를 한 번 더 보낸다. 앱은 `PUT/DELETE /api/v1/push-devices` 로 토큰을 등록·해제한다. 만료 토큰(`DeviceNotRegistered`)은 서버가 지운다.
   - **예약 발송**: Celery beat `dispatch-scheduled-pushes`(`collector.dispatch_scheduled_pushes`, **1분마다**)가 예약 시각이 지난 건을 집어 발송한다. 오래 멈춘 `sending` 은 15분 뒤 `failed` 로 정리. 워커를 중단해 두면 재기동 후 지연 발송된다. 새 beat 엔트리이므로 배포 때 **beat 재시작**이 필요하다.
 
@@ -570,6 +571,11 @@ cd backend && uv run --with pykrx python -m apps.collector.verify.spot_check --n
 1. 운영 DB 마이그레이션: 배포 워크플로(`deploy-server.yml`)가 `alembic upgrade head` 를 실행하는지 확인(새 리비전 `b9c0d1e2f3a4`, `push_devices`·`push_sends`·`push_templates`).
 2. 서버 env 에 `PUSH_BACKEND=expo` — **EAS 에 FCM V1 키를 올린 뒤에** 바꾼다(먼저 바꾸면 Expo 가 `InvalidCredentials` 로 전부 실패, 이력에 실패로 남을 뿐 서비스 영향은 없음). 선택 `EXPO_ACCESS_TOKEN`.
 3. Celery **beat 재시작**(새 엔트리 `dispatch-scheduled-pushes`) 및 워커 재시작.
+
+### 새 글 알림 배포 메모
+1. 운영 DB 마이그레이션: 새 리비전 `c1d2e3f4a5b6`(`push_devices.post_notice`, 기존 행은 true) — 배포 워크플로의 `alembic upgrade head` 로 자동 적용된다.
+2. **서버를 먼저 배포해도 안전**: 구버전 앱은 펀드 등록 기기만 등록하고 `post_notice` 를 안 보내 기본 true → 그 기기들만 새 글 알림을 받는다. 새 앱 빌드를 배포해야 알림을 허용한 모든 로그인 기기로 넓어진다.
+3. blog·Celery 워커 재시작(새 beat 엔트리 없음).
 
 ## 🛠 데이터 스토어
 - **PostgreSQL**: 사용자·게시판·게시글·댓글 등 관계형 데이터

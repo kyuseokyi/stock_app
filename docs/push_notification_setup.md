@@ -1,7 +1,7 @@
 # 푸시 알림 설정 가이드 (모바일 · Expo Push · FCM)
 
 모바일 앱에 실제 푸시 알림을 보내기 위해 **계정·키를 준비하고 연결하는 순서**를 정리한다.
-설계(무엇을 언제 보내는지)는 [`superpowers/specs/2026-10-19-fund-report-notice-design.md`](superpowers/specs/2026-10-19-fund-report-notice-design.md),
+설계(무엇을 언제 보내는지)는 펀드 리포트 [`superpowers/specs/2026-10-19-fund-report-notice-design.md`](superpowers/specs/2026-10-19-fund-report-notice-design.md) · 새 글 [`superpowers/specs/2026-10-21-new-post-push-design.md`](superpowers/specs/2026-10-21-new-post-push-design.md),
 앱 빌드 방법은 [`local_build_guide.md`](local_build_guide.md) 를 본다.
 
 ---
@@ -16,6 +16,7 @@
 | 앱 설정 `app.config.js` | ✅ 연결 | projectId 는 코드 기본값(`DEFAULT_EAS_PROJECT_ID`), `google-services.json` 은 `mobile/secrets/` 에 있으면 자동 사용. env 는 덮어쓸 때만 |
 | 키 파일 git 제외 규칙 | ✅ 있음 | 루트 `.gitignore`(`**/secrets/`, `google-services*.json` 등) — 2026-10-20 추가 |
 | `google-services.json` | ✅ 준비됨 | `mobile/secrets/google-services.json` — **한 파일에 `com.stockapp.dev`·`com.stockapp` 두 앱 포함** |
+| 새 글 알림 | ✅ Expo 이전 | 관리자가 글 작성 때 "앱 알림 보내기"를 고른 글만, `post_notice` 켠 기기(펀드 무관). Android 채널 `blog-post`. `users.fcm_token` 미사용 |
 
 👉 **이 문서의 1~4장(계정·키 준비)은 지금 바로 할 수 있다.** 구현은 끝났다(2026-10-21). 3장까지 마치면 5~7장으로 연결·확인한다.
 
@@ -165,6 +166,7 @@ PUSH_BACKEND=expo            # mock(기본, 로그만) → expo(실발송)
    ```
    응답 `"status":"ok"` + 휴대폰에 알림이 오면 Firebase·EAS 설정은 끝.
 3. **서버 발송 확인**: 관리자 화면의 **테스트 발송**(관리자 기기에만) → 이력에 성공 수 확인.
+4. **새 글 알림 확인**: 펀드가 **없는** 계정으로 로그인 → 홈 탭 안내 시트에서 [알림 받기] → 관리자 웹에서 "앱 알림 보내기"를 체크하고 글 작성 → 기기에 `[게시판] 새 글` 알림 → 탭하면 그 글 상세. 내정보 "새 글 알림"을 끄고 다시 쓰면 오지 않아야 한다. 서버 로그 `send_new_post_notification: post=… recipients=… ok=…` 로 대상 수를 본다.
 
 ---
 
@@ -236,3 +238,4 @@ PUSH_BACKEND=expo            # mock(기본, 로그만) → expo(실발송)
 - [x] projectId 기본값·`google-services.json` 자동 사용 반영(env 불필요) → 재빌드 후 APK 확인(5장)
 - [ ] 서버 `PUSH_BACKEND=expo` → 재배포(6장)
 - [ ] Expo 도구로 단독 발송 확인 → 관리자 테스트 발송 확인(7장)
+- [ ] 새 글 알림 실기기 확인(7장 4번) — 펀드 없는 계정 수신·탭 → 글 상세·스위치 끄면 미수신
