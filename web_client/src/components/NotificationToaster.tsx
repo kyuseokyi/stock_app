@@ -1,8 +1,13 @@
 import { useEffect, useState } from 'react'
 import { API_BASE_URL } from '../config'
-import type { NewPostEvent } from '../types/api'
+import { fundRefresher } from '../lib/fundAutoRefresh'
+import { loadFunds } from '../lib/fundStore'
+import { useAuthStore } from '../store/auth'
+import type { NotificationEvent } from '../types/api'
 
 const STREAM_URL = API_BASE_URL + '/notifications/stream'
+// 모든 접속자가 같은 순간 리포트를 받으러 가지 않게 0~30초 흩뿌린다
+const FUND_JITTER_MS = 30_000
 
 interface Toast {
   id: string
@@ -15,25 +20,37 @@ export default function NotificationToaster() {
 
   useEffect(() => {
     const es = new EventSource(STREAM_URL)
+    const timers = new Set<ReturnType<typeof setTimeout>>()
+    const pushToast = (text: string) => {
+      const id = `${Date.now()}-${Math.random()}`
+      setToasts((prev) => [...prev, { id, text }])
+      setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 5000)
+    }
     const onNotification = (e: MessageEvent<string>) => {
-      let payload: Partial<NewPostEvent> = {}
+      let payload: Partial<NotificationEvent> = {}
       try {
-        payload = JSON.parse(e.data) as Partial<NewPostEvent>
+        payload = JSON.parse(e.data) as Partial<NotificationEvent>
       } catch {
         return
       }
-      const id = `${Date.now()}-${Math.random()}`
-      const text =
-        payload.type === 'new_post'
-          ? `새 글: ${payload.title}`
-          : '새 알림이 도착했습니다.'
-      setToasts((prev) => [...prev, { id, text }])
-      setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 5000)
+      if (payload.type === 'fund_report_updated') {
+        // 갱신 신호 — 로그인 + 이 브라우저에 펀드가 있을 때만, "새 알림" 토스트는 띄우지 않는다
+        if (useAuthStore.getState().user === null || loadFunds().length === 0) return
+        const t = setTimeout(() => {
+          timers.delete(t)
+          void fundRefresher.run({ force: true })
+          pushToast('오늘 수익률 리포트가 올라왔어요')
+        }, Math.random() * FUND_JITTER_MS)
+        timers.add(t)
+        return
+      }
+      pushToast(payload.type === 'new_post' ? `새 글: ${payload.title}` : '새 알림이 도착했습니다.')
     }
     es.addEventListener('notification', onNotification)
     return () => {
       es.removeEventListener('notification', onNotification)
       es.close()
+      timers.forEach(clearTimeout)
     }
   }, [])
 

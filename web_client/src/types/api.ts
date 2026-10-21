@@ -78,3 +78,11 @@ export interface NewPostEvent {
   board_id: number
   title: string
 }
+
+/** 펀드 리포트 갱신 신호(서버가 리포트 게시 시 발행). 클라이언트는 date 로 분기하지 않고 갱신만 한다 */
+export interface FundReportUpdatedEvent {
+  type: 'fund_report_updated'
+  date: string
+}
+
+export type NotificationEvent = NewPostEvent | FundReportUpdatedEvent
