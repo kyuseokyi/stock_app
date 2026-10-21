@@ -35,9 +35,13 @@ export default function NotificationToaster() {
       }
       if (payload.type === 'fund_report_updated') {
         // 갱신 신호 — 로그인 + 이 브라우저에 펀드가 있을 때만, "새 알림" 토스트는 띄우지 않는다
-        if (useAuthStore.getState().user === null || loadFunds().length === 0) return
+        const eligible = () => useAuthStore.getState().user !== null && loadFunds().length > 0
+        // 대기 중인 갱신이 이미 있으면 새 이벤트는 무시 — 토스트가 쌓이지 않게
+        if (timers.size > 0 || !eligible()) return
         const t = setTimeout(() => {
           timers.delete(t)
+          // 지연 중 로그아웃했거나 펀드를 모두 지웠다면 아무것도 하지 않는다
+          if (!eligible()) return
           void fundRefresher.run({ force: true })
           pushToast('오늘 수익률 리포트가 올라왔어요')
         }, Math.random() * FUND_JITTER_MS)
