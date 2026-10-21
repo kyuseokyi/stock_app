@@ -79,15 +79,15 @@
 - [x] **전종목 수집 병렬화** — 스레드 `KIS_WORKERS`(4) + 공유 레이트리밋(HTTP 요청마다, prod 15/s) + 공유 쿨다운. 가짜 KIS 시뮬레이션 100종목 45.7→12.2초, 전종목 추정 ~35분→~9분(배포 후 로그로 확인). 매일 수집이 MA50/120 을 None 으로 덮어쓰던 문제도 수정(직전 119종가 이어 계산) (2026-10-17)
 - [x] **시장 데이터 수집 기반(스크리너 프로젝트 1)** — 종목 프로필(.mst 업종·시총·상태)·KIS 테마(+관리자 보정 API)·지수(국내 3·미국 6·원/달러·대표 종목)·투자자별 순매수·재무비율(EPS·ROE)·공모주 일정·FRED 거시 지표. 스펙 `docs/superpowers/specs/2026-10-18-market-data-foundation-design.md`, 계획 `docs/superpowers/plans/2026-10-18-market-data-foundation.md` (2026-10-18). 실제 KIS·FRED 첫 호출은 배포 후 확인(`pending_checks.md`), FRED 키 미발급. 다음: 프로젝트 2 CANSLIM, 프로젝트 3 주달 화면
 - [ ] 미국 개별 주식 + 미국 CANSLIM — 종목 마스터·일봉·재무 출처(KIS 미확인 → SEC EDGAR 등) 조사 포함. 사용자 결정 2026-10-18: 미국은 지표 우선, 개별 주식은 다음
-- [ ] 정배열/역배열·매물대의 CH 컬럼 영속화(스크리너 성능용)
+- [x] 정배열/역배열·매물대의 CH 컬럼 영속화(스크리너 성능용) — `daily_prices` 대신 별도 테이블 `screener_daily`(배열·매물대 위쪽 비율·RSI·골든크로스·신고가·재무 배수), 2026-10-21
 
 ### Phase 2 — 스크리너
 - [x] **CANSLIM 스크리너(프로젝트 2)** — 7항목 판정·점수 매일 사전 계산(`canslim_daily`), GraphQL `canslimMarket·canslimScreen·canslimScore`, 웹 `/screener`(시장 방향·필터·목록·차트·점수표·추이). C 는 재무 형식 확인 뒤 `FUNDAMENTALS_Q_CUMULATIVE` 로 켬. 스펙 `docs/superpowers/specs/2026-10-18-canslim-design.md` (2026-10-18). 앱 화면은 2026-10-21(모바일 '주도주' 칩·종목 상세)
 - [x] **스크리너 탭 — 시장·테마·업종·일정(프로젝트 3, 주달 화면)** — 메뉴 '스크리너' 안 탭(시장·테마·업종·일정·주도주), 종가 기준 하루 1회 사전 계산(`market_stock_daily`·`market_group_daily`) + 관리자 테마 보정 시 최신일 재계산, 테마/업종 순위·트리맵(시총/거래대금)·상세(순위 추이·대장주)·일정(공모주·경제지표), CANSLIM 탭 이름 '주도주'. 스펙 `docs/superpowers/specs/2026-10-19-market-dashboard-design.md` (2026-10-19). 다음: 관리자 테마 보정 UI, 뉴스·AI 요약(네이버 키·Ollama), 앱 화면
 - [x] 관리자 테마 보정 UI(admin_web) — `MarketThemes.tsx`(시장 지표 목록·정렬·숨김, 이름·설명 수정, 종목 검색 추가·제외·복구)
 - [ ] 차트 패턴(컵·컵핸들·쌍바닥·플랫 베이스·HTF)·베이스 카운트·돌파 리포트 — 참고: 기존 `ams/workspace/api` 의 `app/services/chart_pattern/`(MarketSurge 맞춤 기준값)
-- [ ] `stock_api` 스크리너 리졸버/엔드포인트(필터 조합)
-- [ ] 프리셋(거래량급증/골든크로스/과매도/신고가) + 커스텀 필터(볼린저 σ·정/역배열·매물대·거래량·재무)
+- [x] `stock_api` 스크리너 리졸버/엔드포인트(필터 조합) — GraphQL `screenerScreen`(2026-10-21)
+- [x] 프리셋(거래량급증/골든크로스/과매도/신고가) + 커스텀 필터(볼린저 σ·정/역배열·매물대·거래량·재무) — 웹 '조건검색' 탭·앱 '조건검색' 칩, 스펙 `docs/superpowers/specs/2026-10-21-screener-presets-design.md` (2026-10-21). 배포 후 `backfill_screener` 실행·실기기 확인 대기. 배당수익률·MACD·저장 필터·관리자 버튼은 범위 밖
 - [ ] 결과 카드 UI + 정렬/편집, 차트 상세(웹 스플릿뷰)
 
 ### Phase 3 — web_client 확장
@@ -104,6 +104,7 @@
 - [x] **토스 디자인 전체 적용 + 네비 재편** — 하단 4탭(홈/블로그/게임/내정보, 스크리너·관심종목 탭 제거), 블로그(목록/상세/댓글)·홈 추천글·게임 스켈레톤 동작. 에뮬레이터 육안 검증 완료
 - [x] 스크리너 탭 — 하단 탭 '스크리너'(시장·테마·업종·일정 칩, 그룹 상세, 상단 "실시간 시세 아님" 안내)
 - [x] 주도주(CANSLIM) 칩 + 범용 종목 상세 `/stock/[ticker]`(점수표·일봉 50일선·52주 고점·점수 추이, 테마·업종 구성 종목에서도 진입) — 2026-10-21, 설계 `docs/superpowers/specs/2026-10-21-mobile-leaders-design.md`. 실기기 확인 대기
+- [x] 조건검색 칩(프리셋·필터 바텀시트·무한 스크롤, 행 → 종목 상세) — 2026-10-21. 실기기 확인 대기
 - [ ] 차트 드로잉(앱)
 - [x] 실제 푸시 — Expo Push(→FCM/APNs) 발송기, 펀드 리포트 알림·새 글 알림 적용(2026-10-21). 새 글은 push_devices.post_notice·내정보 스위치
 

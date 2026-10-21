@@ -178,7 +178,7 @@ npm run build -- --mode development    # 빌드 검증(테스트 러너 없음 �
 - **중복 로그인(플랫폼별 단일 세션)**: 같은 계정은 web·app·admin 마다 마지막 로그인 1곳만 유효(`user_sessions`, 마이그레이션 `e7f8a9b0c1d2`). 플랫폼은 `/login`=admin, `/guest` 바디 `platform`(web|app, 기본 web), 간편 로그인은 시작 `client` 로 서버가 정한다. 밀려난 기기는 REST 401 `detail.code=SESSION_REPLACED` / 게임 WS 4401(reason `SESSION_REPLACED`, 즉시)로 로그아웃되고 "다른 기기에서 로그인되어 로그아웃됐어요" 안내. 웹·앱은 시작·복귀 시 `GET /api/v1/auth/me` 로 확인(복귀는 60초 간격). sid 없는 배포 전 토큰은 만료(최대 12h)까지 허용. 즉시 끊기는 auth·trading_game 이 같은 Redis(`REDIS_URL`, 채널 `auth:session:replaced`)를 써야 동작(실패해도 다음 요청에서 차단).
 
 ### 5. 모바일 앱 (Expo / React Native)
-Expo SDK 57 · React Native 0.86 · expo-router(하단 5탭: 홈/커뮤니티/게임/스크리너/내정보 — 스크리너는 시장·테마·업종·일정·주도주, 설계 `docs/superpowers/specs/2026-10-20-mobile-screener-design.md` · 주도주·종목 상세 `docs/superpowers/specs/2026-10-21-mobile-leaders-design.md`. 종목 상세 `/stock/[ticker]`(점수표·일봉 차트 50일선·52주 고점·점수 추이)는 주도주 목록과 테마·업종 상세의 구성 종목에서 들어간다) · **Unistyles v3**(테마 스타일링) · zustand.
+Expo SDK 57 · React Native 0.86 · expo-router(하단 5탭: 홈/커뮤니티/게임/스크리너/내정보 — 스크리너는 시장·테마·업종·일정·주도주·조건검색, 설계 `docs/superpowers/specs/2026-10-20-mobile-screener-design.md` · 주도주·종목 상세 `docs/superpowers/specs/2026-10-21-mobile-leaders-design.md` · 조건검색 `docs/superpowers/specs/2026-10-21-screener-presets-design.md`. 종목 상세 `/stock/[ticker]`(점수표·일봉 차트 50일선·52주 고점·점수 추이)는 주도주·조건검색 목록과 테마·업종 상세의 구성 종목에서 들어간다) · **Unistyles v3**(테마 스타일링) · zustand.
 > 📦 기기 설치·빌드 종류별(개발용 / 단독 실행 APK / 스토어 배포용) 절차: [`docs/local_build_guide.md`](docs/local_build_guide.md)
 >
 > ⚠️ **Unistyles는 네이티브 코드라 Expo Go에서 실행되지 않습니다.** 반드시 **개발 빌드(dev build)** 로 실행하세요. 스타일 없이 UI 구조만 빠르게 볼 때는 웹(`npm run web`)이 가장 가볍습니다.
@@ -546,7 +546,7 @@ cd backend && uv run --with pykrx python -m apps.collector.verify.spot_check --n
 - 보고서 파일은 커밋하지 않는다.
 
 ### 🗺️ 스크리너 탭 — 시장·테마·업종·일정 (스크리너 프로젝트 3)
-설계 `docs/superpowers/specs/2026-10-19-market-dashboard-design.md`. 웹 `/screener/market|themes|sectors|calendar|leaders`(`/screener` → 시장 탭, 비로그인 공개).
+설계 `docs/superpowers/specs/2026-10-19-market-dashboard-design.md`. 웹 `/screener/market|themes|sectors|calendar|leaders|finder`(`/screener` → 시장 탭, 비로그인 공개).
 - **계산**: `collector.compute_market_groups` — 20:30 일일 파이프라인 맨 끝(CANSLIM 뒤). 보통주의 1·5·20일 등락·거래대금(종가×거래량)·시총(종가×상장주식수)을 CH `market_stock_daily`, 테마·업종 단순 평균·대장주·순위를 `market_group_daily` 에 저장. 관리자 테마 보정 API 가 바꿀 때마다 최신 기준일만 다시 계산(`send_task`).
 - **처음 한 번**: 순위 추이·'n일째 상위'용 60거래일 — `uv run celery -A apps.collector.celery_app call collector.backfill_market_groups` (과거 날짜도 현재 테마 소속 기준).
 - **API(stock_api GraphQL)**: `marketOverview`(지수·FRED 거시 — 장중엔 Redis 장중 값을 덧씌워 `MarketIndex.live`·`asOf`, 지수·거시 CH 조회 30초 메모리 캐시, resolver 는 스레드풀 실행), `marketGroups(kind, period, sort, limit, offset)`, `marketTreemap(kind, size, period)`, `marketGroup(kind, id)`, `marketCalendar(start, end, category)`.
@@ -560,6 +560,35 @@ cd backend && uv run --with pykrx python -m apps.collector.verify.spot_check --n
 - **API(stock_api GraphQL)**: `canslimMarket`, `canslimScreen(market, minPass, required, sort, liquidOnly, limit, offset)`, `canslimScore(ticker)`.
 - **C(분기 실적)**: KIS 분기 EPS 형식 확인 뒤 `FUNDAMENTALS_Q_CUMULATIVE` 를 설정해야 켜진다(그 전엔 '준비 중'). A·I·M 은 재무·투자자·지수 데이터가 쌓인 뒤 "데이터 부족"이 풀린다.
 - 기준값(25%·85%·RS 80 등)·가중치는 `apps/collector/canslim/rules.py` 상수.
+
+### 🧮 조건검색 (스크리너 프로젝트 4) — 프리셋·커스텀 필터
+설계 `docs/superpowers/specs/2026-10-21-screener-presets-design.md`, 계획 `docs/superpowers/plans/2026-10-21-screener-presets.md`. 웹 `/screener/finder`(스크리너 탭 '조건검색', 비로그인 공개), 앱은 스크리너 탭 '조건검색' 칩(프리셋 칩·필터 바텀시트·정렬·50개씩 더 불러오기, 행 → `/stock/[ticker]`).
+- **대상·계산**: 분석 대상 보통주(CANSLIM·시장 탭과 같은 범위, 약 2,600종목). `collector.compute_screener` 가 매일 20:30 일일 파이프라인 **맨 마지막 단계**(시장 그룹 계산 뒤, 앞 단계 실패와 무관)에서 돌고, 결과를 CH `screener_daily` 에 저장한다(`ReplacingMergeTree`, 같은 날 재계산은 멱등, 조회는 `FINAL`; `daily_prices` 에는 컬럼을 더하지 않음). 저장 지표: 등락률·거래대금(종가×거래량)·시총(종가×상장주식수)·거래량 비율(당일/직전 20일 평균)·RSI(14, Wilder, 최근 100종가)·이동평균(5·20·50·60·120)·표준편차(20)·배열·직전 52주 고가와 신고가 경신·골든크로스(20/60) 경과일(0~2)·매물대 위쪽 비율(최근 120일·20구간)·연간 재무(ROE·EPS·BPS·PER·PBR·매출/영업이익 성장률·부채비율)·유동성(20일 평균 거래대금 10억·종가 1,000원 이상).
+- **프리셋 4종**(서버 상수, 필터와 AND): `volume_surge` 거래량 비율 ≥ 2배 · `golden_cross` MA20이 MA60을 상향 돌파한 지 3거래일 이내(오늘 포함) · `oversold` RSI(14) ≤ 30 · `new_high` 당일 고가가 직전 251거래일 최고가를 넘음(52주 신고가 경신).
+- **커스텀 필터**: 시장(KOSPI/KOSDAQ)·가격 범위·시총 범위(억 원)·거래대금 하한(억 원)·유동성만 보기(기본 켜짐)·거래량 비율 하한·RSI 범위·배열(정배열/역배열)·볼린저(σ 1·1.5·2·2.5·3, 그 밖은 2 + 위치 상단 돌파/하단 이탈/밴드 안 + 밴드폭 상한 %)·매물대 위쪽 비율 상한·ROE 하한·PER/PBR 범위·부채비율 상한·매출성장률 하한. 이상한 값(음수·뒤집힌 범위·숫자 아님)은 그 조건만 무시한다(ROE·매출성장률만 음수 허용). 정렬: 거래대금(기본)·등락률·거래량 비율·RSI·시총·매물대 위쪽 비율(오름차순).
+- **API(stock_api GraphQL)**: `screenerScreen(preset, filters: ScreenerFilterInput, sort, limit, offset)` → `{ date, total, bbSigma, items }`(`limit` 최대 200). 쿼리는 `web_client/src/api/finder.ts`·`mobile/src/features/finder/api.ts`, 계약 테스트 `backend/tests/test_screener_contract.py`. 기준값은 `apps/stock_api/services/screener_query.py`(프리셋·σ·정렬)와 `apps/collector/screener/indicators.py`(기간·구간 수) 상수.
+- **배포 후 꼭 할 일**
+  1. Celery 워커와 stock_api 재시작 — 새 태스크 모듈 `apps.collector.tasks.screener` 와 바뀐 파이프라인 단계, 새 GraphQL 필드를 읽게 한다. 안 하면 20:30 에 스크리너 단계가 돌지 않는다.
+  2. 처음 한 번 60거래일 채우기(서버 collector 컨테이너에서): `uv run celery -A apps.collector.celery_app call collector.backfill_screener` — 워커 로그 "스크리너 백필: ok=… failed=…" 로 확인(일봉은 한 번만 읽고 날짜별로 잘라 쓴다). 계산 결과가 0행이거나 시도한 종목의 5% 이상 실패한 날은 실패(`failed`)로 남고, 일일 파이프라인에서는 `pipeline_record` 에 실패로 기록된다.
+  3. 프리셋별 건수 점검(CH):
+     ```sql
+     SELECT count() AS total,
+            countIf(liquid = 1) AS liquid,
+            countIf(liquid = 1 AND vol_ratio20 >= 2) AS volume_surge,
+            countIf(liquid = 1 AND gc_days IS NOT NULL) AS golden_cross,
+            countIf(liquid = 1 AND rsi14 <= 30) AS oversold,
+            countIf(liquid = 1 AND is_new_high = 1) AS new_high,
+            countIf(vp_above_pct IS NULL) AS vp_null,
+            countIf(per IS NULL) AS per_null
+     FROM screener_daily FINAL
+     WHERE date = (SELECT max(date) FROM screener_daily)
+     ```
+     기대: `total` 이 분석 대상 보통주 수 근처, 프리셋 4개가 0도 `liquid` 전체도 아님(보통 수십~수백). `vp_null` 은 상장 120일 미만 종목 정도, `per_null` 은 적자·재무 미수집 종목 정도. 아는 종목(예: 005930) 하나의 `rsi14`·`ma20`·`ma60`·`chg_1d`·`per` 를 한투 MTS 와 대조한다(RSI 는 입력 길이 때문에 1 안쪽 차이 허용).
+- **알려진 한계**
+  - 과거 날짜 백필은 최신 연간 재무를 쓰고 상장주식수·업종도 현재 프로필이라, 지난 날짜의 PER·PBR·시총은 근사값이다.
+  - 재무는 필드별로 null 이 아닌 가장 최근 연간 값을 쓰므로(PER·ROE 가 통째로 비는 것 방지) 한 종목 안에서 지표마다 결산 연도가 섞일 수 있다.
+  - 배당수익률(데이터 출처 없음)·MACD·차트 패턴·저장 필터·알림은 없다. 관리자 데이터 현황·작업 버튼에도 아직 없다(후속, 백필은 `celery call` 로만).
+  - 앱 필터 시트는 `keyboardType="numeric"` 이라 iOS 숫자 키패드에 `-` 가 없어 ROE·매출성장률 음수 입력이 어렵다(Android 먼저, iOS 출시 전 `numbers-and-punctuation` 등으로 바꿀지 결정).
 
 ## 🔔 알림 아키텍처
 - **웹(SSE)**: 블로그 서비스의 `GET /api/v1/notifications/stream` 에 EventSource 로 연결 → 새 글 작성 시 Redis pub/sub 로 즉시 토스트 알림.
