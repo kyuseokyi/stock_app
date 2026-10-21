@@ -1,4 +1,4 @@
-import { syncPushRegistrationWith, unregisterWith, type SyncDeps } from './registration-core';
+import { createPushRegistrar, syncPushRegistrationWith, unregisterWith, type SyncDeps } from './registration-core';
 
 const mk = (over: Partial<SyncDeps> = {}) => {
   const saved = { v: null as string | null };
@@ -81,5 +81,30 @@ describe('unregisterWith', () => {
     const { d } = mk();
     await unregisterWith(d, 'jwt');
     expect(d.del).not.toHaveBeenCalled();
+  });
+});
+
+describe('createPushRegistrar (직렬화)', () => {
+  it('put 진행 중 해제 요청이 오면 최종 상태가 해제됨', async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    const { d, saved } = mk({ put: jest.fn(() => gate) });
+    const reg = createPushRegistrar(d);
+    const s = reg.sync(); // put 대기 중
+    const u = reg.unregister('jwt'); // 로그아웃 훅
+    release();
+    await expect(s).resolves.toBe('registered');
+    await u;
+    expect(d.del).toHaveBeenCalledWith('jwt', 'ExponentPushToken[a]');
+    expect(saved.v).toBeNull();
+  });
+
+  it('앞 작업이 실패해도 다음 작업은 실행된다', async () => {
+    const { d, saved } = mk({ put: jest.fn(async () => Promise.reject(new Error('net'))) });
+    const reg = createPushRegistrar(d);
+    await expect(reg.sync()).resolves.toBe('failed');
+    saved.v = 'ExponentPushToken[a]';
+    await reg.unregister('jwt');
+    expect(saved.v).toBeNull();
   });
 });

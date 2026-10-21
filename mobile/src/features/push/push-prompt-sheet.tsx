@@ -11,11 +11,16 @@ import { syncPushRegistration } from './registration';
 /** 펀드 첫 등록 직후 한 번 — [알림 받기] 일 때만 OS 권한을 요청한다 */
 export function PushPromptSheet({ onClose }: { onClose: () => void }) {
   const accept = async () => {
-    await ensureFundChannel();
-    await Notifications.requestPermissionsAsync();
-    await markPrompted('accepted');
-    void syncPushRegistration();
-    onClose();
+    try {
+      await ensureFundChannel();
+      await Notifications.requestPermissionsAsync();
+    } catch {
+      // 채널·권한 요청 실패여도 시트는 반드시 닫고 "물어봤음"으로 기록한다
+    } finally {
+      await markPrompted('accepted');
+      void syncPushRegistration();
+      onClose();
+    }
   };
   const later = () => {
     void markPrompted('declined');

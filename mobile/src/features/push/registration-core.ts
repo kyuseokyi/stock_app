@@ -39,6 +39,16 @@ export async function syncPushRegistrationWith(d: SyncDeps): Promise<SyncResult>
   }
 }
 
+/** 한 번에 하나씩 순서대로 실행하는 Promise 큐 — 앞 작업이 실패해도 다음은 실행된다 */
+export function createSerialQueue(): <T>(task: () => Promise<T>) => Promise<T> {
+  let tail: Promise<unknown> = Promise.resolve();
+  return <T>(task: () => Promise<T>) => {
+    const run = tail.then(task, task);
+    tail = run.catch(() => {});
+    return run;
+  };
+}
+
 /** 로그아웃 직전 — 지워지기 전 인증 토큰을 받아 해제. 서버 실패여도 기기 기록은 비운다 */
 export async function unregisterWith(
   d: Pick<SyncDeps, 'loadSaved' | 'saveToken' | 'del'>,
@@ -48,4 +58,13 @@ export async function unregisterWith(
   if (!saved) return;
   await d.del(authToken, saved).catch(() => {});
   await d.saveToken(null).catch(() => {});
+}
+
+/** 동기화와 해제를 한 큐로 직렬화 — 진행 중인 put 이 끝난 뒤 해제가 실행돼 "로그아웃 후 등록 잔존"이 없다 */
+export function createPushRegistrar(d: SyncDeps) {
+  const enqueue = createSerialQueue();
+  return {
+    sync: () => enqueue(() => syncPushRegistrationWith(d)),
+    unregister: (authToken: string) => enqueue(() => unregisterWith(d, authToken)),
+  };
 }

@@ -9,7 +9,7 @@ import { loadFunds } from '@/features/fund/fund-store';
 
 import { deletePushDevice, putPushDevice } from './api';
 import { getProjectId, isPushConfigured } from './config';
-import { syncPushRegistrationWith, unregisterWith, type PushPermission, type SyncDeps } from './registration-core';
+import { createPushRegistrar, type PushPermission, type SyncDeps } from './registration-core';
 
 const SAVED_KEY = 'push_device_v1';
 const platform = Platform.OS === 'ios' ? 'ios' : 'android';
@@ -26,7 +26,9 @@ const deps: SyncDeps = {
   del: deletePushDevice,
 };
 
-export const syncPushRegistration = () => syncPushRegistrationWith(deps);
+const registrar = createPushRegistrar(deps);
+
+export const syncPushRegistration = () => registrar.sync();
 
 let hooked = false;
 /** 로그아웃 직전 해제 훅 — 앱 시작 시 한 번 */
@@ -34,6 +36,6 @@ export function installPushLogoutHook(): void {
   if (hooked) return;
   hooked = true;
   registerBeforeLogout((authToken) => {
-    if (isPushConfigured()) void unregisterWith(deps, authToken);
+    if (isPushConfigured()) void registrar.unregister(authToken);
   });
 }

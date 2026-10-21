@@ -1,7 +1,7 @@
 import * as Notifications from 'expo-notifications';
 import { useFocusEffect } from 'expo-router';
-import { useCallback, useState } from 'react';
-import { Linking, Pressable, Text, View } from 'react-native';
+import { useCallback, useEffect, useState } from 'react';
+import { AppState, Linking, Pressable, Text, View } from 'react-native';
 import { StyleSheet } from 'react-native-unistyles';
 
 import { isPushConfigured } from './config';
@@ -11,18 +11,34 @@ import { dismissBanner, isBannerDismissed } from './prompt';
 export function PushPermissionBanner() {
   const [show, setShow] = useState(false);
 
-  useFocusEffect(
-    useCallback(() => {
-      if (!isPushConfigured()) return;
-      let alive = true;
-      void Promise.all([Notifications.getPermissionsAsync(), isBannerDismissed()]).then(([p, dismissed]) => {
+  const refresh = useCallback(() => {
+    if (!isPushConfigured()) return () => {};
+    let alive = true;
+    void Promise.all([Notifications.getPermissionsAsync(), isBannerDismissed()])
+      .then(([p, dismissed]) => {
         if (alive) setShow(p.status === 'denied' && !dismissed);
-      });
-      return () => {
-        alive = false;
-      };
-    }, []),
-  );
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  useFocusEffect(refresh);
+
+  // 설정 앱에서 권한을 바꾸고 돌아오면 다시 읽어 배너를 갱신
+  useEffect(() => {
+    let cancel = () => {};
+    const sub = AppState.addEventListener('change', (s) => {
+      if (s !== 'active') return;
+      cancel();
+      cancel = refresh();
+    });
+    return () => {
+      cancel();
+      sub.remove();
+    };
+  }, [refresh]);
 
   if (!show) return null;
   return (
