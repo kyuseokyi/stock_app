@@ -66,8 +66,26 @@ export function toDraft(f: FinderFilters): FinderDraft {
   return { market: f.market, liquidOnly: f.liquidOnly, maOrder: f.maOrder, bbSigma: f.bbSigma, bbPosition: f.bbPosition, ...nums };
 }
 
+/** ROE·매출 성장률만 음수가 정상 값 — 나머지는 음수면 서버가 무시하므로 처음부터 조건으로 세지 않는다 */
+const NEGATIVE_OK: NumKey[] = ['roeMin', 'salesGrowthMin'];
+/** 서버(screener_query._PAIRS)가 뒤집힌 범위는 둘 다 무시 — 같은 규칙 */
+const PAIRS: [NumKey, NumKey][] = [['priceMin', 'priceMax'], ['mcapMin', 'mcapMax'], ['rsiMin', 'rsiMax'], ['perMin', 'perMax'], ['pbrMin', 'pbrMax']];
+
 export function fromDraft(d: FinderDraft): FinderFilters {
-  const nums = Object.fromEntries(NUM_KEYS.map((k) => [k, parseNum(d[k])])) as Record<NumKey, number | null>;
+  const nums = Object.fromEntries(
+    NUM_KEYS.map((k) => {
+      const n = parseNum(d[k]);
+      return [k, n !== null && n < 0 && !NEGATIVE_OK.includes(k) ? null : n];
+    }),
+  ) as Record<NumKey, number | null>;
+  for (const [lo, hi] of PAIRS) {
+    const a = nums[lo];
+    const b = nums[hi];
+    if (a !== null && b !== null && a > b) {
+      nums[lo] = null;
+      nums[hi] = null;
+    }
+  }
   return { market: d.market, liquidOnly: d.liquidOnly, maOrder: d.maOrder, bbSigma: d.bbSigma, bbPosition: d.bbPosition, ...nums };
 }
 

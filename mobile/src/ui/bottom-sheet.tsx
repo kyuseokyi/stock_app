@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { Modal, Pressable, Text, View } from 'react-native';
+import { KeyboardAvoidingView, Modal, Platform, Pressable, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StyleSheet } from 'react-native-unistyles';
 
@@ -7,6 +7,8 @@ type Props = {
   title: string;
   onClose: () => void;
   children: ReactNode;
+  /** 입력칸이 있는 시트 — 키보드가 올라오면 시트를 밀어 올린다(기본 꺼짐: 기존 시트 동작 그대로) */
+  avoidKeyboard?: boolean;
 };
 
 /**
@@ -14,11 +16,13 @@ type Props = {
  * 투명 RN Modal + 반투명 배경(탭하면 닫힘), Android 뒤로가기는 onRequestClose.
  * 호출부가 열 때 마운트·닫을 때 언마운트한다.
  */
-export function BottomSheet({ title, onClose, children }: Props) {
+export function BottomSheet({ title, onClose, children, avoidKeyboard = false }: Props) {
   const insets = useSafeAreaInsets();
+  const Overlay = avoidKeyboard ? KeyboardAvoidingView : View;
+  const overlayProps = avoidKeyboard ? { behavior: Platform.OS === 'ios' ? ('padding' as const) : undefined } : {};
   return (
     <Modal visible transparent animationType="fade" statusBarTranslucent onRequestClose={onClose}>
-      <View style={styles.overlay}>
+      <Overlay style={styles.overlay} {...overlayProps}>
         <Pressable style={styles.backdrop} onPress={onClose} accessibilityLabel="닫기" />
         <View style={[styles.panel, { paddingBottom: insets.bottom + 16 }]}>
           <View style={styles.grabber} />
@@ -30,7 +34,7 @@ export function BottomSheet({ title, onClose, children }: Props) {
           </View>
           <View style={styles.content}>{children}</View>
         </View>
-      </View>
+      </Overlay>
     </Modal>
   );
 }

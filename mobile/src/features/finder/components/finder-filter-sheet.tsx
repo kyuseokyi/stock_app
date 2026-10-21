@@ -65,7 +65,7 @@ export function FinderFilterSheet({ value, onApply, onClose }: Props) {
   );
 
   return (
-    <BottomSheet title="필터" onClose={onClose}>
+    <BottomSheet title="필터" onClose={onClose} avoidKeyboard>
       <ScrollView style={{ maxHeight: height * 0.65 }} contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
         <Section title="시장">
           <View style={styles.chips}>

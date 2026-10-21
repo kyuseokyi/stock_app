@@ -68,6 +68,31 @@ describe('조건검색 순수 함수', () => {
     expect(f.perMax).toBe(15);
   });
 
+  it('fromDraft — 음수는 ROE·매출 성장률만 허용, 나머지는 서버가 무시하므로 null', () => {
+    const f = fromDraft({
+      ...toDraft(DEFAULT_FINDER_FILTERS),
+      priceMin: '-100', rsiMin: '-5', debtRatioMax: '-1', bbWidthMax: '-3', roeMin: '-5', salesGrowthMin: '-10',
+    });
+    expect(f.priceMin).toBeNull();
+    expect(f.rsiMin).toBeNull();
+    expect(f.debtRatioMax).toBeNull();
+    expect(f.bbWidthMax).toBeNull();
+    expect(f.roeMin).toBe(-5);
+    expect(f.salesGrowthMin).toBe(-10);
+    expect(activeFilterCount(f)).toBe(2);
+  });
+
+  it('fromDraft — min 이 max 보다 큰 범위는 둘 다 null(서버 규칙), 같거나 한쪽만이면 유지', () => {
+    const base = toDraft(DEFAULT_FINDER_FILTERS);
+    const flipped = fromDraft({ ...base, priceMin: '5000', priceMax: '1000', perMin: '3', perMax: '3', pbrMin: '2' });
+    expect(flipped.priceMin).toBeNull();
+    expect(flipped.priceMax).toBeNull();
+    expect(flipped.perMin).toBe(3);
+    expect(flipped.perMax).toBe(3);
+    expect(flipped.pbrMin).toBe(2);
+    expect(activeFilterCount(flipped)).toBe(3);
+  });
+
   it('toFilterInput — 기본값은 시장·거래 활발만 보낸다', () => {
     expect(toFilterInput(DEFAULT_FINDER_FILTERS)).toEqual({ market: 'ALL', liquidOnly: true });
   });
