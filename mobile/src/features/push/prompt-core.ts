@@ -27,3 +27,17 @@ export function shouldPromptOnEnter(s: {
 }): boolean {
   return s.configured && s.fundCount >= 1 && !s.prompted && s.permission === 'undetermined';
 }
+
+/** 내정보 스위치에 보일 값 — 설정이 켜져 있어도 OS 권한이 없으면 실제로 못 받으므로 꺼짐으로 보인다 */
+export function postNoticeSwitchValue(saved: boolean, permission: 'granted' | 'denied' | 'undetermined'): boolean {
+  return saved && permission === 'granted';
+}
+
+/** 내정보 "새 글 알림"을 켤 때 할 일: 허용됨 → 저장만, 미결정 → OS 권한 요청, 다시 물을 수 없는 거부 → 설정 앱 안내 */
+export function postNoticeEnableAction(
+  permission: 'granted' | 'denied' | 'undetermined',
+): 'none' | 'request' | 'open-settings' {
+  if (permission === 'granted') return 'none';
+  if (permission === 'undetermined') return 'request';
+  return 'open-settings';
+}

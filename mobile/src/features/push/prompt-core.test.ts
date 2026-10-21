@@ -1,4 +1,10 @@
-import { effectivePermission, shouldOfferPrompt, shouldPromptOnEnter } from './prompt-core';
+import {
+  effectivePermission,
+  postNoticeEnableAction,
+  postNoticeSwitchValue,
+  shouldOfferPrompt,
+  shouldPromptOnEnter,
+} from './prompt-core';
 
 describe('effectivePermission', () => {
   it('Android 13+ 미요청(denied + canAskAgain)은 undetermined 로 본다', () => {
@@ -40,5 +46,26 @@ describe('shouldPromptOnEnter', () => {
   });
   it('푸시 미설정이면 false', () => {
     expect(shouldPromptOnEnter({ ...base, configured: false })).toBe(false);
+  });
+});
+
+describe('postNoticeSwitchValue', () => {
+  it('저장값이 켜짐이고 권한이 허용일 때만 켜짐으로 보인다', () => {
+    expect(postNoticeSwitchValue(true, 'granted')).toBe(true);
+    expect(postNoticeSwitchValue(true, 'undetermined')).toBe(false);
+    expect(postNoticeSwitchValue(true, 'denied')).toBe(false);
+    expect(postNoticeSwitchValue(false, 'granted')).toBe(false);
+  });
+});
+
+describe('postNoticeEnableAction', () => {
+  it('권한 허용이면 저장만', () => {
+    expect(postNoticeEnableAction('granted')).toBe('none');
+  });
+  it('권한 미결정이면 OS 권한 요청', () => {
+    expect(postNoticeEnableAction('undetermined')).toBe('request');
+  });
+  it('다시 물을 수 없는 거부면 설정 앱 안내', () => {
+    expect(postNoticeEnableAction('denied')).toBe('open-settings');
   });
 });

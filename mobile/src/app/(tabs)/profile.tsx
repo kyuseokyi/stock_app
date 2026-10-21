@@ -10,6 +10,7 @@ import { socialErrorMessage } from '@/features/auth/return-url';
 import { startSocialLogin } from '@/features/auth/social';
 import { SocialButton } from '@/features/auth/social-button';
 import { useAuthStore } from '@/features/auth/store';
+import { PostNoticeRow } from '@/features/push/post-notice-row';
 import { usePullRefresh } from '@/hooks/use-pull-refresh';
 import { ENV } from '@/lib/env';
 import { Button, Card, ListRow, showToast } from '@/ui';
@@ -124,6 +125,7 @@ export default function ProfileScreen() {
             left={<Text style={styles.emoji}>💰</Text>}
             onPress={() => router.push('/fund')}
           />
+          <PostNoticeRow />
         </View>
 
         <View style={styles.group}>
