@@ -23,6 +23,7 @@ export default function ScreenerLayout() {
           ))}
         </div>
       </nav>
+      <p className="text-xs text-ink-muted">ⓘ 실시간 시세가 아니어서 실제 값과 차이가 있을 수 있어요</p>
       <Suspense fallback={<p className="py-16 text-center text-ink-muted">불러오는 중…</p>}>
         <Outlet />
       </Suspense>
