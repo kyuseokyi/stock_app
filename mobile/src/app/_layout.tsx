@@ -6,12 +6,14 @@ import { AppState } from 'react-native';
 import { useAuthStore } from '@/features/auth/store';
 import { useFundAutoRefresh } from '@/features/fund/auto-refresh';
 import { useFundSignal } from '@/features/fund/fund-signal';
+import { usePushSetup } from '@/features/push/handlers';
 import { useSystemTheme } from '@/hooks/use-system-theme';
 import { ApiProgressBar, AppToaster } from '@/ui';
 
 export default function RootLayout() {
   useFundAutoRefresh(); // 실행·복귀 시 등록 펀드 자동 갱신(로그인 상태일 때만)
   useFundSignal(); // 앱이 열려 있을 때 관리자 리포트 업데이트 신호(SSE) → 자동 갱신
+  usePushSetup(); // 푸시 채널·알림 탭(→ 펀드 화면 + 강제 갱신)·등록 동기화(설정 안 됐으면 아무 일 없음)
   const navTheme = useSystemTheme(); // OS 라이트/다크 → 앱 테마·헤더 색
   // 앱 시작 시 1회, SecureStore에 저장된 토큰/유저를 복원한다. 복원 전에는 로그아웃 상태로 렌더링된다.
   useEffect(() => {

@@ -3,6 +3,10 @@
 const APP_ENV = process.env.APP_ENV ?? 'development';
 const isDev = APP_ENV === 'development';
 
+// 푸시(expo-notifications) — 값이 없으면 푸시만 꺼진다(isPushConfigured). docs/push_notification_setup.md 5장
+const EAS_PROJECT_ID = process.env.EAS_PROJECT_ID || undefined;
+const GOOGLE_SERVICES_JSON = process.env.GOOGLE_SERVICES_JSON || undefined;
+
 export default {
   expo: {
     name: isDev ? 'StockApp Dev' : 'StockApp',
@@ -27,6 +31,7 @@ export default {
         monochromeImage: './assets/images/android-icon-monochrome.png',
       },
       predictiveBackGestureEnabled: false,
+      ...(GOOGLE_SERVICES_JSON ? { googleServicesFile: GOOGLE_SERVICES_JSON } : {}),
     },
     web: {
       output: 'static',
@@ -44,6 +49,7 @@ export default {
       ],
       'react-native-edge-to-edge',
       'expo-secure-store',
+      'expo-notifications',
       // iOS 출시(애플 로그인과 함께) 전에 실제 값으로
       [
         '@react-native-google-signin/google-signin',
@@ -56,6 +62,7 @@ export default {
     },
     extra: {
       appEnv: APP_ENV,
+      ...(EAS_PROJECT_ID ? { eas: { projectId: EAS_PROJECT_ID } } : {}),
     },
   },
 };

@@ -7,6 +7,7 @@ import { sessionEndMessage, shouldValidate, type SessionEndReason } from '@/lib/
 import { showToast } from '@/ui';
 
 import { deleteAccount as deleteAccountApi, fetchMe, guestLogin, type LoginResult } from './api';
+import { runBeforeLogout } from './logout-hooks';
 import type { User } from './types';
 
 const TOKEN_KEY = 'auth_token';
@@ -62,6 +63,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   logout: () => {
+    const prev = get().token;
+    if (prev) runBeforeLogout(prev); // 토큰이 지워지기 전 — 푸시 기기 해제 등
     setHttpAuthToken(null);
     set({ token: null, user: null });
     persist(null, null).catch(() => {});

@@ -23,6 +23,12 @@ import { deleteCache, fileCache, loadFunds, saveFunds } from '@/features/fund/fu
 import { isBackupConfigured } from '@/features/fund/google-auth';
 import { deleteHistory } from '@/features/fund/history-store';
 import { Button, Card, ListRow, ListState, showToast } from '@/ui';
+import { isPushConfigured } from '@/features/push/config';
+import { PushPermissionBanner } from '@/features/push/permission-banner';
+import { wasPrompted } from '@/features/push/prompt';
+import { shouldOfferPrompt } from '@/features/push/prompt-core';
+import { PushPromptSheet } from '@/features/push/push-prompt-sheet';
+import { syncPushRegistration } from '@/features/push/registration';
 
 // 내 펀드 수익 — 기기에 저장한 fund.ivyro.net 펀드 현황 주소 목록(추가·삭제). 서버에는 저장하지 않는다.
 export default function FundListScreen() {
@@ -36,6 +42,7 @@ export default function FundListScreen() {
   const [loadError, setLoadError] = useState('');
   const status = useAutoRefreshStatus(fundRefresher);
   const [lines, setLines] = useState<Record<string, string>>({});
+  const [promptOpen, setPromptOpen] = useState(false);
   // 당겨서 새로고침: 등록된 펀드 리포트를 지금 바로 모두 다시 받는다(끝나면 status.version 이 바뀌어 목록 줄 갱신)
   const { refreshing, onRefresh } = usePullRefresh(() => fundRefresher.run({ force: true }));
 
@@ -89,6 +96,14 @@ export default function FundListScreen() {
       setUrl('');
       setError('');
       showToast('펀드를 추가했어요');
+      void syncPushRegistration();
+      const offer = shouldOfferPrompt({
+        prevCount: funds.length,
+        nextCount: next.length,
+        configured: isPushConfigured(),
+        prompted: await wasPrompted(),
+      });
+      if (offer) setPromptOpen(true);
     } catch (e) {
       setError(isFundError(e, 'input') ? e.message : '저장하지 못했어요. 다시 시도해 주세요.');
     }
@@ -107,6 +122,7 @@ export default function FundListScreen() {
             deleteCache(f.id);
             deleteHistory(f.id);
             setFunds(next);
+            void syncPushRegistration(); // 마지막 펀드를 지우면 알림 해제
           });
         },
       },
@@ -136,6 +152,7 @@ export default function FundListScreen() {
           ),
         }}
       />
+      <PushPermissionBanner />
       <Card>
         <Text style={styles.label}>펀드 현황 주소</Text>
         <TextInput
@@ -195,6 +212,7 @@ export default function FundListScreen() {
           ))}
         </View>
       )}
+      {promptOpen ? <PushPromptSheet onClose={() => setPromptOpen(false)} /> : null}
     </ScrollView>
   );
 }
