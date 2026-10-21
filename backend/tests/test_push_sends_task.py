@@ -234,3 +234,55 @@ def test_beat_entry_registered():
     assert entry["schedule"] == 60.0
     assert "apps.collector.tasks.push_sends" in celery_app.conf.include
     assert "collector.dispatch_scheduled_pushes" in celery_app.tasks
+
+
+def test_sends_wake_message_after_alert(maker, monkeypatch):
+    sender = FakeSender()
+    monkeypatch.setattr(push_sends, "get_push_sender", lambda: sender)
+    push_sends.send_fund_notice(_seed(maker))
+    assert len(sender.calls) == 2
+    (alert_tokens, alert), (wake_tokens, wake) = sender.calls
+    assert sorted(wake_tokens) == sorted(alert_tokens)
+    assert alert.data["type"] == "fund_report" and alert.title
+    assert wake.title is None and wake.body is None
+    assert wake.data == {"type": "fund_refresh", "date": "2026-03-05"}
+    assert wake.priority == "high" and wake.content_available is True
+
+
+def test_test_mode_wakes_admin_device_too(maker, monkeypatch):
+    sender = FakeSender()
+    monkeypatch.setattr(push_sends, "get_push_sender", lambda: sender)
+    push_sends.send_fund_notice(_seed(maker, mode="test"))
+    assert [c[0] for c in sender.calls] == [["ExponentPushToken[admin]"], ["ExponentPushToken[admin]"]]
+
+
+def test_counts_follow_alert_and_wake_invalid_tokens_also_deleted(maker, monkeypatch):
+    class WakeInvalid(FakeSender):
+        def send_batch(self, tokens, message):
+            self.calls.append((list(tokens), message))
+            if message.data.get("type") == "fund_refresh":
+                return BatchResult(success=1, failure=1, invalid_tokens=["ExponentPushToken[u1]"])
+            return BatchResult(success=len(tokens))
+
+    monkeypatch.setattr(push_sends, "get_push_sender", lambda: WakeInvalid())
+    sid = _seed(maker)
+    push_sends.send_fund_notice(sid)
+    with maker() as db:
+        s = db.get(PushSend, sid)
+        assert (s.status, s.success_count, s.failure_count) == ("done", 2, 0)  # 이력은 알림용 기준
+        assert "ExponentPushToken[u1]" not in set(db.execute(select(PushDevice.token)).scalars())
+
+
+def test_wake_failure_does_not_change_status(maker, monkeypatch):
+    class WakeBoom(FakeSender):
+        def send_batch(self, tokens, message):
+            if message.data.get("type") == "fund_refresh":
+                raise RuntimeError("wake 실패")
+            return super().send_batch(tokens, message)
+
+    monkeypatch.setattr(push_sends, "get_push_sender", lambda: WakeBoom())
+    sid = _seed(maker)
+    push_sends.send_fund_notice(sid)
+    with maker() as db:
+        s = db.get(PushSend, sid)
+        assert (s.status, s.success_count, s.failure_count) == ("done", 2, 0)

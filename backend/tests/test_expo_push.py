@@ -7,7 +7,7 @@ import httpx
 
 from apps.collector.push import get_push_sender
 from apps.collector.push.base import BatchResult, PushMessage, PushSender
-from apps.collector.push.expo import EXPO_PUSH_URL, ExpoPushSender
+from apps.collector.push.expo import EXPO_PUSH_URL, ExpoPushSender, _payload
 
 MSG = PushMessage(title="제목", body="본문", data={"type": "fund_report"}, channel_id="fund-report", sound="default")
 
@@ -155,3 +155,29 @@ def test_non_dict_ticket_counts_as_failure():
 def test_send_single_returns_true_on_success():
     calls: list[httpx.Request] = []
     assert ExpoPushSender(access_token="", transport=_ok_transport(calls)).send("ExponentPushToken[a]", MSG) is True
+
+
+def test_silent_payload_has_only_data_priority_content_available():
+    m = PushMessage(data={"type": "fund_refresh", "date": "2026-10-21"}, priority="high", content_available=True)
+    assert _payload("tok", m) == {
+        "to": "tok",
+        "data": {"type": "fund_refresh", "date": "2026-10-21"},
+        "priority": "high",
+        "contentAvailable": True,
+    }
+
+
+def test_alert_payload_unchanged_shape():
+    m = PushMessage(title="제목", body="본문", data={"type": "fund_report"}, channel_id="fund-report", sound="default")
+    assert _payload("tok", m) == {
+        "to": "tok", "title": "제목", "body": "본문", "data": {"type": "fund_report"},
+        "channelId": "fund-report", "sound": "default",
+    }
+
+
+def test_new_post_message_style_still_works():
+    """새 글 알림의 기존 호출(title/body/data 키워드 + send_multicast)이 그대로 동작."""
+    from apps.collector.push.mock import MockPushSender
+
+    m = PushMessage(title="[공지] 새 글이 등록되었습니다", body="제목", data={"type": "new_post", "post_id": 1})
+    assert MockPushSender().send_multicast(["a", "b"], m) == 2

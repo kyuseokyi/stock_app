@@ -79,14 +79,30 @@ def _run_send(db, send: PushSend, send_id: int) -> dict:
         channel_id=FUND_CHANNEL_ID,
         sound="default",
     )
+    # 깨우기용(무음) — 앱이 꺼져 있어도 백그라운드에서 갱신·히스토리 기록(스펙 §7.1). 이력 수치에는 넣지 않는다
+    wake = PushMessage(
+        data={"type": "fund_refresh", "date": send.ref_date.isoformat()},
+        priority="high",
+        content_available=True,
+    )
+    sender = get_push_sender()
     try:
-        result = get_push_sender().send_batch(tokens, message)
+        result = sender.send_batch(tokens, message)
     except Exception as exc:  # noqa: BLE001
         logger.warning("send_fund_notice: 발송기 오류(send_id=%s): %s", send_id, exc)
         result = BatchResult(failure=len(tokens))
+    wake_invalid: list[str] = []
+    if tokens:
+        try:
+            wake_result = sender.send_batch(tokens, wake)
+            wake_invalid = wake_result.invalid_tokens
+            logger.info("send_fund_notice: wake id=%s ok=%s fail=%s", send_id, wake_result.success, wake_result.failure)
+        except Exception as exc:  # noqa: BLE001 - 깨우기 실패는 알림 결과를 바꾸지 않는다
+            logger.warning("send_fund_notice: 깨우기용 발송 실패(send_id=%s): %s", send_id, exc)
+    invalid = sorted(set(result.invalid_tokens) | set(wake_invalid))
 
-    if result.invalid_tokens:
-        db.execute(delete(PushDevice).where(PushDevice.token.in_(result.invalid_tokens)))
+    if invalid:
+        db.execute(delete(PushDevice).where(PushDevice.token.in_(invalid)))
     send.success_count = result.success
     send.failure_count = result.failure
     send.status = "failed" if tokens and result.success == 0 else "done"

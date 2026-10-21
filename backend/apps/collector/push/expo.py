@@ -70,9 +70,20 @@ class ExpoPushSender(PushSender):
 
 
 def _payload(token: str, message: PushMessage) -> dict:
-    m: dict = {"to": token, "title": message.title, "body": message.body, "data": message.data}
+    """비어 있는 필드는 보내지 않는다 — 제목·본문이 없으면 Android 데이터 전용(앱 태스크가 받음)."""
+    m: dict = {"to": token}
+    if message.title:
+        m["title"] = message.title
+    if message.body:
+        m["body"] = message.body
+    if message.data:
+        m["data"] = message.data
     if message.channel_id:
         m["channelId"] = message.channel_id
     if message.sound:
         m["sound"] = message.sound
+    if message.priority:
+        m["priority"] = message.priority
+    if message.content_available:
+        m["contentAvailable"] = True  # 옛 이름 _contentAvailable 은 하위 호환일 뿐(Expo 문서 2026-10-21)
     return m

@@ -12,11 +12,14 @@ from dataclasses import dataclass, field
 
 @dataclass
 class PushMessage:
-    title: str
-    body: str
+    # 깨우기용(무음) 메시지는 title/body 없이 data 만 — 앱 백그라운드 태스크가 받는다
+    title: str | None = None
+    body: str | None = None
     data: dict = field(default_factory=dict)  # 딥링크 등 부가 데이터
     channel_id: str | None = None  # Android 알림 채널(Expo channelId)
     sound: str | None = None
+    priority: str | None = None  # 'high' — 잠든 Android 기기도 깨움
+    content_available: bool = False  # iOS 백그라운드 깨우기(Expo contentAvailable)
 
 
 @dataclass
