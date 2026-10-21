@@ -1,12 +1,13 @@
 """send_fund_notice — 대상·집계·무효 토큰 삭제·상태·템플릿 last_sent_at."""
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime, timedelta, timezone
 
 import pytest
 from sqlalchemy import create_engine, event, select
 from sqlalchemy.orm import Session, sessionmaker
 
+from apps.collector.celery_app import celery_app
 from apps.collector.push.base import BatchResult, PushSender
 from apps.collector.tasks import push_sends
 from shared.models import Base, PushDevice, PushSend, PushTemplate, User, UserRole
@@ -154,3 +155,82 @@ def test_unexpected_exception_marks_failed_not_stuck(maker, monkeypatch):
     with maker() as db:
         s = db.get(PushSend, sid)
         assert s.status == "failed" and s.finished_at is not None
+
+
+def _scheduled(mk, minutes_from_now: int) -> int:
+    with mk() as db:
+        admin = User(nickname=f"관리자{minutes_from_now}", role=UserRole.ADMIN, is_active=True)
+        db.add(admin)
+        db.flush()
+        s = PushSend(kind="fund_report", mode="scheduled", ref_date=date(2026, 10, 21), title="t", body="b",
+                     status="scheduled", scheduled_at=datetime.now(timezone.utc) + timedelta(minutes=minutes_from_now),
+                     created_by=admin.id)
+        db.add(s)
+        db.commit()
+        return s.id
+
+
+def test_dispatch_claims_due_once_publishes_and_queues(maker, monkeypatch):
+    queued, published = [], []
+    monkeypatch.setattr(push_sends.send_fund_notice, "delay", lambda sid: queued.append(sid))
+    monkeypatch.setattr(push_sends, "publish_fund_event", lambda d: published.append(d))
+    due = _scheduled(maker, -1)
+    later = _scheduled(maker, 30)
+    assert push_sends.dispatch_scheduled_pushes()["claimed"] == 1
+    assert queued == [due] and published == [date(2026, 10, 21)]
+    # 두 번째 실행은 이미 sending 이라 다시 집지 않는다
+    assert push_sends.dispatch_scheduled_pushes()["claimed"] == 0
+    with maker() as db:
+        assert db.get(PushSend, due).status == "sending" and db.get(PushSend, due).started_at is not None
+        assert db.get(PushSend, later).status == "scheduled"
+
+
+def test_dispatch_skips_cancelled(maker, monkeypatch):
+    queued = []
+    monkeypatch.setattr(push_sends.send_fund_notice, "delay", lambda sid: queued.append(sid))
+    monkeypatch.setattr(push_sends, "publish_fund_event", lambda d: None)
+    sid = _scheduled(maker, -1)
+    with maker() as db:
+        db.get(PushSend, sid).status = "cancelled"
+        db.commit()
+    assert push_sends.dispatch_scheduled_pushes()["claimed"] == 0
+    assert queued == []
+
+
+def test_claim_is_conditional_on_status(maker):
+    sid = _scheduled(maker, -1)
+    with maker() as db:
+        db.get(PushSend, sid).status = "cancelled"  # 취소가 먼저 이긴 상황
+        db.commit()
+    with maker() as db:
+        assert push_sends._claim(db, sid, datetime.now(timezone.utc)) is False
+
+
+def test_dispatch_fails_stale_sending_only(maker, monkeypatch):
+    monkeypatch.setattr(push_sends.send_fund_notice, "delay", lambda sid: None)
+    monkeypatch.setattr(push_sends, "publish_fund_event", lambda d: None)
+    now = datetime.now(timezone.utc)
+    old = _scheduled(maker, 30)
+    fresh = _scheduled(maker, 31)
+    sched = _scheduled(maker, 32)
+    with maker() as db:
+        db.get(PushSend, old).status = "sending"
+        db.get(PushSend, old).started_at = now - timedelta(minutes=20)
+        db.get(PushSend, fresh).status = "sending"
+        db.get(PushSend, fresh).started_at = now - timedelta(minutes=5)
+        db.commit()
+    assert push_sends.dispatch_scheduled_pushes()["stale_failed"] == 1
+    with maker() as db:
+        o = db.get(PushSend, old)
+        assert o.status == "failed" and o.finished_at is not None
+        assert db.get(PushSend, fresh).status == "sending"
+        assert db.get(PushSend, sched).status == "scheduled"
+    assert push_sends.dispatch_scheduled_pushes()["stale_failed"] == 0
+
+
+def test_beat_entry_registered():
+    entry = celery_app.conf.beat_schedule["dispatch-scheduled-pushes"]
+    assert entry["task"] == "collector.dispatch_scheduled_pushes"
+    assert entry["schedule"] == 60.0
+    assert "apps.collector.tasks.push_sends" in celery_app.conf.include
+    assert "collector.dispatch_scheduled_pushes" in celery_app.tasks

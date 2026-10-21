@@ -122,4 +122,10 @@ celery_app.conf.beat_schedule = {
         "task": "close_trading_month",
         "schedule": crontab(hour=8, minute=55, day_of_month=1),
     },
+    # 펀드 리포트 알림 예약 발송 — 1분마다 예약 시각이 지난 것을 집는다(워커 중단 중 지난 예약은 재기동 후 지연 발송)
+    "dispatch-scheduled-pushes": {
+        "task": "collector.dispatch_scheduled_pushes",
+        "schedule": 60.0,
+        "options": {"expires": 55},
+    },
 }
