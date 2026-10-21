@@ -36,6 +36,7 @@ export default function FundNoticesPage() {
         {(['send', 'templates'] as const).map((t) => (
           <button
             key={t}
+            aria-pressed={tab === t}
             onClick={() => setTab(t)}
             className={`rounded-lg px-4 py-2 text-sm font-medium ${tab === t ? 'bg-indigo-600 text-white' : 'border border-slate-200 bg-white text-slate-600'}`}
           >
@@ -68,6 +69,7 @@ function SendPanel() {
   }, [])
 
   const loadPreview = useCallback(async () => {
+    if (!date) return
     try {
       setPreview(await previewFundNotice(date))
     } catch (e) {
@@ -82,14 +84,24 @@ function SendPanel() {
   }
 
   useEffect(() => {
-    void listPushTemplates().then((list) => {
-      setTemplates(list)
-      if (list[0]) {
-        setTemplateId(list[0].id)
-        setTitle(list[0].title)
-        setBody(list[0].body)
-      }
-    })
+    void listPushTemplates()
+      .then((list) => {
+        setTemplates(list)
+        const first = list[0]
+        if (!first) return
+        // 사용자가 이미 입력한 내용이 있으면 덮어쓰지 않는다(제목·본문 모두 비었을 때만 자동 채움)
+        setTitle((curTitle) => {
+          setBody((curBody) => {
+            if (curTitle === '' && curBody === '') {
+              setTemplateId(first.id)
+              return first.body
+            }
+            return curBody
+          })
+          return curTitle === '' ? first.title : curTitle
+        })
+      })
+      .catch((e) => showToast(apiErrorMessage(e), { icon: '⚠️' }))
     void loadSends()
   }, [loadSends])
 
@@ -240,8 +252,8 @@ function SendPanel() {
         <table className="w-full min-w-[760px] text-left text-sm">
           <thead className="bg-slate-50 text-slate-500">
             <tr>
-              {['기준일', '제목', '종류', '상태', '대상', '성공/실패', '보낸 사람', '시각', ''].map((h) => (
-                <th key={h} className="px-4 py-3 font-medium">{h}</th>
+              {['기준일', '제목', '종류', '상태', '대상', '성공/실패', '보낸 사람', '시각', ''].map((h, i) => (
+                <th key={i} className="px-4 py-3 font-medium">{h || <span className="sr-only">동작</span>}</th>
               ))}
             </tr>
           </thead>
@@ -331,11 +343,12 @@ function TemplatesPanel() {
     <div className="space-y-4">
       <form onSubmit={onSave} className="space-y-3 rounded-xl border border-slate-200 bg-white p-4">
         <p className="text-sm font-medium text-slate-700">{editing ? `템플릿 수정 (#${editing.id})` : '새 템플릿'}</p>
-        <input value={title} maxLength={100} placeholder="제목" onChange={(e) => setTitle(e.target.value)} className={inputClass} />
+        <input value={title} maxLength={100} placeholder="제목" aria-label="템플릿 제목" onChange={(e) => setTitle(e.target.value)} className={inputClass} />
         <textarea
           value={body}
           maxLength={500}
           rows={2}
+          aria-label="템플릿 본문"
           placeholder="본문 — {date} 는 기준일(M월 D일)로 바뀝니다"
           onChange={(e) => setBody(e.target.value)}
           className={inputClass}
@@ -350,7 +363,7 @@ function TemplatesPanel() {
       <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
         <table className="w-full min-w-[520px] text-left text-sm">
           <thead className="bg-slate-50 text-slate-500">
-            <tr>{['제목', '본문', '마지막 발송', ''].map((h) => <th key={h} className="px-4 py-3 font-medium">{h}</th>)}</tr>
+            <tr>{['제목', '본문', '마지막 발송', ''].map((h, i) => <th key={i} className="px-4 py-3 font-medium">{h || <span className="sr-only">동작</span>}</th>)}</tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
             {list.map((t) => (
