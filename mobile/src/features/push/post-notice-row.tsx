@@ -9,7 +9,7 @@ import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import { ListRow, showToast } from '@/ui';
 
 import { isPushConfigured } from './config';
-import { ensureFundChannel } from './handlers';
+import { ensurePushChannels } from './handlers';
 import { loadPostNotice, savePostNotice } from './post-notice';
 import { markPrompted } from './prompt';
 import { effectivePermission, postNoticeEnableAction, postNoticeSwitchValue } from './prompt-core';
@@ -73,7 +73,7 @@ export function PostNoticeRow() {
       if (next) {
         const action = postNoticeEnableAction(effectivePermission(await Notifications.getPermissionsAsync()));
         if (action === 'request') {
-          await ensureFundChannel(); // Android 13+ 는 권한 요청 전에 채널이 있어야 한다
+          await ensurePushChannels(); // Android 13+ 는 권한 요청 전에 채널이 있어야 한다
           await Notifications.requestPermissionsAsync();
           await markPrompted('accepted'); // 같은 질문을 홈·펀드 시트로 다시 하지 않게
         } else if (action === 'open-settings') {

@@ -4,7 +4,7 @@ import { StyleSheet } from 'react-native-unistyles';
 
 import { BottomSheet, Button } from '@/ui';
 
-import { ensureFundChannel } from './handlers';
+import { ensurePushChannels } from './handlers';
 import { markPrompted } from './prompt';
 import { syncPushRegistration } from './registration';
 
@@ -12,7 +12,7 @@ import { syncPushRegistration } from './registration';
 export function PushPromptSheet({ onClose }: { onClose: () => void }) {
   const accept = async () => {
     try {
-      await ensureFundChannel();
+      await ensurePushChannels();
       await Notifications.requestPermissionsAsync();
     } catch {
       // 채널·권한 요청 실패여도 시트는 반드시 닫고 "물어봤음"으로 기록한다
