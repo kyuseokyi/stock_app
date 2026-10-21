@@ -87,12 +87,18 @@ export function createPushRegistrar(d: SyncDeps) {
     // 아직 시작 전인 sync 가 큐에 있으면 새 요청은 그 결과를 공유(합치기). unregister 는 합치지 않는다
     sync: () => {
       if (pendingSync) return pendingSync;
-      pendingSync = enqueue(() => {
-        pendingSync = null;
+      // 내 시작 시점에 pendingSync 가 아직 나라면 비운다(unregister 뒤 새로 선 sync 의 합치기 대상을 지우지 않게)
+      const p: Promise<SyncResult> = enqueue(() => {
+        if (pendingSync === p) pendingSync = null;
         return syncPushRegistrationWith(d);
       });
-      return pendingSync;
+      pendingSync = p;
+      return p;
     },
-    unregister: (authToken: string) => enqueue(() => unregisterWith(d, authToken)),
+    // 해제 뒤에 들어오는 sync 가 해제 앞의 대기 sync 에 합쳐져 해제보다 먼저 실행되지 않게 합치기 대상을 끊는다
+    unregister: (authToken: string) => {
+      pendingSync = null;
+      return enqueue(() => unregisterWith(d, authToken));
+    },
   };
 }

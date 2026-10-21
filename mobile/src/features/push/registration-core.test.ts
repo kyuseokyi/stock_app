@@ -153,4 +153,21 @@ describe('createPushRegistrar 합치기', () => {
     await Promise.all([s1, s2]);
     expect(d.put).toHaveBeenCalledTimes(1); // 두 번째는 토큰 같아 unchanged
   });
+
+  it('대기 sync → unregister → 새 sync 는 합쳐지지 않고 해제 뒤에 실행되어 최종 등록된다', async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    const { d, saved } = mk({ put: jest.fn(() => gate) });
+    const reg = createPushRegistrar(d);
+    const s1 = reg.sync(); // 실행 시작(put 대기)
+    await Promise.resolve();
+    const s2 = reg.sync(); // 큐에서 대기
+    const u = reg.unregister('jwt');
+    const s3 = reg.sync(); // 해제 뒤에 새로 줄을 서야 함
+    expect(s3).not.toBe(s2);
+    release();
+    await Promise.all([s1, s2, u]);
+    await expect(s3).resolves.toBe('registered');
+    expect(saved.v).toBe('ExponentPushToken[a]');
+  });
 });
