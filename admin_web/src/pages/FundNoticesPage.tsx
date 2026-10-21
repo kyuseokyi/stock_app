@@ -89,17 +89,10 @@ function SendPanel() {
         setTemplates(list)
         const first = list[0]
         if (!first) return
-        // 사용자가 이미 입력한 내용이 있으면 덮어쓰지 않는다(제목·본문 모두 비었을 때만 자동 채움)
-        setTitle((curTitle) => {
-          setBody((curBody) => {
-            if (curTitle === '' && curBody === '') {
-              setTemplateId(first.id)
-              return first.body
-            }
-            return curBody
-          })
-          return curTitle === '' ? first.title : curTitle
-        })
+        // 사용자가 이미 입력한 값은 유지하고, 비어 있을 때만 첫 템플릿으로 채운다
+        setTitle((cur) => cur || first.title)
+        setBody((cur) => cur || first.body)
+        setTemplateId((cur) => cur ?? first.id)
       })
       .catch((e) => showToast(apiErrorMessage(e), { icon: '⚠️' }))
     void loadSends()
