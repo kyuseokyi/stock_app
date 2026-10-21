@@ -41,3 +41,13 @@ export function postNoticeEnableAction(
   if (permission === 'undetermined') return 'request';
   return 'open-settings';
 }
+
+/** 로그인 후 홈 탭: 푸시 설정됨 + 아직 안 물어봄 + OS 권한 미결정이면 안내 시트(펀드 없어도). 기록은 펀드 경로와 공유 */
+export function shouldPromptOnHome(s: {
+  loggedIn: boolean;
+  prompted: boolean;
+  permission: string;
+  configured: boolean;
+}): boolean {
+  return s.configured && s.loggedIn && !s.prompted && s.permission === 'undetermined';
+}

@@ -4,6 +4,7 @@ import {
   postNoticeSwitchValue,
   shouldOfferPrompt,
   shouldPromptOnEnter,
+  shouldPromptOnHome,
 } from './prompt-core';
 
 describe('effectivePermission', () => {
@@ -67,5 +68,25 @@ describe('postNoticeEnableAction', () => {
   });
   it('다시 물을 수 없는 거부면 설정 앱 안내', () => {
     expect(postNoticeEnableAction('denied')).toBe('open-settings');
+  });
+});
+
+describe('shouldPromptOnHome', () => {
+  const base = { loggedIn: true, prompted: false, permission: 'undetermined', configured: true };
+  it('로그인 + 미질문 + 권한 미결정 + 설정됨이면 true(펀드 없어도)', () => {
+    expect(shouldPromptOnHome(base)).toBe(true);
+  });
+  it('비로그인이면 false', () => {
+    expect(shouldPromptOnHome({ ...base, loggedIn: false })).toBe(false);
+  });
+  it('이미 물어봤으면 false(펀드 경로와 기록 공유)', () => {
+    expect(shouldPromptOnHome({ ...base, prompted: true })).toBe(false);
+  });
+  it('권한이 이미 결정됐으면 false', () => {
+    expect(shouldPromptOnHome({ ...base, permission: 'granted' })).toBe(false);
+    expect(shouldPromptOnHome({ ...base, permission: 'denied' })).toBe(false);
+  });
+  it('푸시 미설정이면 false', () => {
+    expect(shouldPromptOnHome({ ...base, configured: false })).toBe(false);
   });
 });
