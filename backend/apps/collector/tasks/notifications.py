@@ -68,12 +68,18 @@ def _run(post_id: int) -> dict:
             try:
                 result = get_push_sender().send_batch(tokens, message)
             except Exception as exc:  # noqa: BLE001 - 발송기 오류는 전부 실패로 집계
-                logger.warning("send_new_post_notification: 발송기 오류(post_id=%s): %s", post_id, exc)
+                # 예외 문구에 토큰이 섞일 수 있어 종류만 남긴다
+                logger.warning("send_new_post_notification: 발송기 오류(post_id=%s): %s", post_id, type(exc).__name__)
                 result = BatchResult(failure=len(tokens))
 
         if result.invalid_tokens:
-            db.execute(delete(PushDevice).where(PushDevice.token.in_(result.invalid_tokens)))
-            db.commit()
+            # 정리 실패가 이미 보낸 발송 집계를 지우지 않게 따로 감싼다
+            try:
+                db.execute(delete(PushDevice).where(PushDevice.token.in_(result.invalid_tokens)))
+                db.commit()
+            except Exception as exc:  # noqa: BLE001
+                db.rollback()
+                logger.warning("send_new_post_notification: 무효 토큰 정리 실패(post_id=%s): %s", post_id, type(exc).__name__)
 
     logger.info(
         "send_new_post_notification: post=%s recipients=%s ok=%s fail=%s invalid=%s",
