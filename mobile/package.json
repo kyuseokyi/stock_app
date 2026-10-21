@@ -74,6 +74,7 @@
     "build:ios:sim": "eas build --platform ios --profile development-sim --local",
     "build:ios:prod": "eas build --platform ios --profile production --local",
     "build:android:dev": "eas build --platform android --profile development --local",
+    "build:android:devapk": "bash ./scripts/build-dev-apk.sh",
     "build:android:prod": "eas build --platform android --profile production --local",
     "lint": "expo lint",
     "typecheck": "tsc --noEmit",

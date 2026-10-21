@@ -203,7 +203,11 @@ npm run android            # = expo run:android.       실기기: npm run androi
 npm run build:android:dev  # eas build --platform android --profile development --local
 npm run build:ios:sim      # iOS 시뮬레이터용 (development-sim 프로필)
 npm run build:android:prod # 상용(app-bundle) / build:ios:prod
+
+# (D) 개발 앱 독립실행형 APK — Metro 없이 실행, 다른 테스트 기기에 설치용(Gradle 로컬 빌드)
+npm run build:android:devapk  # → android/app/build/outputs/apk/release/app-release.apk
 ```
+> `build:android:devapk`: release 번들은 Expo 가 production 모드로 고정해 `.env.production*` 만 읽으므로, 빌드 동안만 개발 env(`.env.development.local` > `.env.development`)를 `.env.production.local` 로 옮겼다가 지운다. 다른 기기에서 localhost 는 접속 불가라 **`mobile/.env.development.local` 에 개발 서버 `EXPO_PUBLIC_*_URL`(게임 포함)을 넣어야** 하며, localhost 가 남아 있으면 빌드 전에 멈춘다. debug 키 서명(내부 테스트용).
 > 모든 스크립트는 `cross-env APP_ENV=development|production` 으로 환경을 주입한다(Windows/macOS 공통). `:dev`/`:prod` 접미사로 환경을, `:device`로 실기기를 선택. EAS 프로필은 `eas.json`의 development/development-sim/preview/production.
 - **환경 분리**: `APP_ENV`(빌드 시 주입, `eas.json`에서 프로필별 지정)에 따라 앱 이름·번들ID가 동적 분리 → 개발/상용 앱 동시 설치 가능.
   - dev → `StockApp Dev` / `com.stockapp.dev`, prod → `StockApp` / `com.stockapp` (`app.config.js`)
