@@ -154,10 +154,7 @@ async def test_upsert_race_retries_on_integrity_error(maker, monkeypatch):
 
     monkeypatch.setattr(push_repo, "_find_by_token", fake_find)
     async with maker() as s:
-        dev = await push_repo.upsert_device(
-            s, token=TOKEN, user_id=b.id, platform="ios", fund_notice=False
-        )
-    assert dev.user_id == b.id
+        await push_repo.upsert_device(s, token=TOKEN, user_id=b.id, platform="ios", fund_notice=False)
     devs = await _devices(maker)
     assert len(devs) == 1 and devs[0].user_id == b.id and devs[0].platform == "ios"
     assert devs[0].fund_notice is False

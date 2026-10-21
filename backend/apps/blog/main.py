@@ -15,7 +15,7 @@ from shared.cors import build_allowed_origins
 from shared.health import add_health_routes
 
 from . import events
-from .routers import blogs, boards, comments, notifications, push_devices
+from .routers import blogs, boards, comments, notifications, push_admin, push_devices
 
 app = FastAPI(title="Stock App - Blog Service", version="0.1.0")
 
@@ -34,6 +34,7 @@ app.include_router(blogs.router)
 app.include_router(comments.router)
 app.include_router(notifications.router)
 app.include_router(push_devices.router)
+app.include_router(push_admin.router)
 
 
 @app.get("/health", tags=["health"])

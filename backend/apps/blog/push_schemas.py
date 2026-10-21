@@ -13,3 +13,77 @@ class PushDeviceIn(BaseModel):
     token: str = Field(min_length=1, max_length=255, pattern=EXPO_TOKEN_PATTERN)
     platform: Literal["android", "ios"]
     fund_notice: bool = True
+
+
+class FundNoticeIn(BaseModel):
+    date: dt.date
+    title: str = Field(min_length=1, max_length=100)
+    body: str = Field(min_length=1, max_length=500)
+    mode: Literal["now", "test", "scheduled"]
+    scheduled_at: dt.datetime | None = None
+    template_id: int | None = None
+    force: bool = False
+
+    @field_validator("title", "body")
+    @classmethod
+    def _not_blank(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("공백만 입력할 수 없습니다.")
+        return v
+
+
+class PushSendOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    kind: str
+    mode: str
+    ref_date: dt.date
+    title: str
+    body: str
+    status: str
+    scheduled_at: dt.datetime | None
+    started_at: dt.datetime | None
+    finished_at: dt.datetime | None
+    target_count: int
+    success_count: int
+    failure_count: int
+    template_id: int | None
+    created_by: int | None
+    created_by_nickname: str | None = None
+    created_at: dt.datetime
+
+
+class PushSendListOut(BaseModel):
+    items: list[PushSendOut]
+    total: int
+
+
+class FundNoticePreviewOut(BaseModel):
+    target_count: int
+    my_device_count: int
+    already_sent: bool
+    last_send: PushSendOut | None
+
+
+class PushTemplateIn(BaseModel):
+    title: str = Field(min_length=1, max_length=100)
+    body: str = Field(min_length=1, max_length=500)
+
+    @field_validator("title", "body")
+    @classmethod
+    def _not_blank(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("공백만 입력할 수 없습니다.")
+        return v
+
+
+class PushTemplateOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    title: str
+    body: str
+    last_sent_at: dt.datetime | None
+    created_at: dt.datetime
+    updated_at: dt.datetime
