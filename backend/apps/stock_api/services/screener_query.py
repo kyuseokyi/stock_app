@@ -5,6 +5,7 @@
 """
 from __future__ import annotations
 
+import logging
 import math
 from datetime import date
 
@@ -14,6 +15,8 @@ from shared import market_repo
 from shared.clickhouse_schema import CLICKHOUSE_DB, get_client
 from shared.database import SyncSessionLocal
 from shared.market_models import Sector
+
+log = logging.getLogger(__name__)
 
 _EPOCH = date(1970, 1, 1)
 MAX_LIMIT = 200
@@ -85,11 +88,23 @@ def _sector_names(codes: list[str]) -> dict[str, str]:
         return dict(db.execute(select(Sector.code, Sector.name).where(Sector.code.in_(codes))).all())
 
 
+_UNKNOWN_TABLE_CODE = 60  # ClickHouse UNKNOWN_TABLE
+
+
+def _is_missing_table(exc: Exception) -> bool:
+    """clickhouse_connect Error 의 code(60)·name(UNKNOWN_TABLE), 없으면 메시지의 'UNKNOWN_TABLE' 로 판별."""
+    return (getattr(exc, "code", None) == _UNKNOWN_TABLE_CODE or getattr(exc, "name", None) == "UNKNOWN_TABLE"
+            or "UNKNOWN_TABLE" in str(exc))
+
+
 def latest_date() -> date | None:
     try:
         rows = _query(f"SELECT max(date) FROM {CLICKHOUSE_DB}.screener_daily")
-    except Exception:  # noqa: BLE001 — 첫 계산 전(테이블 없음)이면 '준비 중'
-        return None
+    except Exception as exc:  # noqa: BLE001
+        if _is_missing_table(exc):  # 첫 계산 전(테이블 없음)이면 '준비 중'
+            return None
+        log.exception("screener_daily 최신 기준일 조회 실패")  # 연결·타임아웃 등은 GraphQL 오류로 넘긴다
+        raise
     d = rows[0][0] if rows else None
     return None if d is None or d == _EPOCH else d
 

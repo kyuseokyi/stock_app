@@ -2,6 +2,7 @@
 from datetime import date
 
 import pytest
+from clickhouse_connect.driver.exceptions import DatabaseError, OperationalError
 
 from apps.stock_api.graphql.schema import schema
 from apps.stock_api.services import screener_query as sq
@@ -38,10 +39,33 @@ def test_no_data_yet(ch, monkeypatch):
 
     class Boom:
         def query(self, sql, parameters=None):
-            raise RuntimeError("table missing")  # 첫 계산 전(테이블 없음)
+            raise DatabaseError("Code: 60. DB::Exception: Table x.screener_daily does not exist. (UNKNOWN_TABLE)",
+                                code=60, name="UNKNOWN_TABLE")  # 첫 계산 전(테이블 없음)
 
     monkeypatch.setattr(sq, "_ch", lambda: Boom())
     assert sq.screen(filters={"bb_sigma": 3}) == {"date": None, "total": 0, "bb_sigma": 3.0, "items": []}
+
+
+def test_latest_date_missing_table_variants(monkeypatch):
+    for exc in (DatabaseError("x", code=60), DatabaseError("x", name="UNKNOWN_TABLE"),
+                RuntimeError("Code: 60. (UNKNOWN_TABLE)")):
+        def boom(sql, params=None, _e=exc):
+            raise _e
+
+        monkeypatch.setattr(sq, "_query", boom)
+        assert sq.latest_date() is None
+
+
+def test_latest_date_other_errors_raise(monkeypatch, caplog):
+    for exc in (OperationalError("Error executing HTTP request attempt 1"), TimeoutError("timeout"),
+                DatabaseError("Code: 241 memory limit", code=241, name="MEMORY_LIMIT_EXCEEDED")):
+        def boom(sql, params=None, _e=exc):
+            raise _e
+
+        monkeypatch.setattr(sq, "_query", boom)
+        with pytest.raises(type(exc)):
+            sq.latest_date()
+    assert "최신 기준일 조회 실패" in caplog.text
 
 
 @pytest.mark.parametrize("preset, cond", [
