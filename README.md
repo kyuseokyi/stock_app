@@ -569,7 +569,9 @@ cd backend && uv run --with pykrx python -m apps.collector.verify.spot_check --n
 - **API(stock_api GraphQL)**: `screenerScreen(preset, filters: ScreenerFilterInput, sort, limit, offset)` → `{ date, total, bbSigma, items }`(`limit` 최대 200). 쿼리는 `web_client/src/api/finder.ts`·`mobile/src/features/finder/api.ts`, 계약 테스트 `backend/tests/test_screener_contract.py`. 기준값은 `apps/stock_api/services/screener_query.py`(프리셋·σ·정렬)와 `apps/collector/screener/indicators.py`(기간·구간 수) 상수.
 - **배포 후 꼭 할 일**
   1. Celery 워커와 stock_api 재시작 — 새 태스크 모듈 `apps.collector.tasks.screener` 와 바뀐 파이프라인 단계, 새 GraphQL 필드를 읽게 한다. 안 하면 20:30 에 스크리너 단계가 돌지 않는다.
-  2. 처음 한 번 60거래일 채우기(서버 collector 컨테이너에서): `uv run celery -A apps.collector.celery_app call collector.backfill_screener` — 워커 로그 "스크리너 백필: ok=… failed=…" 로 확인(일봉은 한 번만 읽고 날짜별로 잘라 쓴다). 계산 결과가 0행이거나 시도한 종목의 5% 이상 실패한 날은 실패(`failed`)로 남고, 일일 파이프라인에서는 `pipeline_record` 에 실패로 기록된다.
+  2. 처음 한 번 60거래일 채우기 — 서버에는 `uv` 가 없으니 워커 컨테이너 안에서 실행(compose·Swarm 공통):
+     `docker exec $(docker ps -qf name=stock_celery_worker -f status=running | head -1) celery -A apps.collector.celery_app call collector.backfill_screener`
+     (로컬은 `uv run celery -A apps.collector.celery_app call collector.backfill_screener`) — 워커 로그 "스크리너 백필: ok=… failed=…" 로 확인(일봉은 한 번만 읽고 날짜별로 잘라 쓴다). 계산 결과가 0행이거나 시도한 종목의 5% 이상 실패한 날은 실패(`failed`)로 남고, 일일 파이프라인에서는 `pipeline_record` 에 실패로 기록된다.
   3. 프리셋별 건수 점검(CH):
      ```sql
      SELECT count() AS total,
