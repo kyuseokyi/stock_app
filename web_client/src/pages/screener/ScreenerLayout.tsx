@@ -2,13 +2,14 @@ import { Suspense } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
 import { chipClass } from '../../components/ui/Chip'
 
-// 스크리너 공통 틀 — 탭(시장·테마·업종·일정·주도주) + 탭 화면. 탭마다 주소가 있어 새로고침·뒤로 가기·공유가 그대로 된다.
+// 스크리너 공통 틀 — 탭(시장·테마·업종·일정·주도주·조건검색) + 탭 화면. 탭마다 주소가 있어 새로고침·뒤로 가기·공유가 그대로 된다.
 const TABS = [
   { to: 'market', label: '시장' },
   { to: 'themes', label: '테마' },
   { to: 'sectors', label: '업종' },
   { to: 'calendar', label: '일정' },
   { to: 'leaders', label: '주도주' },
+  { to: 'finder', label: '조건검색' },
 ]
 
 export default function ScreenerLayout() {

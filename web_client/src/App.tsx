@@ -14,6 +14,7 @@ const ScreenerPage = lazy(() => import('./pages/ScreenerPage'))
 const MarketTab = lazy(() => import('./pages/screener/MarketTab'))
 const GroupTab = lazy(() => import('./pages/screener/GroupTab'))
 const CalendarTab = lazy(() => import('./pages/screener/CalendarTab'))
+const FinderTab = lazy(() => import('./pages/screener/FinderTab'))
 const FundListPage = lazy(() => import('./pages/FundListPage'))
 const FundReportPage = lazy(() => import('./pages/FundReportPage'))
 
@@ -47,13 +48,14 @@ export default function App() {
             <ScreenerLayout />
           </Suspense>
         }>
-          {/* 탭: 시장 · 테마 · 업종 · 일정 · 주도주(CANSLIM). /screener 는 시장 탭으로 */}
+          {/* 탭: 시장 · 테마 · 업종 · 일정 · 주도주(CANSLIM) · 조건검색. /screener 는 시장 탭으로 */}
           <Route index element={<Navigate to="market" replace />} />
           <Route path="market" element={<MarketTab />} />
           <Route path="themes" element={<GroupTab key="theme" kind="theme" />} />
           <Route path="sectors" element={<GroupTab key="sector" kind="sector" />} />
           <Route path="calendar" element={<CalendarTab />} />
           <Route path="leaders" element={<ScreenerPage />} />
+          <Route path="finder" element={<FinderTab />} />
           <Route path="*" element={<Navigate to="market" replace />} />
         </Route>
         <Route path="auth/complete" element={<AuthCompletePage />} />
