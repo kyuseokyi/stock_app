@@ -218,8 +218,8 @@ npm run build:android:devapk  # → android/app/build/outputs/apk/release/app-re
   - ⚠️ **dev 앱 스킴이 `stockapp` → `stockapp-dev` 로 바뀌었다**(prod 와 같은 기기 공존 시 복귀 링크 충돌 방지). 기존 dev build 는 **1회 재생성** 필요: `npm run prebuild:dev` 후 `npm run android:dev`/`ios:dev`(또는 EAS dev 빌드). Expo Go 는 Unistyles 로 원래 미지원.
   - 에뮬레이터는 auth 콜백이 브라우저에서 열리므로 `adb reverse tcp:8001 tcp:8001` 이 필요하다(기존 목록에 포함).
 - **게임 탭(트레이딩 게임 6c)**: web 6a+6b 와 동일 기능(헤더·Streak·코치 배너·심리 바·일봉+실시간 차트·포지션/주문·넛지 토스트 + 🏆 랭킹·🎯 퀘스트·🎓 아카데미(5x 해금)·🧩 야간 10초 차트 퀴즈 시트). trading_game(8003)·stock_api(8002, 일봉)·auth(8001) 필요. `EXPO_PUBLIC_GAME_API_URL`은 **선택** — 미설정 시 dev 는 `http://localhost:8003`, production 이면 "시즌을 준비하고 있어요". 차트는 신규 네이티브 의존성 없는 순수 View 렌더(`src/features/game/lib/chart-layout.ts`). 로그인은 내정보 탭(비로그인에서 주문·퀘스트·퀴즈·아카데미 → 내정보 탭 안내). 에뮬레이터는 `adb reverse tcp:8003 tcp:8003` 추가(8000/8001/8002/8082 와 함께).
-- **푸시 알림 빌드 설정**: `EAS_PROJECT_ID`·`GOOGLE_SERVICES_JSON` 은 `EXPO_PUBLIC_` 이 아니라 **빌드 시** `app.config.js` 가 읽는 env(키 이름만 `mobile/.env.example` 참고, 값은 `.env.development`·`.env.production` 또는 빌드 셸 env). `expo-notifications` 플러그인이 들어 있어 **푸시를 쓰려면 새 dev build 가 필요**하다(`npm run prebuild:dev` 후 `npm run android:dev` 등). 값이 없으면 푸시만 꺼진다. 코드: `src/features/push/`(토큰 등록·해제 직렬화 큐, 안내 시트, 권한 배너, 알림 탭 → 펀드 화면).
-  - **사용자가 직접 할 일(최초 1회)**: ① Firebase 에서 FCM V1 서비스 계정 키 발급 → ② `eas login` → `cd mobile && eas init` 으로 projectId 확인 → ③ `eas credentials` 로 `com.stockapp.dev`·`com.stockapp` 두 패키지에 FCM V1 키 업로드 → ④ 위 env 설정 후 재빌드 → ⑤ 서버 `PUSH_BACKEND=expo`. 자세한 순서: [`docs/push_notification_setup.md`](docs/push_notification_setup.md)
+- **푸시 알림 빌드 설정**: EAS projectId 는 공개 식별자라 `mobile/app.config.js` 에 **기본값**(`DEFAULT_EAS_PROJECT_ID`)으로 들어 있고, `google-services.json` 은 `mobile/secrets/google-services.json` 파일이 **있으면 자동으로** 쓴다(파일은 git 제외). 그래서 개발 빌드·운영 빌드(`android:prod`, `eas build --local`)·개발 APK 모두 **env 를 따로 설정하지 않아도** 푸시가 켜진다. env `EAS_PROJECT_ID`·`GOOGLE_SERVICES_JSON`(`EXPO_PUBLIC_` 아님, 빌드 시 `app.config.js` 가 읽음)은 **덮어쓸 때만** 쓴다(키 이름은 `mobile/.env.example` 참고). `expo-notifications` 플러그인이 들어 있어 **푸시를 쓰려면 새 dev build 가 필요**하다(`npm run prebuild:dev` 후 `npm run android:dev` 등). 웹(`Platform.OS === 'web'`)에서는 `isPushConfigured()` 가 false 라 푸시를 쓰지 않는다. 코드: `src/features/push/`(토큰 등록·해제 직렬화 큐, 안내 시트, 권한 배너, 알림 탭 → 펀드 화면).
+  - **사용자가 직접 할 일(최초 1회)**: ① Firebase 에서 FCM V1 서비스 계정 키 발급 → ② `eas login` → `cd mobile && eas init` 으로 projectId 확인 → ③ `eas credentials` 로 `com.stockapp.dev`·`com.stockapp` 두 패키지에 FCM V1 키 업로드 → ④ 재빌드(env 설정 불필요) → ⑤ 서버 `PUSH_BACKEND=expo`. 자세한 순서: [`docs/push_notification_setup.md`](docs/push_notification_setup.md)
 - **공통 UI**: 공유 컴포넌트는 `mobile/src/ui/`에 있으며 토스 디자인 언어(`docs/mobile_design_language.md`)를 따른다.
 - **테스트/검증**: 순수 로직 단위 테스트는 `cd mobile && npm test`(jest). 화면은 `npx tsc --noEmit`(+ 실기기 확인)로 검증한다. 이 프로젝트에는 eslint가 설정되어 있지 않아 모바일 lint 단계는 없다.
 - **검증(설정 레벨)**: `npx tsc --noEmit` · `npx expo-doctor` · `APP_ENV=production npx expo config --type public --json`
@@ -234,8 +234,8 @@ npm run build:android:devapk  # → android/app/build/outputs/apk/release/app-re
 - **리포트 알림(푸시·SSE)**: 관리자 웹 `/fund-notices`(사이드바 "펀드 리포트 알림")에서 문구를 쓰고 **테스트(내 기기만)·즉시·예약** 발송한다. 서버가 기기 토큰으로 Expo Push → FCM 을 거쳐 보내고, 같은 때 SSE `fund_report_updated` 를 발행한다.
   - 앱: 펀드를 처음 등록하면(이미 펀드가 있으면 펀드 화면 진입 시 1회) 안내 시트 후 알림 권한을 묻고, 로그인 + 펀드 1개 이상 + 권한 허용일 때만 토큰을 서버에 등록한다(조건이 깨지면 해제). 알림을 탭하면 펀드 화면으로 이동해 갱신한다. 권한을 거부했으면 펀드 목록 위에 안내 배너.
   - 앱이 열려 있을 때는 SSE 신호를 받아 0~30초 뒤 자동 갱신(웹도 같음, 토스트 표시).
-  - 푸시 설정이 없으면(`EAS_PROJECT_ID` 미설정) 푸시만 꺼지고 SSE·자동 갱신은 정상 동작.
-  - 푸시 설정 함정: `eas init`·`eas credentials` 는 `.env.development.local` 을 읽지 않는다(동적 `app.config.js` 라 projectId 가 비어 보임) → `EAS_PROJECT_ID=<EAS 프로젝트 projectId> eas credentials -p android` 처럼 셸 환경변수로 넘긴다. `!` 로 실행하면 대화형 질문에 답할 수 없으므로 `eas init --force` 를 쓴다.
+  - 푸시 설정이 없으면(projectId 없음·웹 등) 푸시만 꺼지고 SSE·자동 갱신은 정상 동작.
+  - 푸시 설정 참고: projectId 가 `app.config.js` 에 직접 들어 있어 `eas init`·`eas credentials` 에 env 를 따로 붙일 필요가 없다. **새 EAS 프로젝트로 바꿀 때만** `DEFAULT_EAS_PROJECT_ID` 를 고치거나 env `EAS_PROJECT_ID` 로 덮어쓴다. 빌드한 APK 는 `unzip -p <apk> assets/app.config | grep -c projectId` 로 projectId 포함 여부를 확인할 수 있다(개발 APK 는 `mobile/scripts/build-dev-apk.sh` 가 자동 검사). `!` 로 실행하면 대화형 질문에 답할 수 없으므로 `eas init --force` 를 쓴다.
   - 푸시를 쓰려면 `expo-notifications` 가 들어간 **새 dev build 가 필요**하다. 키·계정 준비 절차: `docs/push_notification_setup.md`. 설계: `docs/superpowers/specs/2026-10-19-fund-report-notice-design.md`
 - **앱을 열지 않은 날의 기록(백그라운드)**: 서버가 알림 뒤에 제목·본문 없는 깨우기용 무음 메시지(`type: fund_refresh`)를 한 번 더 보내고(이력 수치에는 안 셈), 앱이 이를 받아 백그라운드에서 갱신·히스토리 기록을 하게 하는 구조다(Android 위주, iOS 는 OS 재량·강제 종료·잠금 중 불가). 백그라운드에서 생긴 새 기록의 Drive 백업은 다음에 앱을 열 때 한다.
   - **현재 상태**: 구현·실기기 검증 완료(2026-10-21, 갤럭시 A53 / Android 16, 개발 앱). 알림 탭 → 펀드 화면(백그라운드·콜드), 앱이 백그라운드일 때 무음 push → 8초 뒤 히스토리 기록, 앱을 밀어 닫은 콜드 상태의 무음 push → 화면 없이 11초에 태스크 종료 모두 ✅. 정기 작업은 등록과 JS 깨어남까지 확인했고, 콜드 정기 실행은 같은 원인·같은 수정이 적용되는 경로지만 6시간 주기라 **실측 대기**.
@@ -403,8 +403,8 @@ uv run pytest tests/test_universe_cooldown.py    # 특정 파일
 | `QUIZ_POOL_MIN_UNSEEN` / `QUIZ_POOL_BATCH` | collector | `100` / `50` | 퀴즈 정기 생성(21:00) — 미시도 문제 수가 MIN 미만이면 BATCH 개 생성 |
 | `PUSH_BACKEND` | collector | `mock` | `mock`(로그만) \| `expo`(Expo Push → FCM/APNs 실발송) \| `fcm`(미구현 스켈레톤). `expo` 는 EAS 에 FCM V1 키를 올린 **뒤에** 바꾼다 |
 | `EXPO_ACCESS_TOKEN` | collector (선택) | (없음) | Expo 계정에서 "Enhanced push security" 를 켰을 때만 필요 |
-| `EAS_PROJECT_ID` | mobile 빌드 시 (선택) | (없음) | `eas init` 의 projectId. `EXPO_PUBLIC_` 이 아니라 `app.config.js` 가 빌드 때 읽음. 없으면 푸시만 꺼짐. `mobile/.env.development`·`.env.production` 에 둔다 |
-| `GOOGLE_SERVICES_JSON` | mobile 빌드 시 (선택) | (없음) | Firebase `google-services.json` 경로(커밋 금지, `mobile/secrets/`). 없으면 Android 푸시 수신 불가 |
+| `EAS_PROJECT_ID` | mobile 빌드 시 (선택) | (코드 기본값) | `eas init` 의 projectId. `EXPO_PUBLIC_` 이 아니라 `app.config.js` 가 빌드 때 읽음. 기본값은 `app.config.js` 의 `DEFAULT_EAS_PROJECT_ID`, 덮어쓸 때만 설정 |
+| `GOOGLE_SERVICES_JSON` | mobile 빌드 시 (선택) | (자동 탐지) | Firebase `google-services.json` 경로(커밋 금지). 기본값은 `mobile/secrets/google-services.json` 이 있으면 자동 사용, 덮어쓸 때만 설정 |
 | `CORS_ORIGINS` | backend | (localhost + haezean 기본 허용) | 콤마 구분 **추가** 오리진(product 등). develop 배포 도메인(admin/app.haezean.com)은 `shared/cors.py`에 코드로 포함돼 env 없이도 허용 |
 | `VITE_API_BASE_URL` | admin_web | `http://localhost:8000/api/v1` | 블로그 API |
 | `VITE_AUTH_BASE_URL` | admin_web | `http://localhost:8001/api/v1` | 인증 API |

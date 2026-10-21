@@ -13,7 +13,7 @@
 | 서버 발송 구조 `backend/apps/collector/push/` | ✅ | `expo`(Expo Push) 발송기 추가 — `PUSH_BACKEND=expo` 로 실발송 |
 | 서버 설정 `PUSH_BACKEND` | `mock` | `backend/.env.example` 기본값. 실제 발송 안 함 |
 | 앱 패키지 `expo-notifications` | ✅ 설치 | 새 dev build 필요 |
-| 앱 설정 `app.config.js` | ✅ 연결 | env `EAS_PROJECT_ID`·`GOOGLE_SERVICES_JSON` 으로 주입 |
+| 앱 설정 `app.config.js` | ✅ 연결 | projectId 는 코드 기본값(`DEFAULT_EAS_PROJECT_ID`), `google-services.json` 은 `mobile/secrets/` 에 있으면 자동 사용. env 는 덮어쓸 때만 |
 | 키 파일 git 제외 규칙 | ✅ 있음 | 루트 `.gitignore`(`**/secrets/`, `google-services*.json` 등) — 2026-10-20 추가 |
 | `google-services.json` | ✅ 준비됨 | `mobile/secrets/google-services.json` — **한 파일에 `com.stockapp.dev`·`com.stockapp` 두 앱 포함** |
 
@@ -71,12 +71,12 @@ eas login                     # Expo 계정(없으면 https://expo.dev 에서 �
 cd mobile
 eas init                      # 이 앱을 Expo 프로젝트에 연결 → projectId(UUID) 가 출력·생성된다
 ```
-- 나온 **projectId** 를 기록해 둔다 → 앱 설정의 `EAS_PROJECT_ID`(5장). 기기 토큰을 받을 때 꼭 필요하다.
-- `eas init` 이 `app.json`/`app.config.js` 를 고치겠다고 물으면, 이 프로젝트는 `app.config.js` 가 env 로 값을 읽는 구조이므로
-  **직접 고치지 말고** 값만 기록한 뒤 5장 방식(env)으로 넣는다.
-- 함정 1: `eas init`·`eas credentials` 는 `.env.development.local` 을 읽지 않는다. `app.config.js` 가 동적이라 projectId 가 비어 보인다. 실행할 때 셸 환경변수로 넘긴다:
+- 나온 **projectId** 를 기록해 둔다 → 이미 `app.config.js` 의 `DEFAULT_EAS_PROJECT_ID` 에 들어 있다(5장). 기기 토큰을 받을 때 꼭 필요하다. 새 EAS 프로젝트로 바꿀 때만 이 값을 고치거나 env 로 덮어쓴다.
+- `eas init` 이 `app.json`/`app.config.js` 를 고치겠다고 물으면, 이 프로젝트는 `app.config.js` 가 projectId 기본값을 이미 갖고 있으므로
+  **직접 고치지 말고** 값만 확인한다(새 프로젝트로 바꿀 때만 5장 방식으로 반영).
+- 참고: 예전에는 `eas init`·`eas credentials` 가 projectId 를 못 읽어 `EAS_PROJECT_ID=<id> eas …` 로 실행해야 했지만, 이제 projectId 가 `app.config.js` 에 직접 들어 있어 **해당하지 않는다**. 새 EAS 프로젝트로 바꿀 때만 `DEFAULT_EAS_PROJECT_ID` 를 고치거나 env 로 덮어쓴다.
   ```bash
-  EAS_PROJECT_ID=<EAS 프로젝트 projectId> eas credentials -p android
+  eas credentials -p android
   ```
 - 함정 2: `!` 로 실행하면 대화형 질문을 받을 수 없다. 이때는 `eas init --force` 를 쓴다.
 
@@ -92,7 +92,7 @@ eas credentials
    **Set up / Upload a new service account key**
 3. 2-2 에서 받은 JSON 파일 경로를 입력 → 완료.
 - 패키지(`com.stockapp.dev` / `com.stockapp`)마다 자격 증명이 따로라서 **두 패키지 모두** 올려야 개발용·운영용 앱 둘 다 받는다.
-- 위 함정 1 때문에 `eas credentials` 도 `EAS_PROJECT_ID=<EAS 프로젝트 projectId>` 를 앞에 붙여 실행한다. (2026-10-21: EAS 프로젝트 생성과 두 패키지 키 업로드 완료)
+- `eas credentials` 도 env 없이 그대로 실행한다. (2026-10-21: EAS 프로젝트 생성과 두 패키지 키 업로드 완료)
 
 ---
 
@@ -111,7 +111,7 @@ GoogleService-Info*.plist
 보관 위치(권장):
 | 파일 | 어디에 | 비고 |
 |---|---|---|
-| `google-services.json` | 맥 `mobile/secrets/google-services.json` | 앱 빌드 때만 필요. 경로를 env `GOOGLE_SERVICES_JSON` 으로 넘김 |
+| `google-services.json` | 맥 `mobile/secrets/google-services.json` | 앱 빌드 때만 필요. 이 경로에 있으면 자동 사용(다른 경로는 env `GOOGLE_SERVICES_JSON` 으로 덮어쓰기) |
 | FCM 서비스 계정 JSON | EAS 에 업로드 후 맥의 안전한 폴더(저장소 밖) | 서버에는 **필요 없음**(Expo 방식) |
 | `EXPO_ACCESS_TOKEN`(선택) | 서버 `/opt/stock_app/env/.env.production` | 6장 |
 
@@ -121,13 +121,14 @@ GoogleService-Info*.plist
 
 ## 5. 앱 설정 연결
 
-`mobile/.env.development`·`mobile/.env.production`(직접 편집) 또는 빌드 셸 env 에:
-```bash
-EAS_PROJECT_ID=<3장의 projectId>
-GOOGLE_SERVICES_JSON=./secrets/google-services.json
-```
-`app.config.js` 가 `extra.eas.projectId`(← `EAS_PROJECT_ID`), `android.googleServicesFile`(← `GOOGLE_SERVICES_JSON`, 없으면 생략), `expo-notifications` 플러그인을 이미 반영한다(구현됨).
-`projectId` 가 없으면 푸시만 꺼지고 나머지 기능은 정상(`isPushConfigured()`).
+**env 설정은 필요 없다.** 개발 빌드·운영 빌드(`android:prod`, `eas build --local`)·개발 APK 모두 그대로 푸시가 켜진다.
+- projectId: 공개 식별자라 `app.config.js` 의 `DEFAULT_EAS_PROJECT_ID` 에 기본값으로 커밋돼 있다. env `EAS_PROJECT_ID` 가 있으면 그 값이 덮어쓴다.
+- `google-services.json`: `mobile/secrets/google-services.json` 이 **있으면 자동으로** 쓴다(파일은 git 제외). env `GOOGLE_SERVICES_JSON` 으로 경로를 덮어쓸 수 있다.
+- 덮어쓰는 경우에만 `mobile/.env.development`·`.env.production` 또는 빌드 셸 env 에 둔다.
+
+`app.config.js` 가 `extra.eas.projectId`, `android.googleServicesFile`, `expo-notifications` 플러그인을 이미 반영한다(구현됨).
+`projectId` 가 없거나 웹(`Platform.OS === 'web'`)이면 푸시만 꺼지고 나머지 기능은 정상(`isPushConfigured()`).
+빌드한 APK 확인: `unzip -p <apk> assets/app.config | grep -c projectId` (개발 APK 는 `mobile/scripts/build-dev-apk.sh` 가 자동 검사).
 
 `expo-background-task`·`expo-task-manager`(백그라운드 기록용)도 **같은 재빌드에 포함**돼 있어 한 번만 빌드하면 된다.
 
@@ -215,7 +216,7 @@ PUSH_BACKEND=expo            # mock(기본, 로그만) → expo(실발송)
 
 | 증상 | 원인 | 해결 |
 |---|---|---|
-| 앱이 토큰을 못 받음(`projectId` 오류) | `EAS_PROJECT_ID` 미설정 | 3장 `eas init` 값 → 5장 env → 재빌드 |
+| 앱이 토큰을 못 받음(`projectId` 오류) | APK 에 projectId 누락(코드 기본값이 지워졌거나 새 프로젝트로 바꾼 뒤 미반영) | 5장의 `unzip … grep -c projectId` 로 확인 → `DEFAULT_EAS_PROJECT_ID` 또는 env 수정 → 재빌드 |
 | Expo 응답 `InvalidCredentials` | 해당 패키지에 FCM V1 키 미업로드 | 3장, `com.stockapp.dev`·`com.stockapp` 각각 |
 | 응답 `DeviceNotRegistered` | 앱 삭제·재설치로 토큰 만료 | 정상 — 서버가 그 토큰을 지운다. 앱 재실행 시 새 토큰 등록 |
 | 알림이 안 뜸(응답은 ok) | 휴대폰에서 알림 권한 꺼짐 / 배터리 최적화 | 설정 → 앱 → 알림 허용 |
@@ -232,6 +233,6 @@ PUSH_BACKEND=expo            # mock(기본, 로그만) → expo(실발송)
 - [x] FCM V1 서비스 계정 키 발급(2-2) — 2026-10-21
 - [x] `eas login` → `eas init` → projectId 기록(3장) — 2026-10-21
 - [x] `eas credentials` 로 두 패키지에 FCM V1 키 업로드(3장) — 2026-10-21
-- [ ] 앱 env `EAS_PROJECT_ID`·`GOOGLE_SERVICES_JSON` → 재빌드(5장)
+- [x] projectId 기본값·`google-services.json` 자동 사용 반영(env 불필요) → 재빌드 후 APK 확인(5장)
 - [ ] 서버 `PUSH_BACKEND=expo` → 재배포(6장)
 - [ ] Expo 도구로 단독 발송 확인 → 관리자 테스트 발송 확인(7장)
