@@ -10,6 +10,13 @@
 
 **설계:** [`docs/superpowers/specs/2026-10-19-fund-report-notice-design.md`](../specs/2026-10-19-fund-report-notice-design.md) · **설정 가이드:** [`docs/push_notification_setup.md`](../../push_notification_setup.md)
 
+> **보충 계획 — 같은 세션이 이어서 실행:** [`2026-10-21-fund-background-record.md`](2026-10-21-fund-background-record.md)(6개 작업, S1~S6)
+> 스펙 §1·§5·§7.1·§7.2 에 이 계획 작성 뒤 추가된 **백그라운드 히스토리 기록**(앱·웹을 안 연 날도 기록)·**무음 깨우기 메시지**·**빈 날 표시**는 이 계획에 없고 보충 계획에 있다. 끼워 넣는 위치:
+> - 작업 3 직후 → **S1**(서버 깨우기용 메시지 — `PushMessage.title/body` 선택화, `_payload` 빈 필드 생략, `send_fund_notice` 가 알림 뒤 무음 1개 더)
+> - 언제든 → **S2**(히스토리 빈 날 "이전 기록 M.D", core + web 복사)
+> - 작업 8-9(검증) 직후, **8-10 재빌드 전에** → 사용자 설치 `npx expo install expo-background-task expo-task-manager`(S3-1) → **S3·S4·S5-1~5** → 8-10 재빌드를 S5-6 과 합쳐 **1번만**(네이티브 모듈이 또 늘어 재빌드가 두 번 되지 않게)
+> - 작업 9 문서 때 → **S6**
+
 ---
 
 ## 보충 계획과 합친 실행 순서
@@ -1720,6 +1727,8 @@ git commit -m "feat(blog,collector): 펀드 리포트 알림 관리자 API(미�
 
 ---
 
+> ↪ 여기서 보충 계획 **S1**(깨우기용 무음 메시지)을 실행한다 — `push_sends.send_fund_notice`·`expo._payload`·`PushMessage` 를 이 작업의 코드 기준으로 고친다.
+
 ### 작업 4: 예약 발송 beat
 
 **파일:**
@@ -3381,6 +3390,8 @@ import { syncPushRegistration } from '@/features/push/registration';
 실행: `cd mobile && npx tsc --noEmit && npx jest --silent` → 오류 0, 실패 0.
 `npx expo lint` 는 사용자가 실행.
 
+> ↪ 8-10 전에 보충 계획 **S3-1(사용자 설치) → S3 → S4 → S5-1~5** 를 먼저 끝내고, 아래 재빌드를 S5-6 실기기 확인과 함께 한 번에 한다.
+
 - [ ] **8-10. 개발 앱 재빌드(네이티브 모듈 추가) — 커밋 전에 실행 확인**
 
 푸시 설정값(`EAS_PROJECT_ID`)이 아직 없어도 재빌드한다 — 값이 없으면 푸시만 꺼지고 앱은 정상이어야 한다(이것도 확인 대상).
@@ -3412,6 +3423,8 @@ git commit -m "feat(mobile): 펀드 리포트 푸시 — 첫 펀드 등록 시 �
 > 출시 전 개선 후보(이번 범위 밖): 다른 기기 로그인으로 세션이 교체되면 `expireSession` 의 DELETE 가 401 로 실패해 옛 기기 토큰이 남는다 — 그 기기에 펀드 푸시가 계속 갈 수 있다(데이터 없음, 탭하면 프로필).
 
 ---
+
+> ↪ 작업 9 와 함께 보충 계획 **S6**(README 백그라운드 기록 줄, 스펙 §7.1 에 실기기에서 본 payload 모양) 을 한다.
 
 ### 작업 9: 문서(README · ROADMAP · 설정 가이드)
 

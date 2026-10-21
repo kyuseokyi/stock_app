@@ -8,18 +8,43 @@
 
 **Tech Stack:** Python(Celery, httpx) · Expo SDK 57(`expo-background-task`, `expo-task-manager`, `expo-notifications`) · jest(jest-expo).
 
-**스펙:** `docs/superpowers/specs/2026-10-19-fund-report-notice-design.md` §1, §5(깨우기용), §7.1, §7.2, §9, §10. **선행:** `docs/superpowers/plans/2026-10-21-fund-report-notice.md` — 백엔드 Task S1 은 그 계획 **작업 3(발송 태스크)** 이후, 모바일 Task S3~S5 는 **작업 8(모바일 푸시)** 이후. Task S2(빈 날 표시)는 선행 없이 언제든.
+**스펙:** `docs/superpowers/specs/2026-10-19-fund-report-notice-design.md` §1, §5(깨우기용), §7.1, §7.2, §9, §10. **선행:** `docs/superpowers/plans/2026-10-21-fund-report-notice.md`(기본 계획) — S1 은 **작업 3** 직후, S2 는 언제든, S3~S5-5 는 **작업 8-9(검증)** 직후·**8-10 재빌드 전**, S5-6 은 8-10 재빌드와 합쳐 1번, S6 은 작업 9 와 함께. 기본 계획에도 같은 위치에 ↪ 안내가 있다.
+
+---
+
+## 인계 메모 (2026-10-21, 이 계획을 쓴 세션 → 기본 계획을 실행하는 세션)
+
+**왜 필요한가** — 수익 히스토리는 리포트를 가져온 날만 쌓인다. 원본 페이지는 그 순간의 스냅샷(기준일 1개, `core/types.ts` `evalDate`)뿐이라 앱·웹을 안 연 날은 나중에 되살릴 수 없다. 서버가 URL 을 받아 대신 수집하는 방법은 개인정보(URL·잔액·이름이 서버에 쌓임) 때문에 하지 않기로 했다(스펙 §1 범위 밖). 그래서 **기기가 직접, 앱이 꺼져 있어도** 가져오게 한다. 웹은 백그라운드 실행 수단이 없어 지금처럼 히스토리 없음.
+
+**사용자가 정한 것**
+- 관리자 발송 때 무음 push 로 앱을 깨워 기록(정확한 시점) + 6시간 안팎 정기 백그라운드 작업(안전망). 서버 수집은 안 함.
+- 빈 날은 메우지 않고 표시만. 기대치: Android 대부분 채움, iOS 는 OS 재량(강제 종료·저전력·잠금 중이면 못 함).
+
+**Expo 문서로 확인한 사실(2026-10-21)**
+- 앱 JS 를 깨우는 push = 제목·본문 없이 `data` 만 + iOS `contentAvailable: true`(옛 이름 `_contentAvailable` 은 하위 호환). Android 는 `priority: 'high'`.
+- `Notifications.registerTaskAsync` 태스크는 "앱이 일찍 require 하는 모듈(예: index.ts) 최상위"에서 정의·등록 → 이 앱은 `mobile/index.ts`(`"main": "index.ts"`) 에 import. `_layout.tsx` 는 화면 없이 깨어날 때 평가되지 않을 수 있다.
+- 태스크 콜백 `data` 는 FCM/APNs 원본이라 **모양이 문서에 없다** → `push-payload.ts` 가 여러 후보를 본다. 실기기 로그(`[fund-bg] push payload`)로 실제 모양을 확인해 스펙 §7.1 에 적는다(S6-1).
+- `expo-background-task`: `minimumInterval` 은 분 단위(최소 15, 기본 12시간), 사용자가 앱을 강제 종료하면 멈췄다가 다음 실행 때 재개, 디버그 빌드에서 `triggerTaskWorkerForTestingAsync()` 로 강제 실행 가능.
+- 앱 설정: `['expo-notifications', { enableBackgroundRemoteNotifications: true }]`, `'expo-background-task'` 플러그인(iOS `UIBackgroundModes: processing`·`BGTaskSchedulerPermittedIdentifiers` 는 S5-3 에서 introspect 로 확인).
+
+**현재 상태(이 메모 작성 시점)**
+- 기본 계획: 작업 7-1(`react-native-sse`·`expo-notifications` 설치, `1b90bd3`)만 완료. 나머지 작업 1~9 미착수.
+- 이 보충 계획: S1~S6 모두 미착수. 스펙은 이 계획과 일치하게 고쳐 둠(§1·§5·§7.1·§7.2·§9·§10·§12).
+- 추가 설치 필요: `expo-background-task`, `expo-task-manager`(사용자가 S3-1 에서 직접). 재빌드는 기본 계획 8-10 과 합쳐 1번.
+
+**놓치기 쉬운 함정**
+- 백그라운드 표시(`enterBackgroundRun`)는 25초 한도 시점이 아니라 `fundRefresher.run()` 이 **실제로 끝날 때** 끈다 — 늦게 끝난 실행이 앞 화면으로 착각해 화면 없이 Drive 백업을 부르지 않게(S3 테스트 있음).
+- 자동 갱신의 끝 상태 알림(구독)은 `run()` 프라미스가 풀리기 전에 온다(core `createAutoRefresher` 의 `once` finally) → 그 시점에 표시가 아직 켜져 있어 보류 처리가 맞게 된다.
+- 정기 작업 동기화는 로그인 복원(`hydrated`) 뒤에만 — 복원 전에는 `user=null` 이라 매 실행마다 해제됐다 재등록된다.
+- 히스토리 "당일" 값은 기록 사이 차이가 아니라 **원본 리포트에 적힌 값**이다. 빈 날 표시는 날짜 옆(값 옆 아님).
+- `gapFrom` 은 core 변경 → `scripts/check-fund-core-sync.sh --write` 로 web_client 복사를 같은 커밋에.
 
 ---
 
 ## 상시 규칙 (모든 작업)
 
 - 모든 커밋은 `dev` 브랜치. `git add -A`·`git add .` 금지 — 파일을 하나씩 지정. `.serena/project.yml` 은 절대 스테이징하지 않는다(다른 세션도 같은 브랜치에 커밋).
-- 커밋 메시지는 한국어, 끝 두 줄:
-  ```
-  Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
-  Claude-Session: https://claude.ai/code/session_01T814x7jTTuEcJBrCqKt8Pf
-  ```
+- 커밋 메시지는 한국어, 끝 두 줄은 **실행하는 세션의** 규칙대로(기본 계획 상시 규칙과 같은 `Co-Authored-By`·`Claude-Session` 두 줄, 세션 주소는 자기 세션 것).
 - 테스트가 실패하면 커밋하지 않는다.
 - 백엔드 테스트: `cd backend && uv run pytest -p no:warnings <파일>`. 모바일 테스트: `cd mobile && npx jest <파일>`, 타입: `npm run typecheck`.
 - 모바일 `npx expo install` 은 **사용자가 직접** 실행한다(Task S3-1). 하위 에이전트는 설치 명령을 실행하지 않는다.
@@ -387,7 +412,7 @@ git commit -m "feat(fund): 히스토리에 빠진 평일 표시(이전 기록 M.
 
 ### Task S3: 백그라운드 기록 순수 로직 (설치 전에도 테스트 가능)
 
-**선행:** 알림 계획 작업 8 완료(`expo-notifications` 설치, `features/auth/logout-hooks.ts` 존재).
+**선행:** 기본 계획 작업 8-9(검증)까지 완료(`features/push/*`, `features/auth/logout-hooks.ts` 존재). 8-10 재빌드는 아직 하지 않는다.
 
 **Files:**
 - Create: `mobile/src/features/fund/background/background-mode.ts`
@@ -398,7 +423,7 @@ git commit -m "feat(fund): 히스토리에 빠진 평일 표시(이전 기록 M.
 - [ ] **S3-1. 사용자에게 패키지 설치 요청 (하위 에이전트는 실행하지 않음)**
 
 사용자에게 안내: `! cd mobile && npx expo install expo-background-task expo-task-manager`
-그리고 "Task S5 의 재빌드 전까지 기기의 개발 앱은 쓰지 말 것"(새 네이티브 모듈이 옛 바이너리에서 빨간 화면을 낸다). 실행 중인 Metro(8082)가 있으면 멈춘다. 설치 확인: `ls mobile/node_modules | grep -E "expo-background-task|expo-task-manager"` 두 줄.
+그리고 "S5-6(= 기본 계획 8-10) 재빌드 전까지 기기의 개발 앱은 쓰지 말 것"(새 네이티브 모듈이 옛 바이너리에서 빨간 화면을 낸다). 실행 중인 Metro(8082)가 있으면 멈춘다. 설치 확인: `ls mobile/node_modules | grep -E "expo-background-task|expo-task-manager"` 두 줄.
 
 - [ ] **S3-2. 실패하는 테스트 작성**
 
@@ -1019,7 +1044,7 @@ git add mobile/index.ts mobile/src/features/fund/background/tasks.ts mobile/src/
 git commit -m "feat(mobile): 펀드 백그라운드 기록 태스크(무음 push·정기 작업) 연결"
 ```
 
-- [ ] **S5-6. 재빌드·실기기 확인 (사용자)**
+- [ ] **S5-6. 재빌드·실기기 확인 (사용자) — 기본 계획 8-10·8-12 와 한 번에**
 
 사용자에게 안내(하위 에이전트는 실행하지 않음):
 1. 새 dev build: `cd mobile && eas build --profile development --platform android --local` (또는 `npm run build:android:devapk`) 후 설치.
