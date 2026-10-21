@@ -1,4 +1,4 @@
-import { createSignalController, parseFundSignal } from './fund-signal-core';
+import { createSignalController, createSignalScheduler, parseFundSignal } from './fund-signal-core';
 
 describe('parseFundSignal', () => {
   it('fund_report_updated 만 날짜를 돌려준다', () => {
@@ -50,5 +50,93 @@ describe('createSignalController', () => {
     await c.update({ loggedIn: true, active: true });
     c.dispose();
     expect(close).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('createSignalController 경합', () => {
+  const mkDeferred = () => {
+    let resolve!: (n: number) => void;
+    const p = new Promise<number>((r) => (resolve = r));
+    const close = jest.fn();
+    const open = jest.fn(() => close);
+    const c = createSignalController({ open, countFunds: () => p });
+    return { c, open, resolve };
+  };
+
+  it('update 대기 중 dispose 하면 open 하지 않는다', async () => {
+    const { c, open, resolve } = mkDeferred();
+    const u = c.update({ loggedIn: true, active: true });
+    c.dispose();
+    resolve(1);
+    await u;
+    expect(open).not.toHaveBeenCalled();
+  });
+
+  it('active update 대기 중 inactive update 가 오면 open 하지 않는다', async () => {
+    const { c, open, resolve } = mkDeferred();
+    const u = c.update({ loggedIn: true, active: true });
+    await c.update({ loggedIn: true, active: false });
+    resolve(1);
+    await u;
+    expect(open).not.toHaveBeenCalled();
+  });
+
+  it('active update 를 연달아 두 번 해도 open 은 1번', async () => {
+    const { c, open, resolve } = mkDeferred();
+    const a = c.update({ loggedIn: true, active: true });
+    const b = c.update({ loggedIn: true, active: true });
+    resolve(1);
+    await Promise.all([a, b]);
+    expect(open).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('createSignalScheduler', () => {
+  const mk = () => {
+    const pending: Array<{ fn: () => void; ms: number; cancelled: boolean }> = [];
+    const run = jest.fn();
+    const s = createSignalScheduler({
+      run,
+      random: () => 0.5,
+      schedule: (fn, ms) => {
+        const t = { fn, ms, cancelled: false };
+        pending.push(t);
+        return () => {
+          t.cancelled = true;
+        };
+      },
+    });
+    return { s, run, pending };
+  };
+
+  it('0~30초 지연 후 실행하고, 대기 중 신호는 무시한다', () => {
+    const { s, run, pending } = mk();
+    s.signal();
+    s.signal();
+    expect(pending).toHaveLength(1);
+    expect(pending[0].ms).toBe(15_000);
+    pending[0].fn();
+    expect(run).toHaveBeenCalledTimes(1);
+    s.signal();
+    expect(pending).toHaveLength(2);
+  });
+
+  it('대기 중 닫히면 놓친 신호를 다음 연결 때 즉시 실행한다(한 번만)', () => {
+    const { s, run, pending } = mk();
+    s.signal();
+    s.stop();
+    expect(pending[0].cancelled).toBe(true);
+    expect(run).not.toHaveBeenCalled();
+    s.start();
+    expect(run).toHaveBeenCalledTimes(1);
+    s.start();
+    expect(run).toHaveBeenCalledTimes(1);
+  });
+
+  it('대기 중이 아니었으면 닫아도 놓친 신호가 없다', () => {
+    const { s, run } = mk();
+    s.stop();
+    s.start();
+    expect(run).not.toHaveBeenCalled();
   });
 });

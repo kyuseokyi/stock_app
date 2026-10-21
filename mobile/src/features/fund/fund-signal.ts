@@ -8,22 +8,26 @@ import { useAuthStore } from '@/features/auth/store';
 import { ENV } from '@/lib/env';
 
 import { fundRefresher } from './auto-refresh';
-import { createSignalController, FUND_SIGNAL_JITTER_MS, parseFundSignal } from './fund-signal-core';
+import { createSignalController, createSignalScheduler, parseFundSignal } from './fund-signal-core';
 import { loadFunds } from './fund-store';
+
+// 연결이 닫힌 사이(백그라운드)에 대기 중이던 신호를 잃지 않도록 모듈 단위로 유지
+const scheduler = createSignalScheduler({
+  run: () => void fundRefresher.run({ force: true }),
+  schedule: (fn, ms) => {
+    const t = setTimeout(fn, ms);
+    return () => clearTimeout(t);
+  },
+});
 
 function openStream(): () => void {
   const es = new EventSource<'notification'>(`${ENV.blogApiUrl}/api/v1/notifications/stream`);
-  const timers = new Set<ReturnType<typeof setTimeout>>();
   es.addEventListener('notification', (e) => {
-    if (!parseFundSignal(e.data)) return;
-    const t = setTimeout(() => {
-      timers.delete(t);
-      void fundRefresher.run({ force: true });
-    }, Math.random() * FUND_SIGNAL_JITTER_MS);
-    timers.add(t);
+    if (parseFundSignal(e.data)) scheduler.signal();
   });
+  scheduler.start(); // 놓친 신호가 있으면 지연 없이 바로 갱신
   return () => {
-    timers.forEach(clearTimeout);
+    scheduler.stop();
     es.removeAllEventListeners();
     es.close();
   };

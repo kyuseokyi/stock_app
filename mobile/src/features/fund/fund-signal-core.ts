@@ -40,6 +40,50 @@ export function createSignalController(deps: SignalDeps) {
       if (my !== seq || close) return;
       if (count > 0) close = deps.open();
     },
-    dispose: stop,
+    dispose() {
+      seq++; // 대기 중인 countFunds 가 끝나도 open 하지 않게
+      stop();
+    },
+  };
+}
+
+export type SchedulerDeps = {
+  run: () => void;
+  /** 지연(ms) 후 fn 실행을 예약하고 취소 함수를 돌려준다 */
+  schedule: (fn: () => void, ms: number) => () => void;
+  random?: () => number;
+};
+
+/**
+ * 신호 → 0~30초 지연 후 force 갱신. 대기 중이면 새 신호 무시(중복 방지).
+ * 연결을 닫을 때 대기 중이던 신호는 "놓친 신호"로 기억했다가, 다음 연결 때 지연 없이 바로 실행한다.
+ */
+export function createSignalScheduler(deps: SchedulerDeps) {
+  let cancel: (() => void) | null = null;
+  let missed = false;
+  const rnd = deps.random ?? Math.random;
+  return {
+    signal(): void {
+      if (cancel) return;
+      cancel = deps.schedule(() => {
+        cancel = null;
+        deps.run();
+      }, rnd() * FUND_SIGNAL_JITTER_MS);
+    },
+    /** 연결을 닫을 때 */
+    stop(): void {
+      if (cancel) {
+        cancel();
+        cancel = null;
+        missed = true;
+      }
+    },
+    /** 연결을 열 때 */
+    start(): void {
+      if (missed) {
+        missed = false;
+        deps.run();
+      }
+    },
   };
 }
