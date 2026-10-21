@@ -8,7 +8,7 @@ export type PeriodicDeps = {
 };
 
 export type PeriodicResult =
-  "registered" | "unregistered" | "unchanged" | "unavailable" | "failed";
+  'registered' | 'unregistered' | 'unchanged' | 'unavailable' | 'failed';
 
 export async function syncPeriodicTaskWith(
   d: PeriodicDeps,
@@ -16,15 +16,15 @@ export async function syncPeriodicTaskWith(
   try {
     const has = await d.isRegistered();
     if (!d.want) {
-      if (!has) return "unchanged";
+      if (!has) return 'unchanged';
       await d.unregister();
-      return "unregistered";
+      return 'unregistered';
     }
-    if (has) return "unchanged";
-    if (!(await d.available())) return "unavailable";
+    if (has) return 'unchanged';
+    if (!(await d.available())) return 'unavailable';
     await d.register();
-    return "registered";
+    return 'registered';
   } catch {
-    return "failed"; // 다음 동기화 시점(앱 실행·펀드 추가/삭제·로그인)에 다시
+    return 'failed'; // 다음 동기화 시점(앱 실행·펀드 추가/삭제·로그인)에 다시
   }
 }

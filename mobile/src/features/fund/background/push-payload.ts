@@ -2,11 +2,11 @@
 // 알려진 후보를 차례로 본다: 객체 data / JSON 문자열 body / Android dataString / 최상위 type.
 type Obj = Record<string, unknown>;
 
-const isObj = (v: unknown): v is Obj => typeof v === "object" && v !== null;
+const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null;
 
 function typeIn(v: unknown): string | null {
-  if (isObj(v) && typeof v.type === "string") return v.type;
-  if (typeof v === "string") {
+  if (isObj(v) && typeof v.type === 'string') return v.type;
+  if (typeof v === 'string') {
     try {
       return typeIn(JSON.parse(v));
     } catch {
@@ -30,11 +30,11 @@ export function pushTypeOf(payload: unknown): string | null {
   const candidates: unknown[] = [
     payload,
     payload.data,
-    get(payload, "data", "data"), // 객체 또는 JSON 문자열
-    get(payload, "data", "body"),
-    get(payload, "data", "dataString"),
-    get(payload, "data", "notification", "data"),
-    get(payload, "notification", "request", "content", "data"),
+    get(payload, 'data', 'data'), // 객체 또는 JSON 문자열
+    get(payload, 'data', 'body'),
+    get(payload, 'data', 'dataString'),
+    get(payload, 'data', 'notification', 'data'),
+    get(payload, 'notification', 'request', 'content', 'data'),
     payload.body,
     payload.dataString,
   ];
