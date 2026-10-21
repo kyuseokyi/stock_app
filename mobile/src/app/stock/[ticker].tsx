@@ -2,7 +2,7 @@ import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { ActivityIndicator, Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
 import { StyleSheet } from 'react-native-unistyles';
 
-import { high52w, scoreView } from '@/features/leaders/canslim';
+import { high52w, resolveTickerParam, scoreView } from '@/features/leaders/canslim';
 import { ScoreHistory } from '@/features/leaders/components/score-history';
 import { ScoreTable } from '@/features/leaders/components/score-table';
 import { StockDailyChart } from '@/features/leaders/components/stock-daily-chart';
@@ -19,7 +19,8 @@ import { Button, ListState } from '@/ui';
 export default function StockDetailScreen() {
   // name 은 선택 파라미터지만 typedRoutes 제약(값은 string) 때문에 string 으로 선언하고 실제 값으로 판단한다
   const params = useLocalSearchParams<{ ticker: string; name: string }>();
-  const ticker = String(params.ticker ?? '').trim();
+  // 배열이면 첫 요소, 빈 값·허용 외 문자는 NotFound
+  const ticker = resolveTickerParam(params.ticker as string | string[] | undefined);
   const name = typeof params.name === 'string' ? params.name.trim() : '';
   if (!ticker) return <NotFound />;
   return <StockDetailBody ticker={ticker} fallbackName={name || ticker} />;
