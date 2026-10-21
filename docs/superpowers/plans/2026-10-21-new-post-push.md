@@ -25,6 +25,7 @@
 | 내정보 스위치로 OS 권한을 물었을 때 | 홈·펀드 시트는 `wasPrompted` 가 없고 권한이 "미결정"이면 뜸. Android 는 첫 거부 뒤에도 `canAskAgain=true` → 미결정으로 보임 | 스위치에서 권한을 요청하면 `markPrompted('accepted')` 도 기록 — 같은 질문을 시트로 또 하지 않게 |
 | 채널 생성 함수 | `ensureFundChannel()`(펀드 채널만) | 작업 8 에서 `ensurePushChannels()`(펀드·새 글 두 채널)로 바꾸고 호출부 2곳(시트·스위치)도 같이 바꾼다. 작업 6 은 기존 `ensureFundChannel` 을 그대로 부른다 |
 | 마이그레이션 왕복 테스트(설계 §7) | pytest 는 SQLite `create_all` 이라 마이그레이션 파일을 실행하지 않음 | 선행 계획 1-9b 와 같은 **일회용 PostgreSQL 컨테이너 왕복**(upgrade → downgrade -1 → upgrade) 단계로 확인 |
+| 내정보 스위치에 보일 값(설계 §4.3 은 미정) | 설정 기본값이 켜짐이라, 예전 펀드 시트에서 "나중에"를 누른 사용자(권한 미결정·거부, `wasPrompted` 공유로 홈 시트도 안 뜸)는 "켜짐"으로 보이는데 등록이 안 돼 아무것도 못 받음 | 보이는 값 = **설정값 && OS 권한 허용**(`postNoticeSwitchValue`). 권한은 포커스·active 복귀·토글 직후 다시 읽는다. 켜는 순간 권한 요청·설정 안내로 이어진다 |
 | 권한 거부 후 스위치를 켤 때 | — | 값은 켜짐으로 저장하고(사용자 의사), "설정 열기" 안내만 띄운다. 권한이 없으면 등록 자체가 안 되므로 서버에는 영향 없음 |
 
 ## 상시 규칙 (모든 작업)
@@ -70,7 +71,7 @@
 | `mobile/src/features/push/api.ts` (수정) | PUT 본문에 `fund_notice`·`post_notice` |
 | `mobile/src/features/push/post-notice.ts` (신규) | 새 글 알림 설정 기기 저장(SecureStore, 기본 켜짐) |
 | `mobile/src/features/push/registration.ts` (수정) | 새 의존성(`postNotice`·`saveSaved`·플래그 PUT) 연결 |
-| `mobile/src/features/push/prompt-core.ts` (+test, 수정) | `postNoticeEnableAction`, `shouldPromptOnHome` |
+| `mobile/src/features/push/prompt-core.ts` (+test, 수정) | `postNoticeSwitchValue`·`postNoticeEnableAction`(스위치), `shouldPromptOnHome`(홈 1회) |
 | `mobile/src/features/push/post-notice-row.tsx` (신규) | 내정보 "새 글 알림" 스위치 행 |
 | `mobile/src/app/(tabs)/profile.tsx` (수정) | 스위치 행 배치 |
 | `mobile/src/features/push/push-prompt-sheet.tsx` (수정) | 문구 일반화("새 글·펀드 리포트 알림 받기") |
@@ -1455,14 +1456,31 @@ EOF
 
 `@/ui` 에는 Switch 가 없다 → RN 내장 `Switch` 를 `ListRow` 의 `right` 슬롯에 넣고 `onPress` 는 주지 않는다(chevron 이 생기지 않게). 웹·projectId 없음(`isPushConfigured()=false`)이면 행을 숨긴다.
 
+**스위치에 보이는 값 = 저장값 && OS 권한 허용.** 저장값 기본은 켜짐이라, 예전 펀드 시트에서 "나중에"를 눌러 권한이 미결정·거부인 사용자(`wasPrompted` 공유로 홈 시트도 안 뜸)는 저장값만 보이면 "켜짐"인데 실제로는 등록이 안 돼 아무것도 못 받는다. 권한이 없으면 꺼짐으로 보여 주고, 켜는 순간 권한 요청·설정 안내로 이어지게 한다. 권한은 화면 포커스·앱 active 복귀·토글 직후에 다시 읽는다(`permission-banner.tsx` 와 같은 방식).
+
 - [ ] **6-1. 실패하는 테스트 작성** — `mobile/src/features/push/prompt-core.test.ts`
 
 1행 import 를 다음으로 바꾼다:
 ```ts
-import { effectivePermission, postNoticeEnableAction, shouldOfferPrompt, shouldPromptOnEnter } from './prompt-core';
+import {
+  effectivePermission,
+  postNoticeEnableAction,
+  postNoticeSwitchValue,
+  shouldOfferPrompt,
+  shouldPromptOnEnter,
+} from './prompt-core';
 ```
 파일 끝에 추가:
 ```ts
+describe('postNoticeSwitchValue', () => {
+  it('저장값이 켜짐이고 권한이 허용일 때만 켜짐으로 보인다', () => {
+    expect(postNoticeSwitchValue(true, 'granted')).toBe(true);
+    expect(postNoticeSwitchValue(true, 'undetermined')).toBe(false);
+    expect(postNoticeSwitchValue(true, 'denied')).toBe(false);
+    expect(postNoticeSwitchValue(false, 'granted')).toBe(false);
+  });
+});
+
 describe('postNoticeEnableAction', () => {
   it('권한 허용이면 저장만', () => {
     expect(postNoticeEnableAction('granted')).toBe('none');
@@ -1479,11 +1497,16 @@ describe('postNoticeEnableAction', () => {
 - [ ] **6-2. 실패 확인**
 
 실행: `cd mobile && npx jest src/features/push/prompt-core.test.ts`
-예상: FAIL — `postNoticeEnableAction is not a function`.
+예상: FAIL — `postNoticeSwitchValue is not a function`(·`postNoticeEnableAction` 도 없음).
 
 - [ ] **6-3. 순수 판정 추가** — `mobile/src/features/push/prompt-core.ts` 파일 끝에 추가
 
 ```ts
+/** 내정보 스위치에 보일 값 — 설정이 켜져 있어도 OS 권한이 없으면 실제로 못 받으므로 꺼짐으로 보인다 */
+export function postNoticeSwitchValue(saved: boolean, permission: 'granted' | 'denied' | 'undetermined'): boolean {
+  return saved && permission === 'granted';
+}
+
 /** 내정보 "새 글 알림"을 켤 때 할 일: 허용됨 → 저장만, 미결정 → OS 권한 요청, 다시 물을 수 없는 거부 → 설정 앱 안내 */
 export function postNoticeEnableAction(
   permission: 'granted' | 'denied' | 'undetermined',
@@ -1497,15 +1520,17 @@ export function postNoticeEnableAction(
 - [ ] **6-4. 테스트 통과 확인**
 
 실행: `cd mobile && npx jest src/features/push/prompt-core.test.ts`
-예상: PASS(12개).
+예상: PASS(13개).
 
 - [ ] **6-5. 스위치 행** — `mobile/src/features/push/post-notice-row.tsx`(신규)
 
 ```tsx
-// 내정보 "새 글 알림" 스위치 — 값은 기기 저장(SecureStore), 바꾸면 등록 동기화로 서버 post_notice 갱신
+// 내정보 "새 글 알림" 스위치 — 설정값은 기기 저장(SecureStore), 바꾸면 등록 동기화로 서버 post_notice 갱신.
+// 보이는 값은 설정값 && OS 권한 허용(권한 없으면 실제로 못 받으므로 꺼짐으로 보임)
 import * as Notifications from 'expo-notifications';
-import { useEffect, useState } from 'react';
-import { Alert, Linking, Switch, Text } from 'react-native';
+import { useFocusEffect } from 'expo-router';
+import { useCallback, useEffect, useState } from 'react';
+import { Alert, AppState, Linking, Switch, Text } from 'react-native';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
 import { ListRow } from '@/ui';
@@ -1514,23 +1539,42 @@ import { isPushConfigured } from './config';
 import { ensureFundChannel } from './handlers';
 import { loadPostNotice, savePostNotice } from './post-notice';
 import { markPrompted } from './prompt';
-import { effectivePermission, postNoticeEnableAction } from './prompt-core';
+import { effectivePermission, postNoticeEnableAction, postNoticeSwitchValue } from './prompt-core';
 import { syncPushRegistration } from './registration';
 
 export function PostNoticeRow() {
   const { theme } = useUnistyles();
-  const [on, setOn] = useState(true);
+  const [on, setOn] = useState(false); // 읽기 전에는 꺼짐으로 — 권한 없는 기기가 잠깐 켜짐으로 보이지 않게
   const [busy, setBusy] = useState(false);
 
-  useEffect(() => {
+  const refresh = useCallback(() => {
+    if (!isPushConfigured()) return () => {};
     let alive = true;
-    void loadPostNotice().then((v) => {
-      if (alive) setOn(v);
-    });
+    void Promise.all([loadPostNotice(), Notifications.getPermissionsAsync()])
+      .then(([saved, perm]) => {
+        if (alive) setOn(postNoticeSwitchValue(saved, effectivePermission(perm)));
+      })
+      .catch(() => {});
     return () => {
       alive = false;
     };
   }, []);
+
+  useFocusEffect(refresh);
+
+  // 설정 앱에서 권한을 바꾸고 돌아오면 다시 읽는다
+  useEffect(() => {
+    let cancel = () => {};
+    const sub = AppState.addEventListener('change', (s) => {
+      if (s !== 'active') return;
+      cancel();
+      cancel = refresh();
+    });
+    return () => {
+      cancel();
+      sub.remove();
+    };
+  }, [refresh]);
 
   if (!isPushConfigured()) return null; // 웹·projectId 없음 — 푸시를 쓰지 않는다
 
@@ -1556,6 +1600,7 @@ export function PostNoticeRow() {
       // 권한·채널 요청 실패여도 설정값은 저장됐다 — 아래 동기화가 다음 기회에 맞춘다
     } finally {
       setBusy(false);
+      refresh(); // 권한 요청 결과(거부 등)를 스위치에 반영
       void syncPushRegistration();
     }
   };
@@ -1619,7 +1664,7 @@ import { PostNoticeRow } from '@/features/push/post-notice-row';
 - [ ] **6-7. 전체 검증**
 
 실행: `cd mobile && npx jest && npm run typecheck`
-예상: jest 실패 0, 총 518개(515 + 3). typecheck 오류 0.
+예상: jest 실패 0, 총 519개(515 + 4). typecheck 오류 0.
 
 - [ ] **6-8. 커밋**
 
@@ -1657,6 +1702,7 @@ EOF
 import {
   effectivePermission,
   postNoticeEnableAction,
+  postNoticeSwitchValue,
   shouldOfferPrompt,
   shouldPromptOnEnter,
   shouldPromptOnHome,
@@ -1707,7 +1753,7 @@ export function shouldPromptOnHome(s: {
 - [ ] **7-4. 테스트 통과 확인**
 
 실행: `cd mobile && npx jest src/features/push/prompt-core.test.ts`
-예상: PASS(17개).
+예상: PASS(18개).
 
 - [ ] **7-5. 시트 문구 일반화** — `mobile/src/features/push/push-prompt-sheet.tsx`
 
@@ -1846,7 +1892,7 @@ export default function HomeScreen() {
 - [ ] **7-8. 전체 검증**
 
 실행: `cd mobile && npx jest && npm run typecheck`
-예상: jest 실패 0, 총 523개(518 + 5). typecheck 오류 0.
+예상: jest 실패 0, 총 524개(519 + 5). typecheck 오류 0.
 
 - [ ] **7-9. 커밋**
 
@@ -2156,7 +2202,7 @@ cd mobile && grep -rn "ensureFundChannel" src || echo "없음"
 - [ ] **8-7. 전체 검증**
 
 실행: `cd mobile && npx jest && npm run typecheck`
-예상: jest 실패 0, 총 528개(523 + 5: handlers-core 6개 → 11개). typecheck 오류 0. `router.push(p as Href)` 에서 타입 오류가 나면 `p` 의 타입(`PushRoute`)과 typedRoutes 생성 타입 차이이므로 캐스팅 줄만 확인한다(다른 곳은 바꾸지 않는다).
+예상: jest 실패 0, 총 529개(524 + 5: handlers-core 6개 → 11개). typecheck 오류 0. `router.push(p as Href)` 에서 타입 오류가 나면 `p` 의 타입(`PushRoute`)과 typedRoutes 생성 타입 차이이므로 캐스팅 줄만 확인한다(다른 곳은 바꾸지 않는다).
 
 - [ ] **8-8. 커밋**
 
@@ -2184,7 +2230,7 @@ EOF
 - 수정: `docs/push_notification_setup.md`(머리말 설계 링크, §0 표, §7, §10)
 - 수정: `docs/ROADMAP.md`(25·107·149행)
 
-- [ ] **9-1. README** — 다음 네 곳을 바꾼다
+- [ ] **9-1. README** — 다음 여섯 곳을 바꾼다((5)·(6)은 아래 (4) 뒤에 적음)
 
 (1) 디렉터리 트리 줄
 - 전: `│   └── collector/   # 수집·알림 워커 (Celery) — 새 글 푸시(Mock) · 펀드 리포트 알림(Expo Push)`
@@ -2208,6 +2254,20 @@ EOF
 2. **서버를 먼저 배포해도 안전**: 구버전 앱은 펀드 등록 기기만 등록하고 `post_notice` 를 안 보내 기본 true → 그 기기들만 새 글 알림을 받는다. 새 앱을 배포하면 알림을 허용한 모든 로그인 기기로 넓어진다.
 3. blog·Celery 워커 재시작(새 beat 엔트리 없음).
 ```
+
+(5) 모바일 "푸시 알림 빌드 설정" 줄(221행 부근) 끝의 코드 설명
+바꾸기 전(문장 그대로 찾는다):
+```markdown
+코드: `src/features/push/`(토큰 등록·해제 직렬화 큐, 안내 시트, 권한 배너, 알림 탭 → 펀드 화면).
+```
+바꾼 뒤:
+```markdown
+코드: `src/features/push/`(토큰 등록·해제 직렬화 큐, 안내 시트(홈·펀드), 권한 배너, 내정보 새 글 알림 스위치, 알림 탭 → 펀드 화면·글 상세).
+```
+
+(6) DB 표의 `users` 행(369행 부근) 끝 칸
+- 전: `email, nickname, provider, provider_id, role, is_active, password_hash, fcm_token`
+- 후: `email, nickname, provider, provider_id, role, is_active, password_hash, fcm_token(미사용 — 푸시는 push_devices)`
 
 - [ ] **9-2. push_notification_setup.md**
 
