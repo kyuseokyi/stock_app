@@ -5,6 +5,8 @@ export type RunDeps = {
   isLoggedIn: () => boolean;
   run: (opts: { force: boolean }) => Promise<void>;
   enter: () => () => void; // 백그라운드 표시 켜기 → 끄기 함수
+  // 앱이 앞 화면(active)이면 true — 표시를 켜지 않는다. 표시는 앱 상태와 무관한 카운터라 앞 화면에서 켜면 백업이 다음 복귀까지 미뤄진다
+  isForeground?: () => boolean;
   timeoutMs?: number;
   random?: () => number;
   sleep?: (ms: number) => Promise<void>;
@@ -38,7 +40,7 @@ export async function backgroundRecordWith(
     .then(async (): Promise<'skipped' | 'done'> => {
       await d.hydrate(); // 화면 없이 깨어나면 로그인 정보가 아직 안 읽혔을 수 있다
       if (timedOut || !d.isLoggedIn()) return 'skipped';
-      const leave = d.enter();
+      const leave = d.isForeground?.() ? () => {} : d.enter();
       try {
         const jitter =
           reason === 'push'

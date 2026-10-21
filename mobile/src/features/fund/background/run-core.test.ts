@@ -168,3 +168,27 @@ it('실행이 실패해도 표시를 끄고 done', async () => {
   await expect(backgroundRecordWith('push', d)).resolves.toBe('done');
   expect(d.leave).toHaveBeenCalledTimes(1);
 });
+
+it('앱이 앞 화면이면 백그라운드 표시를 켜지 않고 그대로 갱신한다(백업이 보류로 새지 않게)', async () => {
+  const d = deps({ isForeground: () => true });
+  await expect(backgroundRecordWith('periodic', d)).resolves.toBe('done');
+  expect(d.enter).not.toHaveBeenCalled();
+  expect(d.run).toHaveBeenCalledTimes(1);
+  expect(isBackgroundRun()).toBe(false);
+});
+
+it('앞 화면이 아니면(isForeground=false) 표시를 켠다', async () => {
+  const d = deps({ isForeground: () => false });
+  await backgroundRecordWith('periodic', d);
+  expect(d.enter).toHaveBeenCalledTimes(1);
+  expect(d.leave).toHaveBeenCalledTimes(1);
+});
+
+it('isForeground 가 throw 해도 reject 하지 않고 skipped', async () => {
+  const d = deps({
+    isForeground: () => {
+      throw new Error('x');
+    },
+  });
+  await expect(backgroundRecordWith('push', d)).resolves.toBe('skipped');
+});
