@@ -3,9 +3,18 @@
 const APP_ENV = process.env.APP_ENV ?? 'development';
 const isDev = APP_ENV === 'development';
 
-// 푸시(expo-notifications) — 값이 없으면 푸시만 꺼진다(isPushConfigured). docs/push_notification_setup.md 5장
-const EAS_PROJECT_ID = process.env.EAS_PROJECT_ID || undefined;
-const GOOGLE_SERVICES_JSON = process.env.GOOGLE_SERVICES_JSON || undefined;
+// 푸시(expo-notifications) — docs/push_notification_setup.md 5장
+// projectId 는 비밀이 아닌 공개 식별자(앱 바이너리에 그대로 들어감, Expo 도 eas init 시 app.json 에 커밋)라 기본값으로 둔다.
+//   env 로만 받으면 운영 빌드(.env.production·eas.json 에 없음)·expo-constants 의 빌드 중 설정 생성에서 빠져 푸시가 꺼진 채 나갔다.
+// google-services.json 은 git 제외(secrets/) — 파일이 있으면 자동으로 쓴다. 둘 다 env 로 덮어쓸 수 있다.
+const fs = require('fs');
+const path = require('path');
+const DEFAULT_EAS_PROJECT_ID = 'fc55bccf-9c18-4cf5-bb8d-b9b5373c31cb'; // @kyuseokyi/stockapp
+const DEFAULT_GOOGLE_SERVICES_JSON = './secrets/google-services.json';
+const EAS_PROJECT_ID = process.env.EAS_PROJECT_ID || DEFAULT_EAS_PROJECT_ID;
+const GOOGLE_SERVICES_JSON =
+  process.env.GOOGLE_SERVICES_JSON ||
+  (fs.existsSync(path.join(__dirname, DEFAULT_GOOGLE_SERVICES_JSON)) ? DEFAULT_GOOGLE_SERVICES_JSON : undefined);
 
 export default {
   expo: {
