@@ -6,18 +6,18 @@
 
 ---
 
-## 0. 지금 상태 (2026-10-20 기준)
+## 0. 지금 상태 (2026-10-21 기준)
 
 | 항목 | 상태 | 비고 |
 |---|---|---|
-| 서버 발송 구조 `backend/apps/collector/push/` | 일부 | `mock`(로그만)·`fcm`(뼈대)만 있음. 설계의 `expo`(Expo Push) 발송기는 **아직 없음** |
+| 서버 발송 구조 `backend/apps/collector/push/` | ✅ | `expo`(Expo Push) 발송기 추가 — `PUSH_BACKEND=expo` 로 실발송 |
 | 서버 설정 `PUSH_BACKEND` | `mock` | `backend/.env.example` 기본값. 실제 발송 안 함 |
-| 앱 패키지 `expo-notifications` | 없음 | 설치·네이티브 재빌드 필요 |
-| 앱 설정 `app.config.js` | 없음 | EAS `projectId`·`googleServicesFile`·알림 플러그인 연결 전 |
+| 앱 패키지 `expo-notifications` | ✅ 설치 | 새 dev build 필요 |
+| 앱 설정 `app.config.js` | ✅ 연결 | env `EAS_PROJECT_ID`·`GOOGLE_SERVICES_JSON` 으로 주입 |
 | 키 파일 git 제외 규칙 | ✅ 있음 | 루트 `.gitignore`(`**/secrets/`, `google-services*.json` 등) — 2026-10-20 추가 |
 | `google-services.json` | ✅ 준비됨 | `mobile/secrets/google-services.json` — **한 파일에 `com.stockapp.dev`·`com.stockapp` 두 앱 포함** |
 
-👉 **이 문서의 1~4장(계정·키 준비)은 지금 바로 할 수 있다.** 5~7장(연결·확인)은 푸시 구현(설계 문서 12장 순서)이 끝난 뒤 진행한다.
+👉 **이 문서의 1~4장(계정·키 준비)은 지금 바로 할 수 있다.** 구현은 끝났다(2026-10-21). 3장까지 마치면 5~7장으로 연결·확인한다.
 
 ---
 
@@ -113,15 +113,14 @@ GoogleService-Info*.plist
 
 ---
 
-## 5. 앱 설정 연결 (푸시 구현 뒤)
+## 5. 앱 설정 연결
 
 `mobile/.env.development`·`mobile/.env.production`(직접 편집) 또는 빌드 셸 env 에:
 ```bash
 EAS_PROJECT_ID=<3장의 projectId>
 GOOGLE_SERVICES_JSON=./secrets/google-services.json
 ```
-구현 쪽에서 할 일(설계 문서 7장): `expo-notifications` 설치, `app.config.js` 에
-`extra.eas.projectId`(← `EAS_PROJECT_ID`), `android.googleServicesFile`(← `GOOGLE_SERVICES_JSON`, 없으면 생략), `expo-notifications` 플러그인 추가.
+`app.config.js` 가 `extra.eas.projectId`(← `EAS_PROJECT_ID`), `android.googleServicesFile`(← `GOOGLE_SERVICES_JSON`, 없으면 생략), `expo-notifications` 플러그인을 이미 반영한다(구현됨).
 `projectId` 가 없으면 푸시만 꺼지고 나머지 기능은 정상(`isPushConfigured()`).
 
 **네이티브가 바뀌므로 앱을 다시 빌드해야 한다** — [`local_build_guide.md` 2-1](local_build_guide.md):
@@ -132,7 +131,7 @@ APP_ENV=development npx expo run:android --port 8082
 
 ---
 
-## 6. 서버 설정 (푸시 구현 뒤)
+## 6. 서버 설정
 
 서버 `/opt/stock_app/env/.env.production`(워크플로가 `backend/.env.production` 으로 복사):
 ```bash
@@ -167,6 +166,14 @@ PUSH_BACKEND=expo            # mock(기본, 로그만) → expo(실발송)
 
 ---
 
+## 8-1. 앱을 열지 않은 날의 기록(백그라운드) — 현재 상태
+
+- 서버는 알림 메시지 뒤에 제목·본문 없는 깨우기용 무음 메시지(`data.type = fund_refresh`, Android `priority: high`, iOS `contentAvailable`)를 한 번 더 보낸다. 이 메시지는 발송 이력 수치(성공·실패 수)에 넣지 않고, 만료 토큰 정리에만 반영한다. 서버 쪽은 구현됨.
+- 앱 쪽은 순수 로직(payload 해석·25초 한도·정기 작업 판단·백업 보류)까지만 구현돼 있다. **백그라운드 태스크 정의와 6시간 안팎 정기 작업 등록은 아직 구현 전**이며(`expo-background-task`·`expo-task-manager` 설치와 `app.config.js` 플러그인 설정 필요), 패키지 설치·재빌드 이후에야 동작한다. 실기기에서 확인한 결과는 아직 없다.
+- 그 전까지 앱이 꺼져 있으면 깨우기용 메시지는 무시되고, 앱을 열 때(실행·복귀) 일반 자동 갱신이 기록한다.
+
+---
+
 ## 9. 자주 겪는 문제
 
 | 증상 | 원인 | 해결 |
@@ -188,6 +195,6 @@ PUSH_BACKEND=expo            # mock(기본, 로그만) → expo(실발송)
 - [ ] FCM V1 서비스 계정 키 발급(2-2)
 - [ ] `eas login` → `eas init` → projectId 기록(3장)
 - [ ] `eas credentials` 로 두 패키지에 FCM V1 키 업로드(3장)
-- [ ] (구현 뒤) 앱 env `EAS_PROJECT_ID`·`GOOGLE_SERVICES_JSON` → 재빌드(5장)
-- [ ] (구현 뒤) 서버 `PUSH_BACKEND=expo` → 재배포(6장)
+- [ ] 앱 env `EAS_PROJECT_ID`·`GOOGLE_SERVICES_JSON` → 재빌드(5장)
+- [ ] 서버 `PUSH_BACKEND=expo` → 재배포(6장)
 - [ ] Expo 도구로 단독 발송 확인 → 관리자 테스트 발송 확인(7장)

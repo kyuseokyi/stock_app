@@ -11,7 +11,7 @@ backend/
 │   ├── blog/        # 블로그 서비스 — 게시판/게시글/댓글 CRUD, SSE 알림 (포트 8000)
 │   ├── stock_api/   # 주식 API 서비스 — GraphQL 종목검색/차트(온더플라이) (포트 8002)
 │   ├── trading_game/# 트레이딩 게임 — 가상 주문/체결 엔진 + 실시간 WS 게이트웨이 (포트 8003)
-│   └── collector/   # 수집·알림 워커 (Celery) — 새 글 FCM 푸시(Mock)
+│   └── collector/   # 수집·알림 워커 (Celery) — 새 글 푸시(Mock) · 펀드 리포트 알림(Expo Push)
 ├── shared/          # 공통 DB 모델·세션·JWT 검증·보안
 └── alembic/         # DB 마이그레이션
 admin_web/           # 관리자 웹 (React + Vite + TailwindCSS, TypeScript)  (포트 5173)
@@ -54,7 +54,7 @@ uv run uvicorn apps.trading_game.main:app --reload --port 8003 --workers 1  # �
 
 # 데이터 수집/알림 워커 (Celery)
 uv run celery -A apps.collector.celery_app worker --loglevel=info
-uv run celery -A apps.collector.celery_app beat   --loglevel=info   # 스케줄러(매일 20:30 전종목 수집 · 20:40 시즌 정산 · 21:00 퀴즈 풀 보충 · 월 08:50 주간 랭킹 마감 · 매월 1일 08:55 월간 랭킹 마감 · 평일 장중 30초 국내 지수·환율)
+uv run celery -A apps.collector.celery_app beat   --loglevel=info   # 스케줄러(매일 20:30 전종목 수집 · 20:40 시즌 정산 · 21:00 퀴즈 풀 보충 · 월 08:50 주간 랭킹 마감 · 매월 1일 08:55 월간 랭킹 마감 · 평일 장중 30초 국내 지수·환율 · 1분마다 펀드 알림 예약 발송 `dispatch-scheduled-pushes`)
 
 # 국내 주식 데이터 수집 — 수동 트리거 (워커 실행 중일 때)
 # 전종목 일봉(겹침창) 수집:      collector.collect_all_daily
@@ -218,6 +218,8 @@ npm run build:android:devapk  # → android/app/build/outputs/apk/release/app-re
   - ⚠️ **dev 앱 스킴이 `stockapp` → `stockapp-dev` 로 바뀌었다**(prod 와 같은 기기 공존 시 복귀 링크 충돌 방지). 기존 dev build 는 **1회 재생성** 필요: `npm run prebuild:dev` 후 `npm run android:dev`/`ios:dev`(또는 EAS dev 빌드). Expo Go 는 Unistyles 로 원래 미지원.
   - 에뮬레이터는 auth 콜백이 브라우저에서 열리므로 `adb reverse tcp:8001 tcp:8001` 이 필요하다(기존 목록에 포함).
 - **게임 탭(트레이딩 게임 6c)**: web 6a+6b 와 동일 기능(헤더·Streak·코치 배너·심리 바·일봉+실시간 차트·포지션/주문·넛지 토스트 + 🏆 랭킹·🎯 퀘스트·🎓 아카데미(5x 해금)·🧩 야간 10초 차트 퀴즈 시트). trading_game(8003)·stock_api(8002, 일봉)·auth(8001) 필요. `EXPO_PUBLIC_GAME_API_URL`은 **선택** — 미설정 시 dev 는 `http://localhost:8003`, production 이면 "시즌을 준비하고 있어요". 차트는 신규 네이티브 의존성 없는 순수 View 렌더(`src/features/game/lib/chart-layout.ts`). 로그인은 내정보 탭(비로그인에서 주문·퀘스트·퀴즈·아카데미 → 내정보 탭 안내). 에뮬레이터는 `adb reverse tcp:8003 tcp:8003` 추가(8000/8001/8002/8082 와 함께).
+- **푸시 알림 빌드 설정**: `EAS_PROJECT_ID`·`GOOGLE_SERVICES_JSON` 은 `EXPO_PUBLIC_` 이 아니라 **빌드 시** `app.config.js` 가 읽는 env(키 이름만 `mobile/.env.example` 참고, 값은 `.env.development`·`.env.production` 또는 빌드 셸 env). `expo-notifications` 플러그인이 들어 있어 **푸시를 쓰려면 새 dev build 가 필요**하다(`npm run prebuild:dev` 후 `npm run android:dev` 등). 값이 없으면 푸시만 꺼진다. 코드: `src/features/push/`(토큰 등록·해제 직렬화 큐, 안내 시트, 권한 배너, 알림 탭 → 펀드 화면).
+  - **사용자가 직접 할 일(최초 1회)**: ① Firebase 에서 FCM V1 서비스 계정 키 발급 → ② `eas login` → `cd mobile && eas init` 으로 projectId 확인 → ③ `eas credentials` 로 `com.stockapp.dev`·`com.stockapp` 두 패키지에 FCM V1 키 업로드 → ④ 위 env 설정 후 재빌드 → ⑤ 서버 `PUSH_BACKEND=expo`. 자세한 순서: [`docs/push_notification_setup.md`](docs/push_notification_setup.md)
 - **공통 UI**: 공유 컴포넌트는 `mobile/src/ui/`에 있으며 토스 디자인 언어(`docs/mobile_design_language.md`)를 따른다.
 - **테스트/검증**: 순수 로직 단위 테스트는 `cd mobile && npm test`(jest). 화면은 `npx tsc --noEmit`(+ 실기기 확인)로 검증한다. 이 프로젝트에는 eslint가 설정되어 있지 않아 모바일 lint 단계는 없다.
 - **검증(설정 레벨)**: `npx tsc --noEmit` · `npx expo-doctor` · `APP_ENV=production npx expo config --type public --json`
@@ -229,6 +231,14 @@ npm run build:android:devapk  # → android/app/build/outputs/apk/release/app-re
 - 테스트: `cd mobile && npx jest src/features/fund` (가린 픽스처 + convert.py 기대 JSON 교차 검증).
 - **자동 갱신**: 앱 실행·앱 복귀·웹 접속·탭 복귀 때 등록한 펀드를 모두 다시 가져온다(로그인 상태, 10분 이내 확인한 펀드는 건너뜀, 동시 2개). 앱은 리포트를 열지 않아도 히스토리가 쌓인다. 목록에 `기준일 · 확인 시각` 표시.
   설계: `docs/superpowers/specs/2026-10-19-fund-auto-refresh-design.md` (로직은 core `refresh-all.ts`)
+- **리포트 알림(푸시·SSE)**: 관리자 웹 `/fund-notices`(사이드바 "펀드 리포트 알림")에서 문구를 쓰고 **테스트(내 기기만)·즉시·예약** 발송한다. 서버가 기기 토큰으로 Expo Push → FCM 을 거쳐 보내고, 같은 때 SSE `fund_report_updated` 를 발행한다.
+  - 앱: 펀드를 처음 등록하면 안내 시트 후 알림 권한을 묻고, 로그인 + 펀드 1개 이상 + 권한 허용일 때만 토큰을 서버에 등록한다(조건이 깨지면 해제). 알림을 탭하면 펀드 화면으로 이동해 갱신한다. 권한을 거부했으면 펀드 목록 위에 안내 배너.
+  - 앱이 열려 있을 때는 SSE 신호를 받아 0~30초 뒤 자동 갱신(웹도 같음, 토스트 표시).
+  - 푸시 설정이 없으면(`EAS_PROJECT_ID` 미설정) 푸시만 꺼지고 SSE·자동 갱신은 정상 동작.
+  - 푸시를 쓰려면 `expo-notifications` 가 들어간 **새 dev build 가 필요**하다. 키·계정 준비 절차: `docs/push_notification_setup.md`. 설계: `docs/superpowers/specs/2026-10-19-fund-report-notice-design.md`
+- **앱을 열지 않은 날의 기록(백그라운드)**: 서버가 알림 뒤에 제목·본문 없는 깨우기용 무음 메시지(`type: fund_refresh`)를 한 번 더 보내고(이력 수치에는 안 셈), 앱이 이를 받아 백그라운드에서 갱신·히스토리 기록을 하게 하는 구조다(Android 위주, iOS 는 OS 재량·강제 종료·잠금 중 불가). 백그라운드에서 생긴 새 기록의 Drive 백업은 다음에 앱을 열 때 한다.
+  - **현재 구현 범위**: 서버 깨우기 발송, 앱의 순수 로직(payload 해석·25초 한도·정기 작업 판단·백업 보류)까지. **백그라운드 태스크 정의·정기 작업 등록(`expo-background-task`·`expo-task-manager`)은 아직 구현 전**이라 패키지 설치와 재빌드 이후에야 실제로 동작한다. 실기기에서 확인한 결과는 아직 없다.
+- 히스토리에서 빠진 평일은 날짜 옆에 "이전 기록 M.D" 로 표시한다(값을 메우지는 않음).
 - 설계: `docs/superpowers/specs/2026-10-18-fund-report-viewer-design.md`
 
 ### 펀드 히스토리 · Google Drive 백업 (앱)
@@ -381,7 +391,10 @@ uv run pytest tests/test_universe_cooldown.py    # 특정 파일
 | `SOCIAL_FAKE_PROVIDER` | auth | `false` | `true` 면 가짜 공급자(로컬 스모크). `APP_ENV` 가 명시적으로 `development`/`test` 일 때만 유효(미설정·그 외는 무시), 켜지면 기동 경고 |
 | `AUTH_GUEST_ENABLED` | auth | `APP_ENV` 가 `development`/`test` 일 때만 켬 | 닉네임 게스트 로그인(`POST /api/v1/auth/guest`) 허용(`true`/`false`). 꺼지면 404. 미설정+그 외 `APP_ENV`(미설정 포함)는 끔. 개발 서버(develop)는 `true`(웹 `VITE_ENABLE_GUEST_LOGIN=true` 와 짝), product 는 둘 다 `false` |
 | `QUIZ_POOL_MIN_UNSEEN` / `QUIZ_POOL_BATCH` | collector | `100` / `50` | 퀴즈 정기 생성(21:00) — 미시도 문제 수가 MIN 미만이면 BATCH 개 생성 |
-| `PUSH_BACKEND` | collector | `mock` | `mock` \| `fcm` (FCM은 자격증명 준비 후) |
+| `PUSH_BACKEND` | collector | `mock` | `mock`(로그만) \| `expo`(Expo Push → FCM/APNs 실발송) \| `fcm`(미구현 스켈레톤). `expo` 는 EAS 에 FCM V1 키를 올린 **뒤에** 바꾼다 |
+| `EXPO_ACCESS_TOKEN` | collector (선택) | (없음) | Expo 계정에서 "Enhanced push security" 를 켰을 때만 필요 |
+| `EAS_PROJECT_ID` | mobile 빌드 시 (선택) | (없음) | `eas init` 의 projectId. `EXPO_PUBLIC_` 이 아니라 `app.config.js` 가 빌드 때 읽음. 없으면 푸시만 꺼짐. `mobile/.env.development`·`.env.production` 에 둔다 |
+| `GOOGLE_SERVICES_JSON` | mobile 빌드 시 (선택) | (없음) | Firebase `google-services.json` 경로(커밋 금지, `mobile/secrets/`). 없으면 Android 푸시 수신 불가 |
 | `CORS_ORIGINS` | backend | (localhost + haezean 기본 허용) | 콤마 구분 **추가** 오리진(product 등). develop 배포 도메인(admin/app.haezean.com)은 `shared/cors.py`에 코드로 포함돼 env 없이도 허용 |
 | `VITE_API_BASE_URL` | admin_web | `http://localhost:8000/api/v1` | 블로그 API |
 | `VITE_AUTH_BASE_URL` | admin_web | `http://localhost:8001/api/v1` | 인증 API |
@@ -540,6 +553,13 @@ cd backend && uv run --with pykrx python -m apps.collector.verify.spot_check --n
 ## 🔔 알림 아키텍처
 - **웹(SSE)**: 블로그 서비스의 `GET /api/v1/notifications/stream` 에 EventSource 로 연결 → 새 글 작성 시 Redis pub/sub 로 즉시 토스트 알림.
 - **모바일(FCM)**: 새 글 작성 시 Celery 워커로 위임(`collector.send_new_post_notification`) → 대상 유저에게 푸시. 현재 발송기는 Mock(로그), `PUSH_BACKEND=fcm` + 자격증명으로 교체 예정.
+- **펀드 리포트 알림(푸시 + SSE)**: 관리자 웹 `/fund-notices` → blog 관리자 API(`/api/v1/admin/fund-notices`·`push-sends`·`push-templates`) → Celery `collector.send_fund_notice` 가 `push_devices` 의 토큰으로 `PUSH_BACKEND=expo` 발송기(Expo Push → FCM)를 호출하고 SSE `fund_report_updated` 도 발행한다. 알림 메시지 뒤에 깨우기용 무음 메시지(`fund_refresh`)를 한 번 더 보낸다. 앱은 `PUT/DELETE /api/v1/push-devices` 로 토큰을 등록·해제한다. 만료 토큰(`DeviceNotRegistered`)은 서버가 지운다.
+  - **예약 발송**: Celery beat `dispatch-scheduled-pushes`(`collector.dispatch_scheduled_pushes`, **1분마다**)가 예약 시각이 지난 건을 집어 발송한다. 오래 멈춘 `sending` 은 15분 뒤 `failed` 로 정리. 워커를 중단해 두면 재기동 후 지연 발송된다. 새 beat 엔트리이므로 배포 때 **beat 재시작**이 필요하다.
+
+### 펀드 알림 배포 메모
+1. 운영 DB 마이그레이션: 배포 워크플로(`deploy-server.yml`)가 `alembic upgrade head` 를 실행하는지 확인(새 리비전 `b9c0d1e2f3a4`, `push_devices`·`push_sends`·`push_templates`).
+2. 서버 env 에 `PUSH_BACKEND=expo` — **EAS 에 FCM V1 키를 올린 뒤에** 바꾼다(먼저 바꾸면 Expo 가 `InvalidCredentials` 로 전부 실패, 이력에 실패로 남을 뿐 서비스 영향은 없음). 선택 `EXPO_ACCESS_TOKEN`.
+3. Celery **beat 재시작**(새 엔트리 `dispatch-scheduled-pushes`) 및 워커 재시작.
 
 ## 🛠 데이터 스토어
 - **PostgreSQL**: 사용자·게시판·게시글·댓글 등 관계형 데이터
