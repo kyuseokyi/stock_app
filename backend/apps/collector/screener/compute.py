@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import logging
 from datetime import date
+from typing import NamedTuple
 
 from apps.collector.canslim.rules import is_liquid
 from apps.collector.repositories.clickhouse_screener import ROW_COLUMNS
@@ -46,19 +47,29 @@ def stock_row(as_of: date, ticker: str, market: str, sector_m: str, bars: list[t
     }
 
 
-def compute_day(as_of: date, universe: list[tuple], profiles: dict, bars: dict, fundamentals: dict) -> list[dict]:
+class DayResult(NamedTuple):
+    """compute_day 결과 — rows: 계산된 행, failed: 계산 중 예외로 빠진 종목 수, skipped_no_bar: 기준일 봉이 없어 건너뛴 수."""
+    rows: list[dict]
+    failed: int
+    skipped_no_bar: int
+
+
+def compute_day(as_of: date, universe: list[tuple], profiles: dict, bars: dict, fundamentals: dict) -> DayResult:
     """universe: [(ticker, name, market)], profiles: {ticker: (시장, 업종 그룹 코드, 상장주식수(천 주), 거래정지)}
     (market_repo.group_profile_map), bars: {ticker: [(date, high, low, close, volume)]}, fundamentals: {ticker: dict}.
-    기준일 봉이 없는 종목(거래정지 등)은 건너뛴다. 한 종목 오류는 그 종목만 뺀다."""
+    기준일 봉이 없는 종목(거래정지 등)은 건너뛰고 skipped_no_bar 로 센다. 한 종목 오류는 그 종목만 빼고 failed 로 센다."""
     rows: list[dict] = []
+    failed = skipped = 0
     for ticker, _name, market in universe:
         b = bars.get(ticker)
         if not b or b[-1][0] != as_of:
+            skipped += 1
             continue
         p_market, sector, shares, _halted = profiles.get(ticker, (market, "", None, False))
         sector = "" if (sector or "").strip() in ("", NO_SECTOR) else sector.strip()
         try:
             rows.append(stock_row(as_of, ticker, p_market or market, sector, b, shares, fundamentals.get(ticker)))
         except Exception:  # noqa: BLE001 — 한 종목 데이터 이상이 하루 계산 전체를 막지 않게
+            failed += 1
             log.exception("스크리너 계산 실패 ticker=%s date=%s", ticker, as_of)
-    return rows
+    return DayResult(rows, failed, skipped)

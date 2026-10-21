@@ -67,27 +67,50 @@ def _rows(sql: str, params: dict | None, client) -> list:
     return (client or get_client()).query(sql, parameters=params or {}).result_rows
 
 
-def load_bars(as_of: date, days: int = 400, client=None) -> dict[str, list[tuple]]:
-    """{ticker: [(date, high, low, close, volume)]} — as_of 이하 최근 days(달력일 ≈ 275거래일), 날짜 오름차순."""
-    rows = _rows(f"SELECT ticker, date, high, low, close, volume FROM {CLICKHOUSE_DB}.daily_prices FINAL "
-                 "WHERE date <= %(d)s AND date > %(since)s", {"d": as_of, "since": _since(as_of, days)}, client)
+def load_bars(as_of: date, days: int = 400, client=None, tickers=None) -> dict[str, list[tuple]]:
+    """{ticker: [(date, high, low, close, volume)]} — as_of 이하 최근 days(달력일 ≈ 275거래일), 날짜 오름차순.
+    tickers 를 주면 그 종목만 읽는다(분석 대상 밖 종목 제외). 빈 목록이면 조회 없이 {}."""
+    sql = (f"SELECT ticker, date, high, low, close, volume FROM {CLICKHOUSE_DB}.daily_prices FINAL "
+           "WHERE date <= %(d)s AND date > %(since)s")
+    params: dict = {"d": as_of, "since": _since(as_of, days)}
+    if tickers is not None:
+        if not tickers:
+            return {}
+        sql += " AND ticker IN %(tickers)s"
+        params["tickers"] = tuple(tickers)
     out: dict[str, list[tuple]] = {}
-    for ticker, d, high, low, close, volume in rows:
+    for ticker, d, high, low, close, volume in _rows(sql, params, client):
         out.setdefault(ticker, []).append((d, float(high), float(low), float(close), float(volume)))
     for bars in out.values():
         bars.sort(key=lambda b: b[0])
     return out
 
 
+def slice_bars(bars: dict[str, list[tuple]], as_of: date, days: int = 400) -> dict[str, list[tuple]]:
+    """한 번 읽은 봉에서 load_bars(as_of, days) 와 같은 범위(as_of 이하, as_of-days 초과)만 잘라낸다."""
+    since = _since(as_of, days)
+    out = {}
+    for ticker, rows in bars.items():
+        cut = [b for b in rows if since < b[0] <= as_of]
+        if cut:
+            out[ticker] = cut
+    return out
+
+
 def load_fundamentals(client=None) -> dict[str, dict]:
-    """{ticker: {yymm, eps, bps, roe, sales_growth, op_growth, debt_ratio}} — 연간(Y) 최신 결산월 한 행.
+    """{ticker: {yymm, eps, bps, roe, sales_growth, op_growth, debt_ratio}} — 연간(Y), 필드별로 null 이 아닌 가장 최근 값.
+    yymm 은 가장 최근 결산월. 최신 행의 일부 값이 비어도 이전 결산 값으로 채운다(PER·ROE 가 통째로 NULL 되는 것 방지).
     분기(Q) 누적 여부가 확인되지 않아 연간만 쓴다. 과거 기준일 백필도 최신 값을 쓴다."""
     rows = _rows(f"SELECT ticker, stac_yymm, eps, bps, roe, sales_growth, op_growth, debt_ratio "
                  f"FROM {CLICKHOUSE_DB}.fundamentals_periodic FINAL WHERE period = 'Y' ORDER BY ticker, stac_yymm",
                  None, client)
     out: dict[str, dict] = {}
-    for ticker, ym, *vals in rows:
-        out[ticker] = {"yymm": ym, **dict(zip(_FIN_FIELDS, vals))}  # 오름차순이라 마지막 = 최신
+    for ticker, ym, *vals in rows:  # 오름차순이라 뒤 행이 최신 — null 이 아닌 값만 덮어쓴다
+        cur = out.setdefault(ticker, {"yymm": ym, **dict.fromkeys(_FIN_FIELDS)})
+        cur["yymm"] = ym
+        for k, v in zip(_FIN_FIELDS, vals):
+            if v is not None:
+                cur[k] = v
     return out
 
 

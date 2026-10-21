@@ -63,3 +63,35 @@ def test_load_fundamentals_keeps_latest_year():
                           "op_growth": 4.0, "debt_ratio": 70.0}
     assert out["BBB"]["eps"] is None
     assert "period = 'Y'" in ch.queries[0][0] and "ORDER BY ticker, stac_yymm" in ch.queries[0][0]
+
+
+def test_load_fundamentals_fills_null_fields_from_previous_year():
+    ch = _FakeCH([[("AAA", "202312", 100.0, 1000.0, 10.0, 5.0, 3.0, 80.0),
+                   ("AAA", "202412", None, None, 11.0, None, 4.0, 70.0)]])
+    out = cs.load_fundamentals(ch)["AAA"]
+    assert out == {"yymm": "202412", "eps": 100.0, "bps": 1000.0, "roe": 11.0, "sales_growth": 5.0,
+                   "op_growth": 4.0, "debt_ratio": 70.0}      # 최신 행의 값이 있으면 그 값, 비면 이전 결산 값
+
+
+def test_load_bars_ticker_filter():
+    ch = _FakeCH([[("AAA", D2, 21, 19, 20, 5)]])
+    assert list(cs.load_bars(D2, client=ch, tickers=["AAA", "BBB"])) == ["AAA"]
+    sql, params = ch.queries[0]
+    assert "ticker IN %(tickers)s" in sql and params["tickers"] == ("AAA", "BBB")
+    assert cs.load_bars(D2, client=ch, tickers=[]) == {} and len(ch.queries) == 1   # 빈 목록은 조회 없음
+
+
+def test_slice_bars_matches_per_day_load():
+    """한 번 읽어 자른 결과 == 날짜별로 읽은 결과(범위: as_of 이하, as_of-days 초과)."""
+    base = date(2026, 1, 1)
+    table = [("AAA", base + timedelta(days=i), 12.0, 8.0, 10.0 + i, 100.0 + i) for i in range(0, 60)]
+    table += [("BBB", base + timedelta(days=i), 12.0, 8.0, 5.0, 50.0) for i in range(40, 60)]
+
+    def fake_for(as_of, days):
+        since = as_of - timedelta(days=days)
+        return _FakeCH([[r for r in table if since < r[1] <= as_of]])
+
+    whole = cs.load_bars(base + timedelta(days=59), days=200, client=fake_for(base + timedelta(days=59), 200))
+    for off in (10, 45, 59):
+        d = base + timedelta(days=off)
+        assert cs.slice_bars(whole, d, 30) == cs.load_bars(d, days=30, client=fake_for(d, 30))

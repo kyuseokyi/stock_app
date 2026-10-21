@@ -61,7 +61,8 @@ def test_compute_day_skips_and_maps_profile():
     universe = [("AAA", "에이", "KOSPI"), ("BBB", "비", "KOSDAQ"), ("CCC", "씨", "KOSPI"), ("DDD", "디", "KOSPI")]
     profiles = {"AAA": ("KOSDAQ", "0013", 1000, False), "DDD": ("", NO_SECTOR, None, False)}
     all_bars = {"AAA": bars, "BBB": bars[:-1], "DDD": bars}   # BBB 는 기준일 봉 없음(거래정지 등), CCC 는 일봉 없음
-    rows = compute.compute_day(as_of, universe, profiles, all_bars, {"AAA": {"eps": 100.0}})
+    rows, failed, skipped = compute.compute_day(as_of, universe, profiles, all_bars, {"AAA": {"eps": 100.0}})
+    assert (failed, skipped) == (0, 2)                          # BBB(기준일 봉 없음)·CCC(일봉 없음)
     assert [r["ticker"] for r in rows] == ["AAA", "DDD"]
     a, d = rows
     assert a["market"] == "KOSDAQ" and a["sector_m"] == "0013" and a["eps"] == 100.0  # 프로필 시장이 우선
@@ -79,6 +80,6 @@ def test_compute_day_isolates_bad_ticker(monkeypatch):
         return real(as_of_, ticker, *args)
 
     monkeypatch.setattr(compute, "stock_row", flaky)
-    rows = compute.compute_day(as_of, [("AAA", "에이", "KOSPI"), ("BBB", "비", "KOSPI")], {},
-                               {"AAA": bars, "BBB": bars}, {})
-    assert [r["ticker"] for r in rows] == ["BBB"]
+    rows, failed, skipped = compute.compute_day(as_of, [("AAA", "에이", "KOSPI"), ("BBB", "비", "KOSPI")], {},
+                                                {"AAA": bars, "BBB": bars}, {})
+    assert [r["ticker"] for r in rows] == ["BBB"] and (failed, skipped) == (1, 0)
