@@ -25,7 +25,7 @@ const BB_POSITIONS: { key: BbPosition | null; label: string }[] = [
 // 한 줄 — 왼쪽 제목 + 오른쪽 입력들(좁은 화면에서는 줄바꿈)
 function Row({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <div className="flex flex-wrap items-center gap-2">
+    <div role="group" aria-label={title} className="flex flex-wrap items-center gap-2">
       <span className="w-28 shrink-0 text-xs font-medium text-ink-muted">{title}</span>
       {children}
     </div>
@@ -67,7 +67,7 @@ export default function FinderFilters({ value, onApply }: Props) {
     <div className="space-y-3">
       <Row title="시장">
         {MARKETS.map((m) => (
-          <button key={m.key} type="button" className={chipClass(draft.market === m.key)} onClick={() => set({ market: m.key })}>
+          <button key={m.key} type="button" aria-pressed={draft.market === m.key} className={chipClass(draft.market === m.key)} onClick={() => set({ market: m.key })}>
             {m.label}
           </button>
         ))}
@@ -83,21 +83,21 @@ export default function FinderFilters({ value, onApply }: Props) {
       <Row title="RSI(14)">{num('rsiMin', '최소')}<span className="text-ink-muted">~</span>{num('rsiMax', '최대')}</Row>
       <Row title="이동평균 배열">
         {MA_ORDERS.map((m) => (
-          <button key={m.label} type="button" className={chipClass(draft.maOrder === m.key)} onClick={() => set({ maOrder: m.key })}>
+          <button key={m.label} type="button" aria-pressed={draft.maOrder === m.key} className={chipClass(draft.maOrder === m.key)} onClick={() => set({ maOrder: m.key })}>
             {m.label}
           </button>
         ))}
       </Row>
       <Row title="볼린저 σ">
         {BB_SIGMAS.map((s) => (
-          <button key={s} type="button" className={chipClass(draft.bbSigma === s)} onClick={() => set({ bbSigma: s })}>
+          <button key={s} type="button" aria-pressed={draft.bbSigma === s} className={chipClass(draft.bbSigma === s)} onClick={() => set({ bbSigma: s })}>
             {sigmaLabel(s)}
           </button>
         ))}
       </Row>
       <Row title="볼린저 위치">
         {BB_POSITIONS.map((p) => (
-          <button key={p.label} type="button" className={chipClass(draft.bbPosition === p.key)} onClick={() => set({ bbPosition: p.key })}>
+          <button key={p.label} type="button" aria-pressed={draft.bbPosition === p.key} className={chipClass(draft.bbPosition === p.key)} onClick={() => set({ bbPosition: p.key })}>
             {p.label}
           </button>
         ))}

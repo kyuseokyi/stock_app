@@ -23,6 +23,8 @@ export default function FinderTab() {
   const [total, setTotal] = useState(0)
   const [state, setState] = useState<'loading' | 'ready' | 'failed'>('loading')
   const [loadingMore, setLoadingMore] = useState(false)
+  const [moreFailed, setMoreFailed] = useState(false)
+  const [reloadKey, setReloadKey] = useState(0)
   const [selected, setSelected] = useState<string | null>(null)
   // 요청 번호 — 조건을 바꾼 뒤 늦게 온 '더 보기' 응답이 새 목록에 붙지 않게
   const seq = useRef(0)
@@ -31,6 +33,8 @@ export default function FinderTab() {
     let cancelled = false
     seq.current += 1
     setState('loading')
+    setLoadingMore(false)
+    setMoreFailed(false)
     getFinderScreen(query)
       .then((s) => {
         if (cancelled) return
@@ -45,7 +49,7 @@ export default function FinderTab() {
     return () => {
       cancelled = true
     }
-  }, [query])
+  }, [query, reloadKey])
 
   const update = (next: FinderQuery) => setQuery((cur) => (sameFinderQuery(cur, next) ? cur : next))
   const togglePreset = (p: FinderPreset) => update({ ...query, preset: query.preset === p ? null : p })
@@ -53,6 +57,7 @@ export default function FinderTab() {
   const loadMore = () => {
     const id = seq.current
     setLoadingMore(true)
+    setMoreFailed(false)
     getFinderScreen(query, items.length)
       .then((s) => {
         if (id !== seq.current) return
@@ -61,8 +66,12 @@ export default function FinderTab() {
           return [...cur, ...s.items.filter((x) => !seen.has(x.ticker))]
         })
       })
-      .catch(() => undefined)
-      .finally(() => setLoadingMore(false))
+      .catch(() => {
+        if (id === seq.current) setMoreFailed(true)
+      })
+      .finally(() => {
+        if (id === seq.current) setLoadingMore(false)
+      })
   }
 
   // 넓은 화면은 첫 종목을 오른쪽에 바로 보여준다(좁은 화면은 누를 때만 펼침)
@@ -105,7 +114,13 @@ export default function FinderTab() {
           </button>
           <span className="mx-1 w-px shrink-0 self-stretch bg-line" aria-hidden />
           {FINDER_SORTS.map((s) => (
-            <button key={s.key} type="button" className={chipClass(query.sort === s.key)} onClick={() => update({ ...query, sort: s.key })}>
+            <button
+              key={s.key}
+              type="button"
+              aria-pressed={query.sort === s.key}
+              className={chipClass(query.sort === s.key)}
+              onClick={() => update({ ...query, sort: s.key })}
+            >
               {s.label}
             </button>
           ))}
@@ -124,7 +139,16 @@ export default function FinderTab() {
       </Card>
 
       {state === 'failed' && (
-        <Card><EmptyState emoji="⚠️" title="목록을 불러오지 못했어요" description="잠시 뒤 다시 시도해 주세요." /></Card>
+        <Card>
+          <EmptyState emoji="⚠️" title="목록을 불러오지 못했어요" description="잠시 뒤 다시 시도해 주세요." />
+          <button
+            type="button"
+            onClick={() => setReloadKey((k) => k + 1)}
+            className="mx-auto mt-2 block rounded-btn bg-fill px-4 py-2 text-sm font-medium text-ink"
+          >
+            다시 시도
+          </button>
+        </Card>
       )}
       {state === 'loading' && <p className="py-10 text-center text-sm text-ink-muted">불러오는 중…</p>}
       {state === 'ready' && date === null && (
@@ -144,6 +168,9 @@ export default function FinderTab() {
               onSelect={onSelect}
               renderInline={wide ? undefined : (it) => <FinderDetail item={it} bbSigma={bbSigma} date={date} />}
             />
+            {moreFailed && (
+              <p role="alert" className="mt-2 text-center text-xs text-up">더 불러오지 못했어요. 다시 눌러 주세요.</p>
+            )}
             {items.length < total && (
               <button
                 type="button"
