@@ -1,4 +1,5 @@
 // 백그라운드 태스크 2개 — 화면 없이 깨어날 때도 등록돼 있어야 하므로 모듈 최상위에서 정의한다(엔트리 index.ts 가 import).
+// 이 JS 는 expo-background-task·expo-task-manager 가 들어간 재빌드 바이너리에서만 실행된다(옛 바이너리에서는 import 단계에서 실패).
 // push: 관리자 발송의 깨우기용 메시지(type 'fund_refresh') / periodic: 6시간 안팎(OS 재량) 안전망.
 import * as BackgroundTask from 'expo-background-task';
 import * as Notifications from 'expo-notifications';
@@ -28,29 +29,50 @@ const backgroundRecord = (reason: RunReason) =>
     run: (o) => fundRefresher.run(o),
     enter: enterBackgroundRun,
     // 앞 화면에서 표시를 켜면 백업이 다음 background→active 까지 미뤄진다 — 앞이면 표시 없이 일반 경로(즉시 백업)
-    isForeground: () => AppState.currentState === 'active',
+    isForeground: () => {
+      const fg = AppState.currentState === 'active';
+      if (fg && __DEV__) console.log('[fund-bg] periodic foreground'); // 정기 작업은 보통 headless — 'active' 오판 구분용
+      return fg;
+    },
   });
 
-TaskManager.defineTask<Notifications.NotificationTaskPayload>(PUSH_TASK, async ({ data, error }) => {
-  if (error) return;
-  if (__DEV__) console.log('[fund-bg] push payload', JSON.stringify(data).slice(0, 500)); // 실제 모양 확인용(S5-6)
-  if (pushTypeOf(data) !== 'fund_refresh') return;
-  if (AppState.currentState === 'active') return; // 앞에 있으면 SSE·자동 갱신이 이미 처리
-  await backgroundRecord('push');
-});
-
-TaskManager.defineTask(PERIODIC_TASK, async () => {
-  if (__DEV__) console.log('[fund-bg] periodic start');
+const safeJson = (v: unknown): string => {
   try {
-    await backgroundRecord('periodic');
-    return BackgroundTask.BackgroundTaskResult.Success;
+    return String(JSON.stringify(v) ?? '').slice(0, 500);
   } catch {
-    return BackgroundTask.BackgroundTaskResult.Failed;
+    return '<unserializable>'; // 순환 참조 등
   }
-});
+};
 
-// push 태스크는 푸시가 설정됐으면 항상 등록 — 서버는 펀드를 등록한 기기에만 보낸다(Expo 문서: 모듈 최상위에서 등록)
-if (isPushConfigured()) void Notifications.registerTaskAsync(PUSH_TASK).catch(() => {});
+// 모듈 최상위 정의·등록은 동기 throw 해도 앱 시작을 막지 않게 감싼다(.catch 는 Promise 실패만 잡는다)
+try {
+  TaskManager.defineTask<Notifications.NotificationTaskPayload>(PUSH_TASK, async ({ data, error }) => {
+    if (error) return;
+    if (__DEV__) console.log('[fund-bg] push payload', safeJson(data)); // 실제 모양 확인용(S5-6)
+    if (pushTypeOf(data) !== 'fund_refresh') return;
+    if (AppState.currentState === 'active') {
+      if (__DEV__) console.log('[fund-bg] skip: foreground'); // headless 인데 'active' 로 오판했는지 구분용
+      return; // 앞에 있으면 SSE·자동 갱신이 이미 처리
+    }
+    await backgroundRecord('push');
+  });
+
+  TaskManager.defineTask(PERIODIC_TASK, async () => {
+    if (__DEV__) console.log('[fund-bg] periodic start');
+    try {
+      await backgroundRecord('periodic');
+    } catch {
+      return BackgroundTask.BackgroundTaskResult.Failed;
+    }
+    // skipped(로그아웃)·timeout 이어도 Success — 다음 주기에 어차피 다시 돌고, Failed 로 보고하면 OS 가 재시도 간격을 늘릴 수 있다(의도된 동작)
+    return BackgroundTask.BackgroundTaskResult.Success;
+  });
+
+  // push 태스크는 푸시가 설정됐으면 항상 등록 — 서버는 펀드를 등록한 기기에만 보낸다(Expo 문서: 모듈 최상위에서 등록)
+  if (isPushConfigured()) void Notifications.registerTaskAsync(PUSH_TASK).catch(() => {});
+} catch (e) {
+  if (__DEV__) console.log('[fund-bg] define/register failed', String(e));
+}
 
 // 정기 작업 등록·해제는 이 syncer 하나로만 — 복원(hydrated) 전엔 건드리지 않고, 동시 호출은 한 줄로 세운다
 const periodic = createPeriodicSyncer({
