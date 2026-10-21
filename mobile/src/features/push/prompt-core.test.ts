@@ -1,4 +1,17 @@
-import { shouldOfferPrompt, shouldPromptOnEnter } from './prompt-core';
+import { effectivePermission, shouldOfferPrompt, shouldPromptOnEnter } from './prompt-core';
+
+describe('effectivePermission', () => {
+  it('Android 13+ 미요청(denied + canAskAgain)은 undetermined 로 본다', () => {
+    expect(effectivePermission({ status: 'denied', canAskAgain: true })).toBe('undetermined');
+  });
+  it('다시 물을 수 없는 거부만 denied', () => {
+    expect(effectivePermission({ status: 'denied', canAskAgain: false })).toBe('denied');
+  });
+  it('granted·undetermined 는 그대로', () => {
+    expect(effectivePermission({ status: 'granted', canAskAgain: true })).toBe('granted');
+    expect(effectivePermission({ status: 'undetermined', canAskAgain: true })).toBe('undetermined');
+  });
+});
 
 describe('shouldOfferPrompt', () => {
   it('설정됨 + 아직 안 물어봄 + 첫 펀드(0→1)일 때만', () => {

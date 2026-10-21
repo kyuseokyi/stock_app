@@ -28,7 +28,7 @@ import { Button, Card, ListRow, ListState, showToast } from '@/ui';
 import { isPushConfigured } from '@/features/push/config';
 import { PushPermissionBanner } from '@/features/push/permission-banner';
 import { wasPrompted } from '@/features/push/prompt';
-import { shouldOfferPrompt, shouldPromptOnEnter } from '@/features/push/prompt-core';
+import { effectivePermission, shouldOfferPrompt, shouldPromptOnEnter } from '@/features/push/prompt-core';
 import { PushPromptSheet } from '@/features/push/push-prompt-sheet';
 import { syncPushRegistration } from '@/features/push/registration';
 
@@ -86,7 +86,8 @@ export default function FundListScreen() {
           const r = await Promise.all([wasPrompted(), Notifications.getPermissionsAsync()]).catch(() => null);
           if (!r || !alive || promptOpenRef.current) return;
           const [prompted, perm] = r;
-          if (shouldPromptOnEnter({ fundCount: l.length, prompted, permission: perm.status, configured: true })) {
+          const permission = effectivePermission(perm); // Android 13+ 미요청도 'denied' 로 오므로 canAskAgain 으로 보정
+          if (shouldPromptOnEnter({ fundCount: l.length, prompted, permission, configured: true })) {
             setPromptOpen(true);
           }
         })

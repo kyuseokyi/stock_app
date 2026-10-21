@@ -6,6 +6,7 @@ import { StyleSheet } from 'react-native-unistyles';
 
 import { isPushConfigured } from './config';
 import { dismissBanner, isBannerDismissed } from './prompt';
+import { effectivePermission } from './prompt-core';
 
 /** 알림 권한이 거부돼 있으면 펀드 목록 위에 안내(닫으면 다시 안 보임) */
 export function PushPermissionBanner() {
@@ -16,7 +17,8 @@ export function PushPermissionBanner() {
     let alive = true;
     void Promise.all([Notifications.getPermissionsAsync(), isBannerDismissed()])
       .then(([p, dismissed]) => {
-        if (alive) setShow(p.status === 'denied' && !dismissed);
+        // 진짜 거부(다시 물을 수 없음)일 때만 — Android 13+ 미요청 'denied' 는 시트가 맡는다
+        if (alive) setShow(effectivePermission(p) === 'denied' && !dismissed);
       })
       .catch(() => {});
     return () => {
