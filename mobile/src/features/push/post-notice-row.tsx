@@ -20,6 +20,7 @@ export function PostNoticeRow() {
   const [on, setOn] = useState(false); // 읽기 전에는 꺼짐으로 — 권한 없는 기기가 잠깐 켜짐으로 보이지 않게
   const [busy, setBusy] = useState(false);
   const mounted = useRef(true); // 언마운트 뒤 비동기 완료가 setState 하지 않게
+  const gen = useRef(0); // refresh 세대 — 가장 최근 호출의 결과만 반영(늦게 온 옛 읽기가 최신 값을 덮지 않게)
 
   useEffect(() => {
     mounted.current = true;
@@ -30,14 +31,14 @@ export function PostNoticeRow() {
 
   const refresh = useCallback(() => {
     if (!isPushConfigured()) return () => {};
-    let alive = true;
+    const mine = ++gen.current;
     void Promise.all([loadPostNotice(), Notifications.getPermissionsAsync()])
       .then(([saved, perm]) => {
-        if (alive && mounted.current) setOn(postNoticeSwitchValue(saved, effectivePermission(perm)));
+        if (mine === gen.current && mounted.current) setOn(postNoticeSwitchValue(saved, effectivePermission(perm)));
       })
       .catch(() => {});
     return () => {
-      alive = false;
+      if (gen.current === mine) gen.current++; // 아직 최신이면 무효화(포커스 해제·재호출)
     };
   }, []);
 
@@ -61,6 +62,7 @@ export function PostNoticeRow() {
 
   const toggle = async (next: boolean) => {
     setBusy(true);
+    gen.current++; // 진행 중인 옛 refresh 결과가 이 값을 덮지 않게
     setOn(next);
     let saved = false;
     try {
@@ -74,8 +76,11 @@ export function PostNoticeRow() {
         const action = postNoticeEnableAction(effectivePermission(await Notifications.getPermissionsAsync()));
         if (action === 'request') {
           await ensurePushChannels(); // Android 13+ 는 권한 요청 전에 채널이 있어야 한다
-          await Notifications.requestPermissionsAsync();
-          await markPrompted('accepted'); // 같은 질문을 홈·펀드 시트로 다시 하지 않게
+          try {
+            await Notifications.requestPermissionsAsync();
+          } finally {
+            await markPrompted('accepted'); // 요청이 throw 해도 기록 — 같은 질문을 홈·펀드 시트로 다시 하지 않게
+          }
         } else if (action === 'open-settings') {
           Alert.alert('알림이 꺼져 있어요', '휴대폰 설정에서 이 앱의 알림을 허용해야 새 글 알림을 받을 수 있어요.', [
             { text: '닫기', style: 'cancel' },

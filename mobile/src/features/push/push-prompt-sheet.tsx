@@ -1,4 +1,5 @@
 import * as Notifications from 'expo-notifications';
+import { useRef } from 'react';
 import { Text } from 'react-native';
 import { StyleSheet } from 'react-native-unistyles';
 
@@ -10,7 +11,10 @@ import { syncPushRegistration } from './registration';
 
 /** 홈(로그인 후)·펀드 첫 등록·펀드 화면 진입 중 한 번 — [알림 받기] 일 때만 OS 권한을 요청한다 */
 export function PushPromptSheet({ onClose }: { onClose: () => void }) {
+  const busy = useRef(false); // "알림 받기" 연속 탭으로 accept 가 중복 실행되지 않게
   const accept = async () => {
+    if (busy.current) return;
+    busy.current = true;
     try {
       await ensurePushChannels();
       await Notifications.requestPermissionsAsync();
