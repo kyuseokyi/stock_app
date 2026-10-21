@@ -45,6 +45,15 @@ fi
 grep -q '^EXPO_PUBLIC_GAME_API_URL=' "$TMP" || echo "[devapk] ⚠ EXPO_PUBLIC_GAME_API_URL 없음 — 게임 탭이 연결되지 않습니다."
 echo "[devapk] 적용 키: $(cut -d= -f1 "$TMP" | tr '\n' ' ')"
 
-(cd android && APP_ENV=development ./gradlew assembleRelease)
+# 합친 env 를 Gradle 프로세스 환경변수로도 넘긴다 — expo-constants 가 빌드 중 app.config.js 를 평가해 assets/app.config 를
+# 만들 때 env 파일만으로는 EAS_PROJECT_ID 가 안 보여 extra.eas.projectId 가 빠졌다(→ 앱이 푸시 미설정으로 보고 알림 탭 처리를 끔).
+(set -a; . "./$TMP"; set +a; cd android && APP_ENV=development ./gradlew assembleRelease)
+
+# 푸시 설정이 실제로 들어갔는지 확인(값은 출력하지 않음)
+APK=android/app/build/outputs/apk/release/app-release.apk
+if grep -q '^EAS_PROJECT_ID=' "$TMP" && ! unzip -p "$APK" assets/app.config 2>/dev/null | grep -q '"projectId"'; then
+  echo "[devapk] ✗ EAS_PROJECT_ID 가 있는데 APK 설정에 projectId 가 없음 — 푸시가 꺼진 앱이 된다." >&2
+  exit 1
+fi
 
 echo "[devapk] ✓ android/app/build/outputs/apk/release/app-release.apk"
