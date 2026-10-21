@@ -67,7 +67,7 @@ push_sends
 - `collector.send_fund_notice(send_id)`: 행을 읽어 대상 토큰 조회(test=관리자 기기 / 그 외=`fund_notice=true`) → `target_count` 기록 → `ExpoPushSender.send_batch(tokens, message)` → 성공·실패 수, `DeviceNotRegistered` 토큰 삭제 → `status=done`(전부 실패면 `failed`), `finished_at`.
 - 메시지는 기기마다 **2개**(같은 토큰 목록, 같은 100개 묶음 규칙):
   - 알림용: `{title, body, data: {type: 'fund_report', date}, channelId: 'fund-report', sound: 'default'}` — 사용자에게 보이는 알림.
-  - 깨우기용(무음): `{data: {type: 'fund_refresh', date}, priority: 'high', _contentAvailable: true}` — 제목·본문 없음(Android 데이터 전용 메시지, iOS `content-available`). 앱 백그라운드 태스크가 받아 갱신·기록(§7.1).
+  - 깨우기용(무음): `{data: {type: 'fund_refresh', date}, priority: 'high', contentAvailable: true}` — 제목·본문 없음(Android 데이터 전용 메시지, iOS `content-available`). 앱 백그라운드 태스크가 받아 갱신·기록(§7.1).
   - 알림 메시지가 백그라운드일 때 OS 가 표시만 하고 JS 를 깨우지 않을 수 있어 둘을 나눈다. 플랫폼별 수신 조건은 구현 첫 단계(§12-8)에서 Expo 문서로 확인하고 다르면 이 절을 고친다.
   - 이력의 성공·실패 수는 **알림용 기준**. 깨우기용 결과는 로그만 남기고, `DeviceNotRegistered` 토큰은 똑같이 삭제한다.
   - `mode=test` 도 2개 모두 보낸다(관리자 기기에서 백그라운드 기록까지 확인).
@@ -97,25 +97,29 @@ SSE 이벤트: `{"type": "fund_report_updated", "date": "YYYY-MM-DD"}` — 제�
 
 ### 7.1 백그라운드 기록 — `features/fund/background/`
 - 의존성 추가: `expo-background-task`, `expo-task-manager`(config plugin, 같은 새 dev build). `expo-notifications` 는 위와 공유.
-- `run-in-background.ts`: `backgroundRecord(reason: 'push' | 'periodic')` — 두 태스크가 공유하는 본문.
+- `run-core.ts`: `backgroundRecordWith(reason: 'push' | 'periodic', deps)` — 두 태스크가 공유하는 본문(`tasks.ts` 가 실제 의존성을 넣은 `backgroundRecord`).
   1. `useAuthStore.getState().hydrate()` 대기 → 로그아웃이면 종료(화면 없이 실행돼 저장소가 아직 안 읽혔을 수 있음).
   2. `fundRefresher.run({ force: reason === 'push' })` — 1단계 자동 갱신과 **같은 함수**(10분 건너뛰기·동시 2개·single-flight·지운 펀드 처리 그대로). 정기 작업은 force 없이(10분 이내 확인한 펀드는 건너뜀).
   3. 실행 시간 한도(iOS 약 30초)를 넘기지 않게 전체를 25초 타임아웃으로 감싼다. 시간이 다 되면 그때까지 기록한 것만 남긴다.
 - **백업은 백그라운드에서 하지 않는다**(구글 토큰 갱신이 화면 없이 실패할 수 있고 시간이 짧다).
-  - `background-mode.ts`: 백그라운드 실행 중 플래그. `auto-refresh.ts` 의 실행 끝 구독은 이 플래그가 켜져 있으면 `maybeAutoBackup()` 대신 SecureStore `fund_backup_pending_v1=1` 만 기록한다.
+  - `background-mode.ts`: 백그라운드 실행 중 플래그. `auto-refresh.ts` 의 실행 끝 구독은 이 플래그가 켜져 있으면 `maybeAutoBackup()` 대신 보류 파일 `Paths.document/fund-backup-pending.json` 만 쓴다(SecureStore 는 iOS 잠금 중 못 읽을 수 있어 파일).
+  - 플래그는 25초 타임아웃 시점이 아니라 **`fundRefresher.run()` 프라미스가 실제로 끝났을 때** 끈다(타임아웃 뒤 늦게 끝난 실행이 백그라운드에서 백업을 부르지 않게).
   - 앱이 다시 `active` 가 되면(`useFundAutoRefresh` 의 기존 복귀 처리) 이 값이 있으면 `maybeAutoBackup()` → 시도 후 지운다(하루 1회 규칙은 `maybeAutoBackup` 그대로).
-  - 플래그를 메모리가 아니라 SecureStore 에 두는 이유: Android 는 앱이 종료된 상태에서 태스크만 따로 실행될 수 있어 다음 실행과 메모리를 공유하지 않는다.
-- `push-task.ts`: `TaskManager.defineTask('fund-refresh-push', …)` + `Notifications.registerTaskAsync`. 받은 데이터가 `type==='fund_refresh'` 일 때만 `backgroundRecord('push')`. 다른 type 은 무시.
-- `periodic-task.ts`: `TaskManager.defineTask('fund-refresh-periodic', …)` → `backgroundRecord('periodic')`. 최소 간격 6시간(`minimumInterval: 360`) — 실제 시각은 OS 가 정한다.
-- 태스크 정의(`defineTask`)는 **컴포넌트가 아닌 모듈 최상위**에서 해야 한다(화면 없이 깨어날 때도 등록돼 있어야 함) → `background/index.ts` 를 `app/_layout.tsx` 맨 위에서 import.
-- 등록·해제 `syncBackgroundTasks()`: 로그인 + 펀드 ≥1 이면 두 태스크 등록, 아니면 해제. 호출 시점은 `syncPushRegistration()` 과 같다(앱 실행, 펀드 추가·삭제, 로그인 직후, 로그아웃 직전).
+  - 보류 표시를 메모리가 아니라 파일에 두는 이유: Android 는 앱이 종료된 상태에서 태스크만 따로 실행될 수 있어 다음 실행과 메모리를 공유하지 않는다.
+- `tasks.ts`(push): `TaskManager.defineTask('fund-refresh-push', …)` + `Notifications.registerTaskAsync` — 푸시가 설정됐으면 모듈 최상위에서 항상 등록(Expo 문서 요구, 서버가 펀드 등록 기기에만 보내므로 결과는 같음). 받은 데이터가 `type==='fund_refresh'` 일 때만 `backgroundRecord('push')`. 다른 type 은 무시.
+  - 태스크가 받는 payload 모양은 Expo 문서에 정의가 없다(2026-10-21 확인) → `push-payload.ts` 의 방어적 파서 `pushTypeOf(payload)` 가 `data.data`(객체), `data.data.body`·`data.body`(JSON 문자열), `data.dataString` 을 모두 본다. 실제 모양은 수동 확인 때 로그로 남겨 여기에 적는다.
+- config 플러그인: `expo-notifications` 를 `['expo-notifications', { enableBackgroundRemoteNotifications: true }]` 로, `expo-background-task` 추가(iOS `UIBackgroundModes: processing` 을 플러그인이 넣는지 prebuild 결과로 확인).
+- Expo 문서 확인(2026-10-21): 앱 코드를 깨우는 push 는 제목·본문 없이 `data` 만 + iOS `contentAvailable: true`. 태스크는 앱이 일찍 읽는 모듈 최상위에서 정의·등록. 사용자가 앱을 강제 종료하면 정기 작업은 멈췄다가 다음 실행 때 재개.
+- `tasks.ts`(정기): `TaskManager.defineTask('fund-refresh-periodic', …)` → `backgroundRecord('periodic')`. 최소 간격 6시간(`minimumInterval: 360`) — 실제 시각은 OS 가 정한다.
+- 태스크 정의(`defineTask`)는 **컴포넌트가 아닌 모듈 최상위**에서 해야 한다(화면 없이 깨어날 때도 등록돼 있어야 함) → `background/tasks.ts` 를 `app/_layout.tsx` 맨 위에서 import.
+- 등록·해제 `syncBackgroundTasks()`(판단은 `periodic-core.ts`): 로그인 + 펀드 ≥1 이면 정기 작업 등록, 아니면 해제. 호출 시점은 `syncPushRegistration()` 과 같다(앱 실행, 펀드 추가·삭제, 로그인 직후, 로그아웃 직전).
   - 정기 작업은 **푸시 설정·권한과 무관**하게 등록(푸시를 거부해도 안전망은 동작). push 태스크는 푸시가 설정된 경우만.
 - 포그라운드에서 깨우기용 push 가 오면: SSE 가 이미 같은 일을 하므로 무시(중복 갱신 방지). `fund_report_updated` SSE 와 겹쳐도 single-flight 라 한 번만 실행된다.
 
 ### 7.2 빈 날 표시 — core `history-view.ts`
 - 메우지 않는다(앞뒤 값으로 보간하면 실제와 다른 수익률이 생긴다).
 - `HistoryRowView` 에 `gapFrom: string | null` 추가: 바로 이전 기록 날짜가 "직전 평일"(토·일 건너뜀)보다 앞이면 그 날짜(`M.D`), 아니면 null. 공휴일은 판단하지 않는다(공휴일 다음 날에도 표시될 수 있음 — 무해).
-- 화면(앱 `history/[id]`, 웹은 히스토리 없음)은 `gapFrom` 이 있으면 행의 전일 대비 옆에 작은 글씨로 "이전 기록 M.D" — 그 칸의 변화량이 하루치가 아니라는 표시.
+- 화면(앱 `history/[id]` 의 WebView 페이지, 웹은 히스토리 없음)은 `gapFrom` 이 있으면 **날짜 옆**에 작은 글씨로 "이전 기록 M.D" — 그 사이 날짜가 빠졌다는 표시. 값(당일·월 손익)은 원본 리포트에 적힌 그대로라 손대지 않는다.
 - core 변경이므로 `scripts/check-fund-core-sync.sh --write` 로 web_client 에도 복사(타입만 늘어남, 웹 화면 영향 없음).
 
 ## 8. 웹 (web_client)
@@ -136,10 +140,11 @@ SSE 이벤트: `{"type": "fund_report_updated", "date": "YYYY-MM-DD"}` — 제�
 | 백그라운드 실행 시간 초과 | 25초에서 중단, 그때까지 기록한 펀드만 남김(다음 실행에서 나머지) |
 | 백그라운드에서 새 기록 생김 | 백업 보류(`fund_backup_pending_v1`) → 다음 앱 복귀 때 `maybeAutoBackup` |
 | 백그라운드 중 로그아웃 상태 | 아무것도 안 함(로그아웃 직전에 태스크 해제) |
+| iOS 잠금 중 백그라운드 실행 | SecureStore(펀드 목록·로그인)를 잠금 해제 전엔 못 읽을 수 있어 기록 못 함 — 알려진 한계(iOS 실발송은 범위 밖) |
 
 ## 10. 테스트
 - pytest(일회용 PG + Redis DB 5): 토큰 upsert·소유자 교체·본인만 삭제, ADMIN 아닌 사용자 403, 문구 검증, now 중복 409·force, test 대상=관리자 기기·SSE 없음·0대 400, scheduled 과거 거부, `dispatch_scheduled_pushes` SKIP LOCKED 로 두 번 안 집음, 취소 경쟁, `send_fund_notice` 집계·무효 토큰 삭제, `ExpoPushSender`(httpx 모킹: 100개 분할·Bearer·DeviceNotRegistered·네트워크 오류), `{date}` 치환, SSE 이벤트 형식.
-- pytest 추가: `send_fund_notice` 가 기기마다 알림용·깨우기용 2개를 보냄, 깨우기용에 제목·본문 없음·`_contentAvailable`, 이력 수치는 알림용 기준.
+- pytest 추가: `send_fund_notice` 가 기기마다 알림용·깨우기용 2개를 보냄, 깨우기용에 제목·본문 없음·`contentAvailable`, 이력 수치는 알림용 기준.
 - 모바일 jest: `registration`(조건별 PUT/DELETE·토큰 같으면 생략), `handlers`(탭 → 이동+force), `fund-signal`(active 일 때만 연결·지연 후 갱신).
 - 모바일 jest 추가: `backgroundRecord`(로그아웃이면 아무것도 안 함, push=force·periodic=force 없음, 25초 타임아웃), 백그라운드 중 새 기록 → 백업 대신 보류 플래그, 복귀 시 보류면 `maybeAutoBackup` 후 지움, push 태스크가 `fund_refresh` 외 type 무시, `syncBackgroundTasks` 조건별 등록·해제(푸시 거부여도 정기 작업 등록).
 - core jest: `gapFrom`(연속 평일 null, 주말 건너뜀 null, 평일 빠짐이면 이전 날짜, 첫 행 null).
@@ -155,6 +160,7 @@ SSE 이벤트: `{"type": "fund_report_updated", "date": "YYYY-MM-DD"}` — 제�
 README 에 같은 절차와 환경변수를 적는다.
 
 ## 12. 구현 순서
+계획: 1~8·11(README) = `plans/2026-10-21-fund-report-notice.md`(9개 작업) → 9~10(빈 날 표시·백그라운드 기록·서버 깨우기용 메시지) = `plans/2026-10-21-fund-background-record.md`(보충, 기존 계획 작업 3·8 이후 실행).
 1. 마이그레이션 + 모델 + `push_devices` API
 2. `ExpoPushSender` + `send_batch`
 3. 관리자 API(preview·발송·이력·취소·템플릿) + `send_fund_notice` + SSE 발행
