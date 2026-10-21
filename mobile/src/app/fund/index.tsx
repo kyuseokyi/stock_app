@@ -6,6 +6,7 @@ import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
 import { useAuthStore } from '@/features/auth/store';
 import { fundRefresher } from '@/features/fund/auto-refresh';
+import { syncBackgroundTasks } from '@/features/fund/background/tasks';
 import { usePullRefresh } from '@/hooks/use-pull-refresh';
 import {
   addFund,
@@ -97,6 +98,7 @@ export default function FundListScreen() {
       setError('');
       showToast('펀드를 추가했어요');
       void syncPushRegistration();
+      void syncBackgroundTasks();
       const offer = shouldOfferPrompt({
         prevCount: funds.length,
         nextCount: next.length,
@@ -123,6 +125,7 @@ export default function FundListScreen() {
             deleteHistory(f.id);
             setFunds(next);
             void syncPushRegistration(); // 마지막 펀드를 지우면 알림 해제
+            void syncBackgroundTasks();
           });
         },
       },
