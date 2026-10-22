@@ -25,7 +25,7 @@ import { deleteCache, fileCache, isOwnerChangedError, loadFunds, saveFundsAs } f
 import { LegacyImportSheet } from '@/features/fund/components/legacy-import-sheet';
 import { isBackupConfigured } from '@/features/fund/google-auth';
 import { deleteHistory } from '@/features/fund/history-store';
-import { loadLegacyFunds } from '@/features/fund/legacy-funds';
+import { loadLegacyFunds, previewLegacyImport, type LegacyImportPreview } from '@/features/fund/legacy-funds';
 import { Button, Card, ListRow, ListState, showToast } from '@/ui';
 import { isPushConfigured } from '@/features/push/config';
 import { PushPermissionBanner } from '@/features/push/permission-banner';
@@ -50,8 +50,8 @@ export default function FundListScreen() {
   const status = useAutoRefreshStatus(fundRefresher);
   const [lines, setLines] = useState<Record<string, string>>({});
   const [promptOpen, setPromptOpen] = useState(false);
-  const [legacy, setLegacy] = useState<{ uid: number; count: number } | null>(null); // 옛 기기 펀드 가져오기 시트(그 계정일 때만)
-  const legacyCount = legacy !== null && legacy.uid === ownerId ? legacy.count : 0;
+  const [legacy, setLegacy] = useState<{ uid: number; preview: LegacyImportPreview } | null>(null); // 옛 기기 펀드 가져오기 시트(그 계정일 때만)
+  const legacyPreview = legacy !== null && legacy.uid === ownerId ? legacy.preview : null;
   const promptOpenRef = useRef(false); // 진입 경로와 첫 추가(0→1) 경로가 같은 시트를 두 번 열지 않게
   promptOpenRef.current = promptOpen;
   // 당겨서 새로고침: 등록된 펀드 리포트를 지금 바로 모두 다시 받는다(끝나면 status.version 이 바뀌어 목록 줄 갱신)
@@ -90,10 +90,11 @@ export default function FundListScreen() {
         })
         .then(async (l) => {
           // 계정별 저장 전 이 기기에 쌓인 펀드가 있으면 먼저 가져올지 묻는다(닫으면 다음 진입 때 다시). 푸시 안내와 겹치지 않게 이번엔 여기서 끝
-          const legacyN = (await loadLegacyFunds().catch(() => [])).length;
+          // 이 계정 목록이 꽉 차 하나도 가져갈 수 없으면 묻지 않는다(남은 펀드는 다른 계정 몫 — 자리가 나면 다시 묻는다)
+          const preview = previewLegacyImport(l, await loadLegacyFunds().catch(() => []));
           if (!alive) return;
-          if (legacyN > 0) {
-            setLegacy({ uid, count: legacyN });
+          if (preview.show) {
+            setLegacy({ uid, preview });
             return;
           }
           // 이미 펀드가 있는 기존 사용자: 시트를 한 번도 못 봤으면 진입 시 1회 안내(2026-10-21 결정)
@@ -270,8 +271,8 @@ export default function FundListScreen() {
         </View>
       )}
       {promptOpen ? <PushPromptSheet onClose={() => setPromptOpen(false)} /> : null}
-      {legacyCount > 0 && !promptOpen ? (
-        <LegacyImportSheet count={legacyCount} onClose={() => setLegacy(null)} onDone={handleLegacyDone} />
+      {legacyPreview !== null && !promptOpen ? (
+        <LegacyImportSheet preview={legacyPreview} onClose={() => setLegacy(null)} onDone={handleLegacyDone} />
       ) : null}
     </ScrollView>
   );

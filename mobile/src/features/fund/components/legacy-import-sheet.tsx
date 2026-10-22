@@ -4,10 +4,12 @@ import { StyleSheet } from 'react-native-unistyles';
 
 import { BottomSheet, Button, showToast } from '@/ui';
 
-import { discardLegacyFunds, importLegacyFunds } from '../legacy-funds';
+import { MAX_FUNDS } from '../core';
+import { discardLegacyFunds, importLegacyFunds, type LegacyImportPreview } from '../legacy-funds';
 
 type Props = {
-  count: number;
+  /** 옛 펀드 수·이 계정이 가져갈 수 있는 수(previewLegacyImport) */
+  preview: LegacyImportPreview;
   /** 닫기(✕·배경) — 아무것도 바꾸지 않는다. 다음 진입 때 다시 묻는다 */
   onClose: () => void;
   /** 가져오기·버리기를 마침 — 호출부가 목록 다시 읽기·정기 작업·푸시 동기화 */
@@ -15,7 +17,8 @@ type Props = {
 };
 
 /** 계정별 저장 전 이 기기에 쌓인 펀드를 지금 계정으로 가져올지 묻는 시트(펀드 목록 화면) */
-export function LegacyImportSheet({ count, onClose, onDone }: Props) {
+export function LegacyImportSheet({ preview, onClose, onDone }: Props) {
+  const { count, importable, dropped } = preview;
   const [busy, setBusy] = useState<'' | 'import' | 'discard'>('');
   const busyRef = useRef(false); // 연속 탭으로 두 번 실행되지 않게
 
@@ -38,7 +41,7 @@ export function LegacyImportSheet({ count, onClose, onDone }: Props) {
       const r = await importLegacyFunds();
       showToast(
         r.skipped > 0
-          ? `펀드 ${r.added}개를 가져왔어요. ${r.skipped}개는 등록 한도로 가져오지 못했어요.`
+          ? `펀드 ${r.added}개를 가져왔어요. ${r.skipped}개는 등록 한도로 이 기기에 남겨 뒀어요.`
           : `펀드 ${r.added}개를 가져왔어요.`,
       );
     });
@@ -62,6 +65,11 @@ export function LegacyImportSheet({ count, onClose, onDone }: Props) {
       <Text style={styles.text}>
         이 기기에 저장된 펀드 {count}개를 이 계정으로 가져올까요? 가져오면 이 계정으로 로그인했을 때만 보여요.
       </Text>
+      {dropped > 0 ? (
+        <Text style={styles.notice}>
+          {`등록 한도(최대 ${MAX_FUNDS}개) 때문에 ${importable}개만 가져올 수 있어요. 나머지 ${dropped}개는 이 기기에 남아 다른 계정이 가져갈 수 있어요.`}
+        </Text>
+      ) : null}
       <Button label="가져오기" onPress={onImport} loading={busy === 'import'} disabled={busy !== ''} />
       <Button
         label="버리기"
@@ -76,4 +84,5 @@ export function LegacyImportSheet({ count, onClose, onDone }: Props) {
 
 const styles = StyleSheet.create((theme) => ({
   text: { fontSize: 15, color: theme.colors.textSecondary, lineHeight: 22 },
+  notice: { fontSize: 13, color: theme.colors.up, lineHeight: 20 },
 }));

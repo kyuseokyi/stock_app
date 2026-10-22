@@ -1,5 +1,6 @@
 // 계정별 저장 전(기기 공용 키 fund_list_v1)에 쌓인 펀드 — 처음 들어온 계정이 가져오거나 버린다(2026-10-23 설계).
 // 순서: 내 키를 먼저 쓰고 옛 키를 마지막에 지운다 — 도중에 꺼져도 다음 진입 때 다시 물어 같은 결과(멱등)가 된다.
+// 등록 한도로 못 가져온 펀드(dropped)는 옛 키에 남기고 파일도 보존 — 다른 계정이 가져가거나 버릴 수 있게.
 import * as SecureStore from 'expo-secure-store';
 
 import { LEGACY_PENDING_FILE, markBackupPending, removeFile } from './background/backup-pending';
@@ -43,7 +44,25 @@ const isEmptyState = (raw: string | null): boolean => {
 
 export type LegacyImportResult = { added: number; skipped: number };
 
-/** 가져오기 — 합치기(URL 중복 제거·한도) → 내 키 저장 → 백업 상태·대기 표시 넘김 → 옛 키 삭제 */
+export type LegacyImportPreview = {
+  /** 옛 키의 펀드 수 */
+  count: number;
+  /** 이 계정이 가져갈 수 있는 수(새로 추가 + URL 이 겹쳐 기록만 합쳐지는 것 포함) */
+  importable: number;
+  /** 등록 한도로 이 계정이 가져갈 수 없는 수 — 옛 키에 남는다 */
+  dropped: number;
+  /** 시트를 띄울지 — 이 계정이 하나도 가져갈 수 없으면(목록이 꽉 참) 띄우지 않는다. 자리가 나면 다시 뜬다 */
+  show: boolean;
+};
+
+/** 가져오기 미리보기 — 시트 표시 여부와 "N개만 가져올 수 있어요" 안내용 */
+export function previewLegacyImport(mine: FundEntry[], legacy: FundEntry[]): LegacyImportPreview {
+  const dropped = mergeFundLists(mine, legacy).dropped.length;
+  const importable = legacy.length - dropped;
+  return { count: legacy.length, importable, dropped, show: importable > 0 };
+}
+
+/** 가져오기 — 합치기(URL 중복 제거·한도) → 내 키 저장 → 백업 상태·대기 표시 넘김 → 옛 키 삭제(한도로 남은 펀드만 다시 기록) */
 export async function importLegacyFunds(): Promise<LegacyImportResult> {
   const uid = currentOwnerId();
   const legacy = await loadLegacyFunds();
@@ -60,9 +79,11 @@ export async function importLegacyFunds(): Promise<LegacyImportResult> {
   }
   if (removeFile(LEGACY_PENDING_FILE)) markBackupPending(uid);
 
-  deleteFilesExcept([...mergedDup, ...r.dropped], new Set(r.funds.map((f) => f.id)));
-  await SecureStore.deleteItemAsync(LEGACY_BACKUP_STATE_KEY);
-  await SecureStore.deleteItemAsync(LEGACY_FUND_LIST_KEY);
+  // 합쳐진 중복 펀드의 옛 파일만 지운다. 한도로 남은 펀드(dropped)의 캐시·기록은 그대로 둔다
+  deleteFilesExcept(mergedDup, new Set(r.funds.map((f) => f.id)));
+  await SecureStore.deleteItemAsync(LEGACY_BACKUP_STATE_KEY); // 백업 상태·대기 표시는 처음 가져간 계정이 맡는다
+  if (r.dropped.length > 0) await SecureStore.setItemAsync(LEGACY_FUND_LIST_KEY, JSON.stringify(r.dropped));
+  else await SecureStore.deleteItemAsync(LEGACY_FUND_LIST_KEY);
   return { added: r.added, skipped: r.skipped };
 }
 

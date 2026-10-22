@@ -6,7 +6,7 @@ jest.mock('@/features/auth/store', () => ({ useAuthStore: { getState: () => mock
 import { fileMem, resetFakeStorage, secureMem } from './__fixtures__/fake-storage';
 import { MAX_FUNDS, type FundEntry } from './core';
 import { loadFunds, saveFunds } from './fund-store';
-import { discardLegacyFunds, importLegacyFunds, loadLegacyFunds } from './legacy-funds';
+import { discardLegacyFunds, importLegacyFunds, loadLegacyFunds, previewLegacyImport } from './legacy-funds';
 
 const url = (n: number) => `https://fund.ivyro.net/dataroom/om_data/f${n}.htm`;
 const e = (id: string, n: number): FundEntry => ({ id, name: `펀드${n}`, url: url(n) });
@@ -46,15 +46,36 @@ describe('importLegacyFunds', () => {
     expect(fileMem.has('fund-history-o2.json')).toBe(true);
   });
 
-  it('한도를 넘친 옛 펀드는 개수를 돌려주고 그 파일은 지운다', async () => {
+  it('한도를 넘친 옛 펀드는 옛 키에 남기고 그 파일도 보존한다(다른 계정이 가져가거나 버릴 수 있게)', async () => {
     await saveFunds(Array.from({ length: MAX_FUNDS - 1 }, (_, i) => e(`m${i}`, i)));
     setLegacy([e('o100', 100), e('o101', 101)]);
     fileMem.set('fund-cache-o101.json', '{}');
     fileMem.set('fund-history-o101.json', hist(url(101), '2026-10-01', 1));
     expect(await importLegacyFunds()).toEqual({ added: 1, skipped: 1 });
     expect(await loadFunds()).toHaveLength(MAX_FUNDS);
-    expect(fileMem.has('fund-cache-o101.json')).toBe(false);
+    expect(await loadLegacyFunds()).toEqual([e('o101', 101)]);
+    expect(fileMem.has('fund-cache-o101.json')).toBe(true);
+    expect(fileMem.has('fund-history-o101.json')).toBe(true);
+
+    // 다른 계정(8)이 남은 펀드를 가져가면 옛 키가 비워진다
+    mockAuth.user = { id: 8 };
+    expect(await importLegacyFunds()).toEqual({ added: 1, skipped: 0 });
+    expect(await loadFunds()).toEqual([e('o101', 101)]);
+    expect(secureMem.has('fund_list_v1')).toBe(false);
+    expect(fileMem.has('fund-history-o101.json')).toBe(true);
+  });
+
+  it('남은 펀드 버리기는 그 파일을 지운다(가져간 계정의 파일은 그대로)', async () => {
+    await saveFunds(Array.from({ length: MAX_FUNDS - 1 }, (_, i) => e(`m${i}`, i)));
+    setLegacy([e('o100', 100), e('o101', 101)]);
+    fileMem.set('fund-history-o100.json', hist(url(100), '2026-10-01', 1));
+    fileMem.set('fund-history-o101.json', hist(url(101), '2026-10-01', 1));
+    await importLegacyFunds();
+    mockAuth.user = { id: 8 };
+    await discardLegacyFunds();
+    expect(secureMem.has('fund_list_v1')).toBe(false);
     expect(fileMem.has('fund-history-o101.json')).toBe(false);
+    expect(fileMem.has('fund-history-o100.json')).toBe(true);
   });
 
   it('URL 이 겹치는 옛 펀드는 기록을 내 펀드 기록에 합치고 옛 파일을 지운다', async () => {
@@ -135,5 +156,44 @@ describe('discardLegacyFunds', () => {
     await discardLegacyFunds();
     expect(fileMem.has('fund-history-o2.json')).toBe(true);
     expect(secureMem.has('fund_list_v1')).toBe(false);
+  });
+});
+
+describe('previewLegacyImport(시트 표시·안내 판단)', () => {
+  const mine = (n: number) => Array.from({ length: n }, (_, i) => e(`m${i}`, i));
+
+  it('모두 가져올 수 있으면 안내 없이 표시', () => {
+    expect(previewLegacyImport(mine(1), [e('o2', 200), e('o3', 300)])).toEqual({
+      count: 2,
+      importable: 2,
+      dropped: 0,
+      show: true,
+    });
+  });
+
+  it('한도로 일부만 가져올 수 있으면 개수를 알려 준다', () => {
+    expect(previewLegacyImport(mine(MAX_FUNDS - 1), [e('o2', 200), e('o3', 300)])).toEqual({
+      count: 2,
+      importable: 1,
+      dropped: 1,
+      show: true,
+    });
+  });
+
+  it('이 계정 목록이 꽉 차 하나도 가져올 수 없으면 이 계정에는 시트를 띄우지 않는다', () => {
+    expect(previewLegacyImport(mine(MAX_FUNDS), [e('o2', 200)])).toMatchObject({ importable: 0, show: false });
+  });
+
+  it('꽉 찼어도 URL 이 겹치는 펀드(기록 합치기)는 가져올 수 있는 것으로 센다', () => {
+    expect(previewLegacyImport(mine(MAX_FUNDS), [e('o1', 1), e('o2', 200)])).toEqual({
+      count: 2,
+      importable: 1,
+      dropped: 1,
+      show: true,
+    });
+  });
+
+  it('옛 펀드가 없으면 표시하지 않는다', () => {
+    expect(previewLegacyImport(mine(1), [])).toMatchObject({ count: 0, show: false });
   });
 });
