@@ -56,7 +56,13 @@ echo "[devapk] 적용 키: $(cut -d= -f1 "$TMP" | tr '\n' ' ')"
 #   android/ 는 prebuild 때 다시 생성되므로 gradle.properties 를 고치지 않고 -P 로 넘긴다.
 ABIS="${DEVAPK_ABIS:-arm64-v8a}"
 echo "[devapk] ABI: $ABIS"
-(set -a; . "./$TMP"; set +a; cd android && APP_ENV=development ./gradlew assembleRelease -PreactNativeArchitectures="$ABIS")
+# Gradle 메모리: prebuild 가 만드는 기본값(-Xmx2048m, Metaspace 512m)으로는 expo-updates 의 KSP·lint 단계에서
+#   "OutOfMemoryError: Metaspace" 로 실패한다(2026-10-22). android/ 는 prebuild 때 다시 생성되므로 -D 로 넘기고,
+#   설정이 다른 기존 데몬을 재사용하지 않게 먼저 멈춘다. 바꾸려면 DEVAPK_JVMARGS 지정.
+JVMARGS="${DEVAPK_JVMARGS:--Xmx4096m -XX:MaxMetaspaceSize=1536m}"
+(cd android && ./gradlew --stop >/dev/null 2>&1 || true)
+(set -a; . "./$TMP"; set +a; cd android && APP_ENV=development ./gradlew assembleRelease \
+  -PreactNativeArchitectures="$ABIS" "-Dorg.gradle.jvmargs=$JVMARGS")
 
 # 푸시 설정이 실제로 들어갔는지 확인(값은 출력하지 않음)
 APK=android/app/build/outputs/apk/release/app-release.apk
