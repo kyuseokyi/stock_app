@@ -85,6 +85,9 @@ export interface AdminJob {
   status: JobStatus
   task_id: string | null
   requested_at: string | null
+  confirm: string | null // 실행 전 확인 창 문구(없으면 기본 문구)
+  window_block: [string, string] | null // KST "HH:MM" [시작, 끝) 실행 불가
+  uses_kis: boolean
 }
 
 export interface JobRun {
@@ -97,9 +100,32 @@ export interface JobRun {
   result_summary: string | null
 }
 
+export type BootstrapStepState = 'pending' | 'running' | 'ok' | 'failed' | 'skipped'
+
+export interface BootstrapStep {
+  key: string
+  label: string
+  state: BootstrapStepState
+  seconds: number | null
+  summary: string | null
+  reason: string | null
+}
+
+// 초기 데이터 준비 진행 상황 — backend/apps/collector/tasks/bootstrap.py (Redis admin:bootstrap:progress)
+export interface BootstrapProgress {
+  task_id: string | null
+  started_at: string
+  finished_at: string | null
+  months: number
+  end_date: string | null
+  skipped: string | null
+  steps: BootstrapStep[]
+}
+
 export interface JobsOverview {
   jobs: AdminJob[]
   history: JobRun[]
+  bootstrap: BootstrapProgress | null
 }
 
 // 데이터 검증 GET /api/v1/admin/market/verify — backend/apps/stock_api/services/verify_ticker.py

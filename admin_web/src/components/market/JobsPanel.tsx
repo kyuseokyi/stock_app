@@ -4,6 +4,7 @@ import { apiErrorDetail, apiErrorMessage } from '../../lib/apiError'
 import { formatDateTime } from '../../lib/marketFormat'
 import { showToast } from '../../lib/toast'
 import type { AdminJob, JobStatus, JobsOverview } from '../../types/marketAdmin'
+import BootstrapProgressPanel from './BootstrapProgressPanel'
 
 const POLL_MS = 5000
 const JOB_STATUS: Record<JobStatus, string> = { idle: '실행', queued: '대기 중', running: '실행 중' }
@@ -17,6 +18,10 @@ const RUN_STATE: Record<string, string> = {
   REVOKED: '취소됨',
   UNKNOWN: '결과 만료',
 }
+const kisNote = (job: AdminJob): string =>
+  job.uses_kis
+    ? `KIS 대량 호출${job.window_block ? ` · ${job.window_block[0]}~${job.window_block[1]} 실행 불가` : ''}`
+    : 'KIS 호출 없음'
 const stateClass = (s: string): string =>
   s === 'FAILURE' ? 'text-red-600' : s === 'SUCCESS' ? 'text-emerald-600' : 'text-slate-500'
 
@@ -63,14 +68,18 @@ export default function JobsPanel({ refreshKey = 0 }: { refreshKey?: number }) {
   }, [active, load])
 
   const run = async (job: AdminJob) => {
-    if (!window.confirm(`${job.label}을(를) 실행할까요?\n예상 시간: ${job.eta} · KIS 호출 없음`)) return
+    // 작업별 확인 문구가 있으면 그 문구로(초기 데이터 준비), 없으면 기존 기본 문구
+    const message = job.confirm ?? `${job.label}을(를) 실행할까요?\n예상 시간: ${job.eta} · KIS 호출 없음`
+    if (!window.confirm(message)) return
     setSending(job.key)
     try {
       await runJob(job.key)
       showToast(`${job.label} 실행을 요청했어요`)
     } catch (e) {
       const d = apiErrorDetail(e)
-      if (d?.code === 'JOB_RUNNING') {
+      if (d?.code === 'JOB_WINDOW_CLOSED') {
+        showToast(apiErrorMessage(e), { icon: '⏰' })
+      } else if (d?.code === 'JOB_RUNNING') {
         showToast(`이미 실행 중이에요(${formatDateTime(d.requested_at as string | null)} 시작)`, { icon: '⏳' })
       } else {
         showToast(apiErrorMessage(e), { icon: '⚠️' })
@@ -86,7 +95,8 @@ export default function JobsPanel({ refreshKey = 0 }: { refreshKey?: number }) {
       <div>
         <h2 className="text-lg font-bold text-slate-800">계산 수동 실행</h2>
         <p className="text-sm text-slate-500">
-          KIS 를 호출하지 않는 계산만 실행할 수 있어요. 같은 작업은 한 번에 하나만 돌아요. 수집 작업은 다음 단계에서 추가돼요.
+          계산 작업은 KIS 를 호출하지 않아요. 초기 데이터 준비만 KIS 를 대량 호출해요(18:00~21:30 실행 불가). 같은 작업은 한
+          번에 하나만 돌아요.
         </p>
       </div>
       {!data && error ? (
@@ -117,7 +127,9 @@ export default function JobsPanel({ refreshKey = 0 }: { refreshKey?: number }) {
                     )}
                   </div>
                   <p className="mt-1 break-keep text-xs text-slate-500">{job.description}</p>
-                  <p className="mt-1 text-xs text-slate-400">예상 {job.eta} · KIS 호출 없음</p>
+                  <p className="mt-1 text-xs text-slate-400">
+                    예상 {job.eta} · {kisNote(job)}
+                  </p>
                 </div>
                 <button
                   type="button"
@@ -130,6 +142,12 @@ export default function JobsPanel({ refreshKey = 0 }: { refreshKey?: number }) {
               </div>
             ))}
           </div>
+          {data.bootstrap && (
+            <BootstrapProgressPanel
+              progress={data.bootstrap}
+              jobActive={data.jobs.some((j) => j.key === 'bootstrap' && j.status !== 'idle')}
+            />
+          )}
           <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
             <table className="w-full min-w-[560px] text-sm">
               <thead>
