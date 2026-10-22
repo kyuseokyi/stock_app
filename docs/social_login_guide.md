@@ -1,7 +1,12 @@
-# 간편로그인(소셜 로그인) 구현 가이드 & 개발 지시서
+# 간편로그인(소셜 로그인) 설정 가이드 & 구현 현황
 
-본 문서는 **카카오톡 간편로그인**을 최우선으로 구축하고, 향후 **네이버, 구글, 애플 로그인**으로 자연스럽게 확장할 수 있도록 정리한 개발 및 설정 가이드입니다.
-사용자가 직접 콘솔에서 설정해야 하는 부분과, **Claude Code**가 코드베이스에서 구현해야 하는 기술 스펙을 명확히 분리하여 구성하였습니다.
+> **현황 (2026-10-22)**: 카카오·네이버 간편 로그인은 **구현 완료**입니다 (설계: `docs/superpowers/specs/2026-10-13-social-login-kakao-naver-design.md`).
+> 남은 일은 **공급자 콘솔 설정 · 서버 env 키 입력 · 실기기 확인**뿐입니다.
+> 개발 서버의 `/api/v1/auth/social/providers` 는 현재 `{kakao:false, naver:false}` 입니다 (키 미입력).
+> 프로젝트 결정(2026-10-13): **카카오·네이버만** 제공, 애플은 iOS 출시 직전에 추가, 구글은 범위 밖.
+
+본 문서는 **카카오·네이버 간편로그인**의 콘솔 설정 방법과 현재 구현 위치를 정리한 가이드입니다. (구글·애플은 확장 시 참고용으로만 남겨 둠)
+사용자가 직접 콘솔에서 설정해야 하는 부분(2장)과, 코드베이스에 이미 구현된 내용(3장, 참고)을 분리하여 구성하였습니다.
 
 ---
 
@@ -10,14 +15,14 @@
 2. [사용자 직접 설정 가이드 (콘솔 및 사전 준비)](#2-사용자-직접-설정-가이드-콘솔-및-사전-준비)
    - [2.1 카카오 개발자 센터 (Kakao Developers) 설정 (우선 진행)](#21-카카오-개발자-센터-kakao-developers-설정-우선-진행)
    - [2.2 네이버 개발자 센터 (Naver Developers) 설정](#22-네이버-개발자-센터-naver-developers-설정)
-   - [2.3 구글 클라우드 콘솔 (Google Cloud Console) 설정](#23-구글-클라우드-콘솔-google-cloud-console-설정)
+   - [2.3 구글 클라우드 콘솔 설정 — 범위 밖](#23-구글-클라우드-콘솔-google-cloud-console-설정)
    - [2.4 애플 개발자 콘솔 (Apple Developer) 설정](#24-애플-개발자-콘솔-apple-developer-설정)
-3. [클로드코드(Claude Code) 개발 구현 지시서](#3-클로드코드claude-code-개발-구현-지시서)
+3. [구현 현황 (참고)](#3-구현-현황-참고)
    - [3.1 현재 코드베이스 현황 분석](#31-현재-코드베이스-현황-분석)
-   - [3.2 백엔드 (FastAPI `apps/auth`) 구현 요구사항](#32-백엔드-fastapi-appsauth-구현-요구사항)
-   - [3.3 모바일 앱 (React Native / Expo) 구현 요구사항](#33-모바일-앱-react-native--expo-구현-요구사항)
-   - [3.4 웹 클라이언트 (React / Vite) 구현 요구사항](#34-웹-클라이언트-react--vite-구현-요구사항)
-   - [3.5 다중 공급자(네이버·구글·애플) 확장 아키텍처](#35-다중-공급자네이버구글애플-확장-아키텍처)
+   - [3.2 백엔드 (FastAPI `apps/auth`) 구현 현황](#32-백엔드-fastapi-appsauth-구현-현황)
+   - [3.3 모바일 앱 (React Native / Expo) 구현 현황](#33-모바일-앱-react-native--expo-구현-현황)
+   - [3.4 웹 클라이언트 (React / Vite) 구현 현황](#34-웹-클라이언트-react--vite-구현-현황)
+   - [3.5 다중 공급자 확장 절차 (구글·애플은 범위 밖)](#35-다중-공급자-확장-절차-구글애플은-범위-밖)
 4. [단계별 실행 체크리스트](#4-단계별-실행-체크리스트)
 
 ---
@@ -65,7 +70,9 @@
   │
   │ 14. Redis에서 exchange_code 원자적 소모 (GETDEL)
   │ 15. code_verifier의 SHA-256 해시와 저장된 cc 일치 검증 (PKCE 타이밍 공격 방지 hmac.compare_digest)
-  │ 16. 최종 서비스 JWT (access_token, refresh_token) 발급
+  │ 16. 최종 서비스 JWT 발급
+  │     - 앱(client=app) 로그인만 access_token + refresh_token + expires_in
+  │     - 웹 로그인은 access_token 만 (refresh_token·expires_in 은 null)
   ▼
 [로그인 완료 및 서비스 이용]
 ```
@@ -83,10 +90,14 @@
        ▼
 [개발 서버 (Mac mini) - cloudflared 데몬]
        ├── auth.haezean.com  ──▶  localhost:8001 (auth_api 서비스)
-       ├── app.haezean.com   ──▶  localhost:3000 (web_client 정적 서빙)
+       ├── app.haezean.com   ──▶  localhost:3000 (web_client 노드 서버 — 정적 서빙 + `/_api/*` 같은 도메인 프록시, `web_client/server.cjs`)
+       ├── admin.haezean.com ──▶  localhost:3001 (admin_web)
        ├── api.haezean.com   ──▶  localhost:8002 (stock_api 서비스)
-       └── blog.haezean.com  ──▶  localhost:8003 (blog_api 서비스)
+       ├── blog.haezean.com  ──▶  localhost:8003 (blog_api 서비스)
+       └── game.haezean.com  ──▶  localhost:8004 (trading_game, REST + WS)
 ```
+
+> 위 포트는 **개발 서버(운영 compose)** 기준입니다. 로컬 개발에서는 blog 가 8000, trading_game 이 8003 으로 뜹니다 (auth 8001·stock_api 8002 는 동일).
 
 #### 🌟 클라우드플레어 터널 환경에서 소셜 로그인 시 주의사항
 1. **Redirect URI는 반드시 터널 공개 도메인 사용**:
@@ -95,13 +106,13 @@
 2. **무료 SSL/TLS 자동 지원**:
    - 카카오 등 대부분의 소셜 로그인은 상용 환경 및 외부 콜백에 HTTPS를 필수로 요구합니다.
    - Cloudflare Tunnel이 `https://*.haezean.com`의 SSL 인증서 발급과 암호화 종단을 자동으로 처리하므로, 별도의 SSL 인증서 설치 없이 안전한 OAuth2 연동이 가능합니다.
-3. **CORS 및 프록시 헤더**:
-   - Cloudflare Tunnel은 `X-Forwarded-Proto: https` 및 클라이언트 `Origin` 헤더를 백엔드로 전달합니다.
-   - 백엔드의 `shared/cors.py`에 `https://app.haezean.com`이 이미 허용 Origin으로 등록되어 있으므로 브라우저 CORS 문제 없이 토큰 교환이 진행됩니다.
+3. **CORS 및 https 콜백 주소**:
+   - 개발 서버의 웹은 auth 를 **같은 도메인 프록시**(`https://app.haezean.com/_api/auth/...`)로 호출하므로, 토큰 교환(`/exchange`)에는 브라우저 CORS 가 관여하지 않습니다.
+   - 공급자에 넘기는 https 콜백 주소는 요청 헤더(`X-Forwarded-Proto` 등)로 추측하지 않고, **`SOCIAL_REDIRECT_BASE` 값**으로 만들어집니다 (`backend/apps/auth/social/config.py` 의 `redirect_uri()`). 따라서 이 값이 공급자 콘솔 Redirect URI 와 정확히 같아야 합니다.
 
 ### 🔒 보안상 강점
 1. **커스텀 스킴 탈취 방지**: Android 등에서 악성 앱이 `stockapp://auth` 스킴을 가로채더라도 `code_verifier`를 알 수 없어 토큰 교환이 불가능합니다.
-2. **소셜 토큰 미저장**: 공급자의 `access_token`은 프로필 조회 즉시 폐기하며, 서비스 DB에는 자체 발급한 세션/JWT만 관리합니다.
+2. **소셜 토큰 미저장**: 공급자의 `access_token`은 프로필 조회 즉시 폐기하며 저장하지 않습니다. 서비스 자체 리프레시 토큰(앱 로그인만)은 **SHA-256 해시로만** 서버(`refresh_tokens`)에 저장합니다.
 3. **오픈 리다이렉트 방지**: 클라이언트가 넘기는 임의의 URL로 리다이렉트하지 않고, 서명된 state의 `client`/`app_variant`에 따라 서버 화이트리스트 URL로만 복귀합니다.
 
 ---
@@ -153,20 +164,13 @@
 #### [단계 2] 플랫폼 등록 (개발 & 상용 분리)
 **[앱 설정]** > **[플랫폼]** 메뉴로 이동합니다.
 1. **Web 플랫폼 등록**:
-   - 사이트 도메인에 개발 서버(haezean.com)와 로컬을 모두 등록합니다:
-     - **개발 서버 (현재 구축된 서버)**: `https://app.haezean.com`, `https://auth.haezean.com`
-     - **로컬 개발 (내 PC)**: `http://localhost:3000`, `http://localhost:8001`
-     - **상용 운영 (향후 서버/도메인 확장 시)**: `https://stock.app` 등
-2. **Android 플랫폼 등록**:
-   - 패키지명:
-     - **개발 빌드**: `com.stockapp.dev`
-     - **상용 빌드(향후)**: `com.stockapp`
-   - 키 해시(Key Hash):
-     - 개발용(로컬 디버그 키스토어 해시) 및 배포용(Google Play Console 서명 키 해시) 등록
-3. **iOS 플랫폼 등록**:
-   - 번들 ID:
-     - **개발 빌드**: `com.stockapp.dev`
-     - **상용 빌드(향후)**: `com.stockapp`
+   - 사이트 도메인에 로컬과 개발 서버를 등록합니다:
+     - **로컬 개발 (내 PC)**: `http://localhost:3000`
+     - **개발 서버**: `https://app.haezean.com`
+     - **상용 운영 (향후 서버/도메인 확장 시)**: 상용 웹 도메인 추가
+2. **Android 키 해시 · iOS 번들 ID 등록은 불필요**:
+   - 앱은 카카오 네이티브 SDK 가 아니라 **인앱 브라우저 리다이렉트** 방식입니다 (`mobile/src/features/auth/social.ts`). 따라서 Android/iOS 플랫폼 등록은 하지 않습니다.
+   - 필요한 것은 **Web 사이트 도메인**(`http://localhost:3000`, `https://app.haezean.com`)과 **Redirect URI**(단계 4)뿐입니다. README 의 "간편 로그인 배포 체크"와 같은 내용입니다.
 
 #### [단계 3] 카카오 로그인 활성화
 1. **[제품 설정]** > **[카카오 로그인]** 메뉴로 이동
@@ -198,13 +202,16 @@
    - **[제품 설정]** > **[카카오 로그인]** > **[보안]** 메뉴로 이동
    - `Client Secret` 코드 [생성] 클릭 후 활성화 상태를 `사용함`으로 변경 및 코드 복사
 3. **Admin 키 확인**:
-   - **[앱 설정]** > **[앱 키]** 에서 `Admin 키` 복사 (회원 탈퇴 시 카카오 연결 끊기용)
+   - **[앱 설정]** > **[앱 키]** 에서 `Admin 키` 복사 (회원 탈퇴 시 카카오 연결 끊기용 — 선택, 비면 생략)
 
 #### [단계 7] 환경별 환경변수 파일 설정 비교 (haezean 개발서버 vs 로컬 vs 상용)
 
+> 개발 서버의 env 파일은 호스트의 `/opt/stock_app/env/.env.production` 이며, 배포 때 `backend/.env.production` 으로 복사됩니다 (파일은 gitignore 대상).
+> 개발 서버도 `APP_ENV=production` 이므로 가짜 공급자(`SOCIAL_FAKE_PROVIDER`)는 꺼진 상태입니다.
+
 | 환경변수 키 | 로컬 개발 (`.env.development`) | 개발 서버 (haezean.com 배포) | 상용 서버 (향후 신규 구축) |
 | :--- | :--- | :--- | :--- |
-| **`APP_ENV`** | `development` | `development` (또는 `production`) | `production` |
+| **`APP_ENV`** | `development` | `production` | `production` |
 | **`KAKAO_REST_API_KEY`** | 개발용 `StockApp Dev` 키 | 개발용 `StockApp Dev` 키 | 상용용 `StockApp` 키 |
 | **`KAKAO_CLIENT_SECRET`**| 개발용 Client Secret | 개발용 Client Secret | 상용 Client Secret |
 | **`KAKAO_ADMIN_KEY`**    | 개발용 Admin 키 | 개발용 Admin 키 | 상용 Admin 키 |
@@ -212,7 +219,14 @@
 | **`SOCIAL_WEB_RETURN_URL`**| `http://localhost:3000/auth/complete` | `https://app.haezean.com/auth/complete` | `https://domain.com/auth/complete` |
 | **`SOCIAL_APP_RETURN_URL_DEV`** | `stockapp-dev://auth` | `stockapp-dev://auth` | `stockapp-dev://auth` |
 | **`SOCIAL_APP_RETURN_URL_PROD`**| `stockapp://auth` | `stockapp://auth` | `stockapp://auth` |
-| **`SOCIAL_FAKE_PROVIDER`** | `false` (테스트시 true 가능) | `false` | 무조건 `false` (운영 강제 무시) |
+| **`SOCIAL_FAKE_PROVIDER`** | `false` (테스트시 true 가능) | `false` (`production` 이라 무시됨) | 무조건 `false` (운영 강제 무시) |
+| **`NAVER_CLIENT_ID`** / **`NAVER_CLIENT_SECRET`** | 네이버 로그인 키 | 네이버 로그인 키 | 상용 키 |
+| **`SOCIAL_STATE_SECRET`** | 임의의 강한 값 (미설정 시 `JWT_SECRET_KEY` 폴백) | 별도 강한 값 | 새로 생성한 별도 값 |
+| **`JWT_APP_EXPIRE_MINUTES`** | `60` (기본) | `60` (기본) | `60` (기본) |
+| **`REFRESH_EXPIRE_DAYS`** | `30` (기본) | `30` (기본) | `30` (기본) |
+
+> `JWT_APP_EXPIRE_MINUTES`·`REFRESH_EXPIRE_DAYS` 는 **앱 로그인에만** 적용됩니다 (앱은 `refresh_token`·`expires_in` 을 받아 자동 갱신, 웹은 해당 없음).
+> 네이버 **검색** API 키를 쓰게 되면 로그인 키와 겹치지 않도록 `NAVER_SEARCH_CLIENT_ID` / `NAVER_SEARCH_CLIENT_SECRET` 이름을 씁니다.
 
 ---
 
@@ -237,7 +251,12 @@ NAVER_CLIENT_SECRET="<발급받은 Client Secret>"
 
 ---
 
-### 2.3 구글 클라우드 콘솔 (Google Cloud Console) 설정
+### 2.3 구글 클라우드 콘솔 (Google Cloud Console) 설정 — 🚫 범위 밖 (결정 2026-10-13)
+
+> 프로젝트 결정에 따라 구글 로그인은 **구현하지 않습니다.** 아래 내용은 만약 추가한다면 참고하라고 남겨 둔 것입니다.
+
+<details>
+<summary>구글 설정 내용 펼치기 (참고용)</summary>
 
 * **사이트 접속**: [Google Cloud Console](https://console.cloud.google.com/)
 
@@ -258,12 +277,16 @@ GOOGLE_CLIENT_ID="<발급받은 Google Client ID>"
 GOOGLE_CLIENT_SECRET="<발급받은 Google Client Secret>"
 ```
 
+</details>
+
 ---
 
 ### 2.4 애플 개발자 콘솔 (Apple Developer) 설정
 
+> ⏸ **보류**: 애플 로그인은 **iOS 출시 직전**에 추가하기로 했습니다 (결정 2026-10-13). 아래는 그때 참고할 내용입니다.
+>
 > ⚠️ **주의사항 (Apple App Store 심사 지침 4.8)**
-> iOS 앱에 카카오, 네이버, 구글 등 서드파티 간편로그인을 제공하는 경우, **반드시 Sign in with Apple(애플 로그인)도 동등한 수준으로 제공해야 앱 심사를 통과**할 수 있습니다.
+> 4.8 은 서드파티 로그인을 제공하는 iOS 앱에 **개인정보 보호 조건을 만족하는 로그인 옵션**을 함께 제공하도록 요구합니다. 애플 로그인은 그 방법 중 하나입니다. (출시 전에 최신 심사 지침을 확인하세요.)
 
 * **사전 조건**: Apple Developer Program 유료 멤버십 ($99/년)
 * **사이트 접속**: [Apple Developer Account](https://developer.apple.com/account/)
@@ -289,37 +312,40 @@ APPLE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----"
 
 ---
 
-## 3. 클로드코드(Claude Code) 개발 구현 지시서
+## 3. 구현 현황 (참고)
 
-Claude Code CLI 환경에서 실제 소스 코드를 구현하거나 점검할 때 사용하는 기술 사양서입니다.
+카카오·네이버 간편 로그인은 아래 위치에 **이미 구현**되어 있습니다. 코드를 점검하거나 공급자를 확장할 때 참고하세요.
+(코드 블록 중 "의사 코드"라고 표시한 것은 흐름 설명용이며 실제 코드와 다를 수 있습니다.)
 
 ### 3.1 현재 코드베이스 현황 분석
 
-현재 모노레포에는 소셜 로그인의 기초 뼈대가 이미 상당 부분 설계되어 있습니다.
+현재 모노레포에 구현되어 있는 위치입니다.
 - **백엔드**:
   - `backend/shared/models.py`: `AuthProvider` Enum (`KAKAO`, `GOOGLE`, `APPLE`, `NAVER`) 정의됨. `User` 테이블에 `provider`, `provider_id` 유니크 인덱스 완비.
   - `backend/apps/auth/social/`:
-    - `config.py`: `SocialSettings`, 환경변수 읽기 로직 완비.
-    - `pkce.py`: PKCE S256 challenge 검증 및 생성기 완비.
-    - `state.py`: PyJWT 기반 서명 state 생성 및 검증 완비.
-    - `store.py`: Redis 기반 nonce 1회 검증 및 일회용 교환 코드 관리 완비.
-    - `providers.py`: `KakaoProvider`, `NaverProvider`, `FakeProvider` 완비.
-    - `service.py`: `complete_social_login`, `find_or_create_user`, `redeem_exchange_code` 완비.
+    - `config.py`: `SocialSettings`, 환경변수 읽기, Redirect URI 조립(`redirect_uri()`).
+    - `pkce.py`: PKCE S256 challenge 검증.
+    - `state.py`: PyJWT 기반 서명 state 생성 및 검증.
+    - `store.py`: Redis 기반 nonce 1회 검증 및 일회용 교환 코드 관리.
+    - `providers.py`: `KakaoProvider`, `NaverProvider`, `FakeProvider`.
+    - `service.py`: `complete_social_login`, `find_or_create_user`, `redeem_exchange_code`. 교환 실패는 401 `detail={"code": "SOCIAL_CODE_INVALID", "message": ...}` 형식 (사용자 없음 `SOCIAL_USER_NOT_FOUND`, 비활성 계정은 403 `SOCIAL_ACCOUNT_INACTIVE`).
   - `backend/apps/auth/routers/social.py`:
     - `/api/v1/auth/social/providers` (GET)
     - `/api/v1/auth/social/{provider}/start` (GET)
     - `/api/v1/auth/social/{provider}/callback` (GET)
     - `/api/v1/auth/social/exchange` (POST)
 - **모바일 (`mobile/src/features/auth/`)**:
-  - `social.ts`, `api.ts`, `verifier.ts`, `return-url.ts`, `social-button.tsx` 완비.
+  - `social.ts`(인앱 브라우저 흐름), `api.ts`, `verifier.ts`, `return-url.ts`, `social-button.tsx`.
+  - 로그인 화면은 `mobile/src/app/(tabs)/profile.tsx` (공급자 목록 `SOCIAL_PROVIDERS`).
 - **웹 (`web_client/src/api/auth.ts`)**:
-  - `socialStartUrl`, `getSocialProviders`, `exchangeSocialCode` 완비.
+  - `socialStartUrl`, `getSocialProviders`, `exchangeSocialCode`.
+  - 로그인 모달 `web_client/src/components/LoginModal.tsx`, 복귀 페이지 `web_client/src/pages/AuthCompletePage.tsx`.
 
 ---
 
-### 3.2 백엔드 (FastAPI `apps/auth`) 구현 요구사항
+### 3.2 백엔드 (FastAPI `apps/auth`) 구현 현황
 
-#### 1) 카카오 API 스펙 매핑
+#### 1) 카카오 API 스펙 매핑 (구현: `backend/apps/auth/social/providers.py`)
 - **인가 URL 생성**:
   - 엔드포인트: `https://kauth.kakao.com/oauth/authorize`
   - 파라미터: `response_type=code`, `client_id={KAKAO_REST_API_KEY}`, `redirect_uri={REDIRECT_URI}`, `state={SIGNED_STATE}`
@@ -342,9 +368,10 @@ Claude Code CLI 환경에서 실제 소스 코드를 구현하거나 점검할 �
   - 엔드포인트: `POST https://kapi.kakao.com/v1/user/unlink`
   - Header: `Authorization: KakaoAK {KAKAO_ADMIN_KEY}`
   - Body: `target_id_type=user_id&target_id={PROVIDER_ID}`
-  - 구현 위치: `backend/apps/auth/services/account_deletion.py` (이미 연동되어 있음)
+  - 구현 위치: `backend/apps/auth/services/account_deletion.py` (연동 완료, `KAKAO_ADMIN_KEY` 가 있을 때만 호출)
+  - **네이버는 탈퇴 시 연결 해제를 지원하지 않습니다**: 연결 해제에 공급자 `access_token` 이 필요한데, 이 프로젝트는 공급자 토큰을 저장하지 않는 구조이기 때문입니다. (카카오는 Admin 키 + 회원번호로 가능)
 
-#### 2) 환경변수 설정 가이드 (`backend/.env.*`)
+#### 2) 환경변수 설정 가이드 (`backend/.env.*`, 전체 목록은 `backend/.env.example`)
 ```env
 APP_ENV=development
 # 가짜 모드(실제 카카오 키 없이 로컬 테스트할 때: development/test 환경에서만 유효)
@@ -361,13 +388,19 @@ SOCIAL_WEB_RETURN_URL=http://localhost:3000/auth/complete
 SOCIAL_APP_RETURN_URL_DEV=stockapp-dev://auth
 SOCIAL_APP_RETURN_URL_PROD=stockapp://auth
 SOCIAL_STATE_SECRET=your_strong_state_secret_key
+
+# 네이버 로그인 키
+NAVER_CLIENT_ID=your_naver_client_id_here
+NAVER_CLIENT_SECRET=your_naver_client_secret_here
 ```
+
+> 위는 **로컬 개발** 예시입니다. 개발 서버는 `APP_ENV=production` 이고 값이 다릅니다 — 2장 단계 7 표를 보세요.
 
 ---
 
-### 3.3 모바일 앱 (React Native / Expo) 구현 요구사항
+### 3.3 모바일 앱 (React Native / Expo) 구현 현황
 
-#### 1) In-App Browser 세션 처리
+#### 1) In-App Browser 세션 처리 (구현: `mobile/src/features/auth/social.ts`)
 - `expo-web-browser`의 `openAuthSessionAsync`를 사용합니다.
 - 복귀 스킴:
   - 개발 빌드: `stockapp-dev://auth?code=...`
@@ -377,14 +410,17 @@ SOCIAL_STATE_SECRET=your_strong_state_secret_key
 scheme: isDev ? 'stockapp-dev' : 'stockapp',
 ```
 
-#### 2) 카카오 공식 디자인 가이드라인 준수
+#### 2) 카카오 공식 디자인 가이드라인
 - **배경색**: 카카오 옐로우 `#FEE500`
 - **텍스트/심볼 색상**: `#191919` (완전 블랙이 아닌 짙은 차콜/블랙)
 - **라벨 문구**: `카카오 로그인` 또는 `카카오로 시작하기`
 - **아이콘**: 카카오 말풍선 공식 심볼 비율 유지
 - 구현 파일: `mobile/src/features/auth/social-button.tsx`
 
-#### 3) 로그인 처리 플로우
+> **버튼 디자인 수치(색상·문구·심볼 등)는 공식 가이드 확인 후 반영 예정**입니다. 위 항목은 확정값이 아니라 참고용이며, 별도 작업에서 카카오·네이버 공식 가이드를 확인해 버튼을 고칠 예정입니다.
+
+#### 3) 로그인 처리 플로우 (의사 코드 — 실제는 `mobile/src/app/(tabs)/profile.tsx`)
+실제 구현은 `loginWithToken` 이 동기 함수이고, 오류는 `Alert` 가 아니라 화면 문구(`socialErrorMessage`)로 보여 줍니다.
 ```typescript
 const handleKakaoLogin = async () => {
   setIsLoading(true);
@@ -406,7 +442,7 @@ const handleKakaoLogin = async () => {
 
 ---
 
-### 3.4 웹 클라이언트 (React / Vite) 구현 요구사항
+### 3.4 웹 클라이언트 (React / Vite) 구현 현황
 
 #### 1) 시작 시 PKCE 생성 및 보관
 - `sessionStorage`에 `wc_social_verifier` 키로 verifier 저장.
@@ -417,60 +453,75 @@ const handleKakaoLogin = async () => {
 - URL 쿼리 파라미터 파싱:
   - `?code=...`: 성공. `sessionStorage`에서 verifier 꺼내어 `POST /api/v1/auth/social/exchange` 호출.
   - `?error=...`: 실패. 에러 메시지 노출 및 로그인 모달/홈으로 유도.
-- 토큰 발급 성공 시 전역 상태 저장 및 원래 페이지로 리다이렉트 (`router.replace`).
+- 토큰 발급 성공 시 `loginWithToken(res)`(동기)로 상태를 저장하고 `navigate(takeLoginReturn(), { replace: true })` 로 원래 페이지로 이동합니다.
+- 교환 실패(401/403)는 서버 `detail` 을 그대로 보여 주지 않고 `socialErrorMessage` 의 고정 문구로 표시합니다 (`web_client/src/pages/AuthCompletePage.tsx`).
 
 ---
 
-### 3.5 다중 공급자(네이버·구글·애플) 확장 아키텍처
+### 3.5 다중 공급자 확장 절차 (구글·애플은 범위 밖)
 
-새로운 소셜 로그인(구글, 애플 등)을 추가할 때 기존 코드를 훼손하지 않고 확장하는 방법:
+> 구글은 범위 밖(결정 2026-10-13), 애플은 iOS 출시 직전에 추가합니다. 아래는 공급자를 더 추가해야 할 때 손대야 할 곳입니다.
 
 1. **`backend/apps/auth/social/config.py`**:
-   - `PROVIDERS` 튜플에 `"google"`, `"apple"` 추가
+   - `PROVIDERS` 튜플에 새 공급자 추가
    - `SocialSettings`에 클라이언트 ID 및 Secret 필드 추가
+   - `has_keys()` 에 키 존재 판정 분기 추가
 2. **`backend/apps/auth/social/providers.py`**:
-   - `GoogleProvider`, `AppleProvider` 클래스 작성 (`Provider` 프로토콜 준수: `authorize_url`, `exchange_code`)
+   - 새 `Provider` 클래스 작성(예: `AppleProvider`) (`Provider` 프로토콜 준수: `authorize_url`, `exchange_code`)
    - `build_provider` 함수에 팩토리 분기 추가
 3. **`backend/apps/auth/routers/social.py`**:
-   - `ProviderName = Literal["kakao", "naver", "google", "apple"]` 확장
-   - `schemas.SocialProvidersOut` 응답 스키마에 필드 추가
-4. **프론트엔드 (Mobile/Web)**:
-   - `SocialProvider = 'kakao' | 'naver' | 'google' | 'apple'` 타입 확장
-   - 로그인 화면에 구글/애플 버튼 추가 (브랜드별 색상 가이드 준수)
+   - `ProviderName = Literal[...]` 확장
+   - `_LABELS` 에 한국어 이름 추가
+   - `providers()` 응답과 `schemas.SocialProvidersOut` 에 필드 추가
+4. **웹**:
+   - `web_client/src/components/LoginModal.tsx` 의 `SOCIAL_BUTTONS` 에 버튼 추가
+   - `web_client/src/api/auth.ts` 의 `SocialProvider` 타입·`getSocialProviders` 확장
+5. **모바일**:
+   - `mobile/src/features/auth/api.ts` 의 `SocialProvider` 타입·`getSocialProviders` 확장
+   - `mobile/src/app/(tabs)/profile.tsx` 의 `SOCIAL_PROVIDERS` 목록에 추가
+   - 브랜드별 버튼 디자인 가이드 준수 (`social-button.tsx`)
+
+#### 애플 로그인 추가 시 특이사항
+- 콜백이 **`form_post` 방식 POST** 로 옵니다 (현재 콜백 라우터는 GET 만 처리).
+- `client_secret` 이 고정 문자열이 아니라 **ES256 서명 JWT** (`.p8` 키로 생성).
+- 프로필 조회 API 가 없고 **`id_token` 을 JWKS 로 검증**해야 합니다.
+- 탈퇴 시 **토큰 철회(revoke)** 가 필요한데, "공급자 토큰 미저장" 원칙과 충돌합니다 — 설계가 필요합니다.
 
 ---
 
 ## 4. 단계별 실행 체크리스트
 
-### Phase 1: 개발 환경 사전 준비 (사용자 & 개발자)
-- [ ] [사용자] 카카오 개발자 센터에서 앱 생성 및 REST API 키 발급 (테스트 앱 생성 권장)
-- [ ] [사용자] 카카오 로그인 활성화 및 개발용 Redirect URI 등록 (`http://localhost:8001/api/v1/auth/social/kakao/callback`)
-- [ ] [사용자] 닉네임 동의 항목 활성화
-- [ ] [개발자] `backend/.env.development`에 `KAKAO_REST_API_KEY` 설정
-- [ ] [개발자] Redis 및 Postgres 컨테이너 기동 (`docker-compose -f docker-compose.dev.yml up -d`)
+> 상태 표시: ✅ 코드 완료 / 👤 사용자 몫 / ⏸ 보류 / 🚫 범위 밖
 
-### Phase 2: 백엔드 검증 (Claude Code)
-- [ ] 백엔드 단위 테스트 실행:
+### Phase 1: 개발 환경 사전 준비 (사용자 & 개발자)
+- [ ] 👤 [사용자] 카카오 개발자 센터에서 앱 생성 및 REST API 키 발급 (개인 개발자는 일반 앱 `StockApp Dev` 생성)
+- [ ] 👤 [사용자] 카카오 로그인 활성화 및 개발용 Redirect URI 등록 (`http://localhost:8001/api/v1/auth/social/kakao/callback`)
+- [ ] 👤 [사용자] 닉네임 동의 항목 활성화
+- [ ] 👤 `backend/.env.development`에 `KAKAO_REST_API_KEY` 설정 (개발 서버는 호스트 `/opt/stock_app/env/.env.production`)
+- [x] ✅ [개발자] Redis 및 Postgres 컨테이너 기동 (`docker-compose -f docker-compose.dev.yml up -d`)
+
+### Phase 2: 백엔드 검증
+- [x] ✅ 백엔드 단위 테스트 (`tests/test_social_*.py` 등 전체 통과):
   ```bash
   cd backend
   uv run pytest tests/test_social_login.py -v
   ```
-- [ ] 실제 키를 이용한 로컬 기동 및 `/api/v1/auth/social/providers` 엔드포인트 응답 확인 (`kakao: true`)
+- [ ] 👤 실제 키 입력 후 `/api/v1/auth/social/providers` 응답 확인 (`kakao: true` — 개발 서버는 현재 `false`)
 
-### Phase 3: 클라이언트 연동 및 E2E 테스트 (Claude Code)
-- [ ] 모바일 앱에서 카카오 로그인 버튼 클릭 시 인앱 브라우저로 카카오 로그인 창 표시 확인
-- [ ] 로그인 완료 후 `stockapp-dev://auth?code=...` 딥링크 복귀 및 토큰 교환 성공 확인
-- [ ] 웹 클라이언트 로그인 및 `/auth/complete` 페이지 복귀 성공 확인
-- [ ] 회원 탈퇴 시 카카오 연동 해제(Unlink) 정상 호출 확인
+### Phase 3: 클라이언트 연동 및 E2E 테스트
+- [ ] 👤 (코드 ✅) 모바일 앱에서 카카오 로그인 버튼 클릭 시 인앱 브라우저로 카카오 로그인 창 표시 확인
+- [ ] 👤 (코드 ✅) 로그인 완료 후 `stockapp-dev://auth?code=...` 딥링크 복귀 및 토큰 교환 성공 확인
+- [ ] 👤 (코드 ✅) 웹 클라이언트 로그인 및 `/auth/complete` 페이지 복귀 성공 확인
+- [ ] 👤 (코드 ✅) 회원 탈퇴 시 카카오 연동 해제(Unlink) 정상 호출 확인 — **네이버는 공급자 토큰 미저장 구조라 연결 해제 미지원(카카오만)**
 
-### Phase 4: 네이버 / 구글 / 애플 순차 확장
-- [ ] 네이버 개발자 센터 설정 및 `NAVER_CLIENT_ID`, `NAVER_CLIENT_SECRET` 등록
-- [ ] 구글 클라우드 콘솔 설정 및 `GoogleProvider` 구현
-- [ ] 애플 개발자 계정 설정 및 `AppleProvider` 구현 (iOS 배포 전 필수)
+### Phase 4: 네이버 / 구글 / 애플
+- [ ] 👤 네이버 개발자 센터 설정 및 `NAVER_CLIENT_ID`, `NAVER_CLIENT_SECRET` 등록 (코드 ✅, 검수 전에는 등록한 테스트 계정만 로그인 가능)
+- [ ] 🚫 구글 클라우드 콘솔 설정 및 `GoogleProvider` 구현 — 범위 밖 (결정 2026-10-13)
+- [ ] ⏸ 애플 개발자 계정 설정 및 `AppleProvider` 구현 — iOS 출시 직전에 진행 (심사 지침 4.8 최신 내용 확인)
 
 ### Phase 5: 상용(Production) 서버 오픈 시 이관 체크리스트 (향후 서버 구축 시)
-- [ ] [사용자] 카카오 개발자 센터에 상용 도메인 및 상용 Redirect URI 추가 (`https://[상용인증도메인]/api/v1/auth/social/kakao/callback`)
-- [ ] [사용자] 상용 Android 패키지명(`com.stockapp`) 및 배포 키 해시, iOS 번들 ID(`com.stockapp`) 등록
-- [ ] [개발자] 배포 서버의 `.env.production` (또는 Docker Secret)에 상용 키 및 상용 도메인 등록 (`SOCIAL_REDIRECT_BASE`, `SOCIAL_WEB_RETURN_URL` 등)
-- [ ] [개발자] 모바일 상용 프로필 빌드 (`eas build --profile production`) 및 딥링크(`stockapp://auth`) 동작 최종 검증
+- [ ] ⏸ [사용자] 카카오 개발자 센터에 상용 도메인 및 상용 Redirect URI 추가 (`https://[상용인증도메인]/api/v1/auth/social/kakao/callback`)
+- [ ] ⏸ [사용자] 카카오 콘솔에 상용 Web 사이트 도메인 추가 (Android 키 해시·iOS 번들 ID 는 인앱 브라우저 방식이라 불필요)
+- [ ] ⏸ [개발자] 배포 서버의 `.env.production` (또는 Docker Secret)에 상용 키 및 상용 도메인 등록 (`SOCIAL_REDIRECT_BASE`, `SOCIAL_WEB_RETURN_URL` 등)
+- [ ] ⏸ [개발자] 모바일 상용 프로필 빌드 (`eas build --profile production`) 및 딥링크(`stockapp://auth`) 동작 최종 검증
 

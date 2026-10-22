@@ -80,7 +80,7 @@
 - [ ] **모바일 dev build 재생성**: 개발 앱 스킴이 `stockapp-dev` 로 바뀜(`npm run prebuild:dev` 후 재설치)
 - [ ] 에뮬레이터 사용 시 `adb reverse tcp:8003 tcp:8003` 추가
 - [ ] **FRED API 키 발급**(미국 CPI·고용·금리 등 거시 지표) — fred.stlouisfed.org 계정 → My Account → API Keys(무료) → 서버 `.env.production` 에 `FRED_API_KEY`. 없으면 거시 지표 수집만 건너뜀 (스펙 `docs/superpowers/specs/2026-10-18-market-data-foundation-design.md` 10절)
-- [ ] **네이버 검색 Open API 키 발급**(주달 뉴스, 프로젝트 3 때) — developers.naver.com → 애플리케이션 등록 → 검색 API(무료, 일 25,000건) → `NAVER_CLIENT_ID`·`NAVER_CLIENT_SECRET`
+- [ ] **네이버 검색 Open API 키 발급**(주달 뉴스, 프로젝트 3 때) — developers.naver.com → 애플리케이션 등록 → 검색 API(무료, 일 25,000건) → `NAVER_SEARCH_CLIENT_ID`·`NAVER_SEARCH_CLIENT_SECRET`(간편 로그인 키 `NAVER_CLIENT_ID`/`NAVER_CLIENT_SECRET` 와 별개 — 이름 충돌 방지)
 
 ## 5. 주의할 점 (운영 규칙)
 - **게스트 로그인**: 개발 서버는 `AUTH_GUEST_ENABLED=true` 로 켜 둠(웹 빌드 `VITE_ENABLE_GUEST_LOGIN=true` 와 짝). **product 전환 시 둘 다 false**.

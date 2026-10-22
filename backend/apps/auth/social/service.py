@@ -33,11 +33,12 @@ class SocialLoginError(Exception):
 
 
 class ExchangeError(Exception):
-    """교환 실패 — status_code/message 로 HTTP 응답."""
+    """교환 실패 — status_code/code/message 로 HTTP 응답(detail = {"code", "message"})."""
 
-    def __init__(self, status_code: int, message: str):
+    def __init__(self, status_code: int, code: str, message: str):
         super().__init__(message)
         self.status_code = status_code
+        self.code = code
         self.message = message
 
 
@@ -117,10 +118,10 @@ async def redeem_exchange_code(
     """
     grant = await store.consume_exchange_code(code)
     if grant is None or not verifier_matches(code_verifier, grant.cc):
-        raise ExchangeError(401, INVALID_CODE_MESSAGE)
+        raise ExchangeError(401, "SOCIAL_CODE_INVALID", INVALID_CODE_MESSAGE)
     user = await db.get(User, grant.user_id)
     if user is None:
-        raise ExchangeError(401, "사용자를 찾을 수 없습니다.")
+        raise ExchangeError(401, "SOCIAL_USER_NOT_FOUND", "사용자를 찾을 수 없습니다.")
     if not user.is_active:
-        raise ExchangeError(403, "비활성화된 계정입니다.")
+        raise ExchangeError(403, "SOCIAL_ACCOUNT_INACTIVE", "비활성화된 계정입니다.")
     return user, grant.client

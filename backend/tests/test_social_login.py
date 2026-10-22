@@ -354,6 +354,7 @@ async def test_exchange_wrong_or_missing_verifier_401_and_code_consumed(ctx, ver
     assert bad.status_code == 401
     unknown = await _exchange(ctx, "nope")
     assert bad.json()["detail"] == unknown.json()["detail"]  # 같은 문구(코드 존재 여부 노출 금지)
+    assert bad.json()["detail"]["code"] == "SOCIAL_CODE_INVALID" and bad.json()["detail"]["message"]
     # 실패해도 코드는 소모 — 이어서 올바른 verifier 로도 교환 불가
     assert (await _exchange(ctx, q["code"])).status_code == 401
 
