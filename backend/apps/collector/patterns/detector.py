@@ -110,6 +110,8 @@ def _calculate_breakout_metrics(
     prev_close = closes[breakout_idx - 1]
     curr_close = closes[breakout_idx]
     price_pct = float(round(((curr_close / prev_close) - 1.0) * 100.0, 2)) if prev_close > 0 else None
+    if price_pct is not None and not math.isfinite(price_pct):
+        price_pct = None
 
     lo = max(0, breakout_idx - vol_win + 1)
     window_vols = vols[lo : breakout_idx + 1]
@@ -121,6 +123,8 @@ def _calculate_breakout_metrics(
         if avg_vol > 0 and not np.isnan(curr_vol)
         else None
     )
+    if vol_pct is not None and not math.isfinite(vol_pct):
+        vol_pct = None
     return price_pct, vol_pct
 
 
@@ -276,6 +280,8 @@ def _to_frame(bars: list[tuple]) -> tuple[pd.DataFrame, list[date]]:
         o = _finite_pos(b[1]) or c
         try:
             v = float(b[5]) if b[5] is not None else float('nan')
+            if not math.isfinite(v):
+                v = float('nan')
         except (TypeError, ValueError):
             v = float('nan')
         rows.append((o, h, l, c, v))

@@ -1,6 +1,7 @@
 """차트 패턴 엔진 — 후보 선택 규칙(겹침 제거·같은 베이스 병합·flat 흡수·형성 중 하나만),
 detect() 출력 필드·표시 구간 필터·입력 이상 방어. 합성 데이터만(DB 없음)."""
 import datetime as dt
+import math
 import time
 
 import numpy as np
@@ -8,6 +9,7 @@ import numpy as np
 from apps.collector.patterns import Base, detect
 from apps.collector.patterns.detector import _select
 from apps.collector.patterns.kinds import PatternMatch
+from tests.patterns_helpers import htf_prices
 
 D0 = dt.date(2025, 1, 1)
 
@@ -108,9 +110,7 @@ def test_detect_cup_fields():
 
 
 def test_detect_htf_reports_htf_name_and_second_high_pivot():
-    from test_patterns_kinds import _htf_prices
-
-    p = _htf_prices()
+    p = htf_prices()
     res = detect(_bars(p, pct=True))
     assert [b.pattern_type for b in res] == ["htf"]
     b = res[0]
@@ -147,6 +147,22 @@ def test_detect_bad_input_never_raises():
     bars[41] = bars[41][:2] + (float("nan"),) + bars[41][3:]
     res = detect(bars)
     assert all(isinstance(b, Base) for b in res)
+    # 이상 봉을 섞어도 정상 감지가 이어진다(빈 리스트로 통과하지 않게).
+    assert len(res) >= 1
+    clean = detect(_bars(closes))
+    assert {b.rim_date for b in res if b.pattern_type == "cup"} == {b.rim_date for b in clean if b.pattern_type == "cup"}
+    assert any(b.pattern_type == "cup" and b.rim_date == D0 + dt.timedelta(days=5) for b in res)
+
+
+def test_detect_infinite_volume_yields_none_or_finite():
+    closes, vols = _cup_series()
+    vols[55] = float("inf")  # 돌파봉 거래량 inf
+    vols[30] = float("-inf")
+    res = detect(_bars(closes, vols))
+    assert res
+    for b in res:
+        assert b.breakout_vol_pct is None or math.isfinite(b.breakout_vol_pct)
+        assert b.breakout_price_pct is None or math.isfinite(b.breakout_price_pct)
 
 
 def test_detect_random_walk_is_fast_and_consistent():
