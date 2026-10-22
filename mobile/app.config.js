@@ -47,6 +47,10 @@ export default {
         monochromeImage: './assets/images/android-icon-monochrome.png',
       },
       predictiveBackGestureEnabled: false,
+      // 앱 삭제 후 재설치 때 Google 자동 백업이 펀드 파일(캐시·기록)·설정을 되살리지 않게(2026-10-23 계정별 저장 설계 '앱 삭제').
+      //   expo-secure-store 플러그인이 넣는 fullBackupContent·dataExtractionRules 는 그대로 남지만 충돌하지 않는다
+      //   (백업 자체가 꺼지면 규칙은 클라우드 백업에 쓰이지 않음). 네이티브 변경 → 새 APK 필요(OTA 불가).
+      allowBackup: false,
       ...(GOOGLE_SERVICES_JSON ? { googleServicesFile: GOOGLE_SERVICES_JSON } : {}),
     },
     // OTA: 확인·다운로드 시점은 앱 코드(src/features/app-update)가 정한다 — 서버 정책(점검·스토어 강제면 OTA 생략,
