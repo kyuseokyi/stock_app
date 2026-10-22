@@ -5,7 +5,7 @@ jest.mock('@/features/auth/store', () => ({ useAuthStore: { getState: () => mock
 
 import { resetFakeStorage, secureMem } from './__fixtures__/fake-storage';
 import { resetBackupState, saveBackupState } from './backup-state';
-import { loadFunds, saveFunds } from './fund-store';
+import { isOwnerChangedError, loadFunds, renameFundAs, saveFunds, saveFundsAs } from './fund-store';
 import { forgetFundOwner, loadFundOwners, parseOwners, rememberFundOwner, resetFundOwnersMemoForTest } from './keys';
 import { currentOwnerId, isNoOwnerError } from './owner';
 
@@ -103,5 +103,42 @@ describe('소유자 목록(fund_owners_v1) — iOS 재설치 정리가 계정별
     expect(parseOwners('oops')).toEqual([]);
     expect(parseOwners('{"a":1}')).toEqual([]);
     expect(parseOwners('[1,"x",1,2.5,3]')).toEqual([1, 3]);
+  });
+});
+
+describe('목록을 읽은 계정(uid)으로만 저장 — 계정 전환 중 다른 계정 키로 새지 않게', () => {
+  it('지금 소유자가 uid 면 그 계정 키에 저장', async () => {
+    await saveFundsAs([fa], 7);
+    expect(await loadFunds(7)).toEqual([fa]);
+  });
+
+  it('지금 소유자가 바뀌었으면(A→B) 저장하지 않고 던진다 — A 목록 기반 next 가 B 키에 쓰이지 않게', async () => {
+    await saveFunds([fb], 8);
+    mockAuth.user = { id: 8 };
+    const e = await saveFundsAs([fa], 7).catch((x: unknown) => x);
+    expect(isOwnerChangedError(e)).toBe(true);
+    expect(secureMem.has('fund_list_v1_u7')).toBe(false);
+    expect(await loadFunds(8)).toEqual([fb]);
+  });
+
+  it('로그아웃(소유자 없음)이어도 저장하지 않는다', async () => {
+    mockAuth.user = null;
+    await expect(saveFundsAs([fa], 7)).rejects.toThrow();
+    expect(secureMem.size).toBe(0);
+  });
+
+  it('이름 변경은 같은 uid 로 읽고 쓴다', async () => {
+    await saveFunds([{ ...fa, name: '' }, fb], 7);
+    await renameFundAs(7, 'a1', '새이름');
+    expect(await loadFunds(7)).toEqual([{ ...fa, name: '새이름' }, fb]);
+  });
+
+  it('이름 변경 중 계정이 바뀌면 다른 계정 키를 건드리지 않는다', async () => {
+    await saveFunds([{ ...fa, name: '' }], 7);
+    await saveFunds([fb], 8);
+    mockAuth.user = { id: 8 };
+    await expect(renameFundAs(7, 'a1', '새이름')).rejects.toThrow();
+    expect(await loadFunds(8)).toEqual([fb]);
+    expect(await loadFunds(7)).toEqual([{ ...fa, name: '' }]);
   });
 });

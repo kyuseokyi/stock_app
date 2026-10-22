@@ -21,7 +21,7 @@ import {
   useAutoRefreshStatus,
   type FundEntry,
 } from '@/features/fund/core';
-import { deleteCache, fileCache, loadFunds, saveFunds } from '@/features/fund/fund-store';
+import { deleteCache, fileCache, isOwnerChangedError, loadFunds, saveFundsAs } from '@/features/fund/fund-store';
 import { LegacyImportSheet } from '@/features/fund/components/legacy-import-sheet';
 import { isBackupConfigured } from '@/features/fund/google-auth';
 import { deleteHistory } from '@/features/fund/history-store';
@@ -40,7 +40,9 @@ export default function FundListScreen() {
   const { theme } = useUnistyles();
   const user = useAuthStore((s) => s.user);
   const ownerId = user?.id ?? null; // 목록은 계정별 — 계정이 바뀌면 다시 읽는다
-  const [funds, setFunds] = useState<FundEntry[] | null>(null);
+  // 목록은 읽은 계정(uid)과 함께 보관 — 계정이 바뀌면 곧바로 비어 보이고(null), 추가·삭제는 그 uid 로만 저장(saveFundsAs)
+  const [data, setData] = useState<{ uid: number; list: FundEntry[] } | null>(null);
+  const funds = data !== null && data.uid === ownerId ? data.list : null;
   const [name, setName] = useState('');
   const [url, setUrl] = useState('');
   const [error, setError] = useState('');
@@ -48,7 +50,8 @@ export default function FundListScreen() {
   const status = useAutoRefreshStatus(fundRefresher);
   const [lines, setLines] = useState<Record<string, string>>({});
   const [promptOpen, setPromptOpen] = useState(false);
-  const [legacyCount, setLegacyCount] = useState(0); // >0 이면 옛 기기 펀드 가져오기 시트
+  const [legacy, setLegacy] = useState<{ uid: number; count: number } | null>(null); // 옛 기기 펀드 가져오기 시트(그 계정일 때만)
+  const legacyCount = legacy !== null && legacy.uid === ownerId ? legacy.count : 0;
   const promptOpenRef = useRef(false); // 진입 경로와 첫 추가(0→1) 경로가 같은 시트를 두 번 열지 않게
   promptOpenRef.current = promptOpen;
   // 당겨서 새로고침: 등록된 펀드 리포트를 지금 바로 모두 다시 받는다(끝나면 status.version 이 바뀌어 목록 줄 갱신)
@@ -76,10 +79,11 @@ export default function FundListScreen() {
     useCallback(() => {
       if (ownerId === null) return; // 로그인 안 됨 — 아래 Redirect 가 처리(목록은 계정별이라 읽을 수 없다)
       let alive = true;
-      loadFunds()
+      const uid = ownerId;
+      loadFunds(uid)
         .then((l) => {
           if (alive) {
-            setFunds(l);
+            setData({ uid, list: l });
             setLoadError('');
           }
           return l;
@@ -89,7 +93,7 @@ export default function FundListScreen() {
           const legacyN = (await loadLegacyFunds().catch(() => [])).length;
           if (!alive) return;
           if (legacyN > 0) {
-            setLegacyCount(legacyN);
+            setLegacy({ uid, count: legacyN });
             return;
           }
           // 이미 펀드가 있는 기존 사용자: 시트를 한 번도 못 봤으면 진입 시 1회 안내(2026-10-21 결정)
@@ -116,11 +120,12 @@ export default function FundListScreen() {
   if (!user) return <Redirect href="/profile" />;
 
   const handleAdd = async () => {
-    if (funds === null) return; // 저장된 목록을 읽기 전에 추가하면 목록을 덮어쓴다
+    if (funds === null || data === null) return; // 저장된 목록을 읽기 전에 추가하면 목록을 덮어쓴다
+    const uid = data.uid; // 이 목록을 읽은 계정 — 저장 시점에 계정이 바뀌었으면 saveFundsAs 가 던진다
     try {
       const next = addFund(funds, { name, url }, newFundId());
-      await saveFunds(next);
-      setFunds(next);
+      await saveFundsAs(next, uid);
+      setData({ uid, list: next });
       setName('');
       setUrl('');
       setError('');
@@ -135,16 +140,18 @@ export default function FundListScreen() {
       });
       if (offer) setPromptOpen(true);
     } catch (e) {
+      if (isOwnerChangedError(e)) return; // 계정이 바뀜 — 새 계정 목록을 다시 읽는다
       setError(isFundError(e, 'input') ? e.message : '저장하지 못했어요. 다시 시도해 주세요.');
     }
   };
 
   // 가져오기·버리기 후 — 목록 다시 읽기, 펀드 수가 바뀌었으니 정기 작업·푸시 등록 동기화
   const handleLegacyDone = () => {
-    setLegacyCount(0);
-    loadFunds()
+    setLegacy(null);
+    const uid = user.id;
+    loadFunds(uid)
       .then((l) => {
-        setFunds(l);
+        setData({ uid, list: l });
         setLoadError('');
       })
       .catch(() => setLoadError('저장된 목록을 읽지 못했어요.'));
@@ -159,17 +166,21 @@ export default function FundListScreen() {
         text: '삭제',
         style: 'destructive',
         onPress: () => {
-          if (funds === null) return;
+          if (funds === null || data === null) return;
+          const uid = data.uid;
           const next = removeFund(funds, f.id);
-          void saveFunds(next)
+          // 계정이 바뀌었으면 저장도 파일 삭제도 하지 않는다(saveFundsAs 가 던짐)
+          void saveFundsAs(next, uid)
             .then(() => {
               deleteCache(f.id);
               deleteHistory(f.id);
-              setFunds(next);
+              setData({ uid, list: next });
               void syncPushRegistration(); // 마지막 펀드를 지우면 펀드 알림만 끔(fund_notice=false) — 새 글 알림 등록은 유지
               void syncBackgroundTasks();
             })
-            .catch(() => showToast('삭제하지 못했어요. 다시 시도해 주세요.'));
+            .catch((e) => {
+              if (!isOwnerChangedError(e)) showToast('삭제하지 못했어요. 다시 시도해 주세요.');
+            });
         },
       },
     ]);
@@ -260,7 +271,7 @@ export default function FundListScreen() {
       )}
       {promptOpen ? <PushPromptSheet onClose={() => setPromptOpen(false)} /> : null}
       {legacyCount > 0 && !promptOpen ? (
-        <LegacyImportSheet count={legacyCount} onClose={() => setLegacyCount(0)} onDone={handleLegacyDone} />
+        <LegacyImportSheet count={legacyCount} onClose={() => setLegacy(null)} onDone={handleLegacyDone} />
       ) : null}
     </ScrollView>
   );

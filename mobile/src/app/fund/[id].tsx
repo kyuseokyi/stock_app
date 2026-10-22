@@ -13,11 +13,10 @@ import {
   evalDateOf,
   formatChecked,
   formatValue,
-  renameFund,
   useFundReport,
   type FundEntry,
 } from '@/features/fund/core';
-import { fileCache, loadFunds, saveFunds } from '@/features/fund/fund-store';
+import { fileCache, loadFunds, renameFundAs } from '@/features/fund/fund-store';
 import { recordFetched } from '@/features/fund/record';
 import { reportColors } from '@/features/fund/report-colors';
 import { Button, ListState } from '@/ui';
@@ -28,21 +27,26 @@ export default function FundReportScreen() {
   const router = useRouter();
   const { theme } = useUnistyles();
   const user = useAuthStore((s) => s.user);
-  const [fund, setFund] = useState<FundEntry | null | undefined>(undefined); // undefined=읽는 중, null=없음
+  const ownerId = user?.id ?? null;
+  // 펀드는 읽은 계정(uid)과 함께 보관 — 계정이 바뀌면 읽는 중(undefined)으로 보고 다시 읽는다
+  const [loaded, setLoaded] = useState<{ uid: number; fund: FundEntry | null } | null>(null);
+  const fund: FundEntry | null | undefined = loaded !== null && loaded.uid === ownerId ? loaded.fund : undefined; // undefined=읽는 중, null=없음
 
   useEffect(() => {
+    if (ownerId === null) return; // 로그인 안 됨 — 아래 Redirect
     let alive = true;
-    void loadFunds()
+    const uid = ownerId;
+    void loadFunds(uid)
       .then((l) => {
-        if (alive) setFund(l.find((f) => f.id === id) ?? null);
+        if (alive) setLoaded({ uid, fund: l.find((f) => f.id === id) ?? null });
       })
       .catch(() => {
-        if (alive) setFund(null); // 목록을 못 읽으면 무한 로딩 대신 '찾을 수 없어요'
+        if (alive) setLoaded({ uid, fund: null }); // 목록을 못 읽으면 무한 로딩 대신 '찾을 수 없어요'
       });
     return () => {
       alive = false;
     };
-  }, [id]);
+  }, [id, ownerId]);
 
   const { entry, refreshing, error, refresh, reload } = useFundReport(fund ?? null, fileCache);
   const colors = useMemo(() => reportColors(theme.colors), [theme.colors]);
@@ -68,14 +72,15 @@ export default function FundReportScreen() {
   );
 
   // 이름 없이 등록한 펀드는 첫 리포트로 기본 이름을 붙여 저장
+  // 이 펀드를 읽은 계정(uid)으로 읽고 쓴다 — 도중에 계정이 바뀌면 저장하지 않는다(renameFundAs)
   useEffect(() => {
-    if (!fund || fund.name || !entry) return;
+    if (!loaded || !fund || fund.name || !entry) return;
+    const uid = loaded.uid;
     const name = defaultName(entry.report);
-    void loadFunds()
-      .then((l) => saveFunds(renameFund(l, fund.id, name)))
-      .then(() => setFund({ ...fund, name }))
-      .catch(() => {}); // 이름 저장 실패는 다음에 열 때 다시 시도된다
-  }, [fund, entry]);
+    void renameFundAs(uid, fund.id, name)
+      .then(() => setLoaded((cur) => (cur && cur.uid === uid && cur.fund?.id === fund.id ? { uid, fund: { ...fund, name } } : cur)))
+      .catch(() => {}); // 이름 저장 실패·계정 바뀜은 다음에 열 때 다시 시도된다
+  }, [loaded, fund, entry]);
 
   if (!user) return <Redirect href="/profile" />;
 

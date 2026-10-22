@@ -10,15 +10,21 @@ import { markBackupPending, takeBackupPending } from './background/backup-pendin
 import { maybeAutoBackup } from './backup-service';
 import { createAutoRefresher, fetchReportHtml, type CacheEntry, type FundEntry } from './core';
 import { deleteCache, fileCache, loadFunds } from './fund-store';
+import { currentOwnerId, currentOwnerIdOrNull } from './owner';
 import { recordFetched } from './record';
 
-/** 갱신 중 목록에서 지운 펀드는 되살리지 않는다(캐시 삭제·기록 생략). 목록을 못 읽으면 판단 불가라 기록한다. */
+/**
+ * 갱신 중 목록에서 지운 펀드는 되살리지 않는다(캐시 삭제·기록 생략). 목록을 못 읽으면 판단 불가라 기록한다.
+ * 판단은 갱신 시작 때 잡은 계정(uid)의 목록으로 — 도중에 계정이 바뀌었으면(A→B·로그아웃) 캐시 삭제·기록 모두 건너뛴다.
+ */
 export async function recordIfRegistered(
   fund: FundEntry,
   entry: CacheEntry,
-  deps = { loadFunds, deleteCache, recordFetched },
+  uid: number,
+  deps = { loadFunds, deleteCache, recordFetched, ownerId: currentOwnerIdOrNull },
 ): Promise<boolean> {
-  const funds = await deps.loadFunds().catch(() => null);
+  const funds = await deps.loadFunds(uid).catch(() => null);
+  if (deps.ownerId() !== uid) return false; // 읽는 사이 계정이 바뀌었을 수 있어 부수 효과 직전에 확인
   if (funds && !funds.some((f) => f.id === fund.id)) {
     deps.deleteCache(fund.id);
     return false;
@@ -27,12 +33,20 @@ export async function recordIfRegistered(
 }
 
 let addedThisRun = false;
+let runUid: number | null = null; // 이번 갱신을 시작한 계정 — single-flight 라 실행이 겹치지 않는다
 
 export const fundRefresher = createAutoRefresher({
-  loadFunds,
+  // 갱신 시작 때 소유자를 한 번 잡는다(로그인 안 됨이면 던져 이번 실행은 목록 읽기 실패로 끝남)
+  loadFunds: () => {
+    runUid = null;
+    const uid = currentOwnerId();
+    runUid = uid;
+    return loadFunds(uid);
+  },
   deps: { fetchHtml: (u) => fetchReportHtml(u), cache: fileCache, now: Date.now },
   onRefreshed: async (fund, entry) => {
-    if (await recordIfRegistered(fund, entry)) addedThisRun = true;
+    const uid = runUid;
+    if (uid !== null && (await recordIfRegistered(fund, entry, uid))) addedThisRun = true;
   },
 });
 

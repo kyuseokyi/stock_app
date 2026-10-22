@@ -2,6 +2,7 @@ jest.mock('react-native', () => ({ AppState: { currentState: 'active', addEventL
 jest.mock('@/features/auth/store', () => ({ useAuthStore: jest.fn() }));
 jest.mock('./fund-store', () => ({ loadFunds: jest.fn(), deleteCache: jest.fn(), fileCache: {} }));
 jest.mock('./record', () => ({ recordFetched: jest.fn() }));
+jest.mock('./owner', () => ({ currentOwnerId: () => 7, currentOwnerIdOrNull: () => 7 }));
 jest.mock('./backup-service', () => ({ maybeAutoBackup: jest.fn() }));
 jest.mock('./background/backup-pending', () => ({ markBackupPending: jest.fn(), takeBackupPending: jest.fn() }));
 jest.mock('react', () => ({ useEffect: (fn: () => unknown) => void fn() }));
@@ -20,21 +21,24 @@ import { loadFunds } from './fund-store';
 const FUND: FundEntry = { id: 'f1', name: '', url: 'https://fund.example.com/dataroom/om_data/x.htm' };
 const ENTRY = { v: 1, fetchedAt: 1 } as unknown as CacheEntry;
 
-const mk = (loaded: () => Promise<FundEntry[]>) => ({
+const UID = 7;
+const mk = (loaded: () => Promise<FundEntry[]>, owner: number | null = UID) => ({
   loadFunds: jest.fn(loaded),
   deleteCache: jest.fn(),
   recordFetched: jest.fn(async () => true),
+  ownerId: jest.fn(() => owner),
 });
 
-it('등록돼 있으면 backup:false 로 기록하고 결과를 돌려준다', async () => {
+it('등록돼 있으면 backup:false 로 기록하고 결과를 돌려준다(갱신 시작 때 잡은 uid 의 목록으로 판단)', async () => {
   const d = mk(async () => [FUND]);
-  await expect(recordIfRegistered(FUND, ENTRY, d)).resolves.toBe(true);
+  await expect(recordIfRegistered(FUND, ENTRY, UID, d)).resolves.toBe(true);
+  expect(d.loadFunds).toHaveBeenCalledWith(UID);
   expect(d.recordFetched).toHaveBeenCalledWith(FUND, ENTRY, { backup: false });
 });
 
 it('갱신 중 삭제된 펀드는 캐시를 지우고 기록하지 않는다', async () => {
   const d = mk(async () => []);
-  await expect(recordIfRegistered(FUND, ENTRY, d)).resolves.toBe(false);
+  await expect(recordIfRegistered(FUND, ENTRY, UID, d)).resolves.toBe(false);
   expect(d.deleteCache).toHaveBeenCalledWith('f1');
   expect(d.recordFetched).not.toHaveBeenCalled();
 });
@@ -43,9 +47,19 @@ it('목록을 못 읽으면 판단할 수 없으니 기록한다', async () => {
   const d = mk(async () => {
     throw new Error('x');
   });
-  await expect(recordIfRegistered(FUND, ENTRY, d)).resolves.toBe(true);
+  await expect(recordIfRegistered(FUND, ENTRY, UID, d)).resolves.toBe(true);
   expect(d.recordFetched).toHaveBeenCalled();
   expect(d.deleteCache).not.toHaveBeenCalled();
+});
+
+it('갱신 도중 계정이 바뀌었으면(A→B) 캐시 삭제·기록 모두 건너뛴다 — A 의 캐시를 B 기준으로 지우지 않게', async () => {
+  const d = mk(async () => [], 8);
+  await expect(recordIfRegistered(FUND, ENTRY, UID, d)).resolves.toBe(false);
+  expect(d.deleteCache).not.toHaveBeenCalled();
+  expect(d.recordFetched).not.toHaveBeenCalled();
+  const loggedOut = mk(async () => [FUND], null);
+  await expect(recordIfRegistered(FUND, ENTRY, UID, loggedOut)).resolves.toBe(false);
+  expect(loggedOut.recordFetched).not.toHaveBeenCalled();
 });
 
 describe('markAddedDuringRun', () => {
