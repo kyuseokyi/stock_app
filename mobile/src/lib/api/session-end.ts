@@ -3,6 +3,22 @@ export type SessionEndReason = 'expired' | 'replaced';
 
 export const VALIDATE_INTERVAL_MS = 60_000;
 
+/**
+ * 401 응답 본문의 사유 코드 — {detail:{code}} 의 code(TOKEN_EXPIRED·TOKEN_INVALID·SESSION_REPLACED·REFRESH_* 등).
+ * 문자열 detail(구 서버)·빈 본문은 null
+ */
+export function codeFromBody(body: unknown): string | null {
+  const detail = typeof body === 'object' && body !== null && 'detail' in body ? body.detail : undefined;
+  if (typeof detail !== 'object' || detail === null || !('code' in detail)) return null;
+  return typeof detail.code === 'string' && detail.code !== '' ? detail.code : null;
+}
+
+/** 접근 토큰 갱신을 시도할 401 인가 — 만료(TOKEN_EXPIRED) 또는 사유 없는 401(구 서버 호환). 교체·무효는 갱신하지 않는다 */
+export function isRefreshable401(body: unknown): boolean {
+  const code = codeFromBody(body);
+  return code === null || code === 'TOKEN_EXPIRED';
+}
+
 /** 401 응답 본문 → 사유. {detail:{code:'SESSION_REPLACED'}} 만 replaced */
 export function reasonFromBody(body: unknown): SessionEndReason {
   const detail = typeof body === 'object' && body !== null && 'detail' in body ? body.detail : undefined;

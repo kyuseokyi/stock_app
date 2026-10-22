@@ -7,6 +7,7 @@
 import type { SessionEndReason } from './session-end';
 
 let token: string | null = null;
+let refreshToken: string | null = null;
 let onUnauthorized: ((rejectedToken: string | null, reason: SessionEndReason) => void) | null = null;
 
 export function getAuthToken(): string | null {
@@ -15,6 +16,15 @@ export function getAuthToken(): string | null {
 
 export function setAuthToken(next: string | null): void {
   token = next;
+}
+
+/** 리프레시 토큰(앱 로그인만 발급 — 없으면 null). 갱신 모듈(token-refresh.ts)이 동기적으로 읽는다 */
+export function getRefreshToken(): string | null {
+  return refreshToken;
+}
+
+export function setRefreshToken(next: string | null): void {
+  refreshToken = next;
 }
 
 /** 401 응답을 받았을 때 실행할 콜백을 등록한다(auth store 의 expireSession). */

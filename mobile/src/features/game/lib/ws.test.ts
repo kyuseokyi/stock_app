@@ -83,6 +83,17 @@ describe('classifyWsClose', () => {
     expect(classifyWsClose(4401, true)).toBe('auth-failed');
     expect(classifyWsClose(4401, false)).toBe('retry');
   });
+  test('4401 만료(TOKEN_EXPIRED·빈 reason) + 갱신 가능 → auth-expired(갱신 후 재연결)', () => {
+    expect(classifyWsClose(4401, true, 'TOKEN_EXPIRED', true)).toBe('auth-expired');
+    expect(classifyWsClose(4401, true, '', true)).toBe('auth-expired');
+    expect(classifyWsClose(4401, true, undefined, true)).toBe('auth-expired');
+  });
+  test('4401 SESSION_REPLACED·무효 또는 갱신 불가 → auth-failed', () => {
+    expect(classifyWsClose(4401, true, 'SESSION_REPLACED', true)).toBe('auth-failed');
+    expect(classifyWsClose(4401, true, 'TOKEN_INVALID', true)).toBe('auth-failed');
+    expect(classifyWsClose(4401, true, 'TOKEN_EXPIRED', false)).toBe('auth-failed');
+    expect(classifyWsClose(4401, false, 'TOKEN_EXPIRED', true)).toBe('retry');
+  });
   test('4429 — 상한 초과 백오프', () => {
     expect(classifyWsClose(4429, false)).toBe('capacity');
     expect(classifyWsClose(4429, true)).toBe('capacity');

@@ -1,4 +1,4 @@
-import { reasonFromBody, sessionEndMessage, shouldValidate, VALIDATE_INTERVAL_MS } from './session-end';
+import { codeFromBody, isRefreshable401, reasonFromBody, sessionEndMessage, shouldValidate, VALIDATE_INTERVAL_MS } from './session-end';
 
 describe('reasonFromBody', () => {
   test('detail.code SESSION_REPLACED → replaced', () => {
@@ -25,5 +25,23 @@ describe('shouldValidate', () => {
   test('60초 이내면 생략, 지나면 확인', () => {
     expect(shouldValidate(0, VALIDATE_INTERVAL_MS - 1, false)).toBe(false);
     expect(shouldValidate(0, VALIDATE_INTERVAL_MS, false)).toBe(true);
+  });
+});
+
+describe('codeFromBody·isRefreshable401(리프레시 토큰 401 사유 코드)', () => {
+  test('dict detail 의 code 추출, 문자열 detail·빈 본문은 null', () => {
+    expect(codeFromBody({ detail: { code: 'TOKEN_EXPIRED', message: 'x' } })).toBe('TOKEN_EXPIRED');
+    expect(codeFromBody({ detail: '유효하지 않은 토큰입니다.' })).toBeNull();
+    expect(codeFromBody(undefined)).toBeNull();
+  });
+  test('만료·사유 없음만 갱신 대상, 교체·무효는 아님', () => {
+    expect(isRefreshable401({ detail: { code: 'TOKEN_EXPIRED' } })).toBe(true);
+    expect(isRefreshable401({ detail: '구 서버' })).toBe(true);
+    expect(isRefreshable401({ detail: { code: 'SESSION_REPLACED' } })).toBe(false);
+    expect(isRefreshable401({ detail: { code: 'TOKEN_INVALID' } })).toBe(false);
+  });
+  test('새 코드도 reasonFromBody 는 SESSION_REPLACED 만 replaced', () => {
+    expect(reasonFromBody({ detail: { code: 'TOKEN_EXPIRED' } })).toBe('expired');
+    expect(reasonFromBody({ detail: { code: 'REFRESH_REUSED' } })).toBe('expired');
   });
 });

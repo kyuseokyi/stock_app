@@ -7,6 +7,7 @@ import { Platform } from 'react-native';
 import { registerBeforeLogout } from '@/features/auth/logout-hooks';
 import { useAuthStore } from '@/features/auth/store';
 import { loadFunds } from '@/features/fund/fund-store';
+import { withFreshAuth } from '@/lib/api/token-refresh';
 
 import { deletePushDevice, putPushDevice } from './api';
 import { getProjectId, isPushConfigured } from './config';
@@ -27,11 +28,15 @@ const deps: SyncDeps = {
     (await withTimeout(Notifications.getExpoPushTokenAsync({ projectId: getProjectId() }), PUSH_TIMEOUT_MS, 'push token')).data,
   loadSaved: () => SecureStore.getItemAsync(SAVED_KEY),
   saveSaved: (raw) => (raw ? SecureStore.setItemAsync(SAVED_KEY, raw) : SecureStore.deleteItemAsync(SAVED_KEY)),
-  put: (auth, token, flags) => putPushDevice(auth, token, platform, flags),
-  del: deletePushDevice,
+  // 등록·권한 해제 시 삭제: 만료 임박이면 먼저 갱신, 401(만료)이면 한 번 갱신 후 재시도(getFreshAccessToken)
+  put: (auth, token, flags) => withFreshAuth(auth, (a) => putPushDevice(a, token, platform, flags)),
+  del: (auth, token) => withFreshAuth(auth, (a) => deletePushDevice(a, token)),
 };
 
-const registrar = createPushRegistrar(deps);
+// 로그아웃 직전 해제는 훅 인자 토큰 그대로(이미 로컬 상태가 비었을 수 있음 — 필요한 갱신은 로그아웃 쪽이 먼저 한다)
+const logoutDeps = { ...deps, del: deletePushDevice };
+
+const registrar = createPushRegistrar(deps, logoutDeps);
 
 export const syncPushRegistration = () => registrar.sync();
 
@@ -40,7 +45,6 @@ let hooked = false;
 export function installPushLogoutHook(): void {
   if (hooked) return;
   hooked = true;
-  registerBeforeLogout((authToken) => {
-    if (isPushConfigured()) void registrar.unregister(authToken);
-  });
+  // Promise 를 돌려줘 로그아웃이 해제를 기다린 뒤 서버 로그아웃(/auth/logout — 세션 삭제)을 보낸다
+  registerBeforeLogout((authToken) => (isPushConfigured() ? registrar.unregister(authToken) : undefined));
 }

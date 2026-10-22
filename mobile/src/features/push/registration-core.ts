@@ -124,7 +124,11 @@ export function withTimeout<T>(task: Promise<T>, ms: number, label = 'push'): Pr
 }
 
 /** 동기화와 해제를 한 큐로 직렬화 — 진행 중인 put 이 끝난 뒤 해제가 실행돼 "로그아웃 후 등록 잔존"이 없다 */
-export function createPushRegistrar(d: SyncDeps) {
+export function createPushRegistrar(
+  d: SyncDeps,
+  // 로그아웃 해제용 의존성(기본 d) — 해제는 훅이 넘긴 토큰을 그대로 써야 해서 갱신 래퍼 없는 del 을 따로 줄 수 있다
+  unregisterDeps: Pick<SyncDeps, 'loadSaved' | 'saveSaved' | 'del'> = d,
+) {
   const enqueue = createSerialQueue();
   let pendingSync: Promise<SyncResult> | null = null;
   return {
@@ -142,7 +146,7 @@ export function createPushRegistrar(d: SyncDeps) {
     // 해제 뒤에 들어오는 sync 가 해제 앞의 대기 sync 에 합쳐져 해제보다 먼저 실행되지 않게 합치기 대상을 끊는다
     unregister: (authToken: string) => {
       pendingSync = null;
-      return enqueue(() => unregisterWith(d, authToken));
+      return enqueue(() => unregisterWith(unregisterDeps, authToken));
     },
   };
 }

@@ -6,6 +6,17 @@ import { PUSH_TIMEOUT_MS, type PushFlags } from './registration-core';
 const BASE = `${ENV.blogApiUrl}/api/v1/push-devices`;
 
 /** 응답이 없으면 10초 뒤 abort — 멈춘 요청이 등록·해제 큐를 막지 않게 */
+/** 실패 응답 → 오류(status·본문 포함 — 401 만료면 호출부가 토큰을 한 번 갱신해 재시도할 수 있게) */
+async function httpError(res: Response, label: string): Promise<Error> {
+  let body: unknown;
+  try {
+    body = await res.json();
+  } catch {
+    body = undefined;
+  }
+  return Object.assign(new Error(`${label} ${res.status}`), { status: res.status, body });
+}
+
 async function timedFetch(url: string, init: RequestInit): Promise<Response> {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), PUSH_TIMEOUT_MS);
@@ -32,7 +43,7 @@ export async function putPushDevice(
       post_notice: flags.postNotice,
     }),
   });
-  if (!res.ok) throw new Error(`push-devices PUT ${res.status}`);
+  if (!res.ok) throw await httpError(res, 'push-devices PUT');
 }
 
 export async function deletePushDevice(authToken: string, pushToken: string): Promise<void> {
@@ -40,5 +51,5 @@ export async function deletePushDevice(authToken: string, pushToken: string): Pr
     method: 'DELETE',
     headers: { Authorization: `Bearer ${authToken}` },
   });
-  if (!res.ok) throw new Error(`push-devices DELETE ${res.status}`);
+  if (!res.ok) throw await httpError(res, 'push-devices DELETE');
 }

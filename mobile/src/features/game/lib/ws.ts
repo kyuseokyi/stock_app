@@ -115,15 +115,28 @@ export function buildGameWsUrl(baseUrl: string, token: string | null): string {
   return token ? `${base}?token=${encodeURIComponent(token)}` : base;
 }
 
+/** 서버 ws_gateway: 접근 토큰 만료로 닫을 때의 close reason(2026-10-22 리프레시 토큰 설계) */
+export const WS_REASON_TOKEN_EXPIRED = 'TOKEN_EXPIRED';
+
 /**
  * 종료 코드 → 다음 동작.
- * - auth-failed: 로그인 연결의 4401 — 재연결하지 않고 로그인 만료 처리
+ * - auth-expired: 로그인 연결의 4401 이고 reason 이 TOKEN_EXPIRED 또는 빈 값(구 서버)이며 갱신을 시도할 수 있을 때
+ *   — 접근 토큰을 갱신한 뒤 재연결
+ * - auth-failed: 그 밖의 로그인 연결 4401(SESSION_REPLACED·무효·갱신 불가) — 재연결하지 않고 로그인 만료 처리
  * - capacity: 4429 — 별도(긴) 백오프로 재시도
  * - retry: 그 외(공개 연결의 4401 포함) — 일반 지수 백오프 재연결
  */
-export type WsCloseAction = 'auth-failed' | 'capacity' | 'retry';
-export function classifyWsClose(code: number, hasToken: boolean): WsCloseAction {
-  if (code === WS_AUTH_FAILED && hasToken) return 'auth-failed';
+export type WsCloseAction = 'auth-expired' | 'auth-failed' | 'capacity' | 'retry';
+export function classifyWsClose(
+  code: number,
+  hasToken: boolean,
+  reason?: string | null,
+  canRefresh = false,
+): WsCloseAction {
+  if (code === WS_AUTH_FAILED && hasToken) {
+    const expired = !reason || reason === WS_REASON_TOKEN_EXPIRED;
+    return expired && canRefresh ? 'auth-expired' : 'auth-failed';
+  }
   if (code === WS_OVER_CAPACITY) return 'capacity';
   return 'retry';
 }
