@@ -19,22 +19,23 @@ import { fundRefresher } from '../lib/fundAutoRefresh'
 // 펀드 리포트(/me/funds/:id) — 캐시를 먼저 보여주고 열 때마다 원본을 다시 가져온다.
 export default function FundReportPage() {
   const { id } = useParams()
-  return <FundReportBody key={id} id={id} />
+  const uid = useAuthStore((s) => s.user?.id ?? null)
+  if (uid === null) return <Navigate to="/me" replace />
+  return <FundReportBody key={`${uid}-${id}`} id={id} uid={uid} />
 }
 
-// key={id} 로 :id 가 바뀌면 상태를 새로 만든다(다른 펀드 리포트로 이동)
-function FundReportBody({ id }: { id: string | undefined }) {
-  const user = useAuthStore((s) => s.user)
-  const [fund, setFund] = useState<FundEntry | null>(() => loadFunds().find((f) => f.id === id) ?? null)
+// key 로 :id 나 로그인 계정이 바뀌면 상태를 새로 만든다(다른 펀드 리포트로 이동·계정 전환 — 목록은 계정별)
+function FundReportBody({ id, uid }: { id: string | undefined; uid: number }) {
+  const [fund, setFund] = useState<FundEntry | null>(() => loadFunds(uid).find((f) => f.id === id) ?? null)
   const { entry, refreshing, error, refresh, reload } = useFundReport(fund, localCache)
 
   // 이름 없이 등록한 펀드는 첫 리포트로 기본 이름을 붙여 저장
   useEffect(() => {
     if (!fund || fund.name || !entry) return
     const name = defaultName(entry.report)
-    saveFunds(renameFund(loadFunds(), fund.id, name))
+    saveFunds(renameFund(loadFunds(uid), fund.id, name), uid) // 계정이 바뀌었으면 저장하지 않는다
     setFund({ ...fund, name })
-  }, [fund, entry])
+  }, [fund, entry, uid])
 
   // 자동 갱신이 이 펀드를 새로 가져왔으면 캐시만 다시 읽어 반영(다시 가져오지 않음)
   useEffect(
@@ -46,7 +47,6 @@ function FundReportBody({ id }: { id: string | undefined }) {
     [fund, reload],
   )
 
-  if (!user) return <Navigate to="/me" replace />
   if (!fund) {
     return (
       <div className="rounded-card bg-surface p-6 text-center">

@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { Link, Navigate } from 'react-router-dom'
+import LegacyImportModal from '../components/fund/LegacyImportModal'
 import Button from '../components/ui/Button'
 import {
   addFund,
@@ -13,14 +14,32 @@ import {
   useAutoRefreshStatus,
   type FundEntry,
 } from '../lib/fundCore'
-import { deleteCache, loadFunds, localCache, saveFunds } from '../lib/fundStore'
+import {
+  deleteCache,
+  discardLegacyFunds,
+  loadFunds,
+  localCache,
+  previewLegacyImport,
+  saveFunds,
+  type LegacyPreview,
+} from '../lib/fundStore'
 import { fundRefresher } from '../lib/fundAutoRefresh'
 import { useAuthStore } from '../store/auth'
+import { showToast } from '../store/toast'
 
 // 내 펀드 수익(/me/funds) — 이 브라우저에 저장한 fund.ivyro.net 펀드 현황 주소 목록. 서버에는 저장하지 않는다.
+// 목록은 로그인 계정별(2026-10-23). key={uid} 로 계정이 바뀌면 화면 상태를 새로 만든다 — 이전 계정 목록이 새 계정에 저장되지 않게.
 export default function FundListPage() {
-  const user = useAuthStore((s) => s.user)
-  const [funds, setFunds] = useState<FundEntry[]>(() => loadFunds())
+  const uid = useAuthStore((s) => s.user?.id ?? null)
+  if (uid === null) return <Navigate to="/me" replace />
+  return <FundListBody key={uid} uid={uid} />
+}
+
+function FundListBody({ uid }: { uid: number }) {
+  const [funds, setFunds] = useState<FundEntry[]>(() => loadFunds(uid))
+  // 옛 공용 목록(계정별 저장 전) 가져오기 안내 — 닫으면 이번 방문 동안만 숨김(다음 방문 때 다시)
+  const [legacy, setLegacy] = useState<LegacyPreview | null>(() => previewLegacyImport(uid))
+  const [legacyClosed, setLegacyClosed] = useState(false)
   const [name, setName] = useState('')
   const [url, setUrl] = useState('')
   const [error, setError] = useState('')
@@ -41,14 +60,13 @@ export default function FundListPage() {
     }
   }, [funds, status.version])
 
-  if (!user) return <Navigate to="/me" replace />
-
   const handleAdd = (e: FormEvent) => {
     e.preventDefault()
     try {
       const next = addFund(funds, { name, url }, newFundId())
-      saveFunds(next)
+      if (!saveFunds(next, uid)) throw new Error('save failed')
       setFunds(next)
+      setLegacy(previewLegacyImport(uid))
       setName('')
       setUrl('')
       setError('')
@@ -60,9 +78,29 @@ export default function FundListPage() {
   const handleRemove = (f: FundEntry) => {
     if (!window.confirm(`${displayName(f)}을(를) 목록에서 지울까요?`)) return
     const next = removeFund(funds, f.id)
-    saveFunds(next)
+    if (!saveFunds(next, uid)) {
+      showToast('지우지 못했어요. 다시 시도해 주세요.')
+      return
+    }
     deleteCache(f.id)
     setFunds(next)
+    setLegacy(previewLegacyImport(uid)) // 자리가 나면 남겨 둔 옛 펀드를 다시 가져올 수 있다
+  }
+
+  const handleLegacyDone = () => {
+    setFunds(loadFunds(uid))
+    setLegacy(previewLegacyImport(uid))
+    setLegacyClosed(true) // 남은 펀드가 있어도 이번 방문엔 다시 띄우지 않는다
+    void fundRefresher.run() // 가져온 펀드의 리포트를 받아 둔다(10분 이내 확인한 펀드는 건너뜀)
+  }
+
+  // 목록이 꽉 차 하나도 못 가져오는 경우 — 창을 반복해 띄우지 않고 버리기만 제안하는 카드
+  const handleLegacyDiscard = () => {
+    if (!legacy) return
+    if (!window.confirm(`이 브라우저에 저장된 펀드 ${legacy.count}개를 지울까요? 되돌릴 수 없어요.`)) return
+    discardLegacyFunds(uid)
+    showToast('이 브라우저에 저장된 펀드를 지웠어요.')
+    setLegacy(null)
   }
 
   const inputCls =
@@ -77,6 +115,25 @@ export default function FundListPage() {
         내 펀드 수익
         {status.running && <span className="ml-2 text-xs font-normal text-ink-muted">확인 중…</span>}
       </h1>
+
+      {legacy?.full && (
+        <div className="mb-4 flex items-center justify-between gap-3 rounded-card bg-surface p-5">
+          <p className="text-sm text-ink-muted">
+            이 브라우저에 저장된 펀드 {legacy.count}개가 있지만, 이 계정은 등록 한도가 꽉 차서 더 가져올 수 없어요.
+          </p>
+          <Button variant="secondary" className="shrink-0" onClick={handleLegacyDiscard}>
+            버리기
+          </Button>
+        </div>
+      )}
+      {legacy && !legacy.full && !legacyClosed && (
+        <LegacyImportModal
+          uid={uid}
+          preview={legacy}
+          onClose={() => setLegacyClosed(true)}
+          onDone={handleLegacyDone}
+        />
+      )}
 
       <form onSubmit={handleAdd} className="rounded-card bg-surface p-5">
         <label htmlFor="fund-url" className="block text-sm text-ink-muted">
