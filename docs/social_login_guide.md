@@ -70,6 +70,35 @@
 [로그인 완료 및 서비스 이용]
 ```
 
+### 1.1 클라우드플레어 터널(Cloudflare Tunnel)과 소셜 로그인 연동 특성
+
+본 프로젝트의 개발 서버(Mac mini)는 **Cloudflare Tunnel (`cloudflared`)**을 통해 공인 IP나 포트 포워딩 없이 안전하게 외부 도메인(`*.haezean.com`)과 로컬 Docker 컨테이너를 연결하고 있습니다.
+
+```
+[인터넷 / 카카오 인증 서버]
+       │
+       ▼ (HTTPS :443)
+[Cloudflare Edge Network]
+       │  (엔드-투-엔드 암호화 아웃바운드 터널)
+       ▼
+[개발 서버 (Mac mini) - cloudflared 데몬]
+       ├── auth.haezean.com  ──▶  localhost:8001 (auth_api 서비스)
+       ├── app.haezean.com   ──▶  localhost:3000 (web_client 정적 서빙)
+       ├── api.haezean.com   ──▶  localhost:8002 (stock_api 서비스)
+       └── blog.haezean.com  ──▶  localhost:8003 (blog_api 서비스)
+```
+
+#### 🌟 클라우드플레어 터널 환경에서 소셜 로그인 시 주의사항
+1. **Redirect URI는 반드시 터널 공개 도메인 사용**:
+   - 카카오 인증 서버는 사용자의 로그인이 끝나면 등록된 `Redirect URI`로 인터넷을 통해 HTTP GET 요청(인가 코드 전달)을 보냅니다.
+   - 따라서 개발 서버의 백엔드 환경변수 `SOCIAL_REDIRECT_BASE`는 `localhost:8001`이 아니라 **`https://auth.haezean.com/api/v1/auth/social`**로 설정되어야 카카오가 Mac mini의 auth 컨테이너로 정상 도달할 수 있습니다.
+2. **무료 SSL/TLS 자동 지원**:
+   - 카카오 등 대부분의 소셜 로그인은 상용 환경 및 외부 콜백에 HTTPS를 필수로 요구합니다.
+   - Cloudflare Tunnel이 `https://*.haezean.com`의 SSL 인증서 발급과 암호화 종단을 자동으로 처리하므로, 별도의 SSL 인증서 설치 없이 안전한 OAuth2 연동이 가능합니다.
+3. **CORS 및 프록시 헤더**:
+   - Cloudflare Tunnel은 `X-Forwarded-Proto: https` 및 클라이언트 `Origin` 헤더를 백엔드로 전달합니다.
+   - 백엔드의 `shared/cors.py`에 `https://app.haezean.com`이 이미 허용 Origin으로 등록되어 있으므로 브라우저 CORS 문제 없이 토큰 교환이 진행됩니다.
+
 ### 🔒 보안상 강점
 1. **커스텀 스킴 탈취 방지**: Android 등에서 악성 앱이 `stockapp://auth` 스킴을 가로채더라도 `code_verifier`를 알 수 없어 토큰 교환이 불가능합니다.
 2. **소셜 토큰 미저장**: 공급자의 `access_token`은 프로필 조회 즉시 폐기하며, 서비스 DB에는 자체 발급한 세션/JWT만 관리합니다.
