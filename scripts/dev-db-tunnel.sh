@@ -34,11 +34,26 @@ if ! nc -z -w3 "$SSH_HOST" "$SSH_PORT" 2>/dev/null; then
 fi
 
 echo "[dev-db-tunnel] 개발서버 DB 터널 시작: PG→localhost:15432, CH→localhost:18123"
-echo "[dev-db-tunnel] 유지하려면 이 창을 열어두세요. 종료: Ctrl+C"
+echo "[dev-db-tunnel] 유지하려면 이 창을 열어두세요. 끊기면 자동으로 다시 연결합니다. 종료: Ctrl+C"
 
-# ExitOnForwardFailure: 포트 바인드 실패 시 조용히 붙지 말고 즉시 실패(green-but-broken 방지)
-exec ssh -N \
-  -o ServerAliveInterval=30 -o ServerAliveCountMax=3 -o ExitOnForwardFailure=yes \
-  -p "$SSH_PORT" "${SSH_USER}@${SSH_HOST}" \
-  -L 15432:localhost:5432 \
-  -L 18123:localhost:8123
+# 자동 재연결: cloudflared(WebSocket) 경로는 Cloudflare 엣지 재조정·Mac 절전·네트워크 변경으로 몇 시간마다 끊긴다.
+#   ServerAlive 30초×3 무응답이면 ssh 가 스스로 종료 → 3초 뒤 다시 붙는다. Ctrl+C 는 루프까지 끝낸다.
+trap 'echo; echo "[dev-db-tunnel] 종료"; exit 0' INT TERM
+fails=0
+while true; do
+  started=$(date +%s)
+  # ExitOnForwardFailure: 포트 바인드 실패 시 조용히 붙지 말고 즉시 실패(green-but-broken 방지)
+  ssh -N \
+    -o ServerAliveInterval=30 -o ServerAliveCountMax=3 -o ExitOnForwardFailure=yes \
+    -p "$SSH_PORT" "${SSH_USER}@${SSH_HOST}" \
+    -L 15432:localhost:5432 \
+    -L 18123:localhost:8123 || true
+  # 붙자마자 바로 끊기기를 5번 반복하면(포트 점유·인증 실패 등) 무한 재시도 대신 멈춘다
+  if [ $(( $(date +%s) - started )) -lt 10 ]; then fails=$((fails + 1)); else fails=0; fi
+  if [ "$fails" -ge 5 ]; then
+    echo "[dev-db-tunnel] ✗ 연결 직후 종료가 5번 반복 — 15432/18123 포트 사용 중이거나 인증·cloudflared 문제. 확인 후 다시 실행하세요." >&2
+    exit 1
+  fi
+  echo "[dev-db-tunnel] $(date '+%H:%M:%S') 연결 끊김 — 3초 뒤 다시 연결"
+  sleep 3
+done
