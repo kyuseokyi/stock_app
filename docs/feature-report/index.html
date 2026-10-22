@@ -49,12 +49,12 @@ a{color:var(--accent)}
 <body>
 <button id="menu" aria-label="목차">☰ 목차</button>
 <button id="theme" aria-label="테마 전환">🌓</button>
-<aside id="side"><h1>📈 StockApp 기능 보고서</h1><div class="sub">2026-10-22 · dev 8d7d3c7</div><div class="nav-group"><a class="nav-title" href="#overview">개요</a><ul><li><a href="#overview-2">서비스 구성</a></li><li><a href="#overview-3">기능 지도 (어디서 무엇을 하는지)</a></li><li><a href="#overview-4">진행 상태 요약</a></li><li><a href="#overview-5">남은 일 (코드와 문서 기준)</a></li><li><a href="#overview-6">캡처 방법과 개인정보 처리</a></li><li><a href="#overview-7">다시 만들기</a></li></ul></div><div class="nav-group"><a class="nav-title" href="#admin">관리자 웹</a><ul><li><a href="#admin-2">한눈에 보기</a></li><li><a href="#admin-3">0. 로그인 — /login</a></li><li><a href="#admin-4">1. 게시판 관리 — /boards</a></li><li><a href="#admin-5">2. 게시글 관리 — /blogs</a></li><li><a href="#admin-6">3. 글 작성/수정 — /blogs/new, /blogs/:id/edit</a></li><li><a href="#admin-7">4. 게시글 상세 — /blogs/:id</a></li><li><a href="#admin-8">5. 데일리 코치 — /game/coach</a></li><li><a href="#admin-9">6. 아카데미 문항 — /game/academy</a></li><li><a href="#admin-10">7. 퀴즈 관리 — /game/quizzes</a></li><li><a href="#admin-11">8. 게임 설정 — /game/settings</a></li><li><a href="#admin-12">9. 테마 보정 — /market/themes</a></li><li><a href="#admin-13">10. 데이터 현황 — /market/status</a></li><li><a href="#admin-14">11. 데이터 검증 — /market/verify</a></li><li><a href="#admin-15">12. 펀드 리포트 알림 — /fund-notices</a></li><li><a href="#admin-16">13. 앱 버전 &amp; 업데이트 — /app/versions</a></li><li><a href="#admin-17">14. 회원 목록 — /members (준비 중)</a></li><li><a href="#admin-18">15. 통계 대시보드 — /stats (준비 중)</a></li></ul></div><div class="nav-group"><a class="nav-title" href="#app">모바일 앱</a><ul><li><a href="#app-2">한눈에 보기</a></li><li><a href="#app-3">1. 홈 탭 — /</a></li><li><a href="#app-4">2. 커뮤니티 탭 — /blog</a></li><li><a href="#app-5">3. 글 상세 — /blog/[id]</a></li><li><a href="#app-6">4. 게임 탭 — /game (가장 큰 화면)</a></li><li><a href="#app-7">5. 스크리너 탭 — /screener</a></li><li><a href="#app-8">6. 테마/업종 상세 — /market/[kind]/[id]</a></li><li><a href="#app-9">7. 종목 상세 — /stock/[ticker]</a></li><li><a href="#app-10">8. 내정보 탭 — /profile</a></li><li><a href="#app-11">9. 내 펀드 수익 — /fund</a></li><li><a href="#app-15">10. 기록 백업 — /fund/backup</a></li><li><a href="#app-16">앱 전체 기능</a></li></ul></div><div class="nav-group"><a class="nav-title" href="#web">사용자 웹</a><ul><li><a href="#web-2">한눈에 보기</a></li><li><a href="#web-3">1. 홈 — /</a></li><li><a href="#web-4">2. 로그인 모달</a></li><li><a href="#web-5">3. 커뮤니티 — /boards/:boardId</a></li><li><a href="#web-6">4. 글 상세 — /posts/:id</a></li><li><a href="#web-7">5. 트레이딩 게임 — /game</a></li><li><a href="#web-8">6. 스크리너 — /screener/*</a></li><li><a href="#web-15">7. 종목 상세 — /stock/:ticker (10-22 신규)</a></li><li><a href="#web-16">8. 내정보 — /me</a></li><li><a href="#web-17">9. 내 펀드 수익 — /me/funds, /me/funds/:id</a></li><li><a href="#web-18">10. 간편 로그인 완료 — /auth/complete (캡처 없음)</a></li></ul></div></aside>
-<main><section class="doc" id="overview"><h1 id="overview-1">StockApp 기능 보고서 (2026-10-22)</h1>
+<aside id="side"><h1>📈 StockApp 기능 보고서</h1><div class="sub">2026-10-23 갱신 · dev 661f89e</div><div class="nav-group"><a class="nav-title" href="#overview">개요</a><ul><li><a href="#overview-2">업데이트 기록</a></li><li><a href="#overview-5">서비스 구성</a></li><li><a href="#overview-6">기능 지도 (어디서 무엇을 하는지)</a></li><li><a href="#overview-7">진행 상태 요약</a></li><li><a href="#overview-8">남은 일 (코드와 문서 기준)</a></li><li><a href="#overview-9">캡처 방법과 개인정보 처리</a></li><li><a href="#overview-10">다시 만들기</a></li></ul></div><div class="nav-group"><a class="nav-title" href="#admin">관리자 웹</a><ul><li><a href="#admin-2">한눈에 보기</a></li><li><a href="#admin-3">0. 로그인 — /login</a></li><li><a href="#admin-4">1. 게시판 관리 — /boards</a></li><li><a href="#admin-5">2. 게시글 관리 — /blogs</a></li><li><a href="#admin-6">3. 글 작성/수정 — /blogs/new, /blogs/:id/edit</a></li><li><a href="#admin-7">4. 게시글 상세 — /blogs/:id</a></li><li><a href="#admin-8">5. 데일리 코치 — /game/coach</a></li><li><a href="#admin-9">6. 아카데미 문항 — /game/academy</a></li><li><a href="#admin-10">7. 퀴즈 관리 — /game/quizzes</a></li><li><a href="#admin-11">8. 게임 설정 — /game/settings</a></li><li><a href="#admin-12">9. 테마 보정 — /market/themes</a></li><li><a href="#admin-13">10. 데이터 현황 — /market/status</a></li><li><a href="#admin-14">11. 데이터 검증 — /market/verify</a></li><li><a href="#admin-15">12. 펀드 리포트 알림 — /fund-notices</a></li><li><a href="#admin-16">13. 앱 버전 &amp; 업데이트 — /app/versions</a></li><li><a href="#admin-17">14. 회원 목록 — /members (준비 중)</a></li><li><a href="#admin-18">15. 통계 대시보드 — /stats (준비 중)</a></li></ul></div><div class="nav-group"><a class="nav-title" href="#app">모바일 앱</a><ul><li><a href="#app-2">한눈에 보기</a></li><li><a href="#app-3">1. 홈 탭 — /</a></li><li><a href="#app-4">2. 커뮤니티 탭 — /blog</a></li><li><a href="#app-5">3. 글 상세 — /blog/[id]</a></li><li><a href="#app-6">4. 게임 탭 — /game (가장 큰 화면)</a></li><li><a href="#app-7">5. 스크리너 탭 — /screener</a></li><li><a href="#app-8">6. 테마/업종 상세 — /market/[kind]/[id]</a></li><li><a href="#app-9">7. 종목 상세 — /stock/[ticker]</a></li><li><a href="#app-10">8. 내정보 탭 — /profile</a></li><li><a href="#app-11">9. 내 펀드 수익 — /fund</a></li><li><a href="#app-16">10. 기록 백업 — /fund/backup</a></li><li><a href="#app-17">앱 전체 기능</a></li></ul></div><div class="nav-group"><a class="nav-title" href="#web">사용자 웹</a><ul><li><a href="#web-2">한눈에 보기</a></li><li><a href="#web-3">1. 홈 — /</a></li><li><a href="#web-4">2. 로그인 모달</a></li><li><a href="#web-5">3. 커뮤니티 — /boards/:boardId</a></li><li><a href="#web-6">4. 글 상세 — /posts/:id</a></li><li><a href="#web-7">5. 트레이딩 게임 — /game</a></li><li><a href="#web-8">6. 스크리너 — /screener/*</a></li><li><a href="#web-15">7. 종목 상세 — /stock/:ticker (10-22 신규)</a></li><li><a href="#web-16">8. 내정보 — /me</a></li><li><a href="#web-17">9. 내 펀드 수익 — /me/funds, /me/funds/:id</a></li><li><a href="#web-19">10. 간편 로그인 완료 — /auth/complete (캡처 없음)</a></li></ul></div></aside>
+<main><section class="doc" id="overview"><h1 id="overview-1">StockApp 기능 보고서 (2026-10-22, 10-23 갱신)</h1>
 <p>관리자 웹, 모바일 앱, 사용자 웹의 <strong>현재 기능을 화면별로</strong> 정리한 보고서입니다.</p>
 <ul>
 <li><strong>한 파일로 보기</strong>: <code>index.html</code>을 브라우저로 열면 모든 내용과 스크린샷을 한 페이지에서 볼 수 있습니다.</li>
-<li><strong>기준</strong>: <code>dev</code> 브랜치 <code>8d7d3c7</code> 시점의 코드와 실제 실행 화면입니다.</li>
+<li><strong>기준</strong>: <code>dev</code> 브랜치 <code>661f89e</code> 시점의 코드와 실제 실행 화면입니다. 처음 작성한 기준은 <code>8d7d3c7</code>이고, 아래 "업데이트 기록"에 추가분을 정리했습니다.</li>
 </ul>
 <table>
 <thead>
@@ -78,11 +78,67 @@ a{color:var(--accent)}
 <tr>
 <td><a href="#web">web.md</a></td>
 <td>사용자 웹 <code>web_client</code></td>
-<td>17장</td>
+<td>19장</td>
 </tr>
 </tbody>
 </table>
-<h2 id="overview-2">서비스 구성</h2>
+<h2 id="overview-2">업데이트 기록</h2>
+<h3 id="overview-3">2026-10-23 — 내 펀드 로그인 계정별 저장, 앱 삭제·탈퇴 시 정리 (커밋 18개, <code>7bab524</code>~<code>661f89e</code>)</h3>
+<table>
+<thead>
+<tr>
+<th>영역</th>
+<th>추가된 기능</th>
+<th>문서</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>앱</td>
+<td>펀드 목록 키를 계정별로 분리(<code>fund_list_v1_u&lt;회원ID&gt;</code>), 옛 공용 목록 가져오기/버리기 시트</td>
+<td><a href="#app">app.md 9-4</a></td>
+</tr>
+<tr>
+<td>앱</td>
+<td>Drive 백업 파일·상태를 계정별로 분리하고, 작업마다 Google 이메일 확인</td>
+<td>app.md 9-4, 10</td>
+</tr>
+<tr>
+<td>앱</td>
+<td>계정 전환 중에도 목록과 캐시가 다른 계정으로 새지 않게 함, 복원 전 푸시 등록 오작동 수정</td>
+<td>app.md 9-4</td>
+</tr>
+<tr>
+<td>앱</td>
+<td>회원 탈퇴 시 그 계정의 기기 펀드 데이터 삭제 + Google 로그아웃</td>
+<td>app.md 8, 9-4</td>
+</tr>
+<tr>
+<td>앱</td>
+<td>앱 삭제 대비: Android <code>allowBackup=false</code>, iOS 재설치 첫 실행 때 키체인 정리(재시도 3번까지)</td>
+<td>app.md 9-4</td>
+</tr>
+<tr>
+<td>웹</td>
+<td>펀드 목록 계정별 저장 + 옛 목록 가져오기 안내 모달(<strong>새 캡처 2장</strong>), 탈퇴 시 브라우저 펀드 데이터 삭제</td>
+<td><a href="#web">web.md 9-1</a></td>
+</tr>
+<tr>
+<td>공통</td>
+<td>웹·앱 카카오 로그인 성공 확인(개발 서버 키)</td>
+<td>app.md, web.md 로그인</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li><strong>설계 문서</strong>: <code>docs/superpowers/specs/2026-10-23-fund-per-account-storage-design.md</code></li>
+<li><strong>남은 확인</strong>: 새 APK 빌드(allowBackup은 네이티브 변경이라 OTA 불가)와 실기기 시나리오 확인.</li>
+</ul>
+<h3 id="overview-4">2026-10-22 — 최초 작성 (<code>8d7d3c7</code>)</h3>
+<ul>
+<li>관리자 16화면, 앱 12화면, 웹 16화면 + 캡처 52장.</li>
+</ul>
+<h2 id="overview-5">서비스 구성</h2>
 <pre><code> [관리자 웹 :5173]   [사용자 웹 :3000]   [모바일 앱(Expo)]
          │                  │                   │
          ├──── REST ────────┼───────────────────┤
@@ -95,7 +151,7 @@ a{color:var(--accent)}
                      ▲
           collector(Celery) — KIS 수집, 매일 20:30 파이프라인
 </code></pre>
-<h2 id="overview-3">기능 지도 (어디서 무엇을 하는지)</h2>
+<h2 id="overview-6">기능 지도 (어디서 무엇을 하는지)</h2>
 <table>
 <thead>
 <tr>
@@ -145,8 +201,8 @@ a{color:var(--accent)}
 <tr>
 <td>펀드 수익 리포트</td>
 <td>펀드 리포트 알림 발송(푸시, 무음 깨우기, SSE)</td>
-<td>목록, 리포트, <strong>히스토리</strong>, <strong>Drive 백업</strong>, <strong>백그라운드 기록</strong></td>
-<td>목록, 리포트</td>
+<td>목록(계정별), 리포트, <strong>히스토리</strong>, <strong>Drive 백업</strong>, <strong>백그라운드 기록</strong></td>
+<td>목록(계정별), 리포트</td>
 </tr>
 <tr>
 <td>앱 업데이트</td>
@@ -162,7 +218,7 @@ a{color:var(--accent)}
 </tr>
 </tbody>
 </table>
-<h2 id="overview-4">진행 상태 요약</h2>
+<h2 id="overview-7">진행 상태 요약</h2>
 <table>
 <thead>
 <tr>
@@ -193,37 +249,48 @@ a{color:var(--accent)}
 </tr>
 </tbody>
 </table>
-<h2 id="overview-5">남은 일 (코드와 문서 기준)</h2>
+<h2 id="overview-8">남은 일 (코드와 문서 기준)</h2>
 <ol>
-<li><strong>운영 설정</strong>
-   - <code>.env.production</code>에 <code>EXPO_PUBLIC_GAME_API_URL</code>이 없어서 운영 앱의 게임 탭에 "시즌 준비 중"이 뜹니다.
-   - 앱 Drive 백업에 필요한 <code>EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID</code>가 없습니다.
-   - FRED API 키를 아직 받지 않았습니다.</li>
-<li><strong>실기기 확인</strong>
-   - 게임 시트와 WebSocket 재연결, 주도주·조건검색·패턴, 앱 업데이트 시트.
-   - 펀드 정기 작업이 앱이 꺼진 상태에서도 실행되는지 측정.</li>
-<li><strong>간편 로그인</strong>: 실제 공급자 키로 수동 확인, 네이버 검수. 애플 로그인은 iOS 출시 직전에 붙입니다.</li>
-<li><strong>관리자 웹 보완</strong>
-   - 회원 목록과 통계 화면이 비어 있습니다.
-   - 게시글 상세에 댓글 수정 UI가 없고, 본문을 정화(sanitize)하지 않습니다.
-   - 로그인 화면에 기본 계정 안내 문구가 그대로 나옵니다.</li>
+<li><strong>운영 설정</strong><ul>
+<li><code>.env.production</code>에 <code>EXPO_PUBLIC_GAME_API_URL</code>이 없어서 운영 앱의 게임 탭에 "시즌 준비 중"이 뜹니다.</li>
+<li>앱 Drive 백업에 필요한 <code>EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID</code>가 없습니다.</li>
+<li>FRED API 키를 아직 받지 않았습니다.</li>
+</ul>
+</li>
+<li><strong>실기기 확인</strong><ul>
+<li>게임 시트와 WebSocket 재연결, 주도주·조건검색·패턴, 앱 업데이트 시트.</li>
+<li>펀드 정기 작업이 앱이 꺼진 상태에서도 실행되는지 측정.</li>
+</ul>
+</li>
+<li><strong>간편 로그인</strong>: 카카오는 웹·앱 모두 성공을 확인했습니다(10-23). 네이버는 키 발급 후 확인과 검수가 남았고, 애플 로그인은 iOS 출시 직전에 붙입니다.</li>
+<li><strong>관리자 웹 보완</strong><ul>
+<li>회원 목록과 통계 화면이 비어 있습니다.</li>
+<li>게시글 상세에 댓글 수정 UI가 없고, 본문을 정화(sanitize)하지 않습니다.</li>
+<li>로그인 화면에 기본 계정 안내 문구가 그대로 나옵니다.</li>
+</ul>
+</li>
 <li><strong>앱 내정보</strong>: "이번 시즌 내 순위" 카드와 "준비 중" 4개 항목을 실제 기능과 연결해야 합니다.</li>
 <li><strong>iOS</strong>: APNs 설정과 스토어 링크.</li>
+<li><strong>새 APK 빌드</strong>: 펀드 계정별 저장 중 <code>allowBackup=false</code>는 네이티브 변경이라 새 APK를 설치해야 반영됩니다. 그다음 계정 분리와 재설치 시나리오를 실기기에서 확인해야 합니다.</li>
 </ol>
-<h2 id="overview-6">캡처 방법과 개인정보 처리</h2>
+<h2 id="overview-9">캡처 방법과 개인정보 처리</h2>
 <ul>
-<li><strong>실행 환경</strong></li>
+<li><strong>실행 환경</strong><ul>
 <li>로컬 백엔드 4개(8000~8003)를 띄우고, SSH 터널로 개발서버 DB(PostgreSQL·ClickHouse)에 붙었습니다.</li>
 <li>관리자 웹과 사용자 웹은 Vite 개발 서버로 띄웠습니다.</li>
 <li>앱은 Android 에뮬레이터에 개발 빌드를 설치하고 Metro를 8082 포트로 연결했습니다.</li>
+</ul>
+</li>
 <li><strong>로그인 계정</strong>: 관리자는 기본 관리자 계정, 앱과 웹은 개발용 닉네임 <code>test</code> 계정을 썼습니다.</li>
-<li><strong>가린 정보</strong></li>
+<li><strong>가린 정보</strong><ul>
 <li>관리자 로그인 화면의 기본 계정 안내 문구.</li>
 <li>댓글 작성자 닉네임 1개(<code>사용자A</code>로 바꿈).</li>
 <li>앱 랭킹 시트의 다른 사용자 닉네임(흐림 처리).</li>
+</ul>
+</li>
 <li><strong>찍지 않은 화면</strong>: 실명, 투자자 번호, 금액이 나오는 <strong>펀드 리포트와 수익 히스토리</strong>. 해당 문서에 글로만 설명했습니다.</li>
 </ul>
-<h2 id="overview-7">다시 만들기</h2>
+<h2 id="overview-10">다시 만들기</h2>
 <pre><code class="language-bash"># md 를 고친 뒤 index.html 재생성(python-markdown 필요)
 python docs/feature-report/build.py
 </code></pre>
@@ -273,12 +340,14 @@ python docs/feature-report/build.py
 <li><strong>상단 바</strong>: 로고, 로그인한 관리자 닉네임과 역할 배지, 로그아웃 버튼.</li>
 <li><strong>사이드바</strong>: 데스크톱에서는 고정 사이드바, 모바일에서는 ☰ 드로어.</li>
 <li><strong>새 글 토스트</strong>: 오른쪽 아래에 실시간 새 글 토스트가 뜹니다. blog 서비스의 SSE <code>GET /notifications/stream</code>을 받아서 띄웁니다.</li>
-<li><strong>권한</strong></li>
+<li><strong>권한</strong><ul>
 <li>화면에서는 토큰이 있는지만 확인합니다.</li>
 <li>관리자인지는 서버의 <code>require_admin</code>이 확인합니다(역할이 ADMIN이 아니면 거부).</li>
 <li>401 응답을 받으면 토큰을 지우고 <code>/login</code>으로 보냅니다.</li>
-<li><strong>API 서비스</strong></li>
 </ul>
+</li>
+<li>
+<p><strong>API 서비스</strong></p>
 <table>
 <thead>
 <tr>
@@ -310,8 +379,10 @@ python docs/feature-report/build.py
 </tr>
 </tbody>
 </table>
-<ul>
-<li><strong>게임 서버 주소가 없을 때</strong>: 빌드할 때 <code>VITE_GAME_API_URL</code>이 비어 있으면 게임 메뉴 4개는 "게임 서버 미연결" 안내만 보여 줍니다.</li>
+</li>
+<li>
+<p><strong>게임 서버 주소가 없을 때</strong>: 빌드할 때 <code>VITE_GAME_API_URL</code>이 비어 있으면 게임 메뉴 4개는 "게임 서버 미연결" 안내만 보여 줍니다.</p>
+</li>
 </ul>
 <hr />
 <h2 id="admin-3">0. 로그인 — <code>/login</code></h2>
@@ -347,13 +418,17 @@ python docs/feature-report/build.py
 </ul>
 <p><img loading="lazy" alt="차트 삽입 모달" src="images/admin/03b-chart-modal.png" /></p>
 <ul>
-<li><strong>차트 삽입 모달</strong>은 관리자 웹의 핵심 기능입니다.</li>
+<li><strong>차트 삽입 모달</strong>은 관리자 웹의 핵심 기능입니다.<ul>
 <li>국내외 종목·지수를 검색하고 기간을 정합니다.</li>
 <li>캔들 차트에 MA5/20/50/120, 볼린저 σ, 매물대, 캔들 정보를 켜고 끌 수 있습니다.</li>
 <li>그리기 도구 4종(수평선, 3중 추세선, 사각형, 텍스트)으로 표시한 뒤 PNG로 캡처해 본문에 넣습니다.</li>
-<li>API</li>
+</ul>
+</li>
+<li>API<ul>
 <li>blog: <code>POST /blogs</code>(<code>notify</code> 포함), <code>PUT /blogs/{id}</code></li>
 <li>stock_api GraphQL: <code>SearchStocks</code>, <code>GetChartData</code></li>
+</ul>
+</li>
 <li>상태: <strong>완료</strong></li>
 </ul>
 <h2 id="admin-7">4. 게시글 상세 — <code>/blogs/:id</code></h2>
@@ -361,9 +436,11 @@ python docs/feature-report/build.py
 <ul>
 <li>본문(차트 이미지 포함)과 댓글 목록을 보여 줍니다. 관리자 계정으로 댓글을 쓰거나 지울 수 있습니다.</li>
 <li>게시판에서 댓글을 꺼 두었으면 입력창 대신 안내 문구가 나옵니다.</li>
-<li>상태: <strong>부분</strong></li>
+<li>상태: <strong>부분</strong><ul>
 <li>댓글 수정 API(<code>PUT /comments/{id}</code>)는 있지만 화면에 수정 UI가 없습니다.</li>
 <li>본문을 정화(sanitize) 없이 그대로 넣고 있습니다. 코드에 TODO가 남아 있습니다.</li>
+</ul>
+</li>
 <li>캡처에서는 사용자 닉네임 1개를 <code>사용자A</code>로 바꿨습니다.</li>
 </ul>
 <h2 id="admin-8">5. 데일리 코치 — <code>/game/coach</code></h2>
@@ -389,10 +466,12 @@ python docs/feature-report/build.py
 <li>야간 차트 퀴즈 풀을 목록(20개씩)과 상세 두 칸으로 관리합니다.</li>
 <li><strong>자동 생성</strong>: 1~200개, 유형은 기본 비율 / 2지선다 / 등락폭 구간 / 신호 맞히기 중에서 고릅니다.</li>
 <li><strong>직접 출제</strong>: 종목과 기준일을 넣으면 정답과 해설이 자동으로 계산됩니다. 데이터가 부족하거나, 등락이 1% 미만이거나, 중복이면 거절됩니다.</li>
-<li><strong>상세</strong></li>
+<li><strong>상세</strong><ul>
 <li>문제 차트 다음 5봉을 미리 볼 수 있습니다.</li>
 <li>패턴명과 해설을 수정하고, 활성 여부를 토글하고, 삭제할 수 있습니다.</li>
 <li>응시 기록이 있는 문제는 삭제할 수 없습니다.</li>
+</ul>
+</li>
 <li>상태: <strong>완료</strong>. 한 번에 200개를 만들면 Cloudflare의 100초 제한에 걸릴 수 있어 50개씩 만드는 것을 권장합니다.</li>
 </ul>
 <h2 id="admin-11">8. 게임 설정 — <code>/game/settings</code></h2>
@@ -417,15 +496,19 @@ python docs/feature-report/build.py
 <h2 id="admin-13">10. 데이터 현황 — <code>/market/status</code></h2>
 <p><img loading="lazy" alt="데이터 현황" src="images/admin/10-market-status.png" /></p>
 <ul>
-<li>데이터셋별 상태 카드를 보여 줍니다(정상/오래됨/주의/없음/꺼짐/오류).</li>
+<li>데이터셋별 상태 카드를 보여 줍니다(정상/오래됨/주의/없음/꺼짐/오류).<ul>
 <li>대상 데이터: 일봉, 국내·미국 지수, 투자자 순매수, 재무, FRED, 공모주, CANSLIM, 시장 그룹.</li>
 <li>기준 거래일과 비교해 판정합니다.</li>
+</ul>
+</li>
 <li>최근 일일 파이프라인(매일 20:30)의 단계별 결과를 보여 줍니다.</li>
 <li>설정 상태: FRED 키가 있는지, 분기 EPS 형식. 값 자체는 보여 주지 않습니다.</li>
-<li><strong>계산 수동 실행</strong> 8종</li>
+<li><strong>계산 수동 실행</strong> 8종<ul>
 <li>CANSLIM, 시장 그룹, 조건검색, 차트 패턴 계산과 각각의 60일 백필</li>
 <li><strong>초기 데이터 준비</strong>: KIS를 대량 호출하는 작업이라 16:00~21:30에는 실행할 수 없습니다.</li>
 <li>실행 중일 때는 5초마다 다시 조회하고, 실행 기록 표가 있습니다.</li>
+</ul>
+</li>
 <li>상태: <strong>부분</strong>. 분기 EPS 형식 변경, KIS 수집 수동 실행, 단계별 재시작은 다음 단계로 미뤄 두었습니다.</li>
 <li>캡처 시점에 FRED 키가 없어서 <strong>FRED 거시 지표가 '꺼짐'</strong>으로 나옵니다.</li>
 </ul>
@@ -440,12 +523,14 @@ python docs/feature-report/build.py
 <h2 id="admin-15">12. 펀드 리포트 알림 — <code>/fund-notices</code></h2>
 <p><img loading="lazy" alt="펀드 리포트 알림" src="images/admin/12-fund-notices.png" /></p>
 <ul>
-<li><strong>발송 탭</strong></li>
+<li><strong>발송 탭</strong><ul>
 <li>기준일과 템플릿을 고르고 제목(100자)과 본문(500자)을 씁니다. <code>{date}</code>는 "M월 D일"로 바뀝니다.</li>
 <li>휴대폰 알림 미리보기, 대상 기기 수, 같은 기준일에 이미 보냈는지를 보여 줍니다.</li>
 <li>발송 방법: <strong>테스트 발송</strong>(내 기기), <strong>지금 발송</strong>, <strong>예약 발송</strong>. 예약은 취소할 수 있습니다.</li>
 <li>펀드 알림을 보내면 앱이 꺼져 있어도 기록되도록, 무음 깨우기 푸시(<code>fund_refresh</code>)도 함께 나갑니다.</li>
 <li>웹에는 SSE로 갱신 신호를 보냅니다.</li>
+</ul>
+</li>
 <li><strong>문구 템플릿 탭</strong>: 템플릿을 추가·수정·삭제합니다.</li>
 <li>API(blog): <code>/admin/fund-notices*</code>, <code>/admin/push-sends*</code>, <code>/admin/push-templates*</code></li>
 <li>상태: <strong>완료</strong>. Android 실기기에서 확인했습니다. iOS 발송은 아직 범위 밖입니다.</li>
@@ -523,6 +608,7 @@ python docs/feature-report/build.py
 <li>카카오·네이버 간편 로그인은 인앱 브라우저로 이동했다가 돌아오는 방식입니다. 이때 일회용 교환 코드와 PKCE를 씁니다.</li>
 <li>접근 토큰은 60분, 리프레시 토큰은 30일이며 회전 방식입니다. 플랫폼마다 세션은 1개만 유지됩니다.</li>
 <li>개발용 닉네임 로그인은 개발 빌드에서만 보입니다. 애플 로그인은 iOS 출시 직전에 붙일 예정입니다.</li>
+<li>🆕 개발 서버에 카카오 키를 적용했고 <strong>앱 카카오 로그인 성공을 확인</strong>했습니다(2026-10-23). 네이버는 키를 발급받은 뒤 확인합니다.</li>
 </ul>
 <hr />
 <h2 id="app-3">1. 홈 탭 — <code>/</code></h2>
@@ -552,13 +638,17 @@ python docs/feature-report/build.py
 <p><img loading="lazy" alt="게임" src="images/app/03-game.png" /></p>
 <ul>
 <li>한 달 동안 한 종목으로 하는 <strong>실시간 가상 트레이딩</strong>입니다.</li>
-<li><strong>주문</strong></li>
+<li><strong>주문</strong><ul>
 <li>상승/하락에 거는 원클릭 주문입니다.</li>
 <li>비중(25/50/100%, 10~90% 추가), 배율(1·2·5배), 손절과 익절을 고릅니다.</li>
 <li>5배는 아카데미를 통과해야 쓸 수 있습니다.</li>
-<li><strong>차트</strong>: lightweight-charts를 WebView로 띄웁니다.</li>
+</ul>
+</li>
+<li><strong>차트</strong>: lightweight-charts를 WebView로 띄웁니다.<ul>
 <li>봉 단위: 일봉, 1/5/15/60분.</li>
 <li>표시 항목: 이동평균, 볼린저 밴드, 코치 지지·저항선, 진입가, 손절선.</li>
+</ul>
+</li>
 <li><strong>화면 구성 요소</strong>: 유저 베팅 심리 바, 데일리 코치 배너, 장운영 배너(VI·거래정지·서킷브레이커), 야간 퀴즈 배너.</li>
 <li><strong>실시간 연결</strong>: WebSocket으로 시세 틱, 개인 손익, 시장 심리를 받습니다. 순위는 30초마다 새로 받습니다.</li>
 </ul>
@@ -581,9 +671,11 @@ python docs/feature-report/build.py
 <li><strong>규칙</strong>: 시작 자본금, 거래 시간, 배율별 손익, 수수료, 청산 조건을 설명합니다.</li>
 <li>그 밖의 시트: 퀘스트(보상 받기), 아카데미(5배 해금 시험), 야간 차트 퀴즈, 연속 출석 보상.</li>
 <li>API: trading_game <code>/api/game/*</code> 30여 개 + WebSocket <code>/ws/game/stream</code> + stock_api GraphQL <code>GameDailyCandles</code>.</li>
-<li>상태: <strong>코드 완료</strong></li>
+<li>상태: <strong>코드 완료</strong><ul>
 <li>실기기 확인이 남은 항목: 시트 열기/닫기, Android 뒤로가기, WebSocket 재연결.</li>
 <li>운영 <code>.env.production</code>에 <code>EXPO_PUBLIC_GAME_API_URL</code>이 없어서, 운영 빌드에서는 "시즌 준비 중"이 뜹니다.</li>
+</ul>
+</li>
 </ul>
 <h2 id="app-7">5. 스크리너 탭 — <code>/screener</code></h2>
 <p>화면 위쪽의 가로 칩 7개로 전환합니다. 모두 stock_api GraphQL을 쓰는 공개 데이터라 로그인이 필요 없습니다. 데이터는 장 마감 뒤 매일 20:30에 갱신되고, 국내 지수만 장중에 30초마다 갱신합니다.</p>
@@ -661,10 +753,12 @@ python docs/feature-report/build.py
 </tbody>
 </table>
 <ul>
-<li>상태</li>
+<li>상태<ul>
 <li>시장, 테마, 업종, 일정: <strong>완료</strong></li>
 <li>주도주, 조건검색: <strong>코드 완료</strong>(10-21), 실기기 확인 대기</li>
 <li>패턴: <strong>코드 완료</strong>(10-22), 실데이터 검증 대기</li>
+</ul>
+</li>
 </ul>
 <h2 id="app-8">6. 테마/업종 상세 — <code>/market/[kind]/[id]</code></h2>
 <p><img loading="lazy" alt="그룹 상세" src="images/app/06-group.png" /></p>
@@ -700,14 +794,18 @@ python docs/feature-report/build.py
 </table>
 <ul>
 <li><strong>로그인 전</strong>: 카카오(·네이버) 간편 로그인 버튼이 있습니다. 서버에서 켜 둔 공급자만 보입니다. 개발 빌드에서는 닉네임 로그인도 보입니다.</li>
-<li><strong>로그인 후</strong></li>
+<li><strong>로그인 후</strong><ul>
 <li>닉네임과 등급을 보여 줍니다.</li>
 <li><strong>내 펀드 수익</strong> 메뉴가 있습니다.</li>
 <li><strong>새 글 알림</strong> 스위치는 푸시 등록 플래그 <code>post_notice</code>를 바꿉니다.</li>
-<li>로그아웃과 회원 탈퇴(“탈퇴” 입력 후 확인)가 있습니다.</li>
-<li>상태: <strong>부분</strong></li>
+<li>로그아웃과 회원 탈퇴(“탈퇴” 입력 후 확인)가 있습니다. 🆕 탈퇴가 성공하면 그 계정의 기기 펀드 데이터를 지우고 Google에서도 로그아웃합니다(9-4).</li>
+</ul>
+</li>
+<li>상태: <strong>부분</strong><ul>
 <li>"이번 시즌 내 순위" 카드는 고정 문구만 나오고 실제 순위와 연결되어 있지 않습니다.</li>
 <li>Streak 출석, Trading MBTI, 아카데미, 지난 시즌 기록 4줄은 "준비 중"입니다. 출석과 아카데미는 게임 탭 시트에는 있습니다.</li>
+</ul>
+</li>
 </ul>
 <h2 id="app-11">9. 내 펀드 수익 — <code>/fund</code></h2>
 <p><img loading="lazy" alt="펀드 목록" src="images/app/09-fund-list.png" /></p>
@@ -722,11 +820,13 @@ python docs/feature-report/build.py
 <h3 id="app-12">9-1. 펀드 리포트 — <code>/fund/[id]</code> (캡처 없음)</h3>
 <ul>
 <li>실제 리포트에는 <strong>투자자 실명, 투자자 번호, 계좌별 금액</strong>이 들어 있어서 캡처하지 않았습니다.</li>
-<li>동작</li>
+<li>동작<ul>
 <li>캐시를 먼저 보여 준 뒤, 화면을 열 때마다 원본을 다시 가져옵니다.</li>
 <li>새로 가져오는 데 성공한 회차만 <strong>날짜별 히스토리에 기록</strong>합니다. 같은 날짜는 덮어씁니다.</li>
 <li>가져오기 실패, 원본 형식 변경, 일부 항목 누락이 생기면 배너와 "원본 열기" 링크를 보여 줍니다.</li>
 <li>헤더에 수익 히스토리 아이콘과 새로고침 버튼이 있습니다.</li>
+</ul>
+</li>
 <li>상태: <strong>완료</strong></li>
 </ul>
 <h3 id="app-13">9-2. 수익 히스토리 — <code>/fund/history/[id]</code> (캡처 없음)</h3>
@@ -737,22 +837,85 @@ python docs/feature-report/build.py
 </ul>
 <h3 id="app-14">9-3. 백그라운드 기록 (화면 없음)</h3>
 <ul>
-<li>관리자가 펀드 알림을 보내면 <strong>무음 깨우기 푸시</strong>가 함께 갑니다.</li>
+<li>관리자가 펀드 알림을 보내면 <strong>무음 깨우기 푸시</strong>가 함께 갑니다.<ul>
 <li>앱이 꺼져 있어도 백그라운드 작업 <code>fund-refresh-push</code>가 깨어나 리포트를 기록합니다.</li>
 <li>여러 기기가 한꺼번에 몰리지 않도록 0~10초 랜덤 지연을 둡니다. 한 번 실행은 25초 안에 끝냅니다.</li>
+</ul>
+</li>
 <li>안전망으로 약 6시간마다 도는 정기 작업 <code>fund-refresh-periodic</code>이 있습니다.</li>
 <li>Android 실기기(갤럭시 A53)에서 즉시 발송, 알림 탭, 무음 푸시(백그라운드 상태와 완전히 꺼진 상태 모두)를 확인했습니다. 정기 작업이 꺼진 상태에서 실제로 도는지는 아직 측정하지 않았습니다.</li>
 <li>사용자가 앱을 강제 종료했거나 iOS가 잠겨 있으면 기록되지 않을 수 있습니다.</li>
 </ul>
-<h2 id="app-15">10. 기록 백업 — <code>/fund/backup</code></h2>
+<h3 id="app-15">9-4. 🆕 로그인 계정별 저장과 앱 삭제 시 정리 (2026-10-23, 캡처 없음)</h3>
+<ul>
+<li><strong>바뀐 이유</strong><ul>
+<li>예전에는 펀드 목록과 백업 상태를 기기에 키 하나로 저장했습니다. 그래서 개발용 게스트로 추가한 펀드가 카카오 계정에서도 보였습니다.</li>
+<li>앱을 지워도 Android 자동 백업이나 iOS 키체인 때문에 데이터가 되살아날 수 있었습니다.</li>
+</ul>
+</li>
+<li><strong>원칙은 그대로</strong>: 서버는 여전히 펀드 URL과 잔액을 모릅니다. 데이터는 기기 안에서 계정별로 나눌 뿐입니다. 다른 기기로 옮길 때는 같은 계정으로 Drive 복원을 씁니다.</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th>항목</th>
+<th>바뀐 내용</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>목록 저장</td>
+<td>SecureStore 키를 <code>fund_list_v1</code>에서 <code>fund_list_v1_u&lt;회원ID&gt;</code>로 바꿨습니다. 로그인하지 않았거나 복원 전이면 읽기와 쓰기를 모두 막아, 빈 목록으로 덮어쓰는 일을 방지합니다.</td>
+</tr>
+<tr>
+<td>캐시·기록 파일</td>
+<td>펀드 id가 무작위라 겹치지 않으므로 그대로 둡니다. 어느 계정이 볼 수 있는지는 목록이 정합니다.</td>
+</tr>
+<tr>
+<td>옛 데이터</td>
+<td>옛 공용 키에 펀드가 있으면 펀드 화면에 <strong>"저장된 펀드를 가져올까요?"</strong> 바텀시트를 띄웁니다(웹 9-1과 같은 문구). [가져오기]는 URL 중복을 빼고 최대 10개까지 합칩니다. 한도를 넘는 펀드는 기기에 남겨 다른 계정이 가져갈 수 있게 합니다. [버리기]는 쌓인 기록까지 지웁니다.</td>
+</tr>
+<tr>
+<td>Drive 백업</td>
+<td>백업 파일, 백업 상태, 대기 표시를 모두 <strong>계정별</strong>로 나눴습니다(<code>…-u&lt;회원ID&gt;</code>). Drive 작업 직전마다 현재 Google 계정이 연결할 때의 이메일과 같은지 확인하고, 다르면 작업하지 않습니다. 내 백업 파일이 없을 때만 옛 백업 파일로 복원합니다.</td>
+</tr>
+<tr>
+<td>계정 전환</td>
+<td>자동 갱신과 목록 저장은 시작할 때의 계정으로 고정합니다. 저장하는 순간 계정이 바뀌어 있으면 저장하지 않습니다. 푸시 등록은 복원(hydrate)이 끝나기 전에는 <code>fund_notice=false</code>를 보내지 않습니다.</td>
+</tr>
+<tr>
+<td>회원 탈퇴</td>
+<td>탈퇴가 성공하면 그 계정의 목록, 캐시, 기록, 백업 상태를 지우고 Google에서도 로그아웃합니다. Google 로그아웃은 그 계정이 Google을 연결했을 때만 합니다.</td>
+</tr>
+<tr>
+<td>앱 삭제(Android)</td>
+<td><code>allowBackup: false</code>로 Google 자동 백업이 재설치 때 펀드 파일과 설정을 되살리지 못하게 했습니다. <strong>네이티브 변경이라 OTA로는 안 되고 새 APK가 필요합니다.</strong></td>
+</tr>
+<tr>
+<td>앱 삭제(iOS)</td>
+<td>재설치 후 첫 실행 때 키체인에 남은 로그인 정보와 펀드 키를 지웁니다. 키 목록을 볼 수 없어서 소유자 목록 <code>fund_owners_v1</code>을 따로 둡니다. 삭제가 계속 실패해도 매번 로그아웃되지 않도록 재시도는 3번까지만 합니다.</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>캡처하지 않은 이유<ul>
+<li>가져오기 시트를 띄우려면 옛 키에 데이터를 직접 써야 합니다.</li>
+<li>지금 에뮬레이터에 설치된 APK에는 <code>allowBackup</code> 변경이 들어 있지 않습니다.</li>
+<li>화면 문구와 동작은 웹과 같으니 <a href="#web">웹 9-1 캡처</a>를 참고하세요.</li>
+</ul>
+</li>
+<li>상태: <strong>코드 완료</strong>(jest 테스트 포함). <strong>새 APK 빌드 후 실기기 확인 대기.</strong> 확인 시나리오: 게스트로 추가 → 카카오 로그인 → 가져오기 안내 → 게스트로 다시 로그인했을 때 분리되는지 → 앱 삭제·재설치 후 데이터가 없는지.</li>
+</ul>
+<h2 id="app-16">10. 기록 백업 — <code>/fund/backup</code></h2>
 <p><img loading="lazy" alt="기록 백업" src="images/app/10-fund-backup.png" /></p>
 <ul>
 <li>Google 계정을 연결해 펀드 목록과 히스토리를 Google Drive의 앱 전용 폴더(appdata)에 백업하고 복원합니다.</li>
 <li>새 기록이 생기면 하루 1번 자동으로 백업합니다. 백그라운드에서 생긴 기록은 앱을 다시 앞으로 가져올 때 백업합니다.</li>
+<li>🆕 10-23부터 백업 파일과 상태가 <strong>앱 계정별</strong>로 나뉘고, 작업마다 Google 계정 이메일을 확인합니다(9-4). Google 계정을 확인하지 못하면 "Google 계정을 확인하지 못했어요"를 보여 줍니다.</li>
 <li>상태: <strong>코드 완료, 설정 대기</strong>. <code>EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID</code>가 없어서 캡처처럼 <strong>"백업 설정이 필요해요"</strong> 화면이 나옵니다.</li>
 </ul>
 <hr />
-<h2 id="app-16">앱 전체 기능</h2>
+<h2 id="app-17">앱 전체 기능</h2>
 <table>
 <thead>
 <tr>
@@ -871,7 +1034,7 @@ python docs/feature-report/build.py
 <ul>
 <li>서버에서 켜 둔 공급자 버튼만 보입니다(<code>GET /auth/social/providers</code>). 캡처 시점에는 카카오만 켜져 있었습니다.</li>
 <li>다음 화면에서 로그인 모달이 열립니다: 헤더의 [로그인] 버튼, 내정보, 글 상세의 댓글 영역, 게임에서 주문할 때.</li>
-<li>상태: <strong>완료</strong>. 실제 공급자 키로 하는 수동 확인과 네이버 검수가 남아 있습니다.</li>
+<li>상태: <strong>완료</strong>. 개발 서버에 카카오 키를 적용했고 <strong>웹 카카오 로그인 성공을 확인</strong>했습니다(2026-10-23). 남은 일: 네이버 키 발급 뒤 확인, 공식 버튼 디자인.</li>
 </ul>
 <h2 id="web-5">3. 커뮤니티 — <code>/boards/:boardId</code></h2>
 <p><img loading="lazy" alt="게시판" src="images/web/02-board.png" /></p>
@@ -905,14 +1068,18 @@ python docs/feature-report/build.py
 </table>
 <ul>
 <li>앱과 같은 실시간 가상 롱/숏 게임입니다.</li>
-<li><strong>배치</strong></li>
+<li><strong>배치</strong><ul>
 <li>넓은 화면에서는 차트와 오른쪽 sticky 주문 패널을 2단으로 둡니다.</li>
 <li>좁은 화면에서는 아래에 고정 주문 바를 두고, "주문 설정" 시트로 세부 값을 고릅니다.</li>
+</ul>
+</li>
 <li><strong>차트</strong>: lightweight-charts를 씁니다. 봉 단위는 일봉과 1/5/15/60분, 보조지표는 이동평균과 볼린저 밴드입니다.</li>
 <li><strong>로그인 없이 볼 수 있는 것</strong>: 차트, 심리 바, 랭킹, 규칙. 주문을 하거나 개인 모달을 열면 로그인 모달이 뜹니다.</li>
-<li><strong>실시간 연결</strong>: WebSocket <code>/ws/game/stream</code></li>
+<li><strong>실시간 연결</strong>: WebSocket <code>/ws/game/stream</code><ul>
 <li>토큰이 없으면 공개 연결로 시세 틱과 심리만 받습니다.</li>
 <li>토큰이 있으면 개인 손익, 넛지, 코치 메시지, 장 상태도 받습니다.</li>
+</ul>
+</li>
 <li>상태: <strong>완료</strong>. 일부 모달(연속 출석 보상, 주간 랭킹 보상 토스트)은 브라우저 확인이 남았습니다.</li>
 </ul>
 <h2 id="web-8">6. 스크리너 — <code>/screener/*</code></h2>
@@ -920,12 +1087,14 @@ python docs/feature-report/build.py
 <h3 id="web-9">6-1. 시장 — <code>/screener/market</code></h3>
 <p><img loading="lazy" alt="시장" src="images/web/06-screener-market.png" /></p>
 <ul>
-<li>한 화면에 다음을 보여 줍니다.</li>
+<li>한 화면에 다음을 보여 줍니다.<ul>
 <li>국내·미국 지수 카드(20일 스파크라인)</li>
 <li>미국 거시 지표(FRED)</li>
 <li>주도 테마 Top 5와 대장주</li>
 <li>다가오는 일정</li>
 <li>업종 트리맵(면적은 시가총액, 누르면 업종 탭으로 이동)</li>
+</ul>
+</li>
 <li>탭이 화면에 보이는 동안 지수와 거시 지표만 30초마다 다시 받습니다.</li>
 </ul>
 <h3 id="web-10">6-2. 테마 / 6-3. 업종 — <code>/screener/themes</code>, <code>/screener/sectors</code></h3>
@@ -944,10 +1113,12 @@ python docs/feature-report/build.py
 </tbody>
 </table>
 <ul>
-<li><strong>목록과 트리맵</strong></li>
+<li><strong>목록과 트리맵</strong><ul>
 <li>보기 방식은 목록과 트리맵 두 가지입니다.</li>
 <li>기간은 1/5/20일, 정렬은 등락률/거래대금입니다.</li>
 <li>목록 각 행에 연속 상위 일수, 상승/하락 종목 수, 대장주가 나옵니다.</li>
+</ul>
+</li>
 <li><strong>상세</strong>: 등락, 순위 추이 그래프, 구성 종목이 나옵니다. 넓은 화면에서는 오른쪽 sticky 영역에, 좁은 화면에서는 항목 아래에 펼쳐집니다.</li>
 </ul>
 <h3 id="web-11">6-4. 일정 — <code>/screener/calendar</code></h3>
@@ -1002,20 +1173,61 @@ python docs/feature-report/build.py
 <p><img loading="lazy" alt="펀드 목록" src="images/web/13-funds.png" /></p>
 <ul>
 <li>앱과 같은 펀드 현황 기능의 <strong>웹 버전</strong>입니다. 로그인해야 들어올 수 있습니다.</li>
-<li><strong>목록</strong></li>
+<li><strong>목록</strong><ul>
 <li>fund.ivyro.net 주소를 넣어 추가하고, 지울 수 있습니다.</li>
 <li>목록 화면에서 기준일, 마지막 확인 시각, "확인 중…" 상태를 보여 줍니다.</li>
-<li>목록과 캐시는 <strong>브라우저 localStorage에만</strong> 저장됩니다.</li>
-<li><strong>리포트</strong>: 캐시를 먼저 보여 준 뒤 원본을 다시 가져옵니다. 가져오기 실패, 형식 변경, 누락이 생기면 배너를 보여 줍니다.</li>
+<li>목록과 캐시는 <strong>브라우저 localStorage에만</strong> 저장되고, 로그인 계정별로 나뉩니다(9-1).</li>
+</ul>
+</li>
+<li><strong>리포트</strong>: 캐시를 먼저 보여 준 뒤 원본을 다시 가져옵니다. 가져오기 실패, 형식 변경, 누락이 생기면 배너를 보여 줍니다.<ul>
 <li>리포트 화면은 실명과 금액이 나와서 캡처하지 않았습니다.</li>
-<li><strong>데이터 흐름</strong></li>
+</ul>
+</li>
+<li><strong>데이터 흐름</strong><ul>
 <li>브라우저가 fund.ivyro.net에 직접 <code>fetch</code>합니다. 원본이 CORS를 허용합니다.</li>
 <li>백엔드는 갱신 신호(SSE <code>fund_report_updated</code>)만 보냅니다.</li>
+</ul>
+</li>
 <li><strong>앱과 코드 공유</strong>: 파싱·표시 로직의 원본은 <code>mobile/src/features/fund/core/</code>이고, <code>web_client/src/lib/fundCore/</code>에 같은 내용을 복사해 씁니다. 두 곳이 같은지는 <code>scripts/check-fund-core-sync.sh</code>로 검사합니다.</li>
 <li>웹에서 일부러 뺀 것: 수익 히스토리, Drive 백업, 웹과 앱 사이 목록 동기화.</li>
 <li>상태: <strong>완료</strong>(웹 범위 기준)</li>
 </ul>
-<h2 id="web-18">10. 간편 로그인 완료 — <code>/auth/complete</code> (캡처 없음)</h2>
+<h3 id="web-18">9-1. 🆕 로그인 계정별 저장 (2026-10-23)</h3>
+<table>
+<thead>
+<tr>
+<th>가져오기 안내</th>
+<th>가져온 뒤 (계정별 목록)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><img loading="lazy" alt="가져오기 안내" src="images/web/15-fund-legacy-import.png" /></td>
+<td><img loading="lazy" alt="가져온 뒤" src="images/web/16-fund-imported.png" /></td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li><strong>바뀐 이유</strong>: 예전에는 펀드 목록을 브라우저에 키 하나(<code>fund_list_v1</code>)로 저장해서, 어느 계정으로 로그인해도 같은 펀드가 보였습니다.</li>
+<li><strong>지금 동작</strong><ul>
+<li>목록은 <code>fund_list_v1_u&lt;회원ID&gt;</code> 키에 <strong>계정별로</strong> 저장됩니다.</li>
+<li>로그아웃 상태에서는 목록이 보이지 않습니다.</li>
+<li>리포트 캐시는 펀드 id 기준이라 따로 옮기지 않습니다.</li>
+</ul>
+</li>
+<li><strong>옛 목록 가져오기 안내</strong><ul>
+<li>옛 공용 키에 펀드가 남아 있으면, 펀드 화면에 처음 들어온 계정에게 <strong>"저장된 펀드를 가져올까요?"</strong> 창을 1번 띄웁니다.</li>
+<li><strong>가져오기</strong>: 내 목록과 합칩니다. URL이 같은 펀드는 하나로 합치고, 최대 10개까지만 가져옵니다. 한도를 넘는 펀드는 이 브라우저에 남겨 두고 개수를 알려 줍니다.</li>
+<li><strong>버리기</strong>: 확인을 받은 뒤 옛 목록과 해당 캐시를 지웁니다.</li>
+<li>창을 닫기만 하면 아무것도 바꾸지 않고, 다음에 들어올 때 다시 묻습니다.</li>
+</ul>
+</li>
+<li><strong>회원 탈퇴</strong>: 탈퇴가 성공했을 때만 그 계정의 펀드 목록과 캐시를 브라우저에서 지웁니다.</li>
+<li><strong>자동 갱신</strong>: 갱신하는 도중에 계정이 바뀌어도 처음 시작한 계정으로만 저장합니다. 다른 계정 목록으로 새지 않습니다.</li>
+<li>캡처는 가짜 펀드 2개(<code>예시 펀드 A/B</code>)로 찍었고, 찍은 뒤 지웠습니다.</li>
+<li>상태: <strong>완료</strong>(커밋 <code>6ba9a85</code>, <code>03d906a</code>). 설계 문서: <code>docs/superpowers/specs/2026-10-23-fund-per-account-storage-design.md</code></li>
+</ul>
+<h2 id="web-19">10. 간편 로그인 완료 — <code>/auth/complete</code> (캡처 없음)</h2>
 <ul>
 <li>소셜 로그인 콜백이 돌아오는 경로입니다. 화면에는 "로그인 중…"만 잠깐 보입니다.</li>
 <li><code>?code=</code>를 받으면 PKCE verifier와 함께 교환해서 JWT를 저장하고, 로그인 전에 있던 경로로 돌아갑니다.</li>

@@ -21,6 +21,15 @@ DOCS = [  # (파일, 사이드바 제목, 섹션 id 접두어)
 
 def render(md_text: str, prefix: str) -> tuple[str, list[tuple[str, str]]]:
     """md → html, 그리고 h2 목차 [(id, text)] 를 돌려준다. id 는 문서별 접두어로 충돌 방지."""
+    # python-markdown 은 하위 목록 들여쓰기를 4칸으로 본다(md 는 GitHub 식 2칸) → 코드 블록 밖 들여쓰기를 2배로
+    lines, in_fence = [], False
+    for line in md_text.split("\n"):
+        if line.lstrip().startswith("```"):
+            in_fence = not in_fence
+        elif not in_fence and (m := re.match(r"^( +)\S", line)):
+            line = m.group(1) * 2 + line[len(m.group(1)):]
+        lines.append(line)
+    md_text = "\n".join(lines)
     # python-markdown 은 문단 바로 아래 목록을 목록으로 보지 않는다(GitHub 은 인식) → 빈 줄을 끼워 맞춘다
     md_text = re.sub(r"^(?![ \t]*(?:[-*]|\d+\.)\s|[ \t]*$|[ \t]*\|)(.+)\n(?=[-*] |\d+\. )", r"\1\n\n", md_text, flags=re.M)
     body = markdown.markdown(md_text, extensions=["tables", "fenced_code", "sane_lists"])
@@ -109,7 +118,7 @@ a{color:var(--accent)}
 <body>
 <button id="menu" aria-label="목차">☰ 목차</button>
 <button id="theme" aria-label="테마 전환">🌓</button>
-<aside id="side"><h1>📈 StockApp 기능 보고서</h1><div class="sub">2026-10-22 · dev 8d7d3c7</div>{{NAV}}</aside>
+<aside id="side"><h1>📈 StockApp 기능 보고서</h1><div class="sub">2026-10-23 갱신 · dev 661f89e</div>{{NAV}}</aside>
 <main>{{BODY}}</main>
 <div id="lightbox"><img alt=""></div>
 <script>
