@@ -48,8 +48,8 @@ export default function FinderDetail({ item, bbSigma, date }: { item: FinderItem
         ))}
       </dl>
 
-      <Link to={`/screener/leaders?ticker=${encodeURIComponent(item.ticker)}`} className="inline-block text-sm font-medium text-brand">
-        주도주 분석(CANSLIM) 보기 →
+      <Link to={`/stock/${encodeURIComponent(item.ticker)}`} className="inline-block text-sm font-medium text-brand">
+        종목 상세 보기 →
       </Link>
       <p className="text-xs text-ink-muted">재무는 최신 연간 결산 기준이에요.</p>
     </div>

@@ -8,7 +8,7 @@ export type Section = 'home' | 'community' | 'game' | 'screener' | 'me'
 // eslint-disable-next-line react-refresh/only-export-components -- 내비 섹션 판별 함수를 같은 파일에서 공유(개발 중 Fast Refresh 에만 영향)
 export function sectionOf(pathname: string): Section {
   if (pathname.startsWith('/game')) return 'game'
-  if (pathname.startsWith('/screener')) return 'screener'
+  if (pathname.startsWith('/screener') || pathname.startsWith('/stock/')) return 'screener' // 종목 상세는 스크리너에서 들어온다
   if (pathname.startsWith('/me')) return 'me'
   if (pathname === '/' || pathname === '') return 'home'
   return 'community' // /community, /boards/:id, /posts/:id, 기타

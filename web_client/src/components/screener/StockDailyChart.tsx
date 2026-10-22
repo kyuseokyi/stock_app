@@ -18,7 +18,7 @@ export interface ChartMarker {
 // 스크리너 상세용 일봉 차트 — 캔들 + 50일선 + 52주 최고가 점선. 게임 TradingChart(코치·포지션·분봉)와 분리.
 // priceLines·markers 는 선택 — 패턴 상세가 피벗·매수/손절 선과 베이스 꼭짓점을 얹을 때 쓴다(없으면 기존과 동일).
 export default function StockDailyChart({
-  ticker, high52w, priceLines, markers, lookbackDays, onMarkersDropped,
+  ticker, high52w, priceLines, markers, lookbackDays, onMarkersDropped, heightClass = 'h-64',
 }: {
   ticker: string
   high52w: number | null
@@ -28,6 +28,8 @@ export default function StockDailyChart({
   lookbackDays?: number
   /** 받은 일봉 기간 밖이라 그리지 못한 마커 수 알림 */
   onMarkersDropped?: (n: number) => void
+  /** 차트 높이 Tailwind 클래스 — 생략하면 h-64(스크리너 상세 패널) */
+  heightClass?: string
 }) {
   const boxRef = useRef<HTMLDivElement>(null)
   const seriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null)
@@ -110,7 +112,7 @@ export default function StockDailyChart({
   }, [extraKey, state])
 
   return (
-    <div className="relative h-64 touch-pan-y">
+    <div className={`relative ${heightClass} touch-pan-y`}>
       <div ref={boxRef} className="h-full w-full" />
       {state !== 'ready' && (
         <div className="absolute inset-0 flex items-center justify-center text-sm text-ink-muted">

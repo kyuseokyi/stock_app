@@ -95,7 +95,7 @@ export default function GroupDetailView({ kind, id }: { kind: GroupKind; id: str
         <ul className="divide-y divide-line">
           {data.stocks.map((s) => (
             <li key={s.ticker}>
-              <Link to={`/screener/leaders?ticker=${s.ticker}`} className="flex items-center gap-2 px-1 py-2.5 hover:bg-fill/60">
+              <Link to={`/stock/${encodeURIComponent(s.ticker)}`} className="flex items-center gap-2 px-1 py-2.5 hover:bg-fill/60">
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-1.5">
                     <span className="truncate text-sm font-bold text-ink">{s.name}</span>

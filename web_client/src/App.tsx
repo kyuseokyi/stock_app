@@ -16,6 +16,7 @@ const GroupTab = lazy(() => import('./pages/screener/GroupTab'))
 const CalendarTab = lazy(() => import('./pages/screener/CalendarTab'))
 const FinderTab = lazy(() => import('./pages/screener/FinderTab'))
 const PatternsTab = lazy(() => import('./pages/screener/PatternsTab'))
+const StockDetailPage = lazy(() => import('./pages/StockDetailPage'))
 const FundListPage = lazy(() => import('./pages/FundListPage'))
 const FundReportPage = lazy(() => import('./pages/FundReportPage'))
 
@@ -60,6 +61,11 @@ export default function App() {
           <Route path="patterns" element={<PatternsTab />} />
           <Route path="*" element={<Navigate to="market" replace />} />
         </Route>
+        <Route path="stock/:ticker" element={
+          <Suspense fallback={<p className="py-16 text-center text-ink-muted">불러오는 중…</p>}>
+            <StockDetailPage />
+          </Suspense>
+        } />
         <Route path="auth/complete" element={<AuthCompletePage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
