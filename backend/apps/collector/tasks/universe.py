@@ -17,8 +17,9 @@ import os
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
+from apps.collector import trading_day
 from apps.collector.celery_app import celery_app
 from apps.collector.indicators import enrich_with_ma
 from apps.collector.kis.client import KISClient, KISConnectionError
@@ -242,13 +243,20 @@ def backfill_all_daily(
     source: str | None = None,
     rate_per_sec: float | None = None,
     workers: int | None = None,
+    end: str | None = None,
 ) -> dict:
-    """전종목 장기 백필(청킹). MA 는 종목별 전체 시계열에 한 번만 계산."""
+    """전종목 장기 백필(청킹). MA 는 종목별 전체 시계열에 한 번만 계산.
+
+    end(YYYYMMDD) 미지정이면 마지막 확정 거래일(KST 평일 20:30 이후 오늘, 아니면 직전 평일) — 장중 미완성 봉 방지.
+    시작·끝 날짜는 한 번만 정한다(실행이 20:30 을 넘겨도 종목마다 끝 날짜가 갈리지 않게).
+    """
+    end_day = (datetime.strptime(end, "%Y%m%d").date() if end
+               else trading_day.last_confirmed_trading_day())
+    start_s = (end_day - timedelta(days=int(months) * 31)).strftime("%Y%m%d")
+    end_s = end_day.strftime("%Y%m%d")
+
     def _backfill_one(ticker: str, client: KISClient) -> int:
-        today = date.today()
-        start = (today - timedelta(days=int(months) * 31)).strftime("%Y%m%d")
-        end = today.strftime("%Y%m%d")
-        ohlcv = fetch_domestic_daily_range(ticker, start, end, client=client)
+        ohlcv = fetch_domestic_daily_range(ticker, start_s, end_s, client=client)
         return upsert_daily_prices(ticker, enrich_with_ma(ohlcv))
 
     return _run_universe(_backfill_one, limit, source, rate_per_sec, workers)

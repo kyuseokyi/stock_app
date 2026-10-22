@@ -32,6 +32,8 @@ async def run_job(job: str, admin: User = Depends(require_admin)):
         return await run_in_threadpool(admin_jobs.run, job, actor)
     except admin_jobs.UnknownJob:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail={"code": "JOB_NOT_FOUND", "message": "없는 작업입니다."})
+    except admin_jobs.JobWindowClosed as e:
+        raise HTTPException(status.HTTP_409_CONFLICT, detail={"code": "JOB_WINDOW_CLOSED", "message": e.message})
     except admin_jobs.JobRunning as e:
         raise HTTPException(status.HTTP_409_CONFLICT, detail={
             "code": "JOB_RUNNING", "message": "이미 실행 중이에요", "task_id": e.info.get("task_id"),

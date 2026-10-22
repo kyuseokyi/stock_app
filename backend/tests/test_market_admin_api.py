@@ -74,6 +74,15 @@ async def test_run_job_status_codes(api, monkeypatch):
     assert r.json()["detail"] == {"code": "JOB_RUNNING", "message": "이미 실행 중이에요", "task_id": "t0",
                                   "actor": "다른 관리자", "requested_at": "2026-10-16T11:59:00+00:00"}
 
+    def closed(job, actor):
+        raise admin_jobs.JobWindowClosed(admin_jobs.JOBS["bootstrap"])
+
+    monkeypatch.setattr(admin_jobs, "run", closed)
+    r = await client.post("/api/v1/admin/market/jobs/bootstrap")
+    assert r.status_code == 409
+    assert r.json()["detail"] == {"code": "JOB_WINDOW_CLOSED",
+                                  "message": "18:00~21:30 에는 정기 수집과 겹쳐 실행할 수 없어요"}
+
     def down(job, actor):
         raise admin_jobs.QueueUnavailable("broker down")
 

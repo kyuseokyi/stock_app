@@ -3,7 +3,7 @@
 중복 방지는 여기(관리자 실행)에서만 한다. 작업 본문에는 잠금을 걸지 않는다 — 테마 보정마다 보내는
 compute_market_groups 가 '실행 중이라 건너뜀'이 되면 마지막 보정이 다음 날까지 반영되지 않는다(계산은 멱등).
 잠금 값에 task_id 를 넣고 Celery 상태로 실제 실행 여부를 확인한다. 배포로 워커가 바뀌어 STARTED 에 멈춘
-잠금은 TTL 이 지나면 풀린다. KIS 를 호출하는 수집 작업은 2단계(파이프라인 잠금과 함께)에서 추가한다.
+잠금은 TTL 이 지나면 풀린다. KIS 를 대량 호출하는 작업(bootstrap)은 window_block 으로 정기 수집 시간대(KST)에 거부한다.
 """
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ import json
 import logging
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, time, timedelta, timezone
 
 import redis
 
@@ -30,6 +30,9 @@ class Job:
     eta: str
     lock_ttl: int  # 초
     kwargs: dict = field(default_factory=dict)
+    confirm: str | None = None  # 실행 전 확인 창 문구(없으면 화면 기본 문구)
+    window_block: tuple[str, str] | None = None  # KST "HH:MM" [시작, 끝) 에는 실행 거부
+    uses_kis: bool = False  # 화면 안내용(KIS 호출 여부)
 
 
 JOBS: dict[str, Job] = {j.key: j for j in (
@@ -47,11 +50,18 @@ JOBS: dict[str, Job] = {j.key: j for j in (
         "collector.backfill_screener", "수 분", 3600, {"days": 60}),
     Job("patterns", "차트 패턴 계산", "최신 거래일 차트 패턴(베이스·피벗·돌파)을 다시 계산해요",
         "collector.compute_patterns", "1~2분", 900),
+    Job("bootstrap", "초기 데이터 준비",
+        "새 서버에 일봉 3년·지수·수급·재무를 받고 지표를 모두 계산해요(KIS 대량 호출, 1~2시간)",
+        "collector.bootstrap_data", "1~2시간", 4 * 3600, {"months": 37},
+        confirm="KIS 를 대량 호출해 1~2시간 걸려요. 18:00~21:30 에는 실행할 수 없어요. 진행할까요?",
+        window_block=("18:00", "21:30"), uses_kis=True),
 )}
 LOCK_KEY = "admin:job:{}"
 HISTORY_KEY = "admin:job:history"
 HISTORY_MAX = 30
 SUMMARY_MAX = 200
+BOOTSTRAP_PROGRESS_KEY = "admin:bootstrap:progress"  # collector/tasks/bootstrap.py 가 쓴다
+KST = timezone(timedelta(hours=9))
 _ACTIVE = frozenset({"PENDING", "RECEIVED", "STARTED", "RETRY"})
 
 
@@ -61,6 +71,14 @@ class UnknownJob(Exception):
 
 class QueueUnavailable(Exception):
     pass
+
+
+class JobWindowClosed(Exception):
+    def __init__(self, job: Job):
+        start, end = job.window_block or ("", "")
+        super().__init__(f"{start}~{end} 에는 정기 수집과 겹쳐 실행할 수 없어요")
+        self.job = job
+        self.message = str(self)
 
 
 class JobRunning(Exception):
@@ -84,6 +102,22 @@ def _task_state(task_id: str) -> tuple[str, object]:
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+def _now_kst() -> datetime:
+    return datetime.now(KST)
+
+
+def _hm(s: str) -> time:
+    h, m = s.split(":")
+    return time(int(h), int(m))
+
+
+def _window_closed(job: Job) -> bool:
+    if job.window_block is None:
+        return False
+    t = _now_kst().astimezone(KST).time()
+    return _hm(job.window_block[0]) <= t < _hm(job.window_block[1])
 
 
 def _held(r, job: Job) -> dict | None:
@@ -115,6 +149,8 @@ def run(job_key: str, actor: str) -> dict:
     job = JOBS.get(job_key)
     if job is None:
         raise UnknownJob(job_key)
+    if _window_closed(job):  # 잠금을 잡기 전에 — 차단된 요청이 잠금을 남기지 않게
+        raise JobWindowClosed(job)
     r = get_sync_redis()
     key = LOCK_KEY.format(job.key)
     info = {"task_id": uuid.uuid4().hex, "job": job.key, "actor": actor, "requested_at": _now()}
@@ -174,7 +210,9 @@ def _overview() -> dict:
             active_ids.add(held["task_id"])
         jobs.append({"key": job.key, "label": job.label, "description": job.description, "eta": job.eta,
                      "status": status, "task_id": held["task_id"] if held else None,
-                     "requested_at": held["requested_at"] if held else None})
+                     "requested_at": held["requested_at"] if held else None,
+                     "confirm": job.confirm, "window_block": list(job.window_block) if job.window_block else None,
+                     "uses_kis": job.uses_kis})
     history = []
     for raw in r.lrange(HISTORY_KEY, 0, HISTORY_MAX - 1):
         h = json.loads(raw)
@@ -185,4 +223,17 @@ def _overview() -> dict:
         history.append({"job": h["job"], "label": job.label if job else h["job"], "task_id": h["task_id"],
                         "actor": h.get("actor"), "requested_at": h.get("requested_at"), "state": state,
                         "result_summary": _summary(state, result)})
-    return {"jobs": jobs, "history": history}
+    return {"jobs": jobs, "history": history, "bootstrap": _bootstrap_progress(r)}
+
+
+def _bootstrap_progress(r) -> dict | None:
+    """초기 데이터 준비 진행 상황(없거나 깨졌으면 None). Redis 오류는 overview 가 QueueUnavailable 로 바꾼다."""
+    raw = r.get(BOOTSTRAP_PROGRESS_KEY)
+    if not raw:
+        return None
+    try:
+        data = json.loads(raw)
+    except ValueError:
+        log.warning("bootstrap progress 파싱 실패")
+        return None
+    return data if isinstance(data, dict) else None

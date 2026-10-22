@@ -2,12 +2,15 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
 import fakeredis
 import pytest
 
 from apps.stock_api.services import admin_jobs as aj
+
+KST = timezone(timedelta(hours=9))
 
 
 @pytest.fixture
@@ -17,6 +20,7 @@ def env(monkeypatch):
     sent: list = []
     monkeypatch.setattr(aj, "get_sync_redis", lambda: fake)
     monkeypatch.setattr(aj, "_task_state", lambda tid: states.get(tid, ("PENDING", None)))
+    monkeypatch.setattr(aj, "_now_kst", lambda: datetime(2026, 10, 22, 10, 0, tzinfo=KST))  # 차단 시간대 밖
     monkeypatch.setattr(aj.celery_app, "send_task",
                         lambda name, kwargs=None, task_id=None: sent.append((name, kwargs, task_id)))
     return SimpleNamespace(redis=fake, states=states, sent=sent)
@@ -38,7 +42,7 @@ def test_run_sends_whitelisted_task_and_records(env):
     assert 0 < env.redis.ttl("admin:job:backfill_market_groups") <= 3600
     ov = aj.overview()
     assert [j["key"] for j in ov["jobs"]] == ["canslim", "market_groups", "backfill_canslim", "backfill_market_groups",
-                                         "screener", "backfill_screener", "patterns"]
+                                         "screener", "backfill_screener", "patterns", "bootstrap"]
     job = _job(ov, "backfill_market_groups")
     assert job["status"] == "queued" and job["task_id"] == out["task_id"]
     assert _job(ov, "canslim")["status"] == "idle"
@@ -150,3 +154,68 @@ def test_queue_failure_and_lock_release_failure_still_queue_unavailable(env, mon
     monkeypatch.setattr(env.redis, "delete", del_fail)
     with pytest.raises(aj.QueueUnavailable):
         aj.run("canslim", "A")
+
+
+# ---------------------------------------------------------------- 초기 데이터 준비(bootstrap)
+def _at(monkeypatch, h, m):
+    monkeypatch.setattr(aj, "_now_kst", lambda: datetime(2026, 10, 22, h, m, tzinfo=KST))
+
+
+@pytest.mark.parametrize("h, m, blocked", [(17, 59, False), (18, 0, True), (20, 30, True), (21, 29, True),
+                                           (21, 30, False)])
+def test_bootstrap_window_block(env, monkeypatch, h, m, blocked):
+    _at(monkeypatch, h, m)
+    if blocked:
+        with pytest.raises(aj.JobWindowClosed) as e:
+            aj.run("bootstrap", "관리자")
+        assert e.value.message == "18:00~21:30 에는 정기 수집과 겹쳐 실행할 수 없어요"
+        assert env.sent == [] and env.redis.get("admin:job:bootstrap") is None  # 잠금·기록을 남기지 않음
+        assert env.redis.llen(aj.HISTORY_KEY) == 0
+    else:
+        out = aj.run("bootstrap", "관리자")
+        assert env.sent == [("collector.bootstrap_data", {"months": 37}, out["task_id"])]
+        assert 3600 < env.redis.ttl("admin:job:bootstrap") <= 4 * 3600
+
+
+def test_window_block_does_not_affect_other_jobs(env, monkeypatch):
+    _at(monkeypatch, 20, 30)
+    for key in [k for k in aj.JOBS if k != "bootstrap"]:
+        aj.run(key, "관리자")
+    assert len(env.sent) == len(aj.JOBS) - 1
+    assert all(aj.JOBS[k].window_block is None and aj.JOBS[k].confirm is None for k in aj.JOBS if k != "bootstrap")
+
+
+def test_window_block_uses_kst_from_aware_utc(env, monkeypatch):
+    monkeypatch.setattr(aj, "_now_kst", lambda: datetime(2026, 10, 22, 11, 0, tzinfo=timezone.utc))  # KST 20:00
+    with pytest.raises(aj.JobWindowClosed):
+        aj.run("bootstrap", "관리자")
+
+
+def test_overview_exposes_confirm_and_bootstrap_progress(env):
+    ov = aj.overview()
+    assert ov["bootstrap"] is None
+    boot = _job(ov, "bootstrap")
+    assert boot["confirm"].startswith("KIS 를 대량 호출해") and boot["window_block"] == ["18:00", "21:30"]
+    assert boot["uses_kis"] is True and boot["eta"] == "1~2시간"
+    canslim = _job(ov, "canslim")
+    assert canslim["confirm"] is None and canslim["window_block"] is None and canslim["uses_kis"] is False
+    progress = {"task_id": "t1", "started_at": "2026-10-22T01:00:00+00:00", "finished_at": None, "months": 37,
+                "end_date": "2026-10-21", "skipped": None,
+                "steps": [{"key": "daily_backfill", "label": "전종목 일봉 백필", "state": "running",
+                           "seconds": None, "summary": None, "reason": None}]}
+    env.redis.set(aj.BOOTSTRAP_PROGRESS_KEY, json.dumps(progress, ensure_ascii=False))
+    assert aj.overview()["bootstrap"] == progress
+
+
+def test_overview_ignores_broken_bootstrap_progress(env):
+    env.redis.set(aj.BOOTSTRAP_PROGRESS_KEY, "{not json")
+    assert aj.overview()["bootstrap"] is None
+    env.redis.set(aj.BOOTSTRAP_PROGRESS_KEY, "[1, 2]")
+    assert aj.overview()["bootstrap"] is None
+
+
+def test_progress_key_matches_collector():
+    from apps.collector.tasks import bootstrap
+
+    assert aj.BOOTSTRAP_PROGRESS_KEY == bootstrap.PROGRESS_KEY
+    assert aj.JOBS["bootstrap"].task == bootstrap.bootstrap_data.name
