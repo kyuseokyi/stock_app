@@ -71,7 +71,7 @@ export interface PatternLineColors {
   stop: string;
 }
 
-/** 차트 선 — 피벗 실선(굵게), 매수 구간 상단·손절(상단) 점선. zones 가 없으면 피벗만 */
+/** 차트 선 — 피벗 실선(굵게), 매수 구간 상단·손절(하단 stopLow, 피벗 −8%) 점선. zones 가 없으면 피벗만 */
 export function patternChartLines(pivot: number, zones: PatternZones | null, colors: PatternLineColors): ChartLine[] {
   if (!Number.isFinite(pivot)) return [];
   const lines: ChartLine[] = [{ price: pivot, color: colors.pivot, width: 2, dashed: false, title: '피벗', fit: 'day' }];
@@ -79,8 +79,8 @@ export function patternChartLines(pivot: number, zones: PatternZones | null, col
     if (Number.isFinite(zones.buyHigh)) {
       lines.push({ price: zones.buyHigh, color: colors.buy, width: 1, dashed: true, title: '매수 상단', fit: 'day' });
     }
-    if (Number.isFinite(zones.stopHigh)) {
-      lines.push({ price: zones.stopHigh, color: colors.stop, width: 1, dashed: true, title: '손절', fit: 'day' });
+    if (Number.isFinite(zones.stopLow)) {
+      lines.push({ price: zones.stopLow, color: colors.stop, width: 1, dashed: true, title: '손절', fit: 'day' });
     }
   }
   return lines;

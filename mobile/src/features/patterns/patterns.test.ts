@@ -69,7 +69,7 @@ describe('차트 패턴 순수 함수', () => {
     expect(lines.map((l) => [l.title, l.price, l.dashed])).toEqual([
       ['피벗', 100, false],
       ['매수 상단', 105, true],
-      ['손절', 95, true],
+      ['손절', 92, true],
     ]);
     expect(patternChartLines(100, null, colors)).toHaveLength(1);
     expect(patternChartLines(NaN, zones, colors)).toEqual([]);

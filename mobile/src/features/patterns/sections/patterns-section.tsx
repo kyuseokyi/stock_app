@@ -16,6 +16,9 @@ export function PatternsSection({ onOpenStock }: { onOpenStock: (ticker: string,
   const { refreshing, onRefresh } = usePullRefresh(r.refresh);
   const view = listView({ loading: r.loading, error: r.error, date: r.date, count: r.items.length });
   const lastIndex = r.items.length - 1;
+  // 현재 베이스는 종목당 하나가 정상이지만, 중복이 와도 키가 겹치지 않게 한다
+  const keyCount = new Map<string, number>();
+  for (const it of r.items) keyCount.set(it.ticker, (keyCount.get(it.ticker) ?? 0) + 1);
 
   return (
     <View style={styles.screen}>
@@ -26,7 +29,7 @@ export function PatternsSection({ onOpenStock }: { onOpenStock: (ticker: string,
         <FlatList
           contentContainerStyle={[styles.list, r.items.length === 0 && styles.grow]}
           data={r.items}
-          keyExtractor={(it) => `${it.ticker}-${it.patternType}`}
+          keyExtractor={(it, i) => (keyCount.get(it.ticker) === 1 ? it.ticker : `${it.ticker}-${i}`)}
           ListHeaderComponent={
             view === 'list' ? <Text style={styles.total}>총 {formatIndex(r.total)}개</Text> : null
           }
@@ -64,7 +67,7 @@ export function PatternsSection({ onOpenStock }: { onOpenStock: (ticker: string,
                   </Pressable>
                 ) : null}
                 <Text style={styles.basis}>
-                  {r.date} 기준일 종가 · 매일 20:30 갱신 · 패턴 판정은 참고용이며 투자 권유가 아닙니다
+                  {r.date ? `${r.date} 기준일 종가 · ` : ''}매일 20:30 갱신 · 패턴 판정은 참고용이며 투자 권유가 아닙니다
                 </Text>
               </View>
             )

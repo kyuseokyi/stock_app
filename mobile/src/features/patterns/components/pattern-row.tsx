@@ -68,10 +68,10 @@ const styles = StyleSheet.create((theme) => ({
   name: { flexShrink: 1, fontSize: 15, fontWeight: '700', color: theme.colors.text },
   ticker: { fontSize: 12, color: theme.colors.textSecondary },
   badges: { flexDirection: 'row', flexWrap: 'wrap', gap: theme.gap(0.5) },
-  badge: { borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 },
+  badge: { borderRadius: 6, paddingHorizontal: theme.gap(0.75), paddingVertical: theme.gap(0.25) },
   badgeText: { fontSize: 11, fontWeight: '700' },
   meta: { fontSize: 12, color: theme.colors.textSecondary },
-  nums: { alignItems: 'flex-end', gap: 2 },
+  nums: { alignItems: 'flex-end', gap: theme.gap(0.25) },
   price: { fontSize: 15, fontWeight: '700', color: theme.colors.text },
   dist: { fontSize: 13, fontWeight: '700' },
 }));
