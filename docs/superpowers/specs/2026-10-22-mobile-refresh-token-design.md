@@ -13,9 +13,13 @@
 | 세션과의 관계 | 리프레시 행은 로그인 때의 `sid` 에 묶인다. 갱신은 **sid 유지**(새 세션 아님, SESSION_REPLACED 발행 없음). 같은 플랫폼 재로그인으로 `user_sessions.sid` 가 바뀌면 이전 리프레시는 무효 | 기존 "앱은 기기 하나" 규칙과 일관. sid 를 바꾸면 자기 WS 를 끊게 됨 |
 | 회전 | 갱신 성공 시 이전 토큰은 `used_at` 기록 + 새 토큰 발급(`replaced_by`). 동시 갱신·여러 인스턴스(auth replicas 2)는 **행 잠금(SELECT … FOR UPDATE) 또는 조건부 UPDATE** 로 원자 처리 | 같은 토큰으로 두 번 회전되지 않게 |
 | 재사용 감지 | 이미 쓴 토큰이 다시 오면: 사용 후 **30초 이내**면 유예(네트워크로 응답을 못 받은 경우 — 그 토큰으로 다시 회전, 앞서 만든 후속 토큰은 폐기), 30초가 지났으면 **탈취로 보고 그 sid 의 리프레시 전부 폐기 + 앱 세션 삭제**(접근 토큰도 즉시 무효) → 401 `REFRESH_REUSED` | 표준 회전·재사용 감지. 유예는 모바일 망 끊김 대비 |
+| 유예 강화(보안 리뷰 M1) | 유예 안이라도 **후속 토큰(`replaced_by_id`)이 이미 쓰였으면** 재사용으로 처리(응답 유실이면 후속은 아무도 못 씀). **이미 쓰인 뒤 폐기된 토큰**(`used_at`·`revoked_at` 둘 다 있음 — 유예 재회전·재사용 감지·로그아웃으로 폐기)이 다시 와도 재사용 → sid 폐기 + 앱 세션 삭제(sid 같을 때만) → `REFRESH_REUSED`. 쓰인 적 없는 폐기 토큰은 그대로 `REFRESH_INVALID` | 공격자가 유예 재회전으로 자기 체인을 덮어 정상 사용자 토큰을 폐기시키는 것 방지 |
 | 갱신 시 확인 | 사용자 존재·`is_active`, 세션 sid 일치, 만료·폐기 여부 | 탈퇴·비활성·재로그인 반영 |
 | 서버 로그아웃 | `POST /api/v1/auth/logout` {refresh_token}(접근 토큰 없어도 됨): 그 sid 의 리프레시 전부 폐기 + 앱 세션 행 삭제(sid 가 같을 때만). 항상 204(존재 여부 노출 안 함) | 지금은 서버에서 끊을 방법이 없음 |
-| 401 사유 코드 | `get_current_user` 가 만료는 `{"code":"TOKEN_EXPIRED", ...}`, 그 밖의 무효는 `{"code":"TOKEN_INVALID", ...}` 로(기존 SESSION_REPLACED 유지). WS 는 만료면 `close(4401, "TOKEN_EXPIRED")` | 앱이 "갱신해 볼지"를 판단. 웹은 이미 dict detail(SESSION_REPLACED)을 처리하므로 호환 — 웹 표시 문구 확인 필요 |
+| 401 사유 코드 | `get_current_user` 가 만료는 `{"code":"TOKEN_EXPIRED", ...}`, 그 밖의 무효는 `{"code":"TOKEN_INVALID", ...}` 로(기존 SESSION_REPLACED 유지). WS 는 만료면 `close(4401, "TOKEN_EXPIRED")`, 무효 토큰·없는/비활성 사용자는 `close(4401, "TOKEN_INVALID")` | 앱이 "갱신해 볼지"를 판단. 웹은 401 status 로 로그아웃하므로 코드가 늘어도 호환 |
+| 세션 종료 구분(M3) | `check_session` 이 ok / replaced(sid 다름) / ended(세션 행 없음) 세 값. ended 면 REST 401 `{"code":"SESSION_ENDED","message":"로그아웃됐어요. 다시 로그인해 주세요."}`, 갱신도 세션 행 없음이면 `SESSION_ENDED`, WS 는 `close(4401, "SESSION_ENDED")`. 레거시(sid 없는 토큰)는 그대로 허용. 앱은 SESSION_ENDED 를 갱신하지 않고 로그아웃("로그아웃됐어요" 안내), REFRESH_REUSED 는 "보안을 위해 로그아웃됐어요" | 로그아웃·재사용 감지 뒤 남은 토큰에 "다른 기기에서 로그인" 이라는 틀린 안내가 뜨지 않게 |
+| 열린 WS 종료 알림(M2) | 재사용 감지·로그아웃·비활성(갱신 시 앱 세션도 삭제)으로 세션을 끝내면 commit 뒤 기존 채널 `auth:session:replaced` 에 `{"user_id","platform","sid":<끝난 sid>,"kind":"ended"}` 발행(best-effort, 실패는 로그). trading_game 게이트웨이는 DB 현재 sid 기준으로 그 플랫폼의 다른 sid 소켓을 `4401 SESSION_ENDED` 로 닫는다(행 없음이면 전부). DB 조회 실패면 끝난 sid 소켓만 닫는다. kind 없는 기존 교체 알림은 그대로 SESSION_REPLACED | 접근 토큰이 무효가 돼도 이미 열린 소켓은 계속 데이터를 받던 문제 |
+| 기타(L4·L5·L3) | sid 일괄 폐기 전 `SELECT id … ORDER BY id FOR UPDATE` 로 잠금 순서 정렬(제시된 토큰 행 선잠금은 예외). 로그인·`/refresh`(401 포함)·`/logout` 응답에 `Cache-Control: no-store`. 앱은 갱신 응답에 `refresh_token` 이 없으면 옛 토큰을 유지하지 않고 로그인 종료로 처리 | 데드락 가능성 축소, 토큰 응답 캐시 방지, 옛 리프레시 재사용으로 세션이 통째로 끊기는 것 방지 |
 | 탈퇴 | 리프레시 테이블 FK `ON DELETE CASCADE` + 탈퇴 서비스에서 명시 삭제(sqlite 테스트) | users hard delete |
 
 ## 2. 데이터
@@ -25,7 +29,7 @@
 
 ## 3. API(auth, prefix `/api/v1/auth`)
 - 로그인 응답(`TokenResponse`)에 선택 필드 `refresh_token: str | None`, `expires_in: int | None`(접근 토큰 초) 추가 — 앱 로그인일 때만 채움. 구 앱·웹은 무시.
-- `POST /refresh` {refresh_token} → 200 `{access_token, refresh_token, token_type, expires_in, user}` / 401 `{"code": "REFRESH_INVALID"|"REFRESH_EXPIRED"|"REFRESH_REUSED"|"SESSION_REPLACED", "message"}`.
+- `POST /refresh` {refresh_token} → 200 `{access_token, refresh_token, token_type, expires_in, user}` / 401 `{"code": "REFRESH_INVALID"|"REFRESH_EXPIRED"|"REFRESH_REUSED"|"SESSION_REPLACED"|"SESSION_ENDED", "message"}`.
 - `POST /logout` {refresh_token} → 204.
 
 ## 4. 모바일
