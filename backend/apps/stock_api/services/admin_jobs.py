@@ -53,8 +53,8 @@ JOBS: dict[str, Job] = {j.key: j for j in (
     Job("bootstrap", "초기 데이터 준비",
         "새 서버에 일봉 3년·지수·수급·재무를 받고 지표를 모두 계산해요(KIS 대량 호출, 1~2시간)",
         "collector.bootstrap_data", "1~2시간", 4 * 3600, {"months": 37},
-        confirm="KIS 를 대량 호출해 1~2시간 걸려요. 18:00~21:30 에는 실행할 수 없어요. 진행할까요?",
-        window_block=("18:00", "21:30"), uses_kis=True),
+        confirm="KIS 를 대량 호출해 1~2시간 걸려요. 16:00~21:30 에는 실행할 수 없어요. 진행할까요?",
+        window_block=("16:00", "21:30"), uses_kis=True),
 )}
 LOCK_KEY = "admin:job:{}"
 HISTORY_KEY = "admin:job:history"

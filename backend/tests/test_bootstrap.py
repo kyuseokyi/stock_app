@@ -180,7 +180,7 @@ def test_daily_failure_skips_rest(env, monkeypatch, daily):
     assert p["finished_at"] is not None
 
 
-@pytest.mark.parametrize("h, m, blocked", [(17, 59, False), (18, 0, True), (21, 29, True), (21, 30, False)])
+@pytest.mark.parametrize("h, m, blocked", [(15, 59, False), (16, 0, True), (17, 59, True), (21, 29, True), (21, 30, False)])
 def test_start_window_block(env, h, m, blocked):
     out = bs.run_bootstrap(37, task_id="t2", now_fn=clock(kst(2026, 10, 22, h, m)))
     if blocked:
@@ -193,8 +193,8 @@ def test_start_window_block(env, h, m, blocked):
 
 
 def test_kis_window_block_mid_run(env):
-    # 시작 17:00 → daily·indices_kr·indices_us 는 19:59, investor 직전 20:00 → 그 단계부터 끝까지 skipped
-    now = clock(kst(2026, 10, 22, 17, 0), kst(2026, 10, 22, 19, 0), kst(2026, 10, 22, 19, 30),
+    # 시작 15:00 → daily·indices_kr·indices_us 는 19:59 까지, investor 직전 20:00 → 그 단계부터 끝까지 skipped
+    now = clock(kst(2026, 10, 22, 15, 0), kst(2026, 10, 22, 19, 0), kst(2026, 10, 22, 19, 30),
                 kst(2026, 10, 22, 19, 59), kst(2026, 10, 22, 20, 0))
     out = bs.run_bootstrap(37, now_fn=now)
     assert env.keys() == ["daily_backfill", "indices_kr", "indices_us"]
@@ -205,7 +205,7 @@ def test_kis_window_block_mid_run(env):
 
 def test_kis_block_does_not_apply_to_compute_steps(env):
     # 1~7 은 19:00, 계산 단계 직전 시각이 20:10 이어도 계산은 그대로 진행(KIS 단계만 차단)
-    times = [kst(2026, 10, 22, 17, 0)] + [kst(2026, 10, 22, 19, 0)] * 7 + [kst(2026, 10, 22, 20, 10)]
+    times = [kst(2026, 10, 22, 15, 0)] + [kst(2026, 10, 22, 19, 0)] * 7 + [kst(2026, 10, 22, 20, 10)]
     out = bs.run_bootstrap(37, now_fn=clock(*times))
     assert env.keys() == KEYS and set(out["states"].values()) == {"ok"}
 

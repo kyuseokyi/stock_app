@@ -161,14 +161,14 @@ def _at(monkeypatch, h, m):
     monkeypatch.setattr(aj, "_now_kst", lambda: datetime(2026, 10, 22, h, m, tzinfo=KST))
 
 
-@pytest.mark.parametrize("h, m, blocked", [(17, 59, False), (18, 0, True), (20, 30, True), (21, 29, True),
+@pytest.mark.parametrize("h, m, blocked", [(15, 59, False), (16, 0, True), (17, 59, True), (20, 30, True), (21, 29, True),
                                            (21, 30, False)])
 def test_bootstrap_window_block(env, monkeypatch, h, m, blocked):
     _at(monkeypatch, h, m)
     if blocked:
         with pytest.raises(aj.JobWindowClosed) as e:
             aj.run("bootstrap", "관리자")
-        assert e.value.message == "18:00~21:30 에는 정기 수집과 겹쳐 실행할 수 없어요"
+        assert e.value.message == "16:00~21:30 에는 정기 수집과 겹쳐 실행할 수 없어요"
         assert env.sent == [] and env.redis.get("admin:job:bootstrap") is None  # 잠금·기록을 남기지 않음
         assert env.redis.llen(aj.HISTORY_KEY) == 0
     else:
@@ -195,7 +195,7 @@ def test_overview_exposes_confirm_and_bootstrap_progress(env):
     ov = aj.overview()
     assert ov["bootstrap"] is None
     boot = _job(ov, "bootstrap")
-    assert boot["confirm"].startswith("KIS 를 대량 호출해") and boot["window_block"] == ["18:00", "21:30"]
+    assert boot["confirm"].startswith("KIS 를 대량 호출해") and boot["window_block"] == ["16:00", "21:30"]
     assert boot["uses_kis"] is True and boot["eta"] == "1~2시간"
     canslim = _job(ov, "canslim")
     assert canslim["confirm"] is None and canslim["window_block"] is None and canslim["uses_kis"] is False
