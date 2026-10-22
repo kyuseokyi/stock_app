@@ -2,6 +2,7 @@ import { useState } from 'react'
 import Modal from './ui/Modal'
 import Button from './ui/Button'
 import { useAuthStore } from '../store/auth'
+import { currentFundOwner, purgeAccountFunds } from '../lib/fundStore'
 import { DELETE_ACCOUNT_NOTICES, deleteAccountErrorMessage } from '../lib/deleteAccount'
 
 interface Props {
@@ -19,8 +20,10 @@ export default function DeleteAccountModal({ onClose, onDeleted }: Props) {
   const handleDelete = async () => {
     setSubmitting(true)
     setError('')
+    const uid = currentFundOwner() // 탈퇴하면 로그아웃되므로 미리 잡아 둔다
     try {
       await deleteAccount()
+      if (uid !== null) purgeAccountFunds(uid) // 성공했을 때만 — 실패하면 아무것도 지우지 않는다
       onDeleted()
     } catch (e) {
       setSubmitting(false)

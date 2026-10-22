@@ -140,3 +140,12 @@ export function discardLegacyFunds(uid: number): void {
   deleteCachesExcept(loadLegacyFunds(), keep)
   remove(LEGACY_LIST_KEY)
 }
+
+/** 회원 탈퇴 성공 뒤 — 그 계정의 목록과 캐시 삭제. 이 브라우저의 다른 계정·옛 목록이 쓰는 id 의 캐시는 남긴다(앱 account-purge 와 같은 동작). */
+export function purgeAccountFunds(uid: number): void {
+  const funds = loadFunds(uid)
+  remove(fundListKey(uid))
+  const keep = idsInAccountLists()
+  for (const f of loadLegacyFunds()) keep.add(f.id)
+  deleteCachesExcept(funds, keep)
+}
