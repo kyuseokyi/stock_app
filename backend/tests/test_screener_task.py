@@ -127,10 +127,11 @@ def test_daily_pipeline_runs_screener_last_even_if_groups_fail(monkeypatch):
 
     monkeypatch.setattr(md, "compute_market_groups", groups_boom)
     monkeypatch.setattr(md, "compute_screener", lambda: order.append("screener") or {"rows": 7})
+    monkeypatch.setattr(md, "compute_patterns", lambda: order.append("patterns") or {"rows": 3})
     out = md.daily_market_pipeline()
-    assert order == ["daily", "idx", "investor", "canslim", "groups", "screener"]
+    assert order == ["daily", "idx", "investor", "canslim", "groups", "screener", "patterns"]
     assert "error" in out["market_groups"] and out["screener"] == {"rows": 7}
-    assert list(out)[-1] == "screener"
+    assert list(out)[-1] == "patterns"
 
 
 def test_daily_pipeline_screener_failure_is_recorded_not_raised(monkeypatch):
@@ -144,6 +145,7 @@ def test_daily_pipeline_screener_failure_is_recorded_not_raised(monkeypatch):
     monkeypatch.setattr(md, "collect_investor_daily", lambda: {})
     monkeypatch.setattr(md, "compute_canslim", lambda: {})
     monkeypatch.setattr(md, "compute_market_groups", lambda: {})
+    monkeypatch.setattr(md, "compute_patterns", lambda: {})
 
     def boom():
         raise RuntimeError("screener down")
@@ -152,6 +154,7 @@ def test_daily_pipeline_screener_failure_is_recorded_not_raised(monkeypatch):
     out = md.daily_market_pipeline()          # 예외가 밖으로 새지 않는다
     assert "screener down" in out["screener"]["error"]
     rec = pipeline_record.load(fake)
-    last = rec["steps"][-1]
+    last = rec["steps"][-2]
     assert last["name"] == "screener" and last["ok"] is False and "screener down" in last["summary"]
-    assert all(s["ok"] for s in rec["steps"][:-1])
+    assert rec["steps"][-1]["name"] == "patterns" and rec["steps"][-1]["ok"] is True
+    assert all(s["ok"] for s in rec["steps"][:-2])

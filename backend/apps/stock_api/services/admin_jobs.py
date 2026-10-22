@@ -45,6 +45,8 @@ JOBS: dict[str, Job] = {j.key: j for j in (
         "collector.compute_screener", "수십 초", 600),
     Job("backfill_screener", "조건검색 60일 백필", "최근 60거래일 조건검색 지표를 다시 계산해요",
         "collector.backfill_screener", "수 분", 3600, {"days": 60}),
+    Job("patterns", "차트 패턴 계산", "최신 거래일 차트 패턴(베이스·피벗·돌파)을 다시 계산해요",
+        "collector.compute_patterns", "1~2분", 900),
 )}
 LOCK_KEY = "admin:job:{}"
 HISTORY_KEY = "admin:job:history"

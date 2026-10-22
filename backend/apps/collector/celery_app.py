@@ -35,6 +35,7 @@ celery_app = Celery(
         "apps.collector.tasks.canslim",
         "apps.collector.tasks.market_groups",
         "apps.collector.tasks.screener",
+        "apps.collector.tasks.patterns",
         "apps.collector.tasks.push_sends",
     ],
 )

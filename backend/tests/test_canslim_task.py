@@ -76,6 +76,7 @@ def test_daily_pipeline_runs_canslim_last(monkeypatch):
     monkeypatch.setattr(md, "compute_canslim", lambda: order.append("canslim") or {"rows": 1})
     monkeypatch.setattr(md, "compute_market_groups", lambda: {})
     monkeypatch.setattr(md, "compute_screener", lambda: {})
+    monkeypatch.setattr(md, "compute_patterns", lambda: {})
     out = md.daily_market_pipeline()
     assert order == ["daily", "idx", "investor", "canslim"] and out["canslim"] == {"rows": 1}
 
