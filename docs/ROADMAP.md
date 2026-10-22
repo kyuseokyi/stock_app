@@ -107,6 +107,8 @@
 - [x] 조건검색 칩(프리셋·필터 바텀시트·무한 스크롤, 행 → 종목 상세) — 2026-10-21. 실기기 확인 대기
 - [ ] 차트 드로잉(앱)
 - [x] 실제 푸시 — Expo Push(→FCM/APNs) 발송기, 펀드 리포트 알림·새 글 알림 적용(2026-10-21). 새 글은 push_devices.post_notice·내정보 스위치
+- [x] 앱 리프레시 토큰 — 앱 접근 토큰 60분·리프레시 30일(해시 저장·회전·재사용 감지·30초 유예), 서버 로그아웃, 401 사유 코드(TOKEN_EXPIRED·SESSION_ENDED 등), 게임 WS 만료 시 갱신 후 재연결, 세션 종료 시 열린 WS 닫기. 웹·관리자는 12시간 그대로. 설계 `docs/superpowers/specs/2026-10-22-mobile-refresh-token-design.md` (2026-10-22). 실기기 확인 대기
+- [x] 앱 업데이트 관리 — 관리자 '앱 버전 & 업데이트'(스토어 강제·권장, OTA 무음·선택·필수, 점검 모드), 공개 `GET /api/v1/app/version-check`(blog), 앱 expo-updates(fingerprint runtimeVersion·채널 헤더·수동 확인)·모달 5종, OTA 발행 `npm run ota:dev|preview|prod`. 명세 `docs/app_update_management_spec.md` (2026-10-22). APK 재빌드·실기기 확인 대기, iOS 스토어 링크는 출시 후 교체
 
 ### Phase 5 — 실시간 트레이딩 게임 (Trading Game) & 에듀테인먼트
 > 마스터 기획·단계 프롬프트 확정(`docs/trading_game_plan.md`, `docs/prompts/trading_game/`). 6개 서브페이즈로 분해.
