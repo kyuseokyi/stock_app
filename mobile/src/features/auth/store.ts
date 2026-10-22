@@ -85,7 +85,7 @@ async function finishLogoutRemotely(
       const r = await callRefresh(refresh, LOGOUT_REFRESH_TIMEOUT_MS);
       if (r.ok) {
         hookToken = r.accessToken;
-        refreshForLogout = r.refreshToken ?? refresh;
+        refreshForLogout = r.refreshToken;
       }
     }
     if (hookToken) await runBeforeLogout(hookToken);

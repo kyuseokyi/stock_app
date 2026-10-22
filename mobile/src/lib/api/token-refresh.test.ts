@@ -130,6 +130,42 @@ describe('http 401 → 토큰 갱신 → 재시도', () => {
     expect(unauthorized).toEqual([{ token: 'A1', reason: 'replaced' }]);
   });
 
+  it('갱신 거부 사유 REFRESH_REUSED → reused(보안 로그아웃) 안내', async () => {
+    mockFetch(async (url) =>
+      isRefresh(url) ? res(401, { detail: { code: 'REFRESH_REUSED', message: '재사용' } }) : expired401(),
+    );
+    await expect(createHttpClient('https://x.test').get('/a')).rejects.toMatchObject({ status: 401 });
+    expect(unauthorized).toEqual([{ token: 'A1', reason: 'reused' }]);
+  });
+
+  it('SESSION_ENDED 401 → 갱신하지 않고 ended(로그아웃됨) 안내', async () => {
+    const fetchMock = mockFetch(async () => res(401, { detail: { code: 'SESSION_ENDED', message: '로그아웃' } }));
+    await expect(createHttpClient('https://x.test').get('/a')).rejects.toMatchObject({ status: 401 });
+    expect(fetchMock.mock.calls.map((c) => String(c[0])).filter(isRefresh)).toHaveLength(0);
+    expect(unauthorized).toEqual([{ token: 'A1', reason: 'ended' }]);
+  });
+
+  it('갱신 거부 사유 SESSION_ENDED → ended 안내', async () => {
+    mockFetch(async (url) =>
+      isRefresh(url) ? res(401, { detail: { code: 'SESSION_ENDED', message: '로그아웃' } }) : expired401(),
+    );
+    await expect(createHttpClient('https://x.test').get('/a')).rejects.toMatchObject({ status: 401 });
+    expect(unauthorized).toEqual([{ token: 'A1', reason: 'ended' }]);
+  });
+
+  it('갱신 응답에 refresh_token 이 없으면 옛 리프레시를 유지하지 않고 만료 처리', async () => {
+    mockFetch(async (url) =>
+      isRefresh(url)
+        ? res(200, { access_token: 'A2', token_type: 'bearer', expires_in: 3600, user: { id: 1 } })
+        : expired401(),
+    );
+    await expect(createHttpClient('https://x.test').get('/a')).rejects.toMatchObject({ status: 401 });
+    expect(unauthorized).toEqual([{ token: 'A1', reason: 'expired' }]);
+    expect(getAuthToken()).toBe('A1'); // 새 접근 토큰도 저장하지 않음
+    expect(getRefreshToken()).toBe('R1');
+    expect(refreshed).toEqual([]);
+  });
+
   it('갱신 네트워크 오류 → 로그아웃 안 함, 원래 401 ApiError', async () => {
     mockFetch(async (url) => {
       if (isRefresh(url)) throw new TypeError('Network request failed');
@@ -201,6 +237,15 @@ describe('refreshAccessToken', () => {
     await expect(refreshAccessToken()).resolves.toMatchObject({ ok: false, kind: 'auth', code: 'REFRESH_INVALID' });
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(unauthorized).toEqual([]); // 판단은 호출자 몫
+  });
+
+  it('200 이지만 refresh_token 누락·빈 값 → auth 실패(code null)', async () => {
+    for (const refresh_token of [undefined, '']) {
+      __resetTokenRefreshForTest();
+      mockFetch(async () => res(200, { access_token: 'A2', refresh_token, user: { id: 1 } }));
+      await expect(refreshAccessToken()).resolves.toMatchObject({ ok: false, kind: 'auth', code: null });
+    }
+    expect(getRefreshToken()).toBe('R1');
   });
 
   it('리프레시 없으면 즉시 no-refresh(요청 없음)', async () => {

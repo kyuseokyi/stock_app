@@ -26,6 +26,7 @@ import { isQuizPrimeTime } from '@/features/game/lib/quiz';
 import { useTradingGameStore } from '@/features/game/store';
 import type { Leverage, OrderOptions, Ratio, Side } from '@/features/game/types';
 import { useGameSocket } from '@/features/game/use-game-socket';
+import { reasonFromCode } from '@/lib/api/session-end';
 import { BottomSheet, Button, ListState } from '@/ui';
 
 const RANK_POLL_MS = 30_000;
@@ -136,10 +137,8 @@ export default function GameScreen() {
     return () => clearInterval(t);
   }, []);
 
-  // 4401 → 로그아웃 + 안내(웹과 동일). reason 'SESSION_REPLACED' = 다른 기기 로그인
-  useGameSocket(token, ready, (reason) =>
-    expireSession(token, reason === 'SESSION_REPLACED' ? 'replaced' : 'expired'),
-  );
+  // 4401 → 로그아웃 + 사유별 안내(SESSION_REPLACED 다른 기기·SESSION_ENDED 로그아웃됨·REFRESH_REUSED 보안 로그아웃·그 외 만료)
+  useGameSocket(token, ready, (reason) => expireSession(token, reasonFromCode(reason)));
 
   // 시즌 없음/오류 상태의 당겨서 새로고침(시즌만 재조회)
   const onRetry = async () => {

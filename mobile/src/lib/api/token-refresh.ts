@@ -18,16 +18,21 @@ export const REFRESH_TIMEOUT_MS = 15_000;
 /** 만료 이만큼 전부터는 "곧 만료"로 보고 미리 갱신(기기 시계 오차 여유) */
 export const STALE_MARGIN_MS = 60_000;
 
-/** 서버 원응답 하나 — 성공이면 새 토큰 쌍, 401 이면 사유 코드, 그 밖(연결 실패·타임아웃·5xx·형식 오류)은 network */
+/**
+ * 서버 원응답 하나 — 성공이면 새 토큰 쌍, 401 이면 사유 코드, 그 밖(연결 실패·타임아웃·5xx·형식 오류)은 network.
+ * 200 인데 refresh_token 이 없으면 auth 실패(code null) — 서버는 회전 때 옛 리프레시를 이미 '사용됨'으로 바꿨으므로
+ * 옛 것을 계속 쓰면 30초 뒤 재사용 감지로 세션이 통째로 끊긴다. 세션을 이어 가지 않고 로그인 종료로 처리한다.
+ */
 export type RefreshCallResult =
-  | { ok: true; accessToken: string; refreshToken: string | null; user: unknown }
+  | { ok: true; accessToken: string; refreshToken: string; user: unknown }
   | { ok: false; kind: 'auth'; code: string | null; body: unknown }
   | { ok: false; kind: 'network' };
 
 /**
  * refreshAccessToken 결과.
  * - no-refresh: 리프레시 토큰이 없음(구 로그인·웹) — 기존처럼 처리
- * - auth: 서버가 갱신을 거부(REFRESH_INVALID·EXPIRED·REUSED·SESSION_REPLACED) — 세션 종료 대상
+ * - auth: 서버가 갱신을 거부(REFRESH_INVALID·EXPIRED·REUSED·SESSION_REPLACED·SESSION_ENDED)하거나
+ *   응답에 새 리프레시가 없음 — 세션 종료 대상
  * - network: 일시 오류 — 로그아웃하지 않는다
  * - stale: 갱신 도중 로그아웃·재로그인 — 결과를 버림
  */
@@ -98,12 +103,10 @@ export async function callRefresh(refreshToken: string, timeoutMs = REFRESH_TIME
     if (!res.ok) return { ok: false, kind: 'network' };
     const raw = (await res.json()) as { access_token?: unknown; refresh_token?: unknown; user?: unknown };
     if (typeof raw.access_token !== 'string' || raw.access_token === '') return { ok: false, kind: 'network' };
-    return {
-      ok: true,
-      accessToken: raw.access_token,
-      refreshToken: typeof raw.refresh_token === 'string' && raw.refresh_token !== '' ? raw.refresh_token : null,
-      user: raw.user,
-    };
+    if (typeof raw.refresh_token !== 'string' || raw.refresh_token === '') {
+      return { ok: false, kind: 'auth', code: null, body: raw };
+    }
+    return { ok: true, accessToken: raw.access_token, refreshToken: raw.refresh_token, user: raw.user };
   } catch {
     return { ok: false, kind: 'network' };
   }
@@ -123,8 +126,7 @@ export function refreshAccessToken(): Promise<RefreshOutcome> {
     const r = await callRefresh(refresh);
     if (getRefreshToken() !== refresh) return { ok: false, kind: 'stale' };
     if (!r.ok) return r.kind === 'auth' ? { ok: false, kind: 'auth', code: r.code, body: r.body } : { ok: false, kind: 'network' };
-    // 서버가 새 리프레시를 주지 않으면(계약상 항상 줌) 기존 것을 유지
-    const nextRefresh = r.refreshToken ?? refresh;
+    const nextRefresh = r.refreshToken;
     setAuthToken(r.accessToken);
     setRefreshToken(nextRefresh);
     onRefreshed?.({ accessToken: r.accessToken, refreshToken: nextRefresh, user: r.user });

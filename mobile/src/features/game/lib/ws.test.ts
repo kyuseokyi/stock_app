@@ -91,6 +91,7 @@ describe('classifyWsClose', () => {
   test('4401 SESSION_REPLACED·무효 또는 갱신 불가 → auth-failed', () => {
     expect(classifyWsClose(4401, true, 'SESSION_REPLACED', true)).toBe('auth-failed');
     expect(classifyWsClose(4401, true, 'TOKEN_INVALID', true)).toBe('auth-failed');
+    expect(classifyWsClose(4401, true, 'SESSION_ENDED', true)).toBe('auth-failed');
     expect(classifyWsClose(4401, true, 'TOKEN_EXPIRED', false)).toBe('auth-failed');
     expect(classifyWsClose(4401, false, 'TOKEN_EXPIRED', true)).toBe('retry');
   });

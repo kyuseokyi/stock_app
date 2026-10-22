@@ -21,7 +21,7 @@ const REFRESH_GUARD_MS = 60_000;
  *   토큰 회전(갱신)으로는 재연결하지 않는다 — 실제 토큰은 연결할 때 메모리 홀더에서 읽는다.
  * - 끊기면 지수 백오프(1s→30s)로 재연결. 로그인 연결이 4401 이면:
  *   reason TOKEN_EXPIRED·빈 값 + 리프레시 있음 → 토큰 갱신 후 재연결(1회), 갱신 네트워크 오류 → 백오프 재시도,
- *   그 밖(SESSION_REPLACED·갱신 거부) → 재연결하지 않고 onAuthFailed(사유) 호출.
+ *   그 밖(SESSION_REPLACED·SESSION_ENDED·TOKEN_INVALID·갱신 거부) → 갱신·재연결 없이 onAuthFailed(사유) 호출.
  * - 4429(공개 연결 상한)는 accept 직후 닫히므로 별도 백오프(5s→30s)로 재시도 — 첫 메시지 수신 시 초기화.
  * - 로그인 연결의 재연결 성공 시 놓친 자동청산 등을 반영하려고 계좌/포지션/순위를 다시 불러온다(web 과 동일).
  * - 앱이 background 로 가면 연결을 닫고(effect 정리), 포그라운드 복귀 시 재연결 + 재조회.
@@ -105,7 +105,7 @@ export function useGameSocket(token: string | null, enabled: boolean, onAuthFail
             } else if (r.kind === 'network') {
               scheduleRetry(); // 일시 오류 — 로그아웃하지 않고 다시 시도(재연결이 또 만료면 그때 다시 갱신)
             } else if (r.kind !== 'stale') {
-              // 갱신 거부(사유 코드 우선 — SESSION_REPLACED 면 "다른 기기" 안내)·리프레시 없음
+              // 갱신 거부(사유 코드 우선 — SESSION_REPLACED "다른 기기"·SESSION_ENDED·REFRESH_REUSED 안내)·리프레시 없음
               onAuthFailedRef.current((r.kind === 'auth' ? r.code : null) ?? e.reason ?? '');
             }
           });

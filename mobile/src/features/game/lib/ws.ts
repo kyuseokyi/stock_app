@@ -117,12 +117,17 @@ export function buildGameWsUrl(baseUrl: string, token: string | null): string {
 
 /** 서버 ws_gateway: 접근 토큰 만료로 닫을 때의 close reason(2026-10-22 리프레시 토큰 설계) */
 export const WS_REASON_TOKEN_EXPIRED = 'TOKEN_EXPIRED';
+/** 서버 ws_gateway: 무효 토큰·없는/비활성 사용자 — 갱신해도 소용없음 */
+export const WS_REASON_TOKEN_INVALID = 'TOKEN_INVALID';
+/** 서버 ws_gateway: 세션 종료(다른 곳에서 로그아웃·리프레시 재사용 감지 등) — 갱신하지 않음 */
+export const WS_REASON_SESSION_ENDED = 'SESSION_ENDED';
 
 /**
  * 종료 코드 → 다음 동작.
- * - auth-expired: 로그인 연결의 4401 이고 reason 이 TOKEN_EXPIRED 또는 빈 값(구 서버)이며 갱신을 시도할 수 있을 때
+ * - auth-expired: 로그인 연결의 4401 이고 reason 이 TOKEN_EXPIRED 또는 빈 값(구 서버 호환)이며 갱신을 시도할 수 있을 때
  *   — 접근 토큰을 갱신한 뒤 재연결
- * - auth-failed: 그 밖의 로그인 연결 4401(SESSION_REPLACED·무효·갱신 불가) — 재연결하지 않고 로그인 만료 처리
+ * - auth-failed: 그 밖의 로그인 연결 4401(SESSION_REPLACED·SESSION_ENDED·TOKEN_INVALID·갱신 불가)
+ *   — 갱신 없이 재연결하지 않고 사유와 함께 로그인 종료 처리
  * - capacity: 4429 — 별도(긴) 백오프로 재시도
  * - retry: 그 외(공개 연결의 4401 포함) — 일반 지수 백오프 재연결
  */
