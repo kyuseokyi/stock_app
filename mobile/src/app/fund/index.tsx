@@ -136,13 +136,15 @@ export default function FundListScreen() {
         onPress: () => {
           if (funds === null) return;
           const next = removeFund(funds, f.id);
-          void saveFunds(next).then(() => {
-            deleteCache(f.id);
-            deleteHistory(f.id);
-            setFunds(next);
-            void syncPushRegistration(); // 마지막 펀드를 지우면 펀드 알림만 끔(fund_notice=false) — 새 글 알림 등록은 유지
-            void syncBackgroundTasks();
-          });
+          void saveFunds(next)
+            .then(() => {
+              deleteCache(f.id);
+              deleteHistory(f.id);
+              setFunds(next);
+              void syncPushRegistration(); // 마지막 펀드를 지우면 펀드 알림만 끔(fund_notice=false) — 새 글 알림 등록은 유지
+              void syncBackgroundTasks();
+            })
+            .catch(() => showToast('삭제하지 못했어요. 다시 시도해 주세요.'));
         },
       },
     ]);

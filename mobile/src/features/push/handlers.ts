@@ -53,7 +53,8 @@ export async function ensurePushChannels(): Promise<void> {
 
 export function usePushSetup(): void {
   const router = useRouter();
-  const loggedIn = useAuthStore((s) => s.user !== null);
+  const ownerId = useAuthStore((s) => s.user?.id ?? null); // 계정이 바뀌면(로그인 직후 포함) 다시 동기화 — 펀드 수가 계정별
+  const loggedIn = ownerId !== null;
   // 로그인 상태 복원(hydrate) 전에 /fund 로 가면 펀드 화면이 user=null 로 보고 /profile 로 튕긴다 → 복원 후에 처리
   const hydrated = useAuthStore((s) => s.hydrated);
 
@@ -75,7 +76,7 @@ export function usePushSetup(): void {
   // 앱 실행·로그인 직후 등록 동기화
   useEffect(() => {
     if (loggedIn) void syncPushRegistration();
-  }, [loggedIn]);
+  }, [loggedIn, ownerId]);
 
   // 설정 앱에서 알림 권한을 켜고 돌아오면 재동기화(토큰·플래그가 같으면 서버 호출은 생략됨)
   useEffect(() => {

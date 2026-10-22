@@ -114,7 +114,7 @@ export async function syncBackgroundTasks(): Promise<void> {
 
 /** 루트 레이아웃에서 한 번 — 로그인 복원 뒤 동기화, 로그아웃 직전 해제 */
 export function useBackgroundTasks(): void {
-  const loggedIn = useAuthStore((s) => s.user !== null);
+  const ownerId = useAuthStore((s) => s.user?.id ?? null); // 계정이 바뀌면 그 계정 펀드 수로 다시 판단
   const hydrated = useAuthStore((s) => s.hydrated);
   useEffect(() => {
     const off = registerBeforeLogout(() => {
@@ -126,5 +126,5 @@ export function useBackgroundTasks(): void {
   }, []);
   useEffect(() => {
     if (hydrated) void syncBackgroundTasks(); // 복원 전(user=null)에 돌면 매 실행마다 해제됐다 재등록된다(syncer 도 한 번 더 막는다)
-  }, [hydrated, loggedIn]);
+  }, [hydrated, ownerId]);
 }

@@ -1,18 +1,19 @@
-// 펀드 목록 = SecureStore(키 1개, 2KB 한도 → core 의 MAX_FUNDS·MAX_NAME),
+// 펀드 목록 = SecureStore(계정별 키 1개, 2KB 한도 → core 의 MAX_FUNDS·MAX_NAME),
 // 리포트 캐시 = 앱 문서 폴더의 펀드별 JSON 파일(SecureStore 2KB 한도를 넘으므로).
 import { File, Paths } from 'expo-file-system';
 import * as SecureStore from 'expo-secure-store';
 
 import { parseFundList, type CacheEntry, type CachePort, type FundEntry } from './core';
+import { currentOwnerId, fundListKey } from './owner';
 
-const LIST_KEY = 'fund_list_v1';
-
-export async function loadFunds(): Promise<FundEntry[]> {
-  return parseFundList(await SecureStore.getItemAsync(LIST_KEY));
+/** 현재 로그인 계정의 목록(uid 를 주면 그 계정). 로그인 안 됨·hydrate 전이면 던진다(owner.ts). */
+export async function loadFunds(uid: number = currentOwnerId()): Promise<FundEntry[]> {
+  return parseFundList(await SecureStore.getItemAsync(fundListKey(uid)));
 }
 
-export async function saveFunds(list: FundEntry[]): Promise<void> {
-  await SecureStore.setItemAsync(LIST_KEY, JSON.stringify(list));
+/** 현재 로그인 계정의 목록에 저장(uid 를 주면 그 계정). 로그인 안 됨이면 던진다 — 공용 키에 쓰지 않는다. */
+export async function saveFunds(list: FundEntry[], uid: number = currentOwnerId()): Promise<void> {
+  await SecureStore.setItemAsync(fundListKey(uid), JSON.stringify(list));
 }
 
 const cacheFile = (id: string): File => new File(Paths.document, `fund-cache-${id}.json`);

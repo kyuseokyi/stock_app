@@ -7,6 +7,7 @@ import { Platform } from 'react-native';
 import { registerBeforeLogout } from '@/features/auth/logout-hooks';
 import { useAuthStore } from '@/features/auth/store';
 import { loadFunds } from '@/features/fund/fund-store';
+import { isNoOwnerError } from '@/features/fund/owner';
 import { withFreshAuth } from '@/lib/api/token-refresh';
 
 import { deletePushDevice, putPushDevice } from './api';
@@ -21,7 +22,16 @@ const platform = Platform.OS === 'ios' ? 'ios' : 'android';
 const deps: SyncDeps = {
   isConfigured: isPushConfigured,
   authToken: () => useAuthStore.getState().token,
-  countFunds: async () => (await loadFunds()).length,
+  // 사용자 정보 없이 토큰만 복원된 경우(저장값 손상)는 펀드 0개 — 읽기 실패는 그대로 던져 이번 동기화를 건너뛴다
+  // (일시 오류로 fund_notice=false 를 보내지 않게)
+  countFunds: async () => {
+    try {
+      return (await loadFunds()).length;
+    } catch (e) {
+      if (isNoOwnerError(e)) return 0;
+      throw e;
+    }
+  },
   postNotice: loadPostNotice,
   permission: async () => (await Notifications.getPermissionsAsync()).status as PushPermission,
   getPushToken: async () =>
