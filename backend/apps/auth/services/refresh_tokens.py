@@ -79,7 +79,7 @@ def app_access_expires_in() -> int:
 
 
 async def _cleanup(db: AsyncSession, user_id: int, now: datetime) -> None:
-    """같은 사용자의 만료·폐기·사용 후 7일 지난 행 삭제(commit 은 호출자). 행 수를 사용자당 소수로 유지."""
+    """같은 사용자의 만료·폐기 후 7일 지난 행 삭제(commit 은 호출자). 회전된(사용된) 행은 만료까지 남겨 재사용 감지에 쓴다."""
     cutoff = now - CLEANUP_AFTER
     await db.execute(
         delete(RefreshToken).where(
@@ -87,7 +87,6 @@ async def _cleanup(db: AsyncSession, user_id: int, now: datetime) -> None:
             or_(
                 RefreshToken.expires_at < cutoff,
                 and_(RefreshToken.revoked_at.is_not(None), RefreshToken.revoked_at < cutoff),
-                and_(RefreshToken.used_at.is_not(None), RefreshToken.used_at < cutoff),
             ),
         )
         .execution_options(synchronize_session=False)
