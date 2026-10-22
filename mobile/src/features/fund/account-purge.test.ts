@@ -18,7 +18,7 @@ beforeEach(() => {
 describe('purgeFundAccount(회원 탈퇴 성공 후)', () => {
   it('그 계정의 목록·캐시·기록·백업 상태·대기 파일을 지우고 Google 로그아웃 — 다른 계정은 그대로', async () => {
     await saveFunds([{ id: 'a', name: 'A', url: url(1) }]);
-    secureMem.set('fund_backup_state_v1_u7', '{}');
+    secureMem.set('fund_backup_state_v1_u7', JSON.stringify({ connected: true, email: 'a@gmail.com' }));
     fileMem.set('fund-cache-a.json', '{}');
     fileMem.set('fund-history-a.json', '{}');
     fileMem.set('fund-backup-pending-u7.json', '1');
@@ -36,8 +36,17 @@ describe('purgeFundAccount(회원 탈퇴 성공 후)', () => {
     expect(disconnect).toHaveBeenCalledTimes(1);
   });
 
+  it('Google 을 연결한 적 없는 계정이면 Google 로그아웃하지 않는다(다른 계정의 Drive 연결 보존)', async () => {
+    await saveFunds([{ id: 'a', name: 'A', url: url(1) }]);
+    const disconnect = jest.fn(async () => {});
+    await purgeFundAccount(7, { disconnect });
+    expect(disconnect).not.toHaveBeenCalled();
+    expect(secureMem.size).toBe(0);
+  });
+
   it('Google 로그아웃이 실패해도 로컬 정리는 끝낸다', async () => {
     await saveFunds([{ id: 'a', name: 'A', url: url(1) }]);
+    secureMem.set('fund_backup_state_v1_u7', JSON.stringify({ connected: false, email: 'a@gmail.com' }));
     await purgeFundAccount(7, {
       disconnect: async () => {
         throw new Error('x');
