@@ -24,6 +24,8 @@ export default function PatternList({ items, selected, onSelect, renderInline }:
               type="button"
               onClick={() => onSelect(it.ticker)}
               aria-expanded={renderInline ? active : undefined}
+              aria-pressed={renderInline ? undefined : active}
+              aria-current={!renderInline && active ? 'true' : undefined}
               className={`flex w-full items-center gap-3 px-1 py-3 text-left transition ${active ? 'bg-brand-soft/60' : 'hover:bg-fill/60'}`}
             >
               <div className="min-w-0 flex-1">

@@ -82,7 +82,7 @@ export default function PatternsTab() {
       </div>
 
       <Card>
-        <div className="flex gap-2 overflow-x-auto pb-1">
+        <div role="group" aria-label="리포트" className="flex gap-2 overflow-x-auto pb-1">
           {PATTERN_REPORTS.map((r) => (
             <button
               key={r.key}
@@ -96,7 +96,7 @@ export default function PatternsTab() {
           ))}
         </div>
         <p className="mt-2 text-sm text-ink-muted">{report?.description}</p>
-        <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
+        <div role="group" aria-label="패턴 종류" className="mt-3 flex gap-2 overflow-x-auto pb-1">
           {PATTERN_KINDS.map((k) => (
             <button
               key={k.key ?? 'all'}
@@ -109,7 +109,7 @@ export default function PatternsTab() {
             </button>
           ))}
         </div>
-        <div className="mt-3 flex items-center gap-2 overflow-x-auto pb-1">
+        <div role="group" aria-label="시장과 정렬" className="mt-3 flex items-center gap-2 overflow-x-auto pb-1">
           {PATTERN_MARKETS.map((m) => (
             <button
               key={m.key}
@@ -164,7 +164,7 @@ export default function PatternsTab() {
               items={items}
               selected={shown}
               onSelect={onSelect}
-              renderInline={wide ? undefined : (it) => <PatternDetail item={it} />}
+              renderInline={wide ? undefined : (it) => <PatternDetail key={it.ticker} item={it} />}
             />
             {moreFailed && (
               <p role="alert" className="mt-2 text-center text-xs text-up">더 불러오지 못했어요. 다시 눌러 주세요.</p>
@@ -182,7 +182,7 @@ export default function PatternsTab() {
           </Card>
           {wide && shownItem && (
             <Card as="aside" className="lg:sticky lg:top-[7.5rem]">
-              <PatternDetail item={shownItem} />
+              <PatternDetail key={shownItem.ticker} item={shownItem} />
             </Card>
           )}
         </div>

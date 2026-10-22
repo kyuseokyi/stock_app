@@ -20,12 +20,14 @@ interface ChartResponse {
   errors?: { message: string }[]
 }
 
-/** 최근 약 280일 일봉(지표 워밍업 포함). URL 미설정·GraphQL 오류·빈 응답이면 throw(차트만 오류 표시) */
-export async function getDailyCandles(ticker: string, now: Date = new Date()): Promise<DailyCandle[]> {
+/** 최근 약 280일(기본, lookbackDays 로 늘릴 수 있음) 일봉(지표 워밍업 포함). URL 미설정·GraphQL 오류·빈 응답이면 throw(차트만 오류 표시) */
+export async function getDailyCandles(
+  ticker: string, now: Date = new Date(), lookbackDays: number = LOOKBACK_DAYS,
+): Promise<DailyCandle[]> {
   if (!STOCK_API_URL) throw new Error('STOCK_API_URL 미설정')
   const variables = {
     symbol: ticker,
-    startDate: kstDateString(new Date(now.getTime() - LOOKBACK_DAYS * DAY_MS)),
+    startDate: kstDateString(new Date(now.getTime() - lookbackDays * DAY_MS)),
     endDate: kstDateString(now),
   }
   const { data } = await axios.post<ChartResponse>(STOCK_API_URL, { query: QUERY, variables })
