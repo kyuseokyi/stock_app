@@ -30,6 +30,38 @@ export const displayName = (f: FundEntry): string => f.name || '이름 없는 �
 export const defaultName = (r: FundReport): string =>
   r.investorNo ? `펀드 ${r.investorNo}` : r.title.slice(0, MAX_NAME) || '내 펀드';
 
+export type FundListMerge = {
+  funds: FundEntry[];
+  added: number;
+  /** 한도(MAX_FUNDS)로 못 가져온 개수 = dropped.length */
+  skipped: number;
+  /** URL 이 이미 있어 넣지 않은 옛 펀드 → 합칠 대상(같은 id 면 제외 — 이미 가져온 펀드) */
+  duplicates: { legacy: FundEntry; mine: FundEntry }[];
+  dropped: FundEntry[];
+};
+
+/** 기기 공용(옛) 목록을 내 계정 목록에 합치기 — 내 것 먼저, 옛 id 유지(캐시·기록 파일이 id 기준), URL 중복 제거, 한도까지 */
+export function mergeFundLists(mine: FundEntry[], legacy: FundEntry[]): FundListMerge {
+  const funds = [...mine];
+  const duplicates: FundListMerge['duplicates'] = [];
+  const dropped: FundEntry[] = [];
+  let added = 0;
+  for (const f of legacy) {
+    const same = funds.find((x) => x.url === f.url);
+    if (same) {
+      if (same.id !== f.id) duplicates.push({ legacy: f, mine: same });
+      continue;
+    }
+    if (funds.length >= MAX_FUNDS) {
+      dropped.push(f);
+      continue;
+    }
+    funds.push(f);
+    added++;
+  }
+  return { funds, added, skipped: dropped.length, duplicates, dropped };
+}
+
 export function parseFundList(raw: string | null): FundEntry[] {
   if (!raw) return [];
   try {
