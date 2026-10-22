@@ -12,6 +12,7 @@ import {
   ensureInstallCleanup,
   FIXED_SECURE_KEYS,
   INSTALL_MARKER_FILE,
+  MAX_CLEANUP_ATTEMPTS,
   resetInstallCleanupForTest,
   runInstallCleanup,
 } from './install-cleanup';
@@ -86,13 +87,35 @@ describe('runInstallCleanup', () => {
       secureMem.delete(k);
     };
     expect(await runInstallCleanup({ platform: 'ios', deleteKey, log })).toBe('failed');
-    expect(fileMem.get(INSTALL_MARKER_FILE)).toBe('pending');
+    expect(fileMem.get(INSTALL_MARKER_FILE)).toBe('pending:1');
     expect(secureMem.has('fund_owners_v1')).toBe(true);
     expect(secureMem.has('auth_token')).toBe(false);
 
     expect(await runInstallCleanup({ platform: 'ios', log })).toBe('cleaned'); // 다음 실행
     expect(secureMem.size).toBe(0);
     expect(fileMem.get(INSTALL_MARKER_FILE)).toBe('done');
+  });
+
+  it('지우기가 계속 실패하면 MAX_CLEANUP_ATTEMPTS 번째에 멈춘다(매 실행 로그아웃 방지)', async () => {
+    const deleteKey = async () => {
+      throw new Error('keychain');
+    };
+    for (let i = 1; i < MAX_CLEANUP_ATTEMPTS; i++) {
+      expect(await runInstallCleanup({ platform: 'ios', deleteKey, log })).toBe('failed');
+      expect(fileMem.get(INSTALL_MARKER_FILE)).toBe(`pending:${i}`);
+    }
+    expect(await runInstallCleanup({ platform: 'ios', deleteKey, log })).toBe('failed');
+    expect(fileMem.get(INSTALL_MARKER_FILE)).toBe('done');
+    expect(await runInstallCleanup({ platform: 'ios', deleteKey, log })).toBe('already');
+  });
+
+  it('옛 형식 pending(횟수 없음)은 1회 시도로 본다', async () => {
+    fileMem.set(INSTALL_MARKER_FILE, 'pending');
+    const deleteKey = async () => {
+      throw new Error('keychain');
+    };
+    await runInstallCleanup({ platform: 'ios', deleteKey, log });
+    expect(fileMem.get(INSTALL_MARKER_FILE)).toBe('pending:2');
   });
 
   it('완료 표식 쓰기만 실패해도 정리는 성공으로 본다', async () => {

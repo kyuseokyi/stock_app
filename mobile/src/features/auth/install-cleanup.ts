@@ -19,8 +19,15 @@ import {
 } from '@/features/fund/keys';
 
 export const INSTALL_MARKER_FILE = 'install-marker-v1';
-const MARKER_PENDING = 'pending';
+const MARKER_PENDING = 'pending'; // 'pending:<시도 횟수>'
 const MARKER_DONE = 'done';
+/** 지우기가 계속 실패해도 이 횟수만큼만 시도 — 그 뒤엔 완료로 보고 멈춘다(매 실행 로그아웃 방지) */
+export const MAX_CLEANUP_ATTEMPTS = 3;
+
+const attemptsOf = (marker: string | null): number => {
+  const m = marker?.match(/^pending(?::(\d+))?$/);
+  return m ? Number(m[1] ?? 1) : 0;
+};
 
 /**
  * 고정 이름 SecureStore 키 — 새 키를 추가하면 여기에도 넣는다(install-cleanup.test.ts 가 소스를 훑어 빠진 키를 잡는다).
@@ -81,7 +88,9 @@ const defaultDeps = (): InstallCleanupDeps => ({
  * 표식 실패 처리 원칙: "정리했다는 사실을 기록할 수 없는 실행에서는 지우지 않는다".
  *  1) 표식을 먼저 'pending' 으로 쓴다 — 실패하면(문서 폴더에 쓸 수 없음) 정리하지 않고 로그만. 매 실행마다 로그아웃되는 것을 막는 대가로,
  *     그런 기기에서는 옛 키체인 값이 남을 수 있다(드문 경우라 감수).
- *  2) 키를 모두 지운다 — 하나라도 실패하면 표식은 'pending' 으로 남아 다음 실행에 다시 정리한다(지우기 자체가 계속 실패할 때만 반복).
+ *  2) 키를 모두 지운다 — 하나라도 실패하면 표식은 'pending:<n>' 으로 남아 다음 실행에 다시 정리한다. 지우기가 계속 실패해도
+ *     MAX_CLEANUP_ATTEMPTS 번째 시도 뒤엔 'done' 으로 바꿔 멈춘다(그 사이 로그인한 사용자가 매번 로그아웃되지 않게).
+ *     참고: iOS 네이티브 삭제는 SecItemDelete 결과를 무시하므로(SecureStoreModule.swift) 없는 키 삭제는 실패가 아니다.
  *  3) 성공하면 'done' 으로 바꾼다. 방금 'pending' 을 쓴 같은 파일이라 여기서 실패할 일은 드물다(실패하면 다음 실행에 한 번 더 정리).
  */
 export async function runInstallCleanup(over: Partial<InstallCleanupDeps> = {}): Promise<InstallCleanupResult> {
@@ -96,9 +105,10 @@ export async function runInstallCleanup(over: Partial<InstallCleanupDeps> = {}):
     return 'marker-unwritable';
   }
   if (current === MARKER_DONE) return 'already';
+  const attempt = attemptsOf(current) + 1;
 
   try {
-    d.marker.write(MARKER_PENDING);
+    d.marker.write(`${MARKER_PENDING}:${attempt}`);
   } catch (e) {
     d.log('표식 쓰기 실패 — 정리하지 않음(반복 로그아웃 방지)', e);
     return 'marker-unwritable';
@@ -128,7 +138,16 @@ export async function runInstallCleanup(over: Partial<InstallCleanupDeps> = {}):
       d.log('소유자 목록 키 삭제 실패', e);
     }
   }
-  if (!ok) return 'failed';
+  if (!ok) {
+    if (attempt < MAX_CLEANUP_ATTEMPTS) return 'failed';
+    d.log(`정리 ${attempt}회 실패 — 더 시도하지 않음`);
+    try {
+      d.marker.write(MARKER_DONE);
+    } catch {
+      // 다음 실행에 한 번 더 — 위 pending 쓰기가 방금 성공했으므로 드물다
+    }
+    return 'failed';
+  }
 
   try {
     d.marker.write(MARKER_DONE);
