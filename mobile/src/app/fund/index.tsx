@@ -22,8 +22,10 @@ import {
   type FundEntry,
 } from '@/features/fund/core';
 import { deleteCache, fileCache, loadFunds, saveFunds } from '@/features/fund/fund-store';
+import { LegacyImportSheet } from '@/features/fund/components/legacy-import-sheet';
 import { isBackupConfigured } from '@/features/fund/google-auth';
 import { deleteHistory } from '@/features/fund/history-store';
+import { loadLegacyFunds } from '@/features/fund/legacy-funds';
 import { Button, Card, ListRow, ListState, showToast } from '@/ui';
 import { isPushConfigured } from '@/features/push/config';
 import { PushPermissionBanner } from '@/features/push/permission-banner';
@@ -37,6 +39,7 @@ export default function FundListScreen() {
   const router = useRouter();
   const { theme } = useUnistyles();
   const user = useAuthStore((s) => s.user);
+  const ownerId = user?.id ?? null; // 목록은 계정별 — 계정이 바뀌면 다시 읽는다
   const [funds, setFunds] = useState<FundEntry[] | null>(null);
   const [name, setName] = useState('');
   const [url, setUrl] = useState('');
@@ -45,6 +48,7 @@ export default function FundListScreen() {
   const status = useAutoRefreshStatus(fundRefresher);
   const [lines, setLines] = useState<Record<string, string>>({});
   const [promptOpen, setPromptOpen] = useState(false);
+  const [legacyCount, setLegacyCount] = useState(0); // >0 이면 옛 기기 펀드 가져오기 시트
   const promptOpenRef = useRef(false); // 진입 경로와 첫 추가(0→1) 경로가 같은 시트를 두 번 열지 않게
   promptOpenRef.current = promptOpen;
   // 당겨서 새로고침: 등록된 펀드 리포트를 지금 바로 모두 다시 받는다(끝나면 status.version 이 바뀌어 목록 줄 갱신)
@@ -70,6 +74,7 @@ export default function FundListScreen() {
   // 리포트 화면에서 기본 이름이 붙을 수 있어 돌아올 때마다 다시 읽는다
   useFocusEffect(
     useCallback(() => {
+      if (ownerId === null) return; // 로그인 안 됨 — 아래 Redirect 가 처리(목록은 계정별이라 읽을 수 없다)
       let alive = true;
       loadFunds()
         .then((l) => {
@@ -80,6 +85,13 @@ export default function FundListScreen() {
           return l;
         })
         .then(async (l) => {
+          // 계정별 저장 전 이 기기에 쌓인 펀드가 있으면 먼저 가져올지 묻는다(닫으면 다음 진입 때 다시). 푸시 안내와 겹치지 않게 이번엔 여기서 끝
+          const legacyN = (await loadLegacyFunds().catch(() => [])).length;
+          if (!alive) return;
+          if (legacyN > 0) {
+            setLegacyCount(legacyN);
+            return;
+          }
           // 이미 펀드가 있는 기존 사용자: 시트를 한 번도 못 봤으면 진입 시 1회 안내(2026-10-21 결정)
           if (!l.length || !isPushConfigured()) return;
           // 안내 판단 실패는 목록 읽기 실패가 아니다 — 아래 catch(loadError)로 새지 않게 여기서 삼킨다
@@ -98,7 +110,7 @@ export default function FundListScreen() {
       return () => {
         alive = false;
       };
-    }, []),
+    }, [ownerId]),
   );
 
   if (!user) return <Redirect href="/profile" />;
@@ -125,6 +137,19 @@ export default function FundListScreen() {
     } catch (e) {
       setError(isFundError(e, 'input') ? e.message : '저장하지 못했어요. 다시 시도해 주세요.');
     }
+  };
+
+  // 가져오기·버리기 후 — 목록 다시 읽기, 펀드 수가 바뀌었으니 정기 작업·푸시 등록 동기화
+  const handleLegacyDone = () => {
+    setLegacyCount(0);
+    loadFunds()
+      .then((l) => {
+        setFunds(l);
+        setLoadError('');
+      })
+      .catch(() => setLoadError('저장된 목록을 읽지 못했어요.'));
+    void syncBackgroundTasks();
+    void syncPushRegistration();
   };
 
   const handleRemove = (f: FundEntry) => {
@@ -234,6 +259,9 @@ export default function FundListScreen() {
         </View>
       )}
       {promptOpen ? <PushPromptSheet onClose={() => setPromptOpen(false)} /> : null}
+      {legacyCount > 0 && !promptOpen ? (
+        <LegacyImportSheet count={legacyCount} onClose={() => setLegacyCount(0)} onDone={handleLegacyDone} />
+      ) : null}
     </ScrollView>
   );
 }
