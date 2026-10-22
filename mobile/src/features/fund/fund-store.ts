@@ -16,6 +16,11 @@ export async function saveFunds(list: FundEntry[], uid: number = currentOwnerId(
   await SecureStore.setItemAsync(fundListKey(uid), JSON.stringify(list));
 }
 
+/** 회원 탈퇴 정리용 — 그 계정의 목록 키 삭제 */
+export async function deleteFundList(uid: number): Promise<void> {
+  await SecureStore.deleteItemAsync(fundListKey(uid));
+}
+
 const cacheFile = (id: string): File => new File(Paths.document, `fund-cache-${id}.json`);
 
 export const fileCache: CachePort = {

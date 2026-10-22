@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
+import { purgeFundAccount } from '@/features/fund/account-purge';
 import { ApiError } from '@/lib/api';
 import { BottomSheet, Button } from '@/ui';
 
@@ -24,8 +25,11 @@ export function DeleteAccountSheet({ onClose, onDeleted }: Props) {
   const handleDelete = async () => {
     setSubmitting(true);
     setError('');
+    const uid = useAuthStore.getState().user?.id ?? null; // 탈퇴가 끝나면 로그아웃돼 읽을 수 없으므로 먼저 잡는다
     try {
       await deleteAccount();
+      // 성공했을 때만 그 계정의 기기 펀드 데이터 정리 + Google 로그아웃(실패해도 탈퇴 완료 흐름은 막지 않는다)
+      if (uid !== null) void purgeFundAccount(uid).catch(() => {});
       onDeleted();
     } catch (e) {
       setSubmitting(false);
