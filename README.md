@@ -558,7 +558,7 @@ cd backend && uv run --with pykrx python -m apps.collector.verify.spot_check --n
 - **계산**: `collector.compute_canslim` — 20:30 일일 파이프라인 마지막 단계(일봉 → 국내 지수 → 투자자 → CANSLIM)와 토 10:40(재무 수집 뒤). 보통주 전체의 7항목 판정·0~100 점수를 CH `canslim_daily`·`canslim_market` 에 저장(같은 날 재계산은 멱등).
 - **처음 한 번**: 점수 추이용 60거래일 채우기 — `uv run celery -A apps.collector.celery_app call collector.backfill_canslim` (과거 날짜도 실적은 최신값 사용).
 - **API(stock_api GraphQL)**: `canslimMarket`, `canslimScreen(market, minPass, required, sort, liquidOnly, limit, offset)`, `canslimScore(ticker)`.
-- **C(분기 실적)**: KIS 분기 EPS 형식 확인 뒤 `FUNDAMENTALS_Q_CUMULATIVE` 를 설정해야 켜진다(그 전엔 '준비 중'). A·I·M 은 재무·투자자·지수 데이터가 쌓인 뒤 "데이터 부족"이 풀린다.
+- **C(분기 실적)**: `FUNDAMENTALS_Q_CUMULATIVE` 를 설정해야 켜진다(그 전엔 '준비 중'). **실측(2026-10-22): KIS 분기 EPS 는 누적 → `true`** — 결산월 분기 EPS 가 같은 해 연간 EPS 와 11,494건 중 11,493건 일치(단독이면 약 1/4). 운영은 호스트 `/opt/stock_app/env/.env.production` 에 넣고 Deploy Server 재실행 → CANSLIM 60일 백필. A·I·M 은 재무·투자자·지수 데이터가 쌓인 뒤 "데이터 부족"이 풀린다.
 - 기준값(25%·85%·RS 80 등)·가중치는 `apps/collector/canslim/rules.py` 상수.
 
 ### 🧮 조건검색 (스크리너 프로젝트 4) — 프리셋·커스텀 필터
