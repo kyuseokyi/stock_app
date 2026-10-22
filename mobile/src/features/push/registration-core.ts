@@ -20,6 +20,25 @@ export type SyncDeps = {
   del: (authToken: string, pushToken: string) => Promise<void>;
 };
 
+/**
+ * 푸시 플래그용 펀드 수. 소유자 없음 오류는 "복원(hydrate) 끝 + 사용자 정보 없음"(토큰만 복원된 저장값 손상)일 때만 0.
+ * 복원 전이면 그대로 던져 이번 동기화를 건너뛴다 — 앱 시작 직후 로그인에서 fund_notice=false 를 보내 저장하지 않게.
+ * 다른 읽기 실패도 던진다(일시 오류로 fund_notice=false 를 보내지 않게).
+ */
+export async function countFundsForPush(
+  load: () => Promise<number>,
+  auth: () => { hydrated: boolean; user: unknown },
+  isNoOwner: (e: unknown) => boolean,
+): Promise<number> {
+  try {
+    return await load();
+  } catch (e) {
+    const { hydrated, user } = auth();
+    if (isNoOwner(e) && hydrated && user === null) return 0;
+    throw e;
+  }
+}
+
 export type SyncResult = 'skipped' | 'registered' | 'unchanged' | 'unregistered' | 'idle' | 'failed';
 
 /** 새 글 알림 설정 저장값 → 켜짐 여부. '0' 만 꺼짐(없으면 기본 켜짐) */

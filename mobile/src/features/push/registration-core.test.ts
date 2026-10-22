@@ -1,4 +1,5 @@
 import {
+  countFundsForPush,
   createPushRegistrar,
   decodeSaved,
   encodeSaved,
@@ -264,5 +265,52 @@ describe('createPushRegistrar 합치기', () => {
     await Promise.all([s1, s2, u]);
     await expect(s3).resolves.toBe('registered');
     expect(decodeSaved(saved.v)?.token).toBe(TOKEN);
+  });
+});
+
+describe('countFundsForPush(푸시용 펀드 수)', () => {
+  const noOwner = Object.assign(new Error('로그인이 필요해요'), { noFundOwner: true });
+  const isNoOwner = (e: unknown) => e === noOwner;
+  const failing = async (): Promise<number> => {
+    throw noOwner;
+  };
+
+  it('목록을 읽으면 그 개수', async () => {
+    await expect(
+      countFundsForPush(async () => 3, () => ({ hydrated: true, user: { id: 1 } }), isNoOwner),
+    ).resolves.toBe(3);
+  });
+
+  it('복원 끝 + 사용자 정보 없음(토큰만 남음)이면 0', async () => {
+    await expect(countFundsForPush(failing, () => ({ hydrated: true, user: null }), isNoOwner)).resolves.toBe(0);
+  });
+
+  it('복원(hydrate) 전이면 던져 이번 동기화를 건너뛴다 — fund_notice=false 를 보내지 않게', async () => {
+    await expect(
+      countFundsForPush(failing, () => ({ hydrated: false, user: { id: 1 } }), isNoOwner),
+    ).rejects.toBe(noOwner);
+    await expect(countFundsForPush(failing, () => ({ hydrated: false, user: null }), isNoOwner)).rejects.toBe(noOwner);
+  });
+
+  it('소유자 없음 외의 읽기 실패는 그대로 던진다', async () => {
+    const other = new Error('io');
+    await expect(
+      countFundsForPush(
+        async () => {
+          throw other;
+        },
+        () => ({ hydrated: true, user: null }),
+        isNoOwner,
+      ),
+    ).rejects.toBe(other);
+  });
+
+  it('복원 전 throw 로 sync 는 failed — PUT·저장 없음', async () => {
+    const { d } = mk({
+      countFunds: () => countFundsForPush(failing, () => ({ hydrated: false, user: { id: 1 } }), isNoOwner),
+    });
+    await expect(syncPushRegistrationWith(d)).resolves.toBe('failed');
+    expect(d.put).not.toHaveBeenCalled();
+    expect(d.saveSaved).not.toHaveBeenCalled();
   });
 });

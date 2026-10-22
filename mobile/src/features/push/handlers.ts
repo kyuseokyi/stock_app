@@ -73,10 +73,10 @@ export function usePushSetup(): void {
     return () => sub.remove();
   }, [router, hydrated]);
 
-  // 앱 실행·로그인 직후 등록 동기화
+  // 앱 실행·로그인 직후 등록 동기화 — 복원(hydrate) 전엔 펀드 수를 알 수 없어(던짐) 건너뛰므로, 복원이 끝나면 다시
   useEffect(() => {
-    if (loggedIn) void syncPushRegistration();
-  }, [loggedIn, ownerId]);
+    if (loggedIn && hydrated) void syncPushRegistration();
+  }, [loggedIn, ownerId, hydrated]);
 
   // 설정 앱에서 알림 권한을 켜고 돌아오면 재동기화(토큰·플래그가 같으면 서버 호출은 생략됨)
   useEffect(() => {

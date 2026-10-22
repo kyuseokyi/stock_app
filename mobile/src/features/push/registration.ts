@@ -13,7 +13,7 @@ import { withFreshAuth } from '@/lib/api/token-refresh';
 import { deletePushDevice, putPushDevice } from './api';
 import { getProjectId, isPushConfigured } from './config';
 import { loadPostNotice } from './post-notice';
-import { createPushRegistrar, PUSH_TIMEOUT_MS, withTimeout, type PushPermission, type SyncDeps } from './registration-core';
+import { countFundsForPush, createPushRegistrar, PUSH_TIMEOUT_MS, withTimeout, type PushPermission, type SyncDeps } from './registration-core';
 
 // 키를 바꾸지 않는다 — 구버전(토큰 문자열) 값도 이 키에 있어야 업데이트 뒤 로그아웃 때 해제할 수 있다
 const SAVED_KEY = 'push_device_v1';
@@ -22,16 +22,10 @@ const platform = Platform.OS === 'ios' ? 'ios' : 'android';
 const deps: SyncDeps = {
   isConfigured: isPushConfigured,
   authToken: () => useAuthStore.getState().token,
-  // 사용자 정보 없이 토큰만 복원된 경우(저장값 손상)는 펀드 0개 — 읽기 실패는 그대로 던져 이번 동기화를 건너뛴다
-  // (일시 오류로 fund_notice=false 를 보내지 않게)
-  countFunds: async () => {
-    try {
-      return (await loadFunds()).length;
-    } catch (e) {
-      if (isNoOwnerError(e)) return 0;
-      throw e;
-    }
-  },
+  // 사용자 정보 없이 토큰만 복원된 경우(저장값 손상)는 펀드 0개. 복원(hydrate) 전·읽기 실패는 던져 이번 동기화를 건너뛴다
+  // (일시 상태로 fund_notice=false 를 보내지 않게 — 복원이 끝나면 usePushSetup 이 다시 동기화)
+  countFunds: () =>
+    countFundsForPush(async () => (await loadFunds()).length, () => useAuthStore.getState(), isNoOwnerError),
   postNotice: loadPostNotice,
   permission: async () => (await Notifications.getPermissionsAsync()).status as PushPermission,
   getPushToken: async () =>
