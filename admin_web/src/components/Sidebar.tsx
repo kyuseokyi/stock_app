@@ -42,6 +42,10 @@ const NAV_GROUPS: NavGroup[] = [
     items: [{ to: '/fund-notices', label: '펀드 리포트 알림', icon: '📣' }],
   },
   {
+    title: '앱 관리',
+    items: [{ to: '/app/versions', label: '앱 버전 & 업데이트', icon: '📱' }],
+  },
+  {
     title: '회원 관리',
     items: [{ to: '/members', label: '회원 목록', icon: '👥' }],
   },

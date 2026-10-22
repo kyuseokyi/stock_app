@@ -24,6 +24,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    false,
     func,
     true,
 )
@@ -316,3 +317,37 @@ class PushSend(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
+
+
+class AppVersionConfig(Base):
+    """모바일 앱 업데이트 정책(플랫폼별 1행) — 스토어 최신/최소 버전·강제 여부, OTA 정책, 점검 모드.
+
+    명세: docs/app_update_management_spec.md §3-1. 기본 행(android·ios)은 마이그레이션이 시드한다.
+    """
+
+    __tablename__ = "app_version_configs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    platform: Mapped[str] = mapped_column(String(20), nullable=False, unique=True, index=True)  # android | ios
+    latest_version: Mapped[str] = mapped_column(String(20), nullable=False)
+    min_supported_version: Mapped[str] = mapped_column(String(20), nullable=False)
+    force_update_enabled: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=false(), nullable=False
+    )
+    store_url: Mapped[str] = mapped_column(String(255), nullable=False)
+    store_title: Mapped[str] = mapped_column(String(100), nullable=False)
+    store_message: Mapped[str] = mapped_column(Text, nullable=False)
+    # SILENT | OPTIONAL | MANDATORY
+    ota_policy: Mapped[str] = mapped_column(
+        String(20), default="SILENT", server_default="SILENT", nullable=False
+    )
+    ota_title: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    ota_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    is_maintenance: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=false(), nullable=False
+    )
+    maintenance_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_by: Mapped[str | None] = mapped_column(String(100), nullable=True)

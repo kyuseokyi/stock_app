@@ -267,6 +267,19 @@ npm run build:android:devapk  # → android/app/build/outputs/apk/release/app-re
 - ID 가 비어 있으면 히스토리는 그대로 동작하고 백업 화면만 "백업 설정이 필요해요". iOS 는 출시 전 `GOOGLE_IOS_URL_SCHEME` 설정 필요(`mobile/app.config.js`).
 - 설계: `docs/superpowers/specs/2026-10-19-fund-history-backup-design.md`
 
+### 앱 업데이트 관리 (스토어 강제/권장 · OTA 정책 · 점검 모드)
+- 명세: `docs/app_update_management_spec.md`, 지시서 `docs/prompts/07_app_update_management.md`. 현재 **백엔드 + 관리자 웹까지 구현**, 모바일(expo-updates·업데이트 모달)은 후속 작업.
+- **백엔드(blog 서비스, 포트 8000)** — 테이블 `app_version_configs`(플랫폼별 1행, 마이그레이션 `f4a5b6c7d8e9` 가 android·ios 기본 행 시드: 최신/최소 `1.0.0`, 강제 끔, OTA `SILENT`, 점검 끔)
+  - `GET /api/v1/app/version-check?platform=android|ios&current_version=1.0.0` — **인증 없음**, 매 앱 실행마다 호출. 점검 중이어도 200. 응답 `{ maintenance: {is_active, message}, store: {update_type, latest_version, min_supported_version, title, message, store_url}, ota: {policy, title, message} }`
+  - `GET /api/v1/admin/app-versions` — 관리자. android·ios 를 항상 이 순서로(행이 없으면 기본값, `updated_at: null`)
+  - `PUT /api/v1/admin/app-versions/{platform}` — 관리자. `updated_by`(관리자 이메일, 없으면 닉네임)·`updated_at` 기록. 검증 실패는 422 `{detail: {code, message(한국어)}}`
+- **판별 규칙**: ① `is_maintenance` 면 `maintenance.is_active=true`(앱은 최우선 처리) ② `force_update_enabled` 이거나 현재 < 최소 지원 → `FORCE` ③ 현재 < 최신 → `RECOMMENDED` ④ 그 외 `NONE`.
+  - 버전은 SemVer `major.minor.patch` 숫자 비교(`1.10.0 > 1.9.0`, 앞자리 0·접두사 `v`·프리릴리스 불가, 20자 이하). 관리자 입력은 서버·웹이 같은 규칙으로 검증하고 최소 지원 ≤ 최신이어야 한다.
+  - 앱이 보낸 `current_version` 형식이 틀리거나 비면 `store.update_type=NONE`(앱이 막히지 않게), 점검·OTA 정보는 그대로 준다. `platform` 은 android/ios 외 422.
+- **OTA 정책 의미**: `SILENT` 백그라운드 다운로드 후 다음 실행 때 적용(알림 없음) · `OPTIONAL` 다운로드 후 안내 창 [나중에 하기]/[지금 재시작] · `MANDATORY` 닫을 수 없는 창으로 즉시 재시작.
+- **관리자 웹** `/app/versions`(사이드바 "앱 관리 > 📱 앱 버전 & 업데이트"): Android/iOS 탭, 긴급 조치(점검 모드·스토어 강제 스위치·점검 문구), 스토어 버전 카드, OTA 3단계 라디오, 저장 + 토스트. 점검 켬·강제 켬·MANDATORY 가 들어간 저장은 확인 창을 띄운다.
+- ⚠️ iOS 기본 스토어 링크는 플레이스홀더(`https://apps.apple.com/app/id0000000000`) — App Store 는 숫자 앱 ID 가 있어야 열리므로 출시 후 관리자 화면에서 실제 주소로 바꾼다. Android 는 `https://play.google.com/store/apps/details?id=com.stockapp`.
+
 ## 🔄 작업 재개(Resume) 가이드 & 환경 점검
 
 작업을 중단했다가 다시 시작할 때, **DB 인프라(Docker)** 는 재부팅 전까지 계속 떠 있지만 **앱 서비스(FastAPI/Celery/Vite)** 는 종료되므로 다시 띄워야 합니다.
@@ -372,6 +385,7 @@ uv run pytest tests/test_universe_cooldown.py    # 특정 파일
 | `blog_posts` | 게시글 | board_id, author_id, title, content, thumbnail_url, view_count, featured_at(홈 추천 켠 시각) |
 | `blog_comments` | 댓글 | post_id, author_id, content |
 | `push_templates` | 푸시 알림 템플릿 | title, body, last_sent_at |
+| `app_version_configs` | 앱 업데이트 정책(플랫폼별 1행) | platform(UNIQUE), latest_version, min_supported_version, force_update_enabled, store_url/title/message, ota_policy, ota_title/message, is_maintenance, maintenance_message, updated_at, updated_by |
 | `stock_meta` | 종목 메타(마스터) | ticker, name, market, is_active |
 | `alembic_version` | 마이그레이션 버전(Alembic 자동) | version_num |
 
