@@ -15,6 +15,7 @@ const MarketTab = lazy(() => import('./pages/screener/MarketTab'))
 const GroupTab = lazy(() => import('./pages/screener/GroupTab'))
 const CalendarTab = lazy(() => import('./pages/screener/CalendarTab'))
 const FinderTab = lazy(() => import('./pages/screener/FinderTab'))
+const PatternsTab = lazy(() => import('./pages/screener/PatternsTab'))
 const FundListPage = lazy(() => import('./pages/FundListPage'))
 const FundReportPage = lazy(() => import('./pages/FundReportPage'))
 
@@ -56,6 +57,7 @@ export default function App() {
           <Route path="calendar" element={<CalendarTab />} />
           <Route path="leaders" element={<ScreenerPage />} />
           <Route path="finder" element={<FinderTab />} />
+          <Route path="patterns" element={<PatternsTab />} />
           <Route path="*" element={<Navigate to="market" replace />} />
         </Route>
         <Route path="auth/complete" element={<AuthCompletePage />} />

@@ -6,9 +6,25 @@ import { THEME } from '../../lib/themeColors'
 
 const MA50_COLOR = '#f97316'
 
+export interface ChartPriceLine { price: number; color: string; title?: string; dashed?: boolean }
+export interface ChartMarker {
+  date: string
+  position: 'aboveBar' | 'belowBar'
+  shape: 'circle' | 'arrowUp' | 'arrowDown' | 'square'
+  color: string
+  text?: string
+}
+
 // 스크리너 상세용 일봉 차트 — 캔들 + 50일선 + 52주 최고가 점선. 게임 TradingChart(코치·포지션·분봉)와 분리.
-export default function StockDailyChart({ ticker, high52w }: { ticker: string; high52w: number | null }) {
+// priceLines·markers 는 선택 — 패턴 상세가 피벗·매수/손절 선과 베이스 꼭짓점을 얹을 때 쓴다(없으면 기존과 동일).
+export default function StockDailyChart({
+  ticker, high52w, priceLines, markers,
+}: { ticker: string; high52w: number | null; priceLines?: ChartPriceLine[]; markers?: ChartMarker[] }) {
   const boxRef = useRef<HTMLDivElement>(null)
+  const extraRef = useRef({ priceLines, markers })
+  extraRef.current = { priceLines, markers }
+  // 배열은 렌더마다 새로 만들어지므로 내용으로 비교
+  const extraKey = JSON.stringify([priceLines ?? null, markers ?? null])
   const [state, setState] = useState<'loading' | 'ready' | 'failed'>('loading')
 
   useEffect(() => {
@@ -43,6 +59,22 @@ export default function StockDailyChart({ ticker, high52w }: { ticker: string; h
             axisLabelVisible: true, title: '52주 고점',
           })
         }
+        const extra = extraRef.current
+        for (const l of extra.priceLines ?? []) {
+          candles.createPriceLine({
+            price: l.price, color: l.color, lineWidth: 1, lineStyle: l.dashed ? LineStyle.Dashed : LineStyle.Solid,
+            axisLabelVisible: true, title: l.title ?? '',
+          })
+        }
+        if (extra.markers && extra.markers.length > 0) {
+          const times = new Set(rows.map((c) => c.date))
+          candles.setMarkers(
+            extra.markers
+              .filter((m) => times.has(m.date))
+              .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0))
+              .map((m) => ({ time: m.date, position: m.position, shape: m.shape, color: m.color, text: m.text })),
+          )
+        }
         chart.timeScale().fitContent()
         setState('ready')
       })
@@ -51,7 +83,7 @@ export default function StockDailyChart({ ticker, high52w }: { ticker: string; h
       cancelled = true
       chart.remove()
     }
-  }, [ticker, high52w])
+  }, [ticker, high52w, extraKey])
 
   return (
     <div className="relative h-64 touch-pan-y">
