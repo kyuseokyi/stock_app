@@ -139,19 +139,29 @@ class ConnectionManager:
         if tasks:
             await asyncio.gather(*tasks)
 
-    async def close_replaced(self, user_id: int, platform: str, current_sid: str) -> None:
+    async def close_replaced(
+        self, user_id: int, platform: str, current_sid: str, reason: str = "SESSION_REPLACED"
+    ) -> None:
         """같은 플랫폼 새 로그인 → 그 유저·플랫폼 소켓 중 sid 가 다른(이전) 것만 4401 로 닫는다.
-        방금 붙은 새 소켓(current_sid)·다른 플랫폼·레거시(플랫폼 모름) 소켓은 유지."""
+        방금 붙은 새 소켓(current_sid)·다른 플랫폼·레거시(플랫폼 모름) 소켓은 유지.
+        current_sid="" 이면(세션 행 없음) 그 플랫폼 소켓 모두 닫힌다. reason: 교체 SESSION_REPLACED·종료 SESSION_ENDED."""
+        await self._close_matching(user_id, lambda plt, sid: plt == platform and sid != current_sid, reason)
+
+    async def close_session(self, user_id: int, platform: str, sid: str, reason: str) -> None:
+        """그 sid 의 소켓만 4401 로 닫는다(세션 종료 알림인데 현재 sid 를 못 읽었을 때 — 다른 기기 소켓은 건드리지 않음)."""
+        await self._close_matching(user_id, lambda plt, s: plt == platform and s == sid, reason)
+
+    async def _close_matching(self, user_id: int, match, reason: str) -> None:
         async with self._lock:
             stale = []
             for ws in self._conns.get(user_id, set()):
                 plt, sid = self._meta.get(ws, (None, None))
-                if plt == platform and sid != current_sid:
+                if match(plt, sid):
                     stale.append(ws)
         for ws in stale:
             await self.disconnect(user_id, ws)
             with contextlib.suppress(Exception):
-                await asyncio.wait_for(ws.close(code=4401, reason="SESSION_REPLACED"), timeout=SEND_TIMEOUT)
+                await asyncio.wait_for(ws.close(code=4401, reason=reason), timeout=SEND_TIMEOUT)
 
     async def close_all(self, code: int = 1001) -> None:
         """종료(SIGTERM) 시 로컬 연결 전부 close — 1001(going away)이면 클라이언트가 다른 인스턴스로 재연결."""

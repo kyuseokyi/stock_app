@@ -13,7 +13,7 @@ from typing import Literal
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from fastapi.responses import HTMLResponse, RedirectResponse
 from redis.exceptions import RedisError
 from sqlalchemy.exc import SQLAlchemyError
@@ -159,11 +159,13 @@ async def callback(
 @router.post("/exchange", response_model=schemas.TokenResponse)
 async def exchange(
     payload: schemas.SocialExchangeRequest,
+    response: Response,
     db: AsyncSession = Depends(get_db),
     store: SocialStore = Depends(get_social_store),
     redis=Depends(get_redis),
 ):
     """일회용 교환 코드 + code_verifier → 서비스 JWT. 플랫폼은 서명된 state 에서 온 grant 의 client(요청 바디 무시)."""
+    response.headers["Cache-Control"] = "no-store"  # 토큰 응답은 캐시에 남기지 않는다
     try:
         user, client = await redeem_exchange_code(db, store, payload.code, payload.code_verifier)
     except ExchangeError as exc:

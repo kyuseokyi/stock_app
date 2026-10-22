@@ -82,11 +82,11 @@ async def test_start_session_replaces_sid_per_platform(maker):
 @pytest.mark.parametrize(
     "payload, stored, ok",
     [
-        ({"sub": "1"}, None, True),                                   # 레거시 토큰(sid 없음) 허용
-        ({"sub": "1", "sid": "x", "plt": "web"}, None, False),        # 행 없음 → 거부
-        ({"sub": "1", "sid": "x", "plt": "web"}, "y", False),         # sid 다름 → 거부
-        ({"sub": "1", "sid": "x", "plt": "web"}, "x", True),          # 일치 → 허용
-        ({"sub": "1", "sid": "x"}, "x", False),                       # plt 누락 sid 토큰 → 거부
+        ({"sub": "1"}, None, "ok"),                                   # 레거시 토큰(sid 없음) 허용
+        ({"sub": "1", "sid": "x", "plt": "web"}, None, "ended"),      # 행 없음 → 종료(로그아웃 등)
+        ({"sub": "1", "sid": "x", "plt": "web"}, "y", "replaced"),    # sid 다름 → 교체
+        ({"sub": "1", "sid": "x", "plt": "web"}, "x", "ok"),          # 일치 → 허용
+        ({"sub": "1", "sid": "x"}, "x", "replaced"),                  # plt 누락 sid 토큰 → 거부(교체로 분류, 기존 유지)
     ],
 )
 async def test_check_session_rules(maker, payload, stored, ok):
@@ -96,7 +96,7 @@ async def test_check_session_rules(maker, payload, stored, ok):
             db.add(UserSession(user_id=1, platform="web", sid=stored))
             await db.commit()
     async with maker() as db:
-        assert await sessions.check_session(db, 1, payload) is ok
+        assert await sessions.check_session(db, 1, payload) == ok
 
 
 async def test_publish_session_replaced_sends_new_sid():

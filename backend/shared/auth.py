@@ -15,7 +15,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from shared.database import get_db
 from shared.models import User, UserRole
 from shared.security import decode_token
-from shared.sessions import SESSION_REPLACED, SESSION_REPLACED_MESSAGE, check_session
+from shared.sessions import (
+    SESSION_ENDED,
+    SESSION_ENDED_MESSAGE,
+    SESSION_OK,
+    SESSION_REPLACED,
+    SESSION_REPLACED_MESSAGE,
+    SESSION_STATE_ENDED,
+    check_session,
+)
 
 bearer_scheme = HTTPBearer(auto_error=False)
 
@@ -54,8 +62,11 @@ async def get_current_user(
     user = await db.get(User, user_id)
     if user is None or not user.is_active:
         raise _unauthorized(TOKEN_INVALID, TOKEN_INVALID_MESSAGE)
-    # 같은 플랫폼에서 다시 로그인했으면 이전 토큰 거부 — 클라이언트는 detail.code 로 안내 문구를 구분한다
-    if not await check_session(db, user.id, payload):
+    # 같은 플랫폼 재로그인(교체)·로그아웃 등으로 세션 행 삭제(종료)면 거부 — 클라이언트는 detail.code 로 안내 문구를 구분한다
+    state = await check_session(db, user.id, payload)
+    if state == SESSION_STATE_ENDED:
+        raise _unauthorized(SESSION_ENDED, SESSION_ENDED_MESSAGE)
+    if state != SESSION_OK:
         raise _unauthorized(SESSION_REPLACED, SESSION_REPLACED_MESSAGE)
     return user
 

@@ -23,6 +23,13 @@ from ..social.providers import get_http_transport
 
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 
+# 토큰이 담긴 응답·토큰을 받는 요청의 응답은 중간 캐시(프록시·브라우저)에 남기지 않는다
+NO_STORE = {"Cache-Control": "no-store"}
+
+
+def no_store(response: Response) -> None:
+    response.headers.update(NO_STORE)
+
 
 def _guest_email(nickname: str) -> str:
     """닉네임을 임시 계정 식별용 이메일로 변환(같은 닉네임=같은 계정)."""
@@ -34,8 +41,12 @@ def _guest_email(nickname: str) -> str:
 
 @router.post("/login", response_model=schemas.TokenResponse)
 async def login(
-    payload: schemas.LoginRequest, db: AsyncSession = Depends(get_db), redis=Depends(get_redis)
+    payload: schemas.LoginRequest,
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+    redis=Depends(get_redis),
 ):
+    no_store(response)
     result = await db.execute(select(User).where(User.email == payload.email))
     user = result.scalar_one_or_none()
 
@@ -60,12 +71,16 @@ async def login(
     dependencies=[Depends(require_guest_enabled)],  # AUTH_GUEST_ENABLED 게이트(꺼짐 → 404)
 )
 async def guest_login(
-    payload: schemas.GuestLoginRequest, db: AsyncSession = Depends(get_db), redis=Depends(get_redis)
+    payload: schemas.GuestLoginRequest,
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+    redis=Depends(get_redis),
 ):
     """임시 로그인 — 닉네임으로 FREE 유저 upsert 후 JWT 발급.
 
     카카오/구글 OAuth 도입 시 콜백에서도 동일한 'upsert → 토큰 발급' 경로를 따른다.
     """
+    no_store(response)
     nickname = payload.nickname.strip()
     email = _guest_email(nickname)
 
@@ -89,25 +104,36 @@ async def guest_login(
 
 
 @router.post("/refresh", response_model=schemas.TokenResponse)
-async def refresh(payload: schemas.RefreshRequest, db: AsyncSession = Depends(get_db)):
+async def refresh(
+    payload: schemas.RefreshRequest,
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+    redis=Depends(get_redis),
+):
     """앱 리프레시 토큰 → 새 접근 토큰 + 새 리프레시(회전, sid 유지). 접근 토큰은 필요 없다.
 
-    401 detail = {"code": REFRESH_INVALID|REFRESH_EXPIRED|REFRESH_REUSED|SESSION_REPLACED, "message"}.
+    401 detail = {"code": REFRESH_INVALID|REFRESH_EXPIRED|REFRESH_REUSED|SESSION_REPLACED|SESSION_ENDED, "message"}.
+    세션을 끝낸 경우(재사용 감지·비활성) 열린 게임 WS 를 닫게 Redis 로 알린다(best-effort).
     """
+    no_store(response)
     try:
-        result = await refresh_tokens.rotate(db, payload.refresh_token)
+        result = await refresh_tokens.rotate(db, payload.refresh_token, redis=redis)
     except refresh_tokens.RefreshError as e:
         raise HTTPException(
-            status.HTTP_401_UNAUTHORIZED, detail={"code": e.code, "message": e.message}
+            status.HTTP_401_UNAUTHORIZED, detail={"code": e.code, "message": e.message}, headers=NO_STORE
         ) from e
     return schemas.token_response(result, result.user)
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
-async def logout(payload: schemas.RefreshRequest | None = Body(None), db: AsyncSession = Depends(get_db)) -> Response:
-    """서버 로그아웃(앱) — 그 리프레시의 sid 를 폐기하고 앱 세션을 끊는다. 존재 여부를 숨기려고 항상 204."""
-    await refresh_tokens.logout(db, payload.refresh_token if payload else "")
-    return Response(status_code=status.HTTP_204_NO_CONTENT)
+async def logout(
+    payload: schemas.RefreshRequest | None = Body(None),
+    db: AsyncSession = Depends(get_db),
+    redis=Depends(get_redis),
+) -> Response:
+    """서버 로그아웃(앱) — 그 리프레시의 sid 를 폐기하고 앱 세션을 끊는다(열린 게임 WS 도 닫게 알림). 존재 여부를 숨기려고 항상 204."""
+    await refresh_tokens.logout(db, payload.refresh_token if payload else "", redis=redis)
+    return Response(status_code=status.HTTP_204_NO_CONTENT, headers=NO_STORE)
 
 
 @router.get("/me", response_model=schemas.UserOut)

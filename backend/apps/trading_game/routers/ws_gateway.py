@@ -2,6 +2,8 @@
 
 token 선택: 없으면 비로그인 공개 연결(틱·시장심리만), 있으면 기존 검증(잘못된 토큰 4401 — 공개로 강등하지 않음).
 단일 세션: 같은 플랫폼에서 교체된 토큰은 핸드셰이크에서 4401(SESSION_REPLACED), 연결 중 교체되면 버스 이벤트로 즉시 4401 close.
+세션이 끝났으면(로그아웃·리프레시 재사용 감지·비활성 — 세션 행 없음) 4401(SESSION_ENDED), 연결 중이면 같은 버스의 종료 알림으로 닫는다.
+무효 토큰·없는/비활성 사용자는 4401(TOKEN_INVALID), 만료는 4401(TOKEN_EXPIRED).
 공개 연결 상한: IP당 GAME_WS_PUBLIC_PER_IP(3)·전체 GAME_WS_PUBLIC_MAX(2000), 초과 시 4429.
 """
 from __future__ import annotations
@@ -15,10 +17,17 @@ import jwt
 from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect
 from sqlalchemy import func, select
 
-from shared.auth import TOKEN_EXPIRED
+from shared.auth import TOKEN_EXPIRED, TOKEN_INVALID
 from shared.database import AsyncSessionLocal
 from shared.security import decode_token
-from shared.sessions import SESSION_REPLACED, check_session
+from shared.sessions import (
+    SESSION_ENDED,
+    SESSION_EVENT_ENDED,
+    SESSION_OK,
+    SESSION_REPLACED,
+    SESSION_STATE_ENDED,
+    check_session,
+)
 from shared.models import User, UserSession
 from shared.game_models import GameAccount, GamePosition
 from apps.trading_game.services import account_service, ws_bus
@@ -118,47 +127,64 @@ async def game_stream(ws: WebSocket, token: str | None = Query(None)):
         return
     except (jwt.PyJWTError, ValueError, TypeError):
         await ws.accept()  # accept 후 close 해야 4401 코드가 클라이언트에 전달됨
-        await ws.close(code=4401)
+        await ws.close(code=4401, reason=TOKEN_INVALID)
         return
     # REST 와 동일하게 유저 존재·활성 + 단일 세션 검증(같은 플랫폼에서 다시 로그인한 이전 토큰 차단)
+    state = None
     async with AsyncSessionLocal() as db:
         user = await db.get(User, user_id)
-        session_ok = user is not None and user.is_active and await check_session(db, user_id, payload)
+        if user is not None and user.is_active:
+            state = await check_session(db, user_id, payload)
     if user is None or not user.is_active:
         await ws.accept()
-        await ws.close(code=4401)
+        await ws.close(code=4401, reason=TOKEN_INVALID)
         return
-    if not session_ok:
+    if state != SESSION_OK:
         await ws.accept()
-        await ws.close(code=4401, reason=SESSION_REPLACED)  # 4401 재사용 — 설치된 클라이언트가 재연결을 멈추는 코드
+        # 4401 재사용 — 설치된 클라이언트가 재연결을 멈추는 코드
+        await ws.close(code=4401, reason=_session_reason(state))
         return
     await manager.connect(user_id, ws, platform=payload.get("plt"), sid=payload.get("sid"))
     try:
         # 검증~등록 사이에 같은 플랫폼 새 로그인 알림이 먼저 지나갔으면 close_replaced 가 이 소켓을 못 찾는다 → 등록 후 재확인
         if payload.get("sid") is not None:
             async with AsyncSessionLocal() as db:
-                still_ok = await check_session(db, user_id, payload)
-            if not still_ok:
+                state = await check_session(db, user_id, payload)
+            if state != SESSION_OK:
                 with contextlib.suppress(Exception):
-                    await ws.close(code=4401, reason=SESSION_REPLACED)
+                    await ws.close(code=4401, reason=_session_reason(state))
                 return
         await _keepalive(ws)
     finally:
         await manager.disconnect(user_id, ws)
 
 
+def _session_reason(state: str | None) -> str:
+    return SESSION_ENDED if state == SESSION_STATE_ENDED else SESSION_REPLACED
+
+
 async def on_session_replaced(data: dict) -> None:
-    """auth 가 발행한 세션 교체 알림(버스 payload_channels) → 이 인스턴스의 이전 소켓 즉시 닫기."""
+    """auth 가 발행한 세션 교체·종료 알림(버스 payload_channels) → 이 인스턴스의 해당 소켓 즉시 닫기.
+
+    교체(kind 없음): sid = 새 현재 sid. 종료(kind="ended"): sid = 끝난 sid(로그아웃·재사용 감지·비활성).
+    """
     try:
         user_id, platform, sid = int(data["user_id"]), str(data["platform"]), str(data["sid"])
     except (KeyError, TypeError, ValueError):
         return
-    # 동시 로그인이면 알림 도착 순서가 커밋 순서와 다를 수 있다 → DB 의 현재 sid 기준으로 닫는다(읽기 실패 시 알림 sid)
+    ended = data.get("kind") == SESSION_EVENT_ENDED
+    # 동시 로그인이면 알림 도착 순서가 커밋 순서와 다를 수 있다 → DB 의 현재 sid 기준으로 닫는다
     try:
         async with AsyncSessionLocal() as db:
             row = await db.get(UserSession, (user_id, platform))
-        current = row.sid if row is not None else ""  # 행이 없으면(탈퇴 등) 그 플랫폼 소켓 모두 이전 것
     except Exception:
-        log.warning("세션 교체 알림 — 현재 sid 조회 실패, 알림 sid 로 처리", exc_info=True)
-        current = sid
-    await manager.close_replaced(user_id, platform, current)
+        log.warning("세션 알림 — 현재 sid 조회 실패, 알림 sid 로 처리", exc_info=True)
+        if ended:  # 끝난 sid 의 소켓만(다른 기기 소켓까지 닫으면 그 기기가 로그아웃된다)
+            await manager.close_session(user_id, platform, sid, SESSION_ENDED)
+        else:
+            await manager.close_replaced(user_id, platform, sid)
+        return
+    if row is None:  # 행이 없으면(로그아웃·탈퇴 등) 그 플랫폼 소켓 모두 끝난 것
+        await manager.close_replaced(user_id, platform, "", SESSION_ENDED)
+        return
+    await manager.close_replaced(user_id, platform, row.sid, SESSION_ENDED if ended else SESSION_REPLACED)

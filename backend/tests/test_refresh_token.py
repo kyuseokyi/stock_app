@@ -173,6 +173,7 @@ async def test_social_exchange_refresh_only_for_app_client(maker, client, issued
     finally:
         auth_app.dependency_overrides.clear()
     assert r.status_code == 200
+    assert r.headers["cache-control"] == "no-store"
     assert (r.json()["refresh_token"] is not None) is issued
     assert (len(await _rows(maker)) == 1) is issued
 
@@ -278,6 +279,8 @@ async def test_reuse_after_grace_revokes_all_and_kills_session(ctx, maker, clock
     assert r2.status_code == 401 and r2.json()["detail"]["code"] == "REFRESH_INVALID"
     me = await c.get("/api/v1/auth/me", headers=_bearer(rotated["access_token"]))
     assert me.status_code == 401
+    # 세션 행이 지워졌으므로 "다른 기기 로그인"이 아니라 종료 사유
+    assert me.json()["detail"] == {"code": "SESSION_ENDED", "message": "로그아웃됐어요. 다시 로그인해 주세요."}
 
 
 async def test_relogin_invalidates_previous_refresh(ctx, maker):
@@ -375,6 +378,306 @@ async def test_logout_always_204(ctx, kwargs):
     assert (await c.post("/api/v1/auth/logout", **kwargs)).status_code == 204
 
 
+# ── 유예 강화(M1) ───────────────────────────────────────────────────────────
+async def test_grace_retry_after_successor_used_is_reuse(ctx, maker, clock):
+    """유예 안이라도 후속 토큰이 이미 쓰였으면(다른 쪽이 체인을 이어 감) 재사용 → sid 전부 폐기 + 세션 삭제."""
+    c, _ = ctx
+    login = await _app_login(c)
+    uid = login["user"]["id"]
+    t1 = (await _refresh(c, login["refresh_token"])).json()
+    clock.advance(seconds=5)
+    t2 = (await _refresh(c, t1["refresh_token"])).json()  # 후속 T1 사용
+    clock.advance(seconds=5)
+    r = await _refresh(c, login["refresh_token"])  # T0 유예 안 재제시
+    assert r.status_code == 401 and r.json()["detail"]["code"] == "REFRESH_REUSED"
+    assert all(row.revoked_at is not None for row in await _rows(maker))
+    async with maker() as db:
+        assert await db.get(UserSession, (uid, "app")) is None
+    assert (await _refresh(c, t2["refresh_token"])).json()["detail"]["code"] == "REFRESH_INVALID"
+    me = await c.get("/api/v1/auth/me", headers=_bearer(t2["access_token"]))
+    assert me.status_code == 401 and me.json()["detail"]["code"] == "SESSION_ENDED"
+
+
+async def test_used_token_revoked_by_grace_rerotation_is_reuse(ctx, maker, clock):
+    """유예 재회전으로 폐기된 '이미 쓰인' 토큰이 다시 오면 재사용(공격자 체인 은폐 방지)."""
+    c, _ = ctx
+    login = await _app_login(c)
+    uid = login["user"]["id"]
+    t1 = (await _refresh(c, login["refresh_token"])).json()  # T0 사용
+    clock.advance(seconds=2)
+    await _refresh(c, t1["refresh_token"])  # T1 사용(응답 유실 가정)
+    clock.advance(seconds=2)
+    retry = await _refresh(c, t1["refresh_token"])  # T1 유예 재회전 → T0(사용됨)·T2 폐기
+    assert retry.status_code == 200
+    t0_row = next(r for r in await _rows(maker) if r.token_hash == hash_refresh_token(login["refresh_token"]))
+    assert t0_row.revoked_at is not None and t0_row.used_at is not None
+    clock.advance(seconds=2)
+    r = await _refresh(c, login["refresh_token"])  # 폐기된 사용 토큰 재제시
+    assert r.status_code == 401 and r.json()["detail"]["code"] == "REFRESH_REUSED"
+    async with maker() as db:
+        assert await db.get(UserSession, (uid, "app")) is None
+    assert (await _refresh(c, retry.json()["refresh_token"])).status_code == 401
+
+
+async def test_grace_retry_with_unused_successor_still_succeeds(ctx, clock):
+    """정상 응답 유실 재시도(후속 미사용)는 그대로 유예."""
+    c, _ = ctx
+    login = await _app_login(c)
+    await _refresh(c, login["refresh_token"])
+    clock.advance(seconds=10)
+    r = await _refresh(c, login["refresh_token"])
+    assert r.status_code == 200
+    assert (await c.get("/api/v1/auth/me", headers=_bearer(r.json()["access_token"]))).status_code == 200
+
+
+async def test_unused_revoked_token_is_still_invalid_not_reuse(ctx, maker, clock):
+    """폐기됐지만 쓰인 적 없는 토큰(유예 재회전으로 버려진 후속)은 기존처럼 INVALID — 세션 유지."""
+    c, _ = ctx
+    login = await _app_login(c)
+    first = (await _refresh(c, login["refresh_token"])).json()
+    clock.advance(seconds=3)
+    second = (await _refresh(c, login["refresh_token"])).json()
+    r = await _refresh(c, first["refresh_token"])
+    assert r.status_code == 401 and r.json()["detail"]["code"] == "REFRESH_INVALID"
+    assert (await c.get("/api/v1/auth/me", headers=_bearer(second["access_token"]))).status_code == 200
+
+
+# ── 세션 종료 구분(M3) ───────────────────────────────────────────────────────
+async def test_refresh_with_deleted_session_is_session_ended(ctx, maker):
+    c, _ = ctx
+    login = await _app_login(c)
+    async with maker() as db:
+        await db.delete(await db.get(UserSession, (login["user"]["id"], "app")))
+        await db.commit()
+    r = await _refresh(c, login["refresh_token"])
+    assert r.status_code == 401
+    assert r.json()["detail"] == {"code": "SESSION_ENDED", "message": "로그아웃됐어요. 다시 로그인해 주세요."}
+
+
+async def test_logout_then_access_token_gets_session_ended(ctx):
+    c, _ = ctx
+    login = await _app_login(c)
+    await c.post("/api/v1/auth/logout", json={"refresh_token": login["refresh_token"]})
+    me = await c.get("/api/v1/auth/me", headers=_bearer(login["access_token"]))
+    assert me.status_code == 401 and me.json()["detail"]["code"] == "SESSION_ENDED"
+
+
+# ── 다른 사용자 격리 ─────────────────────────────────────────────────────────
+async def test_other_users_refresh_and_logout_do_not_affect_this_user(ctx, maker):
+    c, _ = ctx
+    a = await _app_login(c, "사용자A")
+    b = await _app_login(c, "사용자B")
+    assert a["user"]["id"] != b["user"]["id"]
+    rb = await _refresh(c, b["refresh_token"])
+    assert rb.status_code == 200 and decode_token(rb.json()["access_token"])["sub"] == str(b["user"]["id"])
+    assert (await c.post("/api/v1/auth/logout", json={"refresh_token": rb.json()["refresh_token"]})).status_code == 204
+    # B 의 재사용 감지도 A 에 영향 없음
+    assert (await _refresh(c, b["refresh_token"])).status_code == 401
+    assert (await c.get("/api/v1/auth/me", headers=_bearer(a["access_token"]))).status_code == 200
+    async with maker() as db:
+        assert await db.get(UserSession, (a["user"]["id"], "app")) is not None
+        assert await db.get(UserSession, (b["user"]["id"], "app")) is None
+    ra = await _refresh(c, a["refresh_token"])
+    assert ra.status_code == 200 and decode_token(ra.json()["access_token"])["sub"] == str(a["user"]["id"])
+
+
+# ── 세션 종료 알림(M2) ───────────────────────────────────────────────────────
+async def _subscribed(redis):
+    ps = redis.pubsub()
+    await ps.subscribe(sessions.SESSION_REPLACED_CHANNEL)
+    await ps.get_message(timeout=1)
+    return ps
+
+
+async def _next(ps):
+    msg = await ps.get_message(ignore_subscribe_messages=True, timeout=1)
+    return json.loads(msg["data"]) if msg else None
+
+
+async def test_logout_publishes_session_ended(ctx):
+    c, redis = ctx
+    login = await _app_login(c)
+    sid = decode_token(login["access_token"])["sid"]
+    ps = await _subscribed(redis)
+    await c.post("/api/v1/auth/logout", json={"refresh_token": login["refresh_token"]})
+    assert await _next(ps) == {"user_id": login["user"]["id"], "platform": "app", "sid": sid, "kind": "ended"}
+
+
+async def test_reuse_publishes_session_ended(ctx, clock):
+    c, redis = ctx
+    login = await _app_login(c)
+    sid = decode_token(login["access_token"])["sid"]
+    await _refresh(c, login["refresh_token"])
+    ps = await _subscribed(redis)
+    clock.advance(seconds=31)
+    assert (await _refresh(c, login["refresh_token"])).json()["detail"]["code"] == "REFRESH_REUSED"
+    assert await _next(ps) == {"user_id": login["user"]["id"], "platform": "app", "sid": sid, "kind": "ended"}
+
+
+async def test_inactive_refresh_ends_session_and_publishes(ctx, maker):
+    c, redis = ctx
+    login = await _app_login(c)
+    uid = login["user"]["id"]
+    async with maker() as db:
+        (await db.get(User, uid)).is_active = False
+        await db.commit()
+    ps = await _subscribed(redis)
+    assert (await _refresh(c, login["refresh_token"])).json()["detail"]["code"] == "REFRESH_INVALID"
+    assert (await _next(ps))["kind"] == "ended"
+    async with maker() as db:
+        assert await db.get(UserSession, (uid, "app")) is None
+
+
+async def test_normal_refresh_publishes_nothing(ctx, clock):
+    c, redis = ctx
+    login = await _app_login(c)
+    ps = await _subscribed(redis)
+    assert (await _refresh(c, login["refresh_token"])).status_code == 200
+    assert await _next(ps) is None
+
+
+async def test_publish_ended_failure_is_swallowed_and_none_skips():
+    class Broken:
+        async def publish(self, *_a):
+            raise ConnectionError("down")
+
+    await sessions.publish_session_ended(Broken(), 1, "app", "s")
+    await sessions.publish_session_ended(None, 1, "app", "s")
+
+
+class _WS:
+    def __init__(self):
+        self.closed = None
+
+    async def accept(self):
+        pass
+
+    async def send_text(self, _t):
+        pass
+
+    async def close(self, code=1000, reason=""):
+        self.closed = (code, reason)
+
+
+class _GwDB:
+    """게이트웨이용 가짜 세션 — UserSession 은 row(None 이면 행 없음), User 는 user."""
+
+    def __init__(self, row=None, user=None, fail=False):
+        self.row, self.user, self.fail = row, user, fail
+
+    async def __aenter__(self):
+        if self.fail:
+            raise RuntimeError("db down")
+        return self
+
+    async def __aexit__(self, *a):
+        return False
+
+    async def get(self, model, _id):
+        return self.row if model is UserSession else self.user
+
+
+class _SidRow:
+    def __init__(self, sid):
+        self.sid = sid
+
+
+async def test_gateway_ended_event_closes_app_sockets_with_session_ended(monkeypatch):
+    m = ConnectionManager()
+    monkeypatch.setattr(ws_gateway, "manager", m)
+    monkeypatch.setattr(ws_gateway, "AsyncSessionLocal", lambda: _GwDB(row=None))  # 세션 행 삭제됨
+    app_ws, web_ws = _WS(), _WS()
+    await m.connect(1, app_ws, platform="app", sid="dead")
+    await m.connect(1, web_ws, platform="web", sid="w")
+    await ws_gateway.on_session_replaced({"user_id": 1, "platform": "app", "sid": "dead", "kind": "ended"})
+    assert app_ws.closed == (4401, "SESSION_ENDED")
+    assert web_ws.closed is None
+
+
+async def test_gateway_ended_event_keeps_new_login_socket(monkeypatch):
+    """종료 알림이 늦게 와서 그사이 재로그인(sid=new)했으면 새 소켓은 유지, 끝난 소켓만 SESSION_ENDED."""
+    m = ConnectionManager()
+    monkeypatch.setattr(ws_gateway, "manager", m)
+    monkeypatch.setattr(ws_gateway, "AsyncSessionLocal", lambda: _GwDB(row=_SidRow("new")))
+    dead, new = _WS(), _WS()
+    await m.connect(1, dead, platform="app", sid="dead")
+    await m.connect(1, new, platform="app", sid="new")
+    await ws_gateway.on_session_replaced({"user_id": 1, "platform": "app", "sid": "dead", "kind": "ended"})
+    assert dead.closed == (4401, "SESSION_ENDED") and new.closed is None
+
+
+async def test_gateway_ended_event_db_failure_closes_only_ended_sid(monkeypatch):
+    m = ConnectionManager()
+    monkeypatch.setattr(ws_gateway, "manager", m)
+    monkeypatch.setattr(ws_gateway, "AsyncSessionLocal", lambda: _GwDB(fail=True))
+    dead, other = _WS(), _WS()
+    await m.connect(1, dead, platform="app", sid="dead")
+    await m.connect(1, other, platform="app", sid="other")
+    await ws_gateway.on_session_replaced({"user_id": 1, "platform": "app", "sid": "dead", "kind": "ended"})
+    assert dead.closed == (4401, "SESSION_ENDED") and other.closed is None
+
+
+async def test_gateway_replaced_event_without_kind_keeps_replaced_reason(monkeypatch):
+    m = ConnectionManager()
+    monkeypatch.setattr(ws_gateway, "manager", m)
+    monkeypatch.setattr(ws_gateway, "AsyncSessionLocal", lambda: _GwDB(row=_SidRow("cur")))
+    old = _WS()
+    await m.connect(1, old, platform="app", sid="old")
+    await ws_gateway.on_session_replaced({"user_id": 1, "platform": "app", "sid": "cur"})
+    assert old.closed == (4401, "SESSION_REPLACED")
+
+
+class _ActiveUser:
+    is_active = True
+
+
+def _ws_reason(monkeypatch, token: str, db: _GwDB):
+    monkeypatch.setattr(ws_gateway, "manager", ConnectionManager())
+    monkeypatch.setattr(ws_gateway, "AsyncSessionLocal", lambda: db)
+
+    async def _close_now(ws):  # 검증이 빠져 연결되면 대기 대신 1000 으로 닫아 멈추지 않고 실패
+        await ws.close(code=1000)
+
+    monkeypatch.setattr(ws_gateway, "_keepalive", _close_now)
+    app = FastAPI()
+    app.include_router(ws_gateway.router)
+    with TestClient(app) as client:
+        with pytest.raises(WebSocketDisconnect) as ei:
+            with client.websocket_connect(f"/ws/game/stream?token={token}") as ws:
+                ws.receive_text()
+    return ei.value.code, ei.value.reason
+
+
+def test_ws_handshake_ended_session_reason(monkeypatch):
+    tok = create_access_token(subject=1, role="FREE", sid="dead", platform="app")
+    assert _ws_reason(monkeypatch, tok, _GwDB(row=None, user=_ActiveUser())) == (4401, "SESSION_ENDED")
+
+
+def test_ws_handshake_missing_user_is_token_invalid(monkeypatch):
+    tok = create_access_token(subject=1, role="FREE", sid="s", platform="app")
+    assert _ws_reason(monkeypatch, tok, _GwDB(row=_SidRow("s"), user=None)) == (4401, "TOKEN_INVALID")
+
+
+# ── 캐시 금지(L5) ────────────────────────────────────────────────────────────
+async def test_token_responses_are_no_store(ctx, maker):
+    c, _ = ctx
+    r = await c.post("/api/v1/auth/guest", json={"nickname": "주린이", "platform": "app"})
+    assert r.headers["cache-control"] == "no-store"
+    login = r.json()
+    ok = await _refresh(c, login["refresh_token"])
+    assert ok.status_code == 200 and ok.headers["cache-control"] == "no-store"
+    bad = await _refresh(c, "nope")
+    assert bad.status_code == 401 and bad.headers["cache-control"] == "no-store"
+    out = await c.post("/api/v1/auth/logout", json={"refresh_token": ok.json()["refresh_token"]})
+    assert out.status_code == 204 and out.headers["cache-control"] == "no-store"
+    async with maker() as db:
+        db.add(User(email="admin@stock.app", nickname="관리자", role=UserRole.ADMIN, is_active=True,
+                    password_hash=hash_password("pw1234")))
+        await db.commit()
+    adm = await c.post("/api/v1/auth/login", json={"email": "admin@stock.app", "password": "pw1234"})
+    assert adm.status_code == 200 and adm.headers["cache-control"] == "no-store"
+
+
 # ── 401 사유 코드(REST) ───────────────────────────────────────────────────────
 @pytest.fixture
 async def me_client(maker):
@@ -455,7 +758,7 @@ def test_ws_handshake_invalid_token_has_no_expired_reason(monkeypatch):
         with pytest.raises(WebSocketDisconnect) as ei:
             with client.websocket_connect("/ws/game/stream?token=garbage") as ws:
                 ws.receive_text()
-    assert ei.value.code == 4401 and ei.value.reason != "TOKEN_EXPIRED"
+    assert ei.value.code == 4401 and ei.value.reason == "TOKEN_INVALID"
 
 
 # ── 마이그레이션 ─────────────────────────────────────────────────────────────
