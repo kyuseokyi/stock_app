@@ -14,7 +14,7 @@ jest.mock('expo-updates', () => {
   };
 });
 
-import { checkAndFetchOta, isOtaSupported, reloadApp } from './ota';
+import { checkAndFetchOta, isOtaSupported, OTA_TIMEOUT_MS, reloadApp, withTimeout } from './ota';
 
 const mockUpdates = jest.requireMock('expo-updates') as {
   state: { enabled: boolean };
@@ -93,6 +93,31 @@ describe('checkAndFetchOta', () => {
     await expect(checkAndFetchOta()).resolves.toBe(false);
   });
 
+  it('확인이 끝나지 않으면 60초 상한 후 false(검사 락 고착 방지)', async () => {
+    jest.useFakeTimers();
+    try {
+      mockUpdates.checkForUpdateAsync.mockReturnValue(new Promise(() => {}));
+      const p = checkAndFetchOta();
+      await jest.advanceTimersByTimeAsync(OTA_TIMEOUT_MS);
+      await expect(p).resolves.toBe(false);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('내려받기가 끝나지 않아도 상한 후 false', async () => {
+    jest.useFakeTimers();
+    try {
+      mockUpdates.checkForUpdateAsync.mockResolvedValue({ isAvailable: true, isRollBackToEmbedded: false });
+      mockUpdates.fetchUpdateAsync.mockReturnValue(new Promise(() => {}));
+      const p = checkAndFetchOta();
+      await jest.advanceTimersByTimeAsync(OTA_TIMEOUT_MS);
+      await expect(p).resolves.toBe(false);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
   it('내려받기 실패도 삼키고 false', async () => {
     mockUpdates.checkForUpdateAsync.mockResolvedValue({ isAvailable: true, isRollBackToEmbedded: false });
     mockUpdates.fetchUpdateAsync.mockRejectedValue(new Error('disk'));
@@ -101,18 +126,27 @@ describe('checkAndFetchOta', () => {
 });
 
 describe('reloadApp', () => {
-  it('재시작 호출', async () => {
+  it('재시작 호출 → true', async () => {
     mockUpdates.reloadAsync.mockResolvedValue(undefined);
-    await reloadApp();
+    await expect(reloadApp()).resolves.toBe(true);
     expect(mockUpdates.reloadAsync).toHaveBeenCalledTimes(1);
   });
-  it('재시작 실패는 삼킨다', async () => {
+  it('재시작 실패는 삼키고 false', async () => {
     mockUpdates.reloadAsync.mockRejectedValue(new Error('no runtime'));
-    await expect(reloadApp()).resolves.toBeUndefined();
+    await expect(reloadApp()).resolves.toBe(false);
   });
-  it('개발 모드면 부르지 않음', async () => {
+  it('개발 모드면 부르지 않고 false', async () => {
     g.__DEV__ = true;
-    await reloadApp();
+    await expect(reloadApp()).resolves.toBe(false);
     expect(mockUpdates.reloadAsync).not.toHaveBeenCalled();
+  });
+});
+
+describe('withTimeout', () => {
+  it('제때 끝나면 값 그대로', async () => {
+    await expect(withTimeout(Promise.resolve(3), 1000)).resolves.toBe(3);
+  });
+  it('원래 오류는 그대로 전달', async () => {
+    await expect(withTimeout(Promise.reject(new Error('x')), 1000)).rejects.toThrow('x');
   });
 });

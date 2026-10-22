@@ -3,6 +3,7 @@ import { useRef } from 'react';
 import { Text } from 'react-native';
 import { StyleSheet } from 'react-native-unistyles';
 
+import { useAppUpdateBlocking } from '@/features/app-update/use-app-update';
 import { BottomSheet, Button } from '@/ui';
 
 import { ensurePushChannels } from './handlers';
@@ -12,6 +13,8 @@ import { syncPushRegistration } from './registration';
 /** 홈(로그인 후)·펀드 첫 등록·펀드 화면 진입 중 한 번 — [알림 받기] 일 때만 OS 권한을 요청한다 */
 export function PushPromptSheet({ onClose }: { onClose: () => void }) {
   const busy = useRef(false); // "알림 받기" 연속 탭으로 accept 가 중복 실행되지 않게
+  // 점검·스토어 강제·OTA 필수 안내 중엔 그리지 않는다(시트 두 장이 겹치지 않게). 물어봤음 기록도 남기지 않아 풀리면 다시 뜬다.
+  const updateBlocking = useAppUpdateBlocking();
   const accept = async () => {
     if (busy.current) return;
     busy.current = true;
@@ -30,6 +33,7 @@ export function PushPromptSheet({ onClose }: { onClose: () => void }) {
     void markPrompted('declined');
     onClose();
   };
+  if (updateBlocking) return null;
   return (
     <BottomSheet title="새 글·펀드 리포트 알림 받기" onClose={later}>
       <Text style={styles.text}>

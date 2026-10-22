@@ -36,6 +36,16 @@ function str(v: unknown): string | null {
   return t ? t : null;
 }
 
+/**
+ * 스토어 주소는 https:// 만(대소문자 무시) — 그 외(http·javascript:·market:// 등)는 null 로 버려 호출부가 플랫폼 기본
+ * 스토어로 대체한다(강제 업데이트 버튼이 먹통이 되지 않게). market:// 는 Android 전용이라 iOS 에서 열리지 않고,
+ * 관리자 서버도 https 만 저장하므로 받지 않는다(Play 의 https 주소는 Android 에서 스토어 앱으로 열린다).
+ */
+function httpsUrl(v: unknown): string | null {
+  const t = str(v);
+  return t && /^https:\/\/[^\s]+$/i.test(t) ? t : null;
+}
+
 function oneOf<T extends string>(v: unknown, allowed: readonly T[], fallback: T): T {
   if (typeof v !== 'string') return fallback;
   const up = v.toUpperCase() as T;
@@ -55,7 +65,7 @@ export function parseVersionCheck(body: unknown): VersionCheck | null {
       minSupportedVersion: str(s.min_supported_version),
       title: str(s.title),
       message: str(s.message),
-      storeUrl: str(s.store_url),
+      storeUrl: httpsUrl(s.store_url),
     },
     ota: { policy: oneOf(o.policy, OTA_POLICIES, 'SILENT'), title: str(o.title), message: str(o.message) },
   };

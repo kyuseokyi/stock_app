@@ -18,3 +18,14 @@ export function currentAppVersion(): string {
 export function currentPlatform(): AppPlatform | null {
   return Platform.OS === 'android' || Platform.OS === 'ios' ? Platform.OS : null;
 }
+
+/** 설치된 앱의 패키지명(Android applicationId·iOS bundleId) — 기본 스토어 주소용. 모르면 app.config 값, 그래도 없으면 null */
+export function currentPackageId(): string | null {
+  try {
+    if (Application.applicationId) return Application.applicationId;
+  } catch {
+    // 아래 대체값
+  }
+  const cfg = Constants.expoConfig;
+  return (Platform.OS === 'ios' ? cfg?.ios?.bundleIdentifier : cfg?.android?.package) ?? null;
+}

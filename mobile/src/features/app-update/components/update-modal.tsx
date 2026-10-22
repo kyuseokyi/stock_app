@@ -36,7 +36,7 @@ const DEFAULTS = {
 
 /** 루트 레이아웃에 한 번 둔다. 띄울 안내가 없으면 아무것도 그리지 않는다 */
 export function AppUpdateGate() {
-  const { mode, check, dismissStore, openStore, dismissOta, restart, exitApp } = useAppUpdate();
+  const { mode, check, restarting, notice, dismissStore, openStore, dismissOta, restart, exitApp } = useAppUpdate();
   if (!mode) return null;
 
   const d = DEFAULTS[mode];
@@ -61,6 +61,12 @@ export function AppUpdateGate() {
       <Text style={styles.message} accessibilityRole="text">
         {message}
       </Text>
+      {/* 재시작 실패·스토어 열기 실패 안내 — 토스트는 Modal 뒤에 그려져 안 보이므로 시트 안에도 둔다 */}
+      {notice ? (
+        <Text style={styles.notice} accessibilityRole="alert">
+          {notice}
+        </Text>
+      ) : null}
       <View style={styles.actions}>
         {mode === 'MAINTENANCE' &&
           (Platform.OS === 'android' ? (
@@ -83,7 +89,12 @@ export function AppUpdateGate() {
           </View>
         )}
         {mode === 'OTA_MANDATORY' && (
-          <Button label="지금 재시작" onPress={() => void restart()} accessibilityLabel="앱을 지금 재시작해 업데이트 적용하기" />
+          <Button
+            label="지금 재시작"
+            onPress={() => void restart()}
+            loading={restarting}
+            accessibilityLabel="앱을 지금 재시작해 업데이트 적용하기"
+          />
         )}
         {mode === 'OTA_OPTIONAL' && (
           <View style={styles.row}>
@@ -92,11 +103,17 @@ export function AppUpdateGate() {
                 label="나중에 하기"
                 variant="secondary"
                 onPress={dismissOta}
+                disabled={restarting}
                 accessibilityLabel="나중에 하기, 다음 실행 때 자동 적용"
               />
             </View>
             <View style={styles.flex}>
-              <Button label="지금 재시작" onPress={() => void restart()} accessibilityLabel="앱을 지금 재시작해 업데이트 적용하기" />
+              <Button
+                label="지금 재시작"
+                onPress={() => void restart()}
+                loading={restarting}
+                accessibilityLabel="앱을 지금 재시작해 업데이트 적용하기"
+              />
             </View>
           </View>
         )}
@@ -110,6 +127,7 @@ const noop = () => {};
 const styles = StyleSheet.create((theme) => ({
   message: { fontSize: 16, lineHeight: 24, color: theme.colors.text },
   hint: { fontSize: 14, color: theme.colors.textSecondary },
+  notice: { marginTop: theme.gap(1), fontSize: 14, lineHeight: 20, color: theme.colors.textSecondary },
   actions: { marginTop: theme.gap(1) },
   row: { flexDirection: 'row', gap: theme.gap(1) },
   flex: { flex: 1 },

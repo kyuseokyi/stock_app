@@ -83,4 +83,16 @@ describe('parseVersionCheck', () => {
       message: '02~04시 점검',
     });
   });
+
+  it('store_url 은 https 만 — http·javascript·market 은 null(기본 스토어로 대체)', () => {
+    const url = (v: unknown) => parseVersionCheck({ store: { store_url: v } })!.store.storeUrl;
+    expect(url('HTTPS://play.google.com/store/apps/details?id=com.stockapp')).toBe(
+      'HTTPS://play.google.com/store/apps/details?id=com.stockapp',
+    );
+    expect(url('http://play.google.com/x')).toBeNull();
+    expect(url('javascript:alert(1)')).toBeNull();
+    expect(url('market://details?id=com.stockapp')).toBeNull();
+    expect(url('https://')).toBeNull();
+    expect(url('https://a b')).toBeNull();
+  });
 });

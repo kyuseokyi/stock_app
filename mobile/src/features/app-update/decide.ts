@@ -16,8 +16,17 @@ export type UpdateMode = 'MAINTENANCE' | 'STORE_FORCE' | 'STORE_RECOMMENDED' | '
 export const STORE_HIDE_MS = 24 * 60 * 60 * 1000;
 /** 포그라운드 복귀 재검사 간격(평소) — Expo 업데이트 서버 과호출 방지 */
 export const RECHECK_INTERVAL_MS = 60 * 60 * 1000;
-/** 점검·스토어 강제가 떠 있을 때 재검사 간격 — 관리자가 풀면 곧바로 내려가게(연타만 막는다) */
+/**
+ * 차단 안내(점검·스토어 강제·OTA 필수)가 떠 있을 때 "포그라운드 복귀" 재검사 임계값 — 주기 폴링이 아니다.
+ * 앱을 나갔다 돌아왔을 때 마지막 검사 후 10초가 지났으면 다시 검사한다(복귀 연타만 막는다).
+ */
 export const BLOCKING_RECHECK_INTERVAL_MS = 10 * 1000;
+/**
+ * 점검 모드에서만 화면을 띄운 채 기다리는 사용자를 위한 주기 재검사(앱이 active 일 때만, setInterval).
+ * 점검은 관리자가 끄는 순간 끝나므로 기다리는 화면에서 풀려야 한다. 스토어 강제·OTA 필수는 사용자가
+ * 스토어 업데이트·재시작으로 끝내는 안내라 주기 폴링 없이 포그라운드 복귀 임계값(위 10초)만 둔다.
+ */
+export const MAINTENANCE_POLL_MS = 30 * 1000;
 
 export type DecideInput = {
   check: VersionCheck | null;
@@ -66,10 +75,34 @@ export function isBlockingMode(mode: UpdateMode | null): boolean {
   return mode === 'MAINTENANCE' || mode === 'STORE_FORCE' || mode === 'OTA_MANDATORY';
 }
 
-/** 포그라운드 복귀 시 재검사할지 — 점검·스토어 강제 중엔 짧은 간격, 평소엔 1시간 */
+/** 포그라운드 복귀 시 재검사할지 — 차단 모드(점검·스토어 강제·OTA 필수) 중엔 10초, 평소엔 1시간 */
 export function shouldRecheck(mode: UpdateMode | null, lastCheckedAt: number, now: number): boolean {
-  const interval = mode === 'MAINTENANCE' || mode === 'STORE_FORCE' ? BLOCKING_RECHECK_INTERVAL_MS : RECHECK_INTERVAL_MS;
+  const interval = isBlockingMode(mode) ? BLOCKING_RECHECK_INTERVAL_MS : RECHECK_INTERVAL_MS;
   return now - lastCheckedAt >= interval;
+}
+
+/** 점검 모드에서만 30초 주기 재검사 */
+export function shouldPollMaintenance(mode: UpdateMode | null): boolean {
+  return mode === 'MAINTENANCE';
+}
+
+/**
+ * 스토어 이동 주소 — 서버 값이 안전하면(parse 에서 https 만 남김) 그대로, 없으면 플랫폼 기본 스토어.
+ *  Android: Play 웹 주소(https)는 Play 스토어 앱이 받아 연다 — market:// 는 쓰지 않는다(서버도 https 만 저장).
+ *  iOS: 앱스토어 ID 를 모르므로 기본 주소가 없다(null) → 호출부가 "앱스토어에서 업데이트" 안내만 한다.
+ */
+export function resolveStoreUrl(
+  storeUrl: string | null,
+  platform: 'android' | 'ios' | null,
+  packageId: string | null,
+): string | null {
+  if (storeUrl) return storeUrl;
+  return defaultStoreUrl(platform, packageId);
+}
+
+export function defaultStoreUrl(platform: 'android' | 'ios' | null, packageId: string | null): string | null {
+  if (platform !== 'android' || !packageId || !/^[A-Za-z0-9._]+$/.test(packageId)) return null;
+  return `https://play.google.com/store/apps/details?id=${packageId}`;
 }
 
 /** 스토어 권장 숨김 기록 키 — 버전별(새 버전이 나오면 다시 안내). SecureStore 키 문자셋 [A-Za-z0-9._-] 로 정리 */
