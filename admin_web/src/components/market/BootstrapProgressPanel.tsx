@@ -22,13 +22,17 @@ const stepClass = (s: BootstrapStepState): string =>
 export default function BootstrapProgressPanel({
   progress,
   jobActive,
+  jobTaskId,
 }: {
   progress: BootstrapProgress
   jobActive: boolean
+  jobTaskId: string | null // 지금 대기·실행 중인 bootstrap 작업의 task_id(없으면 null)
 }) {
   // 작업 잠금이 풀렸는데 끝 시각이 없으면 워커 재시작 등으로 중단된 것 — '진행 중'으로 계속 보이지 않게
   const interrupted = !progress.finished_at && !jobActive
-  const title = progress.finished_at ? '마지막 결과' : interrupted ? '중단됨' : '진행 중'
+  // 대기·실행 중인 작업이 이 기록의 작업이 아니면(새로 눌렀는데 아직 시작 전) 보이는 건 이전 기록
+  const waiting = jobActive && !!jobTaskId && progress.task_id !== jobTaskId
+  const title = waiting ? '대기 중(이전 기록)' : progress.finished_at ? '마지막 결과' : interrupted ? '중단됨' : '진행 중'
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-4">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
@@ -42,23 +46,34 @@ export default function BootstrapProgressPanel({
           {progress.end_date && ` · 일봉 ${progress.months}개월, ${progress.end_date}까지`}
         </p>
       </div>
-      {progress.skipped && <p className="mt-2 text-xs text-amber-600">{progress.skipped}</p>}
+      {progress.skipped && (
+        <p className="mt-2 text-xs text-amber-600">
+          {progress.skipped_at && `${formatDateTime(progress.skipped_at)} `}
+          {progress.skipped}
+        </p>
+      )}
       <ol className="mt-3 space-y-1.5">
-        {progress.steps.map((s, i) => (
+        {progress.steps.map((s, i) => {
+          // 중단된 기록의 running 단계는 실제로는 멈춘 것
+          const stopped = interrupted && s.state === 'running'
+          return (
           <li key={s.key} className="flex min-w-0 items-start gap-2 text-xs">
             <span className="w-5 shrink-0 text-center" aria-hidden>
-              {STEP_ICON[s.state] ?? '·'}
+              {stopped ? '⛔' : (STEP_ICON[s.state] ?? '·')}
             </span>
             <span className="w-40 shrink-0 text-slate-700">
               {i + 1}. {s.label}
             </span>
-            <span className={`w-14 shrink-0 font-semibold ${stepClass(s.state)}`}>{STEP_TEXT[s.state] ?? s.state}</span>
+            <span className={`w-14 shrink-0 font-semibold ${stopped ? 'text-red-600' : stepClass(s.state)}`}>
+              {stopped ? '중단' : (STEP_TEXT[s.state] ?? s.state)}
+            </span>
             <span className="w-16 shrink-0 text-slate-500">{s.seconds != null ? formatSeconds(s.seconds) : ''}</span>
             <span className="min-w-0 flex-1 truncate text-slate-500" title={s.reason ?? s.summary ?? ''}>
               {s.reason ?? s.summary ?? ''}
             </span>
           </li>
-        ))}
+          )
+        })}
       </ol>
     </div>
   )

@@ -90,12 +90,16 @@ export default function JobsPanel({ refreshKey = 0 }: { refreshKey?: number }) {
     }
   }
 
+  // 실행 불가 시간대는 서버가 내려준 window_block 에서 만든다(하드코딩 금지)
+  const wb = data?.jobs.find((j) => j.key === 'bootstrap')?.window_block
+  const blockText = wb ? `(${wb[0]}~${wb[1]} 실행 불가)` : ''
+
   return (
     <section className="min-w-0 space-y-3">
       <div>
         <h2 className="text-lg font-bold text-slate-800">계산 수동 실행</h2>
         <p className="text-sm text-slate-500">
-          계산 작업은 KIS 를 호출하지 않아요. 초기 데이터 준비만 KIS 를 대량 호출해요(16:00~21:30 실행 불가). 같은 작업은 한
+          계산 작업은 KIS 를 호출하지 않아요. 초기 데이터 준비만 KIS 를 대량 호출해요{blockText}. 같은 작업은 한
           번에 하나만 돌아요.
         </p>
       </div>
@@ -146,6 +150,7 @@ export default function JobsPanel({ refreshKey = 0 }: { refreshKey?: number }) {
             <BootstrapProgressPanel
               progress={data.bootstrap}
               jobActive={data.jobs.some((j) => j.key === 'bootstrap' && j.status !== 'idle')}
+              jobTaskId={data.jobs.find((j) => j.key === 'bootstrap' && j.status !== 'idle')?.task_id ?? null}
             />
           )}
           <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">

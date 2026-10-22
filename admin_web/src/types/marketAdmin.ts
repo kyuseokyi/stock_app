@@ -119,6 +119,7 @@ export interface BootstrapProgress {
   months: number
   end_date: string | null
   skipped: string | null
+  skipped_at?: string | null // 시작이 막힌 시각(이전 기록에 덧붙여짐)
   steps: BootstrapStep[]
 }
 

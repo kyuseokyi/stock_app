@@ -2,11 +2,13 @@
 
 설계: docs/superpowers/specs/2026-10-22-data-bootstrap-design.md
 - 단계는 기존 태스크 함수를 직접(동기) 부른다. 각 단계는 이미 멱등이라 다시 실행해도 안전하다.
-- 판정은 일일 파이프라인과 같다(예외 또는 결과 dict 의 error 키 → 실패). 일봉 백필만 추가로 성공 0종목도 실패로 본다
-  (KIS 키 오류 등으로 전 종목이 실패하면 예외 없이 끝나는데, 그 위에서 계산하면 빈 결과만 '성공'으로 남는다).
+- 판정은 일일 파이프라인과 같다(예외 또는 결과 dict 의 error 키 → 실패). 일봉 백필만 추가로 성공 0종목 또는
+  실패 비율 > DAILY_MAX_FAIL_RATIO 도 실패로 본다(KIS 키 오류 등으로 전 종목이 실패하면 예외 없이 끝나는데, 그 위에서
+  계산하면 빈 결과만 '성공'으로 남는다).
 - 일봉 백필이 실패하면 뒤 단계는 모두 skipped(일봉 없이는 계산 무의미). 나머지 단계 실패는 다음 단계로 진행.
-- 시간대: 시작 시 KST [16:00, 21:30) 이면 아무것도 하지 않는다. KIS 단계(1~7) 직전 [20:00, 21:30) 이면
+- 시간대: 시작 시 KST [16:00, 21:30) 이면 아무것도 하지 않는다. KIS 단계(1~7) 직전 [19:00, 21:30) 이면
   그 단계부터 끝까지 skipped(20:30 정기 수집과 KIS 호출 한도를 나눠 쓰지 않게 — 다시 누르면 이어서 채워진다).
+  19:00 은 긴 단계(재무·수급)가 20:30 을 넘기지 않도록 1시간+ 여유를 둔 값.
 - 진행 상황은 Redis admin:bootstrap:progress 에 단계 시작·끝마다 덮어쓴다(관리자 화면). 기록 실패는 무시.
 """
 from __future__ import annotations
@@ -40,10 +42,13 @@ PROGRESS_KEY = "admin:bootstrap:progress"
 PROGRESS_TTL = 30 * 24 * 3600  # 끝난 뒤에도 마지막 결과를 화면에 남긴다
 BACKFILL_DAYS = 60
 START_BLOCK = (dtime(16, 0), dtime(21, 30))  # 시작 차단(반열린 구간) — 일봉 백필이 1시간+ 라 20:30 수집과 KIS 한도를 나눠 쓰지 않게 넉넉히
-KIS_BLOCK = (dtime(20, 0), dtime(21, 30))  # 진행 중 KIS 단계 차단
+KIS_BLOCK = (dtime(19, 0), dtime(21, 30))  # 진행 중 KIS 단계 차단 — 재무·수급 같은 긴 단계가 20:30 을 넘기지 않게 1시간+ 여유
 START_BLOCKED_MSG = "16:00~21:30 에는 정기 수집과 겹쳐 실행할 수 없어요"
-KIS_BLOCKED_MSG = "20:00~21:30 정기 수집 시간이라 KIS 단계를 멈췄어요 — 다시 실행하면 이어서 채워져요"
+KIS_BLOCKED_MSG = "19:00~21:30 에는 긴 KIS 단계가 20:30 정기 수집과 겹칠 수 있어 멈췄어요 — 다시 실행하면 이어서 채워져요"
 DAILY_FAILED_MSG = "일봉 백필 실패 — 일봉 없이는 계산할 수 없어요"
+# 일봉 백필 실패 비율 상한 — 상장폐지·거래정지 종목의 빈 응답은 몇 건 있을 수 있지만, 5% 를 넘으면 KIS 연결·한도 문제로
+# 보고 멈춘다(그 위에서 계산하면 일부 종목이 빠진 채로 '성공'처럼 보인다). 실패 종목은 다시 누르면 이어서 채워진다.
+DAILY_MAX_FAIL_RATIO = 0.05
 
 # (키, 라벨, KIS 단계 여부) — 순서 고정
 STEPS: tuple[tuple[str, str, bool], ...] = (
@@ -86,8 +91,11 @@ def _runners(months: int, end: str) -> dict[str, Callable[[], object]]:
 def _failed(key: str, result) -> bool:
     if isinstance(result, dict) and "error" in result:
         return True
-    # 일봉 백필은 성공 0종목이면 실패(예외 없이 전 종목 실패한 경우)
-    return key == "daily_backfill" and isinstance(result, dict) and not result.get("ok")
+    if key != "daily_backfill" or not isinstance(result, dict):
+        return False
+    # 일봉 백필: 성공 0종목(예외 없이 전 종목 실패) 또는 실패 비율 > DAILY_MAX_FAIL_RATIO 면 실패
+    ok, fail = int(result.get("ok") or 0), int(result.get("failed_count") or 0)
+    return ok == 0 or fail / (ok + fail) > DAILY_MAX_FAIL_RATIO
 
 
 def _save(progress: dict) -> None:
@@ -95,6 +103,15 @@ def _save(progress: dict) -> None:
         get_sync_redis().set(PROGRESS_KEY, json.dumps(progress, ensure_ascii=False, default=str), ex=PROGRESS_TTL)
     except Exception as exc:  # noqa: BLE001 — 진행 기록 실패가 작업을 막지 않게
         log.warning("부트스트랩 진행 기록 실패: %s", exc)
+
+
+def _load(key: str = PROGRESS_KEY) -> dict | None:
+    try:
+        raw = get_sync_redis().get(key)
+        data = json.loads(raw) if raw else None
+    except Exception:  # noqa: BLE001
+        return None
+    return data if isinstance(data, dict) else None
 
 
 def _iso(now: datetime) -> str:
@@ -107,13 +124,18 @@ def run_bootstrap(months: int = 37, task_id: str | None = None,
     steps = [{"key": k, "label": label, "state": "pending", "seconds": None, "summary": None, "reason": None}
              for k, label, _ in STEPS]
     progress = {"task_id": task_id, "started_at": _iso(started), "finished_at": None, "months": int(months),
-                "end_date": None, "skipped": None, "steps": steps}
+                "end_date": None, "skipped": None, "skipped_at": None, "steps": steps}
 
     if _in_window(started, START_BLOCK):
-        for s in steps:
-            s.update(state="skipped", reason=START_BLOCKED_MSG)
-        progress.update(finished_at=_iso(started), skipped=START_BLOCKED_MSG)
-        _save(progress)
+        previous = _load()
+        if previous is not None:  # 이전 진행 기록은 그대로 두고 '이번 시작이 막혔다'만 덧붙인다
+            previous.update(skipped=START_BLOCKED_MSG, skipped_at=_iso(started))
+            _save(previous)
+        else:
+            for s in steps:
+                s.update(state="skipped", reason=START_BLOCKED_MSG)
+            progress.update(finished_at=_iso(started), skipped=START_BLOCKED_MSG, skipped_at=_iso(started))
+            _save(progress)
         log.info("부트스트랩 시작 차단: %s", START_BLOCKED_MSG)
         return {"skipped": START_BLOCKED_MSG}
 
@@ -140,8 +162,10 @@ def run_bootstrap(months: int = 37, task_id: str | None = None,
             result = {"error": repr(e)[:300]}
         results[key] = result
         failed = _failed(key, result)
-        s.update(state="failed" if failed else "ok", seconds=round(time.monotonic() - t0, 1),
-                 summary=pipeline_record.summarize(result))
+        summary = pipeline_record.summarize(result)
+        if key == "daily_backfill" and isinstance(result, dict) and "error" not in result:
+            summary = f"성공 {result.get('ok', 0)} · 실패 {result.get('failed_count', 0)} — {summary}"
+        s.update(state="failed" if failed else "ok", seconds=round(time.monotonic() - t0, 1), summary=summary)
         if failed and key == "daily_backfill":
             stop_reason = DAILY_FAILED_MSG
         _save(progress)

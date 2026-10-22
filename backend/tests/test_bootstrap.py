@@ -24,6 +24,11 @@ def kst(y, mo, d, h, mi):
     (kst(2026, 10, 22, 20, 29), date(2026, 10, 21)),  # 평일 20:29 → 전 평일
     (kst(2026, 10, 22, 20, 30), date(2026, 10, 22)),  # 평일 20:30 → 오늘
     (kst(2026, 10, 22, 23, 59), date(2026, 10, 22)),
+    (kst(2026, 10, 23, 0, 0), date(2026, 10, 22)),    # 자정 넘으면 새 날(금 00:00 → 직전 평일 목)
+    (kst(2026, 10, 23, 23, 59), date(2026, 10, 23)),  # 금 23:59 → 금
+    (kst(2026, 10, 24, 0, 0), date(2026, 10, 23)),    # 토 00:00 → 금
+    (kst(2026, 10, 26, 0, 0), date(2026, 10, 23)),    # 월 00:00 → 금
+    (datetime(2026, 10, 22, 15, 0, tzinfo=timezone.utc), date(2026, 10, 22)),  # UTC 15:00 = KST 금 00:00 → 목
     (kst(2026, 10, 24, 22, 0), date(2026, 10, 23)),   # 토 → 금
     (kst(2026, 10, 25, 9, 0), date(2026, 10, 23)),    # 일 → 금
     (kst(2026, 10, 26, 8, 0), date(2026, 10, 23)),    # 월 아침 → 금
@@ -164,6 +169,24 @@ def test_step_failure_is_isolated(env, monkeypatch):
     assert "kis down" in step["summary"]
 
 
+@pytest.mark.parametrize("fail, goes_on", [(104, True), (156, False), (2600, False)])
+def test_daily_fail_ratio(env, monkeypatch, fail, goes_on):
+    # 총 2600: 4% 실패는 계속, 6% 실패·전부 실패(성공 0)는 중단
+    monkeypatch.setattr(bs, "backfill_all_daily",
+                        lambda **k: {"total": 2600, "ok": 2600 - fail, "failed_count": fail})
+    out = bs.run_bootstrap(37, now_fn=clock(kst(2026, 10, 22, 10, 0)))
+    assert (out["states"]["daily_backfill"] == "ok") is goes_on
+    assert (env.keys() == KEYS[1:]) is goes_on
+    summary = env.progress()["steps"][0]["summary"]
+    assert f"실패 {fail}" in summary
+
+
+def test_daily_zero_universe_fails(env, monkeypatch):
+    monkeypatch.setattr(bs, "backfill_all_daily", lambda **k: {"total": 0, "ok": 0, "failed_count": 0})
+    out = bs.run_bootstrap(37, now_fn=clock(kst(2026, 10, 22, 10, 0)))
+    assert out["states"]["daily_backfill"] == "failed" and env.keys() == []
+
+
 @pytest.mark.parametrize("daily", [
     lambda **k: (_ for _ in ()).throw(RuntimeError("master down")),
     lambda **k: {"error": "x"},
@@ -192,10 +215,31 @@ def test_start_window_block(env, h, m, blocked):
         assert env.keys() == KEYS
 
 
+def test_start_block_keeps_previous_progress(env):
+    bs.run_bootstrap(37, task_id="old", now_fn=clock(kst(2026, 10, 22, 10, 0)))
+    before = env.progress()
+    out = bs.run_bootstrap(37, task_id="new", now_fn=clock(kst(2026, 10, 22, 17, 0)))
+    assert out == {"skipped": bs.START_BLOCKED_MSG}
+    after = env.progress()
+    assert after["skipped"] == bs.START_BLOCKED_MSG and after["skipped_at"]
+    assert after["task_id"] == "old" and after["steps"] == before["steps"]
+    assert after["finished_at"] == before["finished_at"]
+
+
+@pytest.mark.parametrize("h, m, blocked", [(18, 59, False), (19, 0, True), (21, 29, True), (21, 30, False)])
+def test_kis_block_boundary(env, h, m, blocked):
+    # 시작 15:00, 첫 KIS 단계(daily) 직전 시각이 h:m
+    out = bs.run_bootstrap(37, now_fn=clock(kst(2026, 10, 22, 15, 0), kst(2026, 10, 22, h, m)))
+    if blocked:
+        assert env.keys() == [] and out["states"]["daily_backfill"] == "skipped"
+    else:
+        assert env.keys()[0] == "daily_backfill"
+
+
 def test_kis_window_block_mid_run(env):
-    # 시작 15:00 → daily·indices_kr·indices_us 는 19:59 까지, investor 직전 20:00 → 그 단계부터 끝까지 skipped
-    now = clock(kst(2026, 10, 22, 15, 0), kst(2026, 10, 22, 19, 0), kst(2026, 10, 22, 19, 30),
-                kst(2026, 10, 22, 19, 59), kst(2026, 10, 22, 20, 0))
+    # 시작 15:00 → daily·indices_kr·indices_us 는 18:59 까지, investor 직전 19:00 → 그 단계부터 끝까지 skipped
+    now = clock(kst(2026, 10, 22, 15, 0), kst(2026, 10, 22, 18, 0), kst(2026, 10, 22, 18, 30),
+                kst(2026, 10, 22, 18, 59), kst(2026, 10, 22, 19, 0))
     out = bs.run_bootstrap(37, now_fn=now)
     assert env.keys() == ["daily_backfill", "indices_kr", "indices_us"]
     assert [out["states"][k] for k in KEYS[3:]] == ["skipped"] * 8
@@ -204,8 +248,8 @@ def test_kis_window_block_mid_run(env):
 
 
 def test_kis_block_does_not_apply_to_compute_steps(env):
-    # 1~7 은 19:00, 계산 단계 직전 시각이 20:10 이어도 계산은 그대로 진행(KIS 단계만 차단)
-    times = [kst(2026, 10, 22, 15, 0)] + [kst(2026, 10, 22, 19, 0)] * 7 + [kst(2026, 10, 22, 20, 10)]
+    # 1~7 은 18:00, 계산 단계 직전 시각이 20:10 이어도 계산은 그대로 진행(KIS 단계만 차단)
+    times = [kst(2026, 10, 22, 15, 0)] + [kst(2026, 10, 22, 18, 0)] * 7 + [kst(2026, 10, 22, 20, 10)]
     out = bs.run_bootstrap(37, now_fn=clock(*times))
     assert env.keys() == KEYS and set(out["states"].values()) == {"ok"}
 
