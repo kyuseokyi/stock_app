@@ -1,0 +1,1048 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>StockApp 기능 보고서</title>
+<style>
+:root{--bg:#f7f6fc;--card:#fff;--text:#1f1d2b;--muted:#6b6880;--line:#e6e3f1;--accent:#5b4ee6;--code:#f0eefa;--side:#fbfaff}
+@media (prefers-color-scheme:dark){:root:not([data-theme=light]){--bg:#15141c;--card:#1e1c28;--text:#ecebf3;--muted:#a19eb5;--line:#2e2b3d;--accent:#9c93ff;--code:#272436;--side:#1a1923}}
+:root[data-theme=dark]{--bg:#15141c;--card:#1e1c28;--text:#ecebf3;--muted:#a19eb5;--line:#2e2b3d;--accent:#9c93ff;--code:#272436;--side:#1a1923}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:15px/1.7 -apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Noto Sans KR",sans-serif}
+aside{position:fixed;inset:0 auto 0 0;width:270px;overflow-y:auto;background:var(--side);border-right:1px solid var(--line);padding:20px 16px}
+aside h1{font-size:17px;margin:0 0 4px}
+aside .sub{color:var(--muted);font-size:12px;margin-bottom:14px}
+.nav-group{margin-bottom:14px}
+.nav-title{display:block;font-weight:700;color:var(--text);text-decoration:none;margin-bottom:4px}
+.nav-group ul{list-style:none;margin:0;padding:0 0 0 8px;border-left:2px solid var(--line)}
+.nav-group li a{display:block;color:var(--muted);text-decoration:none;font-size:13px;padding:2px 6px;border-radius:6px}
+.nav-group li a:hover,.nav-group li a.on{color:var(--accent);background:var(--code)}
+main{margin-left:270px;padding:28px 40px 80px;max-width:1180px}
+.doc{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:28px 34px;margin-bottom:32px}
+h1{font-size:26px;margin-top:0}
+h2{font-size:20px;margin-top:40px;padding-top:12px;border-top:1px solid var(--line)}
+h3{font-size:16px;margin-top:26px}
+blockquote{margin:0 0 16px;padding:8px 14px;border-left:4px solid var(--accent);background:var(--code);border-radius:6px;color:var(--muted)}
+code{background:var(--code);padding:1px 5px;border-radius:5px;font-size:13px}
+pre{background:var(--code);padding:14px;border-radius:10px;overflow-x:auto;line-height:1.4}
+pre code{padding:0}
+table{border-collapse:collapse;width:100%;margin:12px 0;font-size:14px;display:block;overflow-x:auto}
+th,td{border:1px solid var(--line);padding:6px 10px;text-align:left;vertical-align:top}
+th{background:var(--code)}
+img{max-width:100%;max-height:640px;border:1px solid var(--line);border-radius:10px;cursor:zoom-in;display:block;margin:10px 0}
+td img{max-height:520px}
+a{color:var(--accent)}
+#lightbox{position:fixed;inset:0;background:rgba(10,8,20,.88);display:none;align-items:center;justify-content:center;z-index:10;cursor:zoom-out;padding:20px}
+#lightbox img{max-width:96vw;max-height:94vh;cursor:zoom-out;border:none;margin:0}
+#theme{position:fixed;top:12px;right:14px;z-index:5;border:1px solid var(--line);background:var(--card);color:var(--text);border-radius:999px;padding:4px 12px;cursor:pointer}
+#menu{display:none}
+@media (max-width:860px){
+  aside{transform:translateX(-100%);transition:transform .2s;z-index:6;width:80vw}
+  aside.open{transform:none}
+  main{margin-left:0;padding:56px 16px 60px}
+  .doc{padding:18px 16px}
+  #menu{display:block;position:fixed;top:12px;left:14px;z-index:7;border:1px solid var(--line);background:var(--card);color:var(--text);border-radius:999px;padding:4px 12px}
+}
+</style>
+</head>
+<body>
+<button id="menu" aria-label="목차">☰ 목차</button>
+<button id="theme" aria-label="테마 전환">🌓</button>
+<aside id="side"><h1>📈 StockApp 기능 보고서</h1><div class="sub">2026-10-22 · dev 8d7d3c7</div><div class="nav-group"><a class="nav-title" href="#overview">개요</a><ul><li><a href="#overview-2">서비스 구성</a></li><li><a href="#overview-3">기능 지도 (어디서 무엇을 하는지)</a></li><li><a href="#overview-4">진행 상태 요약</a></li><li><a href="#overview-5">남은 일 (코드와 문서 기준)</a></li><li><a href="#overview-6">캡처 방법과 개인정보 처리</a></li><li><a href="#overview-7">다시 만들기</a></li></ul></div><div class="nav-group"><a class="nav-title" href="#admin">관리자 웹</a><ul><li><a href="#admin-2">한눈에 보기</a></li><li><a href="#admin-3">0. 로그인 — /login</a></li><li><a href="#admin-4">1. 게시판 관리 — /boards</a></li><li><a href="#admin-5">2. 게시글 관리 — /blogs</a></li><li><a href="#admin-6">3. 글 작성/수정 — /blogs/new, /blogs/:id/edit</a></li><li><a href="#admin-7">4. 게시글 상세 — /blogs/:id</a></li><li><a href="#admin-8">5. 데일리 코치 — /game/coach</a></li><li><a href="#admin-9">6. 아카데미 문항 — /game/academy</a></li><li><a href="#admin-10">7. 퀴즈 관리 — /game/quizzes</a></li><li><a href="#admin-11">8. 게임 설정 — /game/settings</a></li><li><a href="#admin-12">9. 테마 보정 — /market/themes</a></li><li><a href="#admin-13">10. 데이터 현황 — /market/status</a></li><li><a href="#admin-14">11. 데이터 검증 — /market/verify</a></li><li><a href="#admin-15">12. 펀드 리포트 알림 — /fund-notices</a></li><li><a href="#admin-16">13. 앱 버전 &amp; 업데이트 — /app/versions</a></li><li><a href="#admin-17">14. 회원 목록 — /members (준비 중)</a></li><li><a href="#admin-18">15. 통계 대시보드 — /stats (준비 중)</a></li></ul></div><div class="nav-group"><a class="nav-title" href="#app">모바일 앱</a><ul><li><a href="#app-2">한눈에 보기</a></li><li><a href="#app-3">1. 홈 탭 — /</a></li><li><a href="#app-4">2. 커뮤니티 탭 — /blog</a></li><li><a href="#app-5">3. 글 상세 — /blog/[id]</a></li><li><a href="#app-6">4. 게임 탭 — /game (가장 큰 화면)</a></li><li><a href="#app-7">5. 스크리너 탭 — /screener</a></li><li><a href="#app-8">6. 테마/업종 상세 — /market/[kind]/[id]</a></li><li><a href="#app-9">7. 종목 상세 — /stock/[ticker]</a></li><li><a href="#app-10">8. 내정보 탭 — /profile</a></li><li><a href="#app-11">9. 내 펀드 수익 — /fund</a></li><li><a href="#app-15">10. 기록 백업 — /fund/backup</a></li><li><a href="#app-16">앱 전체 기능</a></li></ul></div><div class="nav-group"><a class="nav-title" href="#web">사용자 웹</a><ul><li><a href="#web-2">한눈에 보기</a></li><li><a href="#web-3">1. 홈 — /</a></li><li><a href="#web-4">2. 로그인 모달</a></li><li><a href="#web-5">3. 커뮤니티 — /boards/:boardId</a></li><li><a href="#web-6">4. 글 상세 — /posts/:id</a></li><li><a href="#web-7">5. 트레이딩 게임 — /game</a></li><li><a href="#web-8">6. 스크리너 — /screener/*</a></li><li><a href="#web-15">7. 종목 상세 — /stock/:ticker (10-22 신규)</a></li><li><a href="#web-16">8. 내정보 — /me</a></li><li><a href="#web-17">9. 내 펀드 수익 — /me/funds, /me/funds/:id</a></li><li><a href="#web-18">10. 간편 로그인 완료 — /auth/complete (캡처 없음)</a></li></ul></div></aside>
+<main><section class="doc" id="overview"><h1 id="overview-1">StockApp 기능 보고서 (2026-10-22)</h1>
+<p>관리자 웹, 모바일 앱, 사용자 웹의 <strong>현재 기능을 화면별로</strong> 정리한 보고서입니다.</p>
+<ul>
+<li><strong>한 파일로 보기</strong>: <code>index.html</code>을 브라우저로 열면 모든 내용과 스크린샷을 한 페이지에서 볼 수 있습니다.</li>
+<li><strong>기준</strong>: <code>dev</code> 브랜치 <code>8d7d3c7</code> 시점의 코드와 실제 실행 화면입니다.</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th>문서</th>
+<th>대상</th>
+<th>캡처</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a href="#admin">admin.md</a></td>
+<td>관리자 웹 <code>admin_web</code></td>
+<td>17장</td>
+</tr>
+<tr>
+<td><a href="#app">app.md</a></td>
+<td>모바일 앱 <code>mobile</code></td>
+<td>18장</td>
+</tr>
+<tr>
+<td><a href="#web">web.md</a></td>
+<td>사용자 웹 <code>web_client</code></td>
+<td>17장</td>
+</tr>
+</tbody>
+</table>
+<h2 id="overview-2">서비스 구성</h2>
+<pre><code> [관리자 웹 :5173]   [사용자 웹 :3000]   [모바일 앱(Expo)]
+         │                  │                   │
+         ├──── REST ────────┼───────────────────┤
+         ▼                  ▼                   ▼
+  blog :8000      auth :8001      stock_api :8002      trading_game :8003
+  게시판·글·댓글   로그인·JWT       GraphQL 시세·스크리너  가상 트레이딩·WS
+  SSE·푸시·앱버전  소셜 로그인       관리자 시장 데이터 REST 랭킹·퀴즈·코치
+         │                  │                   │
+         └──── PostgreSQL ──┴── ClickHouse(시세) ┴── Redis(Celery·랭킹)
+                     ▲
+          collector(Celery) — KIS 수집, 매일 20:30 파이프라인
+</code></pre>
+<h2 id="overview-3">기능 지도 (어디서 무엇을 하는지)</h2>
+<table>
+<thead>
+<tr>
+<th>기능</th>
+<th>관리자 웹</th>
+<th>모바일 앱</th>
+<th>사용자 웹</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>커뮤니티(게시판·글·댓글)</td>
+<td>게시판·글 관리, 글 작성(차트 삽입), 추천 글 지정</td>
+<td>읽기 + 댓글</td>
+<td>읽기 + 댓글</td>
+</tr>
+<tr>
+<td>홈 추천 글</td>
+<td>⭐ 지정</td>
+<td>홈 탭</td>
+<td>홈</td>
+</tr>
+<tr>
+<td>새 글 알림</td>
+<td>"앱 알림 보내기" 체크</td>
+<td>푸시(새 글 알림 스위치)</td>
+<td>SSE 토스트</td>
+</tr>
+<tr>
+<td>트레이딩 게임</td>
+<td>코치, 아카데미, 퀴즈, 게임 설정</td>
+<td>게임 탭 + 시트 6종</td>
+<td>게임 + 모달 6종</td>
+</tr>
+<tr>
+<td>스크리너(시장·테마·업종·일정·주도주·조건검색·패턴)</td>
+<td>테마 보정, 데이터 현황·검증</td>
+<td>스크리너 탭</td>
+<td>스크리너 7탭</td>
+</tr>
+<tr>
+<td>종목 상세</td>
+<td>데이터 검증(우리 DB 값 확인)</td>
+<td><code>/stock/[ticker]</code></td>
+<td><code>/stock/:ticker</code></td>
+</tr>
+<tr>
+<td>펀드 수익 리포트</td>
+<td>펀드 리포트 알림 발송(푸시, 무음 깨우기, SSE)</td>
+<td>목록, 리포트, <strong>히스토리</strong>, <strong>Drive 백업</strong>, <strong>백그라운드 기록</strong></td>
+<td>목록, 리포트</td>
+</tr>
+<tr>
+<td>앱 업데이트</td>
+<td>버전·점검·OTA 정책</td>
+<td>업데이트 안내 시트</td>
+<td>—</td>
+</tr>
+<tr>
+<td>회원·통계</td>
+<td>준비 중</td>
+<td>—</td>
+<td>—</td>
+</tr>
+</tbody>
+</table>
+<h2 id="overview-4">진행 상태 요약</h2>
+<table>
+<thead>
+<tr>
+<th>영역</th>
+<th>완료</th>
+<th>부분</th>
+<th>준비 중</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>관리자 웹(16화면)</td>
+<td>12</td>
+<td>2(게시글 상세, 데이터 현황)</td>
+<td>2(회원 목록, 통계)</td>
+</tr>
+<tr>
+<td>모바일 앱(12화면)</td>
+<td>10(실기기 확인이 남은 것 포함)</td>
+<td>2(내정보 일부 항목, 기록 백업 설정)</td>
+<td>—</td>
+</tr>
+<tr>
+<td>사용자 웹(16화면)</td>
+<td>16</td>
+<td>—</td>
+<td>—</td>
+</tr>
+</tbody>
+</table>
+<h2 id="overview-5">남은 일 (코드와 문서 기준)</h2>
+<ol>
+<li><strong>운영 설정</strong>
+   - <code>.env.production</code>에 <code>EXPO_PUBLIC_GAME_API_URL</code>이 없어서 운영 앱의 게임 탭에 "시즌 준비 중"이 뜹니다.
+   - 앱 Drive 백업에 필요한 <code>EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID</code>가 없습니다.
+   - FRED API 키를 아직 받지 않았습니다.</li>
+<li><strong>실기기 확인</strong>
+   - 게임 시트와 WebSocket 재연결, 주도주·조건검색·패턴, 앱 업데이트 시트.
+   - 펀드 정기 작업이 앱이 꺼진 상태에서도 실행되는지 측정.</li>
+<li><strong>간편 로그인</strong>: 실제 공급자 키로 수동 확인, 네이버 검수. 애플 로그인은 iOS 출시 직전에 붙입니다.</li>
+<li><strong>관리자 웹 보완</strong>
+   - 회원 목록과 통계 화면이 비어 있습니다.
+   - 게시글 상세에 댓글 수정 UI가 없고, 본문을 정화(sanitize)하지 않습니다.
+   - 로그인 화면에 기본 계정 안내 문구가 그대로 나옵니다.</li>
+<li><strong>앱 내정보</strong>: "이번 시즌 내 순위" 카드와 "준비 중" 4개 항목을 실제 기능과 연결해야 합니다.</li>
+<li><strong>iOS</strong>: APNs 설정과 스토어 링크.</li>
+</ol>
+<h2 id="overview-6">캡처 방법과 개인정보 처리</h2>
+<ul>
+<li><strong>실행 환경</strong></li>
+<li>로컬 백엔드 4개(8000~8003)를 띄우고, SSH 터널로 개발서버 DB(PostgreSQL·ClickHouse)에 붙었습니다.</li>
+<li>관리자 웹과 사용자 웹은 Vite 개발 서버로 띄웠습니다.</li>
+<li>앱은 Android 에뮬레이터에 개발 빌드를 설치하고 Metro를 8082 포트로 연결했습니다.</li>
+<li><strong>로그인 계정</strong>: 관리자는 기본 관리자 계정, 앱과 웹은 개발용 닉네임 <code>test</code> 계정을 썼습니다.</li>
+<li><strong>가린 정보</strong></li>
+<li>관리자 로그인 화면의 기본 계정 안내 문구.</li>
+<li>댓글 작성자 닉네임 1개(<code>사용자A</code>로 바꿈).</li>
+<li>앱 랭킹 시트의 다른 사용자 닉네임(흐림 처리).</li>
+<li><strong>찍지 않은 화면</strong>: 실명, 투자자 번호, 금액이 나오는 <strong>펀드 리포트와 수익 히스토리</strong>. 해당 문서에 글로만 설명했습니다.</li>
+</ul>
+<h2 id="overview-7">다시 만들기</h2>
+<pre><code class="language-bash"># md 를 고친 뒤 index.html 재생성(python-markdown 필요)
+python docs/feature-report/build.py
+</code></pre>
+<p><code>index.html</code> 은 <code>images/</code> 를 상대 경로로 참조하므로 <strong>이 폴더째</strong> 열거나 옮겨야 이미지가 보입니다.</p></section><section class="doc" id="admin"><h1 id="admin-1">관리자 웹 (admin_web)</h1>
+<blockquote>
+<p>React + Vite + TailwindCSS · 로컬 <code>http://localhost:5173</code> · 캡처: 2026-10-22, 개발 DB 기준(1366px 데스크톱)</p>
+</blockquote>
+<h2 id="admin-2">한눈에 보기</h2>
+<table>
+<thead>
+<tr>
+<th>구분</th>
+<th>수</th>
+<th>내용</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>라우트</td>
+<td>19</td>
+<td><code>/login</code> + 레이아웃 하위 17개 + 그 밖의 경로는 <code>/boards</code>로 이동</td>
+</tr>
+<tr>
+<td>사이드바 메뉴</td>
+<td>13</td>
+<td>7개 그룹: 블로그 관리, 트레이딩 게임, 시장 데이터, 알림, 앱 관리, 회원 관리, 통계</td>
+</tr>
+<tr>
+<td>완료</td>
+<td>12</td>
+<td>로그인, 게시판, 게시글 목록, 글 작성/수정, 코치, 아카데미, 퀴즈, 게임 설정, 테마 보정, 데이터 검증, 펀드 알림, 앱 버전</td>
+</tr>
+<tr>
+<td>부분</td>
+<td>2</td>
+<td>게시글 상세(댓글 수정 UI 없음), 데이터 현황(설정은 읽기 전용)</td>
+</tr>
+<tr>
+<td>준비 중</td>
+<td>2</td>
+<td>회원 목록, 통계 대시보드</td>
+</tr>
+</tbody>
+</table>
+<p><strong>공통 구조</strong></p>
+<ul>
+<li><strong>상단 바</strong>: 로고, 로그인한 관리자 닉네임과 역할 배지, 로그아웃 버튼.</li>
+<li><strong>사이드바</strong>: 데스크톱에서는 고정 사이드바, 모바일에서는 ☰ 드로어.</li>
+<li><strong>새 글 토스트</strong>: 오른쪽 아래에 실시간 새 글 토스트가 뜹니다. blog 서비스의 SSE <code>GET /notifications/stream</code>을 받아서 띄웁니다.</li>
+<li><strong>권한</strong></li>
+<li>화면에서는 토큰이 있는지만 확인합니다.</li>
+<li>관리자인지는 서버의 <code>require_admin</code>이 확인합니다(역할이 ADMIN이 아니면 거부).</li>
+<li>401 응답을 받으면 토큰을 지우고 <code>/login</code>으로 보냅니다.</li>
+<li><strong>API 서비스</strong></li>
+</ul>
+<table>
+<thead>
+<tr>
+<th>서비스</th>
+<th>포트 / 경로</th>
+<th>호출 방식</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>blog</td>
+<td>8000</td>
+<td>REST</td>
+</tr>
+<tr>
+<td>auth</td>
+<td>8001</td>
+<td>REST</td>
+</tr>
+<tr>
+<td>stock_api</td>
+<td>8002</td>
+<td>GraphQL <code>/graphql</code>, 관리자 REST <code>/api/v1/admin/*</code></td>
+</tr>
+<tr>
+<td>trading_game</td>
+<td>8003</td>
+<td><code>/api/game/admin/*</code></td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li><strong>게임 서버 주소가 없을 때</strong>: 빌드할 때 <code>VITE_GAME_API_URL</code>이 비어 있으면 게임 메뉴 4개는 "게임 서버 미연결" 안내만 보여 줍니다.</li>
+</ul>
+<hr />
+<h2 id="admin-3">0. 로그인 — <code>/login</code></h2>
+<p><img loading="lazy" alt="관리자 로그인" src="images/admin/00-login.png" /></p>
+<ul>
+<li>이메일과 비밀번호로 로그인합니다(<code>POST /auth/login</code>, auth). 로그인하면 처음 가려던 화면, 기본값은 <code>/boards</code>로 이동합니다.</li>
+<li>서버가 응답하지 않으면 "백엔드 연결 불가", 비밀번호가 틀리면 "비밀번호 오류"를 따로 보여 줍니다.</li>
+<li>화면 아래에 기본 계정 안내 문구가 고정으로 나옵니다. 캡처에서는 가렸습니다. <strong>운영 배포 전에 이 문구를 지울지 검토가 필요합니다.</strong></li>
+<li>상태: <strong>완료</strong></li>
+</ul>
+<h2 id="admin-4">1. 게시판 관리 — <code>/boards</code></h2>
+<p><img loading="lazy" alt="게시판 관리" src="images/admin/01-boards.png" /></p>
+<ul>
+<li>게시판을 조회하고 추가합니다. 이름만 넣으면 순서는 맨 뒤로 자동으로 붙습니다.</li>
+<li>게시판마다 <strong>댓글 허용</strong> 스위치가 있습니다. 삭제하면 하위 글도 함께 삭제된다는 확인창이 뜹니다.</li>
+<li>API(blog): <code>GET/POST /boards</code>, <code>PUT /boards/{id}</code>, <code>DELETE /boards/{id}</code></li>
+<li>상태: <strong>완료</strong>. 이름 수정, 순서 변경, 활성화를 바꾸는 UI는 없습니다. API는 있습니다.</li>
+</ul>
+<h2 id="admin-5">2. 게시글 관리 — <code>/blogs</code></h2>
+<p><img loading="lazy" alt="게시글 관리" src="images/admin/02-blogs.png" /></p>
+<ul>
+<li>게시판 필터로 글 목록을 봅니다(10건씩 페이지).</li>
+<li>⭐를 누르면 <strong>홈 추천 글</strong>로 지정하거나 해제합니다. 화면에 먼저 반영하고, 실패하면 원래대로 되돌립니다.</li>
+<li>수정·삭제 버튼과 "+ 새 글 작성" 버튼이 있습니다.</li>
+<li>API(blog): <code>GET /blogs?board_id&amp;page&amp;size</code>, <code>PUT /blogs/{id}</code> (<code>featured</code>), <code>DELETE /blogs/{id}</code></li>
+<li>상태: <strong>완료</strong>. 검색 기능은 없습니다.</li>
+</ul>
+<h2 id="admin-6">3. 글 작성/수정 — <code>/blogs/new</code>, <code>/blogs/:id/edit</code></h2>
+<p><img loading="lazy" alt="글 작성" src="images/admin/03-blog-editor.png" /></p>
+<ul>
+<li>TipTap 리치 에디터를 씁니다. 툴바: 굵게, 기울임, H2, H3, 목록, 인용, 링크, <strong>📈 차트 삽입</strong>, 실행 취소/다시 실행.</li>
+<li><strong>앱 알림 보내기</strong> 체크박스는 새 글에만 있습니다. 체크하면 새 글 알림을 켠 앱 기기에 푸시가 갑니다. 웹 실시간 알림은 체크하지 않아도 항상 나갑니다.</li>
+</ul>
+<p><img loading="lazy" alt="차트 삽입 모달" src="images/admin/03b-chart-modal.png" /></p>
+<ul>
+<li><strong>차트 삽입 모달</strong>은 관리자 웹의 핵심 기능입니다.</li>
+<li>국내외 종목·지수를 검색하고 기간을 정합니다.</li>
+<li>캔들 차트에 MA5/20/50/120, 볼린저 σ, 매물대, 캔들 정보를 켜고 끌 수 있습니다.</li>
+<li>그리기 도구 4종(수평선, 3중 추세선, 사각형, 텍스트)으로 표시한 뒤 PNG로 캡처해 본문에 넣습니다.</li>
+<li>API</li>
+<li>blog: <code>POST /blogs</code>(<code>notify</code> 포함), <code>PUT /blogs/{id}</code></li>
+<li>stock_api GraphQL: <code>SearchStocks</code>, <code>GetChartData</code></li>
+<li>상태: <strong>완료</strong></li>
+</ul>
+<h2 id="admin-7">4. 게시글 상세 — <code>/blogs/:id</code></h2>
+<p><img loading="lazy" alt="게시글 상세" src="images/admin/04-blog-detail.png" /></p>
+<ul>
+<li>본문(차트 이미지 포함)과 댓글 목록을 보여 줍니다. 관리자 계정으로 댓글을 쓰거나 지울 수 있습니다.</li>
+<li>게시판에서 댓글을 꺼 두었으면 입력창 대신 안내 문구가 나옵니다.</li>
+<li>상태: <strong>부분</strong></li>
+<li>댓글 수정 API(<code>PUT /comments/{id}</code>)는 있지만 화면에 수정 UI가 없습니다.</li>
+<li>본문을 정화(sanitize) 없이 그대로 넣고 있습니다. 코드에 TODO가 남아 있습니다.</li>
+<li>캡처에서는 사용자 닉네임 1개를 <code>사용자A</code>로 바꿨습니다.</li>
+</ul>
+<h2 id="admin-8">5. 데일리 코치 — <code>/game/coach</code></h2>
+<p><img loading="lazy" alt="데일리 코치" src="images/admin/05-game-coach.png" /></p>
+<ul>
+<li>시즌, 날짜, 종류(🌅 모닝 시황 / 🌙 이브닝 복기)를 고르면 그 슬롯의 브리핑을 불러옵니다.</li>
+<li>입력 항목: 제목, 한 줄 넛지(200자), 지지선·저항선, 마크다운 상세 시황(작성/미리보기, DOMPurify로 정화).</li>
+<li><strong>📐 추천값 채우기</strong>: 서버가 일봉으로 계산한 지지·저항선 추천값을 채워 넣습니다.</li>
+<li><strong>임시저장</strong>과 <strong>🚀 실시간 발행</strong>이 있습니다. 이미 발행한 브리핑은 다시 발행해서 수정합니다.</li>
+<li>API(game): <code>GET seasons</code>, <code>GET/PUT coach-messages</code>, <code>GET coach-levels/suggest</code></li>
+<li>상태: <strong>완료</strong>. 운영 작업이 하나 남았습니다: 오늘 브리핑을 실제 지지·저항선 값으로 다시 발행해야 합니다.</li>
+</ul>
+<h2 id="admin-9">6. 아카데미 문항 — <code>/game/academy</code></h2>
+<p><img loading="lazy" alt="아카데미 문항" src="images/admin/06-game-academy.png" /></p>
+<ul>
+<li>5배 레버리지를 해금하는 퀴즈 문항을 추가·조회·수정·삭제합니다. 질문, 선택지 2~6개, 정답, 해설, 순서, 활성 여부를 다룹니다.</li>
+<li>활성 문항을 모두 맞혀야 해금된다는 안내가 있고, 활성 문항이 0개면 경고가 뜹니다.</li>
+<li>상태: <strong>완료</strong>. 웹 모달에 바뀐 내용이 반영되는지 브라우저 확인이 남아 있습니다.</li>
+</ul>
+<h2 id="admin-10">7. 퀴즈 관리 — <code>/game/quizzes</code></h2>
+<p><img loading="lazy" alt="퀴즈 관리" src="images/admin/07-game-quizzes.png" /></p>
+<ul>
+<li>야간 차트 퀴즈 풀을 목록(20개씩)과 상세 두 칸으로 관리합니다.</li>
+<li><strong>자동 생성</strong>: 1~200개, 유형은 기본 비율 / 2지선다 / 등락폭 구간 / 신호 맞히기 중에서 고릅니다.</li>
+<li><strong>직접 출제</strong>: 종목과 기준일을 넣으면 정답과 해설이 자동으로 계산됩니다. 데이터가 부족하거나, 등락이 1% 미만이거나, 중복이면 거절됩니다.</li>
+<li><strong>상세</strong></li>
+<li>문제 차트 다음 5봉을 미리 볼 수 있습니다.</li>
+<li>패턴명과 해설을 수정하고, 활성 여부를 토글하고, 삭제할 수 있습니다.</li>
+<li>응시 기록이 있는 문제는 삭제할 수 없습니다.</li>
+<li>상태: <strong>완료</strong>. 한 번에 200개를 만들면 Cloudflare의 100초 제한에 걸릴 수 있어 50개씩 만드는 것을 권장합니다.</li>
+</ul>
+<h2 id="admin-11">8. 게임 설정 — <code>/game/settings</code></h2>
+<p><img loading="lazy" alt="게임 설정" src="images/admin/08-game-settings.png" /></p>
+<ul>
+<li>기능 켜기/끄기: 🌙 야간 차트 퀴즈, 🔥 연속 출석.</li>
+<li>현재 시즌 정보(기간, D-day)와 <strong>다음 시즌 기간</strong>(월간/분기)을 다룹니다.</li>
+<li><strong>차트 기본 단위</strong>: 일봉, 1분, 5분, 15분, 60분.</li>
+<li><strong>보상 금액</strong>: 주간 1~3위, 월간 1~3위, 연속 출석 3/7/14/30일. 0~1억 사이 정수만 받습니다.</li>
+<li>바뀐 항목만 저장합니다.</li>
+<li>상태: <strong>완료</strong>. 10/31 정산 전에 다음 시즌 기간을 확인해야 합니다.</li>
+</ul>
+<h2 id="admin-12">9. 테마 보정 — <code>/market/themes</code></h2>
+<p><img loading="lazy" alt="테마 보정" src="images/admin/09-market-themes.png" /></p>
+<ul>
+<li>KIS 테마와 관리자가 만든 테마를 지표(순위, 1일 등락, 거래대금, 종목 수)와 함께 보여 줍니다. 검색과 정렬이 되고, 숨긴 테마도 볼 수 있습니다.</li>
+<li>새 테마 만들기, 이름·설명 수정, 숨기기/해제를 합니다. 구성 종목은 추가(편입 사유 입력), 제외, 복구할 수 있습니다.</li>
+<li>바뀐 내용은 <strong>웹·앱 스크리너의 테마 탭에 반영</strong>되고, 순위는 서버가 다시 계산합니다.</li>
+<li>API(stock_api REST): <code>/api/v1/admin/themes*</code></li>
+<li>상태: <strong>완료</strong></li>
+</ul>
+<h2 id="admin-13">10. 데이터 현황 — <code>/market/status</code></h2>
+<p><img loading="lazy" alt="데이터 현황" src="images/admin/10-market-status.png" /></p>
+<ul>
+<li>데이터셋별 상태 카드를 보여 줍니다(정상/오래됨/주의/없음/꺼짐/오류).</li>
+<li>대상 데이터: 일봉, 국내·미국 지수, 투자자 순매수, 재무, FRED, 공모주, CANSLIM, 시장 그룹.</li>
+<li>기준 거래일과 비교해 판정합니다.</li>
+<li>최근 일일 파이프라인(매일 20:30)의 단계별 결과를 보여 줍니다.</li>
+<li>설정 상태: FRED 키가 있는지, 분기 EPS 형식. 값 자체는 보여 주지 않습니다.</li>
+<li><strong>계산 수동 실행</strong> 8종</li>
+<li>CANSLIM, 시장 그룹, 조건검색, 차트 패턴 계산과 각각의 60일 백필</li>
+<li><strong>초기 데이터 준비</strong>: KIS를 대량 호출하는 작업이라 16:00~21:30에는 실행할 수 없습니다.</li>
+<li>실행 중일 때는 5초마다 다시 조회하고, 실행 기록 표가 있습니다.</li>
+<li>상태: <strong>부분</strong>. 분기 EPS 형식 변경, KIS 수집 수동 실행, 단계별 재시작은 다음 단계로 미뤄 두었습니다.</li>
+<li>캡처 시점에 FRED 키가 없어서 <strong>FRED 거시 지표가 '꺼짐'</strong>으로 나옵니다.</li>
+</ul>
+<h2 id="admin-14">11. 데이터 검증 — <code>/market/verify</code></h2>
+<p><img loading="lazy" alt="데이터 검증" src="images/admin/11-market-verify.png" /></p>
+<ul>
+<li>종목 하나에 대해 우리 DB에 있는 값을 모아 보여 주는 <strong>읽기 전용</strong> 화면입니다. 외부 사이트 링크와 눈으로 비교하는 용도입니다.</li>
+<li>카드 구성: 프로필, 계산값, 투자자, 일봉 표, 테마·업종 소속, CANSLIM, 외부 링크, 재무.</li>
+<li>종목과 기준일이 주소(<code>?ticker=&amp;date=</code>)에 남아서 새로고침하거나 주소를 공유해도 같은 화면이 나옵니다.</li>
+<li>상태: <strong>완료</strong></li>
+</ul>
+<h2 id="admin-15">12. 펀드 리포트 알림 — <code>/fund-notices</code></h2>
+<p><img loading="lazy" alt="펀드 리포트 알림" src="images/admin/12-fund-notices.png" /></p>
+<ul>
+<li><strong>발송 탭</strong></li>
+<li>기준일과 템플릿을 고르고 제목(100자)과 본문(500자)을 씁니다. <code>{date}</code>는 "M월 D일"로 바뀝니다.</li>
+<li>휴대폰 알림 미리보기, 대상 기기 수, 같은 기준일에 이미 보냈는지를 보여 줍니다.</li>
+<li>발송 방법: <strong>테스트 발송</strong>(내 기기), <strong>지금 발송</strong>, <strong>예약 발송</strong>. 예약은 취소할 수 있습니다.</li>
+<li>펀드 알림을 보내면 앱이 꺼져 있어도 기록되도록, 무음 깨우기 푸시(<code>fund_refresh</code>)도 함께 나갑니다.</li>
+<li>웹에는 SSE로 갱신 신호를 보냅니다.</li>
+<li><strong>문구 템플릿 탭</strong>: 템플릿을 추가·수정·삭제합니다.</li>
+<li>API(blog): <code>/admin/fund-notices*</code>, <code>/admin/push-sends*</code>, <code>/admin/push-templates*</code></li>
+<li>상태: <strong>완료</strong>. Android 실기기에서 확인했습니다. iOS 발송은 아직 범위 밖입니다.</li>
+<li>캡처의 "대상 기기 -대 / 내 기기 0대"는 고장이 아닙니다. 대상 기기 수는 미리보기 응답을 받기 전까지 "-"로 나오고, 캡처에 쓴 관리자 계정에는 등록된 기기가 없었습니다.</li>
+</ul>
+<h2 id="admin-16">13. 앱 버전 &amp; 업데이트 — <code>/app/versions</code></h2>
+<p><img loading="lazy" alt="앱 버전" src="images/admin/13-app-versions.png" /></p>
+<ul>
+<li>Android와 iOS 탭을 따로 둡니다.</li>
+<li><strong>긴급 조치</strong>: 서버 점검 모드(안내 문구 포함), 스토어 강제 업데이트.</li>
+<li><strong>스토어</strong>: 최신 버전과 최소 지원 버전(semver 검사), 스토어 URL(https만), 안내 문구.</li>
+<li><strong>OTA 정책</strong>: SILENT / OPTIONAL / MANDATORY와 OTA 안내 문구.</li>
+<li>위험한 설정을 켜고 저장하면 확인창이 뜹니다.</li>
+<li>API(blog): <code>GET /admin/app-versions</code>, <code>PUT /admin/app-versions/{platform}</code></li>
+<li>상태: <strong>완료</strong>. iOS 스토어 링크는 출시 후에 바꿉니다.</li>
+</ul>
+<h2 id="admin-17">14. 회원 목록 — <code>/members</code> (준비 중)</h2>
+<p><img loading="lazy" alt="회원 목록" src="images/admin/14-members.png" /></p>
+<ul>
+<li>"회원 목록 · 권한 관리 준비 중" 안내만 있습니다. 회원 등급(FREE/PREMIUM/ADMIN)을 바꾸는 UI가 들어갈 자리입니다.</li>
+<li>상태: <strong>미구현</strong>. ROADMAP에 구현 계획이 없습니다.</li>
+</ul>
+<h2 id="admin-18">15. 통계 대시보드 — <code>/stats</code> (준비 중)</h2>
+<p><img loading="lazy" alt="통계" src="images/admin/15-stats.png" /></p>
+<ul>
+<li>게시글, 댓글, 회원 지표를 보여 줄 자리입니다. 지금은 안내 문구만 있습니다.</li>
+<li>상태: <strong>미구현</strong></li>
+</ul></section><section class="doc" id="app"><h1 id="app-1">모바일 앱 (mobile)</h1>
+<blockquote>
+<p>React Native(Expo) · Expo Router · Unistyles v3 · 캡처: 2026-10-22, Android 에뮬레이터(개발 빌드 <code>com.stockapp.dev</code>, 1080×2400) + 로컬 백엔드(개발 DB)</p>
+</blockquote>
+<h2 id="app-2">한눈에 보기</h2>
+<table>
+<thead>
+<tr>
+<th>구분</th>
+<th>내용</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>라우트 화면</td>
+<td>12개. 하단 탭 5개(홈, 커뮤니티, 게임, 스크리너, 내정보)와 스택 화면 7개</td>
+</tr>
+<tr>
+<td>스택 화면</td>
+<td>글 상세, 펀드 목록, 펀드 리포트, 수익 히스토리, 기록 백업, 테마/업종 상세, 종목 상세</td>
+</tr>
+<tr>
+<td>화면 안의 하위 뷰</td>
+<td>스크리너 칩 7개, 게임 시트 8개(랭킹, 규칙, 퀘스트, 아카데미, 퀴즈, 연속 출석, 주문 설정, 로그인 안내)</td>
+</tr>
+<tr>
+<td>앱 전체 오버레이</td>
+<td>앱 업데이트 안내(5가지 모드), 토스트, API 진행 막대, 푸시 권한 시트</td>
+</tr>
+<tr>
+<td>기기 기능</td>
+<td>푸시(Expo → FCM), 백그라운드 작업, 파일 저장, SecureStore, Google Drive 백업, 딥링크, OTA 업데이트</td>
+</tr>
+<tr>
+<td>빌드 분리</td>
+<td>개발 빌드: <code>StockApp Dev</code>, <code>com.stockapp.dev</code>, 스킴 <code>stockapp-dev</code><br>운영 빌드: <code>StockApp</code>, <code>com.stockapp</code>, 스킴 <code>stockapp</code></td>
+</tr>
+</tbody>
+</table>
+<p><strong>디자인</strong></p>
+<ul>
+<li>토스식 레이아웃과 파스텔 C안 팔레트를 씁니다. 바탕은 라벤더, 카드는 흰색, 핑크는 포인트에만 씁니다.</li>
+<li>상승은 핑크레드, 하락은 블루로 표시합니다.</li>
+<li>라이트/다크 테마는 OS 설정을 따릅니다. 기준 문서는 <code>docs/mobile_design_language.md</code>입니다.</li>
+</ul>
+<p><strong>로그인</strong></p>
+<ul>
+<li>카카오·네이버 간편 로그인은 인앱 브라우저로 이동했다가 돌아오는 방식입니다. 이때 일회용 교환 코드와 PKCE를 씁니다.</li>
+<li>접근 토큰은 60분, 리프레시 토큰은 30일이며 회전 방식입니다. 플랫폼마다 세션은 1개만 유지됩니다.</li>
+<li>개발용 닉네임 로그인은 개발 빌드에서만 보입니다. 애플 로그인은 iOS 출시 직전에 붙일 예정입니다.</li>
+</ul>
+<hr />
+<h2 id="app-3">1. 홈 탭 — <code>/</code></h2>
+<p><img loading="lazy" alt="홈" src="images/app/01-home.png" /></p>
+<ul>
+<li>관리자가 ⭐로 지정한 <strong>추천 글</strong> 목록을 보여 줍니다. 당겨서 새로고침할 수 있습니다.</li>
+<li>로그인한 사용자에게 새 글 알림 권한을 묻는 시트를 1번 띄웁니다.</li>
+<li>API(blog): <code>GET /api/v1/blogs?featured=true</code></li>
+<li>상태: <strong>완료</strong></li>
+</ul>
+<h2 id="app-4">2. 커뮤니티 탭 — <code>/blog</code></h2>
+<p><img loading="lazy" alt="커뮤니티" src="images/app/02-blog.png" /></p>
+<ul>
+<li>가로 게시판 탭에서 게시판을 고르면 글 목록이 10개씩 나옵니다. 이전/다음 페이지로 넘깁니다.</li>
+<li>앱에서는 글을 쓸 수 없고, 댓글만 쓸 수 있습니다.</li>
+<li>API(blog): <code>GET /boards</code>, <code>GET /blogs?board_id&amp;page&amp;size</code></li>
+<li>상태: <strong>완료</strong></li>
+</ul>
+<h2 id="app-5">3. 글 상세 — <code>/blog/[id]</code></h2>
+<p><img loading="lazy" alt="글 상세" src="images/app/08-blog-detail.png" /></p>
+<ul>
+<li>진입 경로: 홈·커뮤니티 카드를 누르거나, <strong>새 글 푸시 알림</strong>을 누르면 이 화면으로 옵니다.</li>
+<li>본문 HTML은 WebView로 그리고, 높이를 본문에 맞춥니다. 댓글은 로그인하면 쓸 수 있습니다(1000자).</li>
+<li>상태: <strong>완료</strong></li>
+</ul>
+<h2 id="app-6">4. 게임 탭 — <code>/game</code> (가장 큰 화면)</h2>
+<p><img loading="lazy" alt="게임" src="images/app/03-game.png" /></p>
+<ul>
+<li>한 달 동안 한 종목으로 하는 <strong>실시간 가상 트레이딩</strong>입니다.</li>
+<li><strong>주문</strong></li>
+<li>상승/하락에 거는 원클릭 주문입니다.</li>
+<li>비중(25/50/100%, 10~90% 추가), 배율(1·2·5배), 손절과 익절을 고릅니다.</li>
+<li>5배는 아카데미를 통과해야 쓸 수 있습니다.</li>
+<li><strong>차트</strong>: lightweight-charts를 WebView로 띄웁니다.</li>
+<li>봉 단위: 일봉, 1/5/15/60분.</li>
+<li>표시 항목: 이동평균, 볼린저 밴드, 코치 지지·저항선, 진입가, 손절선.</li>
+<li><strong>화면 구성 요소</strong>: 유저 베팅 심리 바, 데일리 코치 배너, 장운영 배너(VI·거래정지·서킷브레이커), 야간 퀴즈 배너.</li>
+<li><strong>실시간 연결</strong>: WebSocket으로 시세 틱, 개인 손익, 시장 심리를 받습니다. 순위는 30초마다 새로 받습니다.</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th>랭킹 시트</th>
+<th>규칙 시트</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><img loading="lazy" alt="랭킹" src="images/app/03b-game-ranking.png" /></td>
+<td><img loading="lazy" alt="규칙" src="images/app/03c-game-rules.png" /></td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li><strong>랭킹</strong>: 주간, 시즌, 명예의 전당. 캡처에서는 다른 사용자 닉네임을 흐리게 처리했습니다.</li>
+<li><strong>규칙</strong>: 시작 자본금, 거래 시간, 배율별 손익, 수수료, 청산 조건을 설명합니다.</li>
+<li>그 밖의 시트: 퀘스트(보상 받기), 아카데미(5배 해금 시험), 야간 차트 퀴즈, 연속 출석 보상.</li>
+<li>API: trading_game <code>/api/game/*</code> 30여 개 + WebSocket <code>/ws/game/stream</code> + stock_api GraphQL <code>GameDailyCandles</code>.</li>
+<li>상태: <strong>코드 완료</strong></li>
+<li>실기기 확인이 남은 항목: 시트 열기/닫기, Android 뒤로가기, WebSocket 재연결.</li>
+<li>운영 <code>.env.production</code>에 <code>EXPO_PUBLIC_GAME_API_URL</code>이 없어서, 운영 빌드에서는 "시즌 준비 중"이 뜹니다.</li>
+</ul>
+<h2 id="app-7">5. 스크리너 탭 — <code>/screener</code></h2>
+<p>화면 위쪽의 가로 칩 7개로 전환합니다. 모두 stock_api GraphQL을 쓰는 공개 데이터라 로그인이 필요 없습니다. 데이터는 장 마감 뒤 매일 20:30에 갱신되고, 국내 지수만 장중에 30초마다 갱신합니다.</p>
+<table>
+<thead>
+<tr>
+<th>시장</th>
+<th>테마</th>
+<th>일정</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><img loading="lazy" alt="시장" src="images/app/04-screener.png" /></td>
+<td><img loading="lazy" alt="테마" src="images/app/04b-themes.png" /></td>
+<td><img loading="lazy" alt="일정" src="images/app/04c-calendar.png" /></td>
+</tr>
+</tbody>
+</table>
+<table>
+<thead>
+<tr>
+<th>주도주(CANSLIM)</th>
+<th>조건검색</th>
+<th>패턴</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><img loading="lazy" alt="주도주" src="images/app/04d-leaders.png" /></td>
+<td><img loading="lazy" alt="조건검색" src="images/app/04e-finder.png" /></td>
+<td><img loading="lazy" alt="패턴" src="images/app/04f-patterns.png" /></td>
+</tr>
+</tbody>
+</table>
+<table>
+<thead>
+<tr>
+<th>칩</th>
+<th>하는 일</th>
+<th>GraphQL</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>시장</td>
+<td>국내·미국 지수 카드(스파크라인), 거시 지표, 주도 테마 Top 5, 다가오는 일정</td>
+<td><code>MarketOverview</code></td>
+</tr>
+<tr>
+<td>테마 / 업종</td>
+<td>기간(1·5·20일)과 정렬(등락률·거래대금)을 고르는 순위 목록, 무한 스크롤</td>
+<td><code>MarketGroups</code></td>
+</tr>
+<tr>
+<td>일정</td>
+<td>공모주 청약·상장, 미국 경제지표 발표일(앞으로 60일, 지난 7일은 펼쳐 보기)</td>
+<td><code>MarketCalendar</code></td>
+</tr>
+<tr>
+<td>주도주</td>
+<td>CANSLIM 점수·RS·통과 수, 시장 방향 줄, 필터 시트</td>
+<td><code>CanslimScreen</code></td>
+</tr>
+<tr>
+<td>조건검색</td>
+<td>프리셋(거래량 급증, 골든크로스, 과매도, 신고가)과 정렬, 필터 시트</td>
+<td><code>ScreenerScreen</code></td>
+</tr>
+<tr>
+<td>패턴</td>
+<td>형성 중, 피벗 근접, 오늘 돌파, 최근 돌파 / 컵, 컵핸들, 쌍바닥 등</td>
+<td><code>PatternScreen</code></td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>상태</li>
+<li>시장, 테마, 업종, 일정: <strong>완료</strong></li>
+<li>주도주, 조건검색: <strong>코드 완료</strong>(10-21), 실기기 확인 대기</li>
+<li>패턴: <strong>코드 완료</strong>(10-22), 실데이터 검증 대기</li>
+</ul>
+<h2 id="app-8">6. 테마/업종 상세 — <code>/market/[kind]/[id]</code></h2>
+<p><img loading="lazy" alt="그룹 상세" src="images/app/06-group.png" /></p>
+<ul>
+<li>순위, 1·5·20일 등락, 거래대금, 시가총액, 상승/보합/하락 막대, 구성 종목(대장주 배지)을 보여 줍니다.</li>
+<li>종목을 누르면 종목 상세로 이동합니다.</li>
+<li>API: GraphQL <code>MarketGroup</code></li>
+<li>상태: <strong>완료</strong></li>
+</ul>
+<h2 id="app-9">7. 종목 상세 — <code>/stock/[ticker]</code></h2>
+<p><img loading="lazy" alt="종목 상세" src="images/app/07-stock.png" /></p>
+<ul>
+<li>종가와 <strong>CANSLIM 점수</strong>(7개 기준 중 몇 개를 통과했는지)를 보여 줍니다.</li>
+<li>약 1년치 일봉 차트에 50일선, 52주 고점, 패턴 피벗, 손절선이 표시됩니다.</li>
+<li>현재 차트 패턴(피벗, 깊이, 길이), 7가지 기준 점수표, 점수 추이가 있습니다.</li>
+<li>API: GraphQL <code>CanslimScore</code>, <code>PatternBases</code>, <code>GameDailyCandles</code></li>
+<li>상태: <strong>코드 완료</strong>, 실기기 확인 대기</li>
+</ul>
+<h2 id="app-10">8. 내정보 탭 — <code>/profile</code></h2>
+<table>
+<thead>
+<tr>
+<th>로그인 전</th>
+<th>로그인 후</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><img loading="lazy" alt="로그인 전" src="images/app/05a-login.png" /></td>
+<td><img loading="lazy" alt="내정보" src="images/app/05-profile.png" /></td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li><strong>로그인 전</strong>: 카카오(·네이버) 간편 로그인 버튼이 있습니다. 서버에서 켜 둔 공급자만 보입니다. 개발 빌드에서는 닉네임 로그인도 보입니다.</li>
+<li><strong>로그인 후</strong></li>
+<li>닉네임과 등급을 보여 줍니다.</li>
+<li><strong>내 펀드 수익</strong> 메뉴가 있습니다.</li>
+<li><strong>새 글 알림</strong> 스위치는 푸시 등록 플래그 <code>post_notice</code>를 바꿉니다.</li>
+<li>로그아웃과 회원 탈퇴(“탈퇴” 입력 후 확인)가 있습니다.</li>
+<li>상태: <strong>부분</strong></li>
+<li>"이번 시즌 내 순위" 카드는 고정 문구만 나오고 실제 순위와 연결되어 있지 않습니다.</li>
+<li>Streak 출석, Trading MBTI, 아카데미, 지난 시즌 기록 4줄은 "준비 중"입니다. 출석과 아카데미는 게임 탭 시트에는 있습니다.</li>
+</ul>
+<h2 id="app-11">9. 내 펀드 수익 — <code>/fund</code></h2>
+<p><img loading="lazy" alt="펀드 목록" src="images/app/09-fund-list.png" /></p>
+<ul>
+<li>fund.ivyro.net 펀드 현황 주소(<code>…/dataroom/om_data/*.htm</code>만 허용)와 이름(선택)을 넣어 펀드를 추가합니다. 최대 10개까지입니다.</li>
+<li><strong>목록은 기기에만 저장되고 서버에는 저장되지 않습니다.</strong> 앱이 원본 HTML을 직접 가져와 파싱합니다.</li>
+<li>앱을 켤 때와 다시 앞으로 가져올 때 <strong>자동 갱신</strong>합니다(10분 안에 확인한 펀드는 건너뜀). 당겨서 새로고침하면 강제로 갱신합니다.</li>
+<li>첫 펀드를 등록하면 푸시 권한 시트가 뜹니다. 펀드를 추가하거나 지우면 푸시 등록과 백그라운드 작업 설정을 다시 맞춥니다.</li>
+<li>헤더의 ☁️ 아이콘을 누르면 기록 백업 화면으로 갑니다.</li>
+<li>상태: <strong>완료</strong></li>
+</ul>
+<h3 id="app-12">9-1. 펀드 리포트 — <code>/fund/[id]</code> (캡처 없음)</h3>
+<ul>
+<li>실제 리포트에는 <strong>투자자 실명, 투자자 번호, 계좌별 금액</strong>이 들어 있어서 캡처하지 않았습니다.</li>
+<li>동작</li>
+<li>캐시를 먼저 보여 준 뒤, 화면을 열 때마다 원본을 다시 가져옵니다.</li>
+<li>새로 가져오는 데 성공한 회차만 <strong>날짜별 히스토리에 기록</strong>합니다. 같은 날짜는 덮어씁니다.</li>
+<li>가져오기 실패, 원본 형식 변경, 일부 항목 누락이 생기면 배너와 "원본 열기" 링크를 보여 줍니다.</li>
+<li>헤더에 수익 히스토리 아이콘과 새로고침 버튼이 있습니다.</li>
+<li>상태: <strong>완료</strong></li>
+</ul>
+<h3 id="app-13">9-2. 수익 히스토리 — <code>/fund/history/[id]</code> (캡처 없음)</h3>
+<ul>
+<li>기기에 쌓인 계좌별 기록을 차트와 날짜별 목록으로 보여 줍니다. 계좌 칩과 기간 칩(1개월, 3개월, 전체)이 있습니다.</li>
+<li>기록이 빠진 날이 있으면 "이전 기록 M.D"로 표시합니다. 빈 값을 추정해서 채우지 않습니다.</li>
+<li>상태: <strong>완료</strong>. 금액이 보이는 화면이라 캡처하지 않았습니다.</li>
+</ul>
+<h3 id="app-14">9-3. 백그라운드 기록 (화면 없음)</h3>
+<ul>
+<li>관리자가 펀드 알림을 보내면 <strong>무음 깨우기 푸시</strong>가 함께 갑니다.</li>
+<li>앱이 꺼져 있어도 백그라운드 작업 <code>fund-refresh-push</code>가 깨어나 리포트를 기록합니다.</li>
+<li>여러 기기가 한꺼번에 몰리지 않도록 0~10초 랜덤 지연을 둡니다. 한 번 실행은 25초 안에 끝냅니다.</li>
+<li>안전망으로 약 6시간마다 도는 정기 작업 <code>fund-refresh-periodic</code>이 있습니다.</li>
+<li>Android 실기기(갤럭시 A53)에서 즉시 발송, 알림 탭, 무음 푸시(백그라운드 상태와 완전히 꺼진 상태 모두)를 확인했습니다. 정기 작업이 꺼진 상태에서 실제로 도는지는 아직 측정하지 않았습니다.</li>
+<li>사용자가 앱을 강제 종료했거나 iOS가 잠겨 있으면 기록되지 않을 수 있습니다.</li>
+</ul>
+<h2 id="app-15">10. 기록 백업 — <code>/fund/backup</code></h2>
+<p><img loading="lazy" alt="기록 백업" src="images/app/10-fund-backup.png" /></p>
+<ul>
+<li>Google 계정을 연결해 펀드 목록과 히스토리를 Google Drive의 앱 전용 폴더(appdata)에 백업하고 복원합니다.</li>
+<li>새 기록이 생기면 하루 1번 자동으로 백업합니다. 백그라운드에서 생긴 기록은 앱을 다시 앞으로 가져올 때 백업합니다.</li>
+<li>상태: <strong>코드 완료, 설정 대기</strong>. <code>EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID</code>가 없어서 캡처처럼 <strong>"백업 설정이 필요해요"</strong> 화면이 나옵니다.</li>
+</ul>
+<hr />
+<h2 id="app-16">앱 전체 기능</h2>
+<table>
+<thead>
+<tr>
+<th>기능</th>
+<th>내용</th>
+<th>상태</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>앱 업데이트 관리</td>
+<td>실행할 때 <code>GET /app/version-check</code>로 점검 모드와 스토어 강제/권장 업데이트를 확인하고, 그다음 expo-updates OTA를 확인합니다. 결과에 따라 시트 5종 중 하나를 띄웁니다.</td>
+<td>코드 완료, 실기기 확인 대기</td>
+</tr>
+<tr>
+<td>푸시</td>
+<td>Expo Push → FCM. Android 채널은 "펀드 리포트"와 "새 글" 2개. 알림을 누르면 펀드 알림은 <code>/fund</code>, 새 글 알림은 <code>/blog/{id}</code>로 이동합니다.</td>
+<td>Android 확인 완료, iOS는 APNs 준비 전</td>
+</tr>
+<tr>
+<td>실시간 신호</td>
+<td>앱이 앞에 있을 때 SSE로 <code>fund_report_updated</code>를 받으면 0~30초 뒤 펀드를 갱신합니다.</td>
+<td>완료</td>
+</tr>
+<tr>
+<td>세션</td>
+<td>앱을 켤 때와 다시 앞으로 가져올 때(60초 간격 제한) <code>/auth/me</code>로 세션을 확인합니다. 401 사유 코드별로 안내 문구가 다릅니다.</td>
+<td>완료</td>
+</tr>
+<tr>
+<td>웹(expo web)</td>
+<td>WebView와 SecureStore가 웹에서 동작하지 않아 차트, 본문, 펀드 화면을 웹에서 쓸 수 없습니다. 웹은 <code>web_client</code>가 맡습니다.</td>
+<td>해당 없음</td>
+</tr>
+</tbody>
+</table></section><section class="doc" id="web"><h1 id="web-1">사용자 웹 (web_client)</h1>
+<blockquote>
+<p>React + Vite + TailwindCSS · 로컬 <code>http://localhost:3000</code> · 캡처: 2026-10-22, 개발 DB 기준. 데스크톱은 1366px, 모바일은 390px 폭.</p>
+</blockquote>
+<h2 id="web-2">한눈에 보기</h2>
+<table>
+<thead>
+<tr>
+<th>구분</th>
+<th>내용</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>화면</td>
+<td>16개: 홈, 게시판 글 목록, 글 상세, 게임, 스크리너 7개, 종목 상세, 내정보, 펀드 목록, 펀드 리포트, 로그인 완료</td>
+</tr>
+<tr>
+<td>그 밖</td>
+<td><code>/community</code>는 첫 게시판으로 바로 이동</td>
+</tr>
+<tr>
+<td>모달</td>
+<td>9개: 로그인, 회원 탈퇴, 게임 모달 6개(랭킹, 규칙, 퀘스트, 아카데미, 차트 퀴즈, 연속 출석), 주문 설정 시트</td>
+</tr>
+<tr>
+<td>메뉴</td>
+<td>홈, 커뮤니티, 게임, 스크리너, 내정보. 640px 이상에서는 위쪽 메뉴, 그보다 좁으면 하단 탭바로 보입니다</td>
+</tr>
+<tr>
+<td>반응형</td>
+<td>모든 화면이 모바일 폭에 맞춰집니다. 게임과 스크리너는 넓은 화면에서 2단, 좁은 화면에서 1단으로 바뀌고 항목을 펼쳐서 봅니다</td>
+</tr>
+<tr>
+<td>웹에 없는 기능</td>
+<td>푸시, 수익 히스토리, Drive 백업은 앱에만 있습니다</td>
+</tr>
+</tbody>
+</table>
+<p><strong>전역 요소</strong></p>
+<ul>
+<li>맨 위 API 진행 막대가 있습니다.</li>
+<li>SSE 알림 토스트를 띄웁니다. 새 글이 올라오면 "새 글: 제목"을, 펀드 리포트가 갱신되면 "오늘 수익률 리포트가 올라왔어요"를 보여 줍니다.</li>
+<li>탭으로 돌아올 때 <code>/auth/me</code>로 세션을 확인합니다(60초 간격 제한).</li>
+<li>로그인 상태에서는 펀드를 자동으로 갱신합니다.</li>
+</ul>
+<p><strong>로그인</strong></p>
+<ul>
+<li>카카오·네이버 간편 로그인을 씁니다. 브라우저 전체가 공급자 페이지로 이동했다가 <code>/auth/complete</code>로 돌아오고, PKCE 교환을 거칩니다.</li>
+<li>개발 서버에서는 닉네임(게스트) 로그인도 보입니다. 이 기능은 운영으로 바꿀 때 꺼야 합니다.</li>
+<li>JWT는 localStorage에 저장하고 12시간 유지됩니다. 리프레시 토큰은 없습니다.</li>
+</ul>
+<p><strong>운영 프록시</strong></p>
+<ul>
+<li>운영에서는 <code>server.cjs</code>가 같은 도메인에서 서비스별로 요청을 넘깁니다.</li>
+<li>경로: <code>/_api/blog</code>, <code>/_api/auth</code>, <code>/_api/stock</code>, <code>/_api/game</code>(WS 포함).</li>
+</ul>
+<hr />
+<h2 id="web-3">1. 홈 — <code>/</code></h2>
+<table>
+<thead>
+<tr>
+<th>데스크톱</th>
+<th>모바일</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><img loading="lazy" alt="홈 데스크톱" src="images/web/01-home-desktop.png" /></td>
+<td><img loading="lazy" alt="홈 모바일" src="images/web/01b-home-mobile.png" /></td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>관리자가 고른 <strong>📌 추천 글</strong>을 최대 20개 보여 줍니다. 카드에는 미리보기 100자, 작성일, 조회수가 나옵니다.</li>
+<li>API(blog): <code>GET /blogs?featured=true&amp;size=20</code>. 로그인 없이 볼 수 있습니다.</li>
+<li>상태: <strong>완료</strong></li>
+</ul>
+<h2 id="web-4">2. 로그인 모달</h2>
+<p><img loading="lazy" alt="로그인 모달" src="images/web/12-login-modal.png" /></p>
+<ul>
+<li>서버에서 켜 둔 공급자 버튼만 보입니다(<code>GET /auth/social/providers</code>). 캡처 시점에는 카카오만 켜져 있었습니다.</li>
+<li>다음 화면에서 로그인 모달이 열립니다: 헤더의 [로그인] 버튼, 내정보, 글 상세의 댓글 영역, 게임에서 주문할 때.</li>
+<li>상태: <strong>완료</strong>. 실제 공급자 키로 하는 수동 확인과 네이버 검수가 남아 있습니다.</li>
+</ul>
+<h2 id="web-5">3. 커뮤니티 — <code>/boards/:boardId</code></h2>
+<p><img loading="lazy" alt="게시판" src="images/web/02-board.png" /></p>
+<ul>
+<li>헤더 아래 게시판 칩에서 게시판을 고르면 글 목록이 10개씩 나옵니다.</li>
+<li>웹에서는 글을 쓸 수 없습니다. 글은 관리자 웹에서 씁니다.</li>
+<li>상태: <strong>완료</strong></li>
+</ul>
+<h2 id="web-6">4. 글 상세 — <code>/posts/:id</code></h2>
+<p><img loading="lazy" alt="글 상세" src="images/web/03-post-detail.png" /></p>
+<ul>
+<li>게시판 배지, 제목, 작성 시각, 조회수, 본문(관리자가 넣은 차트 이미지 포함)을 보여 줍니다.</li>
+<li>로그인하면 댓글을 쓸 수 있습니다(1000자). 댓글을 꺼 둔 게시판이면 안내 문구가 나옵니다.</li>
+<li>상태: <strong>완료</strong>. 댓글 수정·삭제와 대댓글은 없습니다.</li>
+<li>캡처에서는 사용자 닉네임 1개를 <code>사용자A</code>로 바꿨습니다.</li>
+</ul>
+<h2 id="web-7">5. 트레이딩 게임 — <code>/game</code></h2>
+<table>
+<thead>
+<tr>
+<th>데스크톱(2단)</th>
+<th>모바일(하단 주문 바)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><img loading="lazy" alt="게임 데스크톱" src="images/web/05-game-desktop.png" /></td>
+<td><img loading="lazy" alt="게임 모바일" src="images/web/05b-game-mobile.png" /></td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>앱과 같은 실시간 가상 롱/숏 게임입니다.</li>
+<li><strong>배치</strong></li>
+<li>넓은 화면에서는 차트와 오른쪽 sticky 주문 패널을 2단으로 둡니다.</li>
+<li>좁은 화면에서는 아래에 고정 주문 바를 두고, "주문 설정" 시트로 세부 값을 고릅니다.</li>
+<li><strong>차트</strong>: lightweight-charts를 씁니다. 봉 단위는 일봉과 1/5/15/60분, 보조지표는 이동평균과 볼린저 밴드입니다.</li>
+<li><strong>로그인 없이 볼 수 있는 것</strong>: 차트, 심리 바, 랭킹, 규칙. 주문을 하거나 개인 모달을 열면 로그인 모달이 뜹니다.</li>
+<li><strong>실시간 연결</strong>: WebSocket <code>/ws/game/stream</code></li>
+<li>토큰이 없으면 공개 연결로 시세 틱과 심리만 받습니다.</li>
+<li>토큰이 있으면 개인 손익, 넛지, 코치 메시지, 장 상태도 받습니다.</li>
+<li>상태: <strong>완료</strong>. 일부 모달(연속 출석 보상, 주간 랭킹 보상 토스트)은 브라우저 확인이 남았습니다.</li>
+</ul>
+<h2 id="web-8">6. 스크리너 — <code>/screener/*</code></h2>
+<p>모든 탭이 stock_api GraphQL만 씁니다. 로그인이 필요 없고 개인정보도 없습니다. 탭마다 주소가 따로 있습니다.</p>
+<h3 id="web-9">6-1. 시장 — <code>/screener/market</code></h3>
+<p><img loading="lazy" alt="시장" src="images/web/06-screener-market.png" /></p>
+<ul>
+<li>한 화면에 다음을 보여 줍니다.</li>
+<li>국내·미국 지수 카드(20일 스파크라인)</li>
+<li>미국 거시 지표(FRED)</li>
+<li>주도 테마 Top 5와 대장주</li>
+<li>다가오는 일정</li>
+<li>업종 트리맵(면적은 시가총액, 누르면 업종 탭으로 이동)</li>
+<li>탭이 화면에 보이는 동안 지수와 거시 지표만 30초마다 다시 받습니다.</li>
+</ul>
+<h3 id="web-10">6-2. 테마 / 6-3. 업종 — <code>/screener/themes</code>, <code>/screener/sectors</code></h3>
+<table>
+<thead>
+<tr>
+<th>테마(목록 + 상세)</th>
+<th>업종(트리맵)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><img loading="lazy" alt="테마" src="images/web/07-screener-themes.png" /></td>
+<td><img loading="lazy" alt="업종" src="images/web/08-screener-sectors.png" /></td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li><strong>목록과 트리맵</strong></li>
+<li>보기 방식은 목록과 트리맵 두 가지입니다.</li>
+<li>기간은 1/5/20일, 정렬은 등락률/거래대금입니다.</li>
+<li>목록 각 행에 연속 상위 일수, 상승/하락 종목 수, 대장주가 나옵니다.</li>
+<li><strong>상세</strong>: 등락, 순위 추이 그래프, 구성 종목이 나옵니다. 넓은 화면에서는 오른쪽 sticky 영역에, 좁은 화면에서는 항목 아래에 펼쳐집니다.</li>
+</ul>
+<h3 id="web-11">6-4. 일정 — <code>/screener/calendar</code></h3>
+<p><img loading="lazy" alt="일정" src="images/web/08b-screener-calendar.png" /></p>
+<ul>
+<li>공모주 청약·상장일과 미국 경제지표(CPI, 고용, PCE) 발표일을 보여 줍니다. 앞으로 60일을 보여 주고, 지난 7일은 접어 둡니다.</li>
+<li>남은 문제: 공모주 제목이 종목코드로 나오는 경우가 있습니다.</li>
+</ul>
+<h3 id="web-12">6-5. 주도주(CANSLIM) — <code>/screener/leaders</code></h3>
+<p><img loading="lazy" alt="주도주" src="images/web/09-screener-leaders.png" /></p>
+<ul>
+<li>CANSLIM 7개 기준으로 종목을 고릅니다.</li>
+<li>위쪽에 시장 방향 띠가 있고, 필터는 시장, 최소 통과 수, 꼭 통과할 글자, 유동성입니다.</li>
+<li>상세에는 글자별 점수표, 일봉(50일선, 52주 고점), 60거래일 점수 추이가 나옵니다.</li>
+</ul>
+<h3 id="web-13">6-6. 조건검색 — <code>/screener/finder</code></h3>
+<p><img loading="lazy" alt="조건검색" src="images/web/10-screener-finder.png" /></p>
+<ul>
+<li><strong>프리셋</strong>: 거래량 급증, 골든크로스, 과매도, 신고가.</li>
+<li><strong>필터</strong>: 가격, 시가총액, 거래대금, 정배열/역배열, 볼린저, 위쪽 매물, ROE, PER, PBR, 부채비율, 성장률.</li>
+<li><strong>정렬 칩</strong>은 6개입니다.</li>
+<li>기획에는 있었지만 빠진 것: 관심 종목 담기, 미니 스파크라인, 배당·MACD 필터.</li>
+</ul>
+<h3 id="web-14">6-7. 패턴 — <code>/screener/patterns</code></h3>
+<p><img loading="lazy" alt="패턴" src="images/web/11-screener-patterns.png" /></p>
+<ul>
+<li><strong>리포트</strong>: 형성 중, 피벗 근접, 오늘 돌파, 최근 20일 돌파.</li>
+<li><strong>패턴</strong>: 컵, 컵핸들, 쌍바닥, 플랫 베이스, 박스권, HTF.</li>
+<li><strong>상세</strong>: 일봉에 피벗, 매수 상단, 손절선, 베이스 꼭짓점 마커가 표시되고, 베이스 이력 표가 있습니다.</li>
+<li>상태: <strong>완료</strong>(10-22 추가). 37개월치 일봉 백필 후 실데이터 검증이 필요합니다.</li>
+</ul>
+<h2 id="web-15">7. 종목 상세 — <code>/stock/:ticker</code> (10-22 신규)</h2>
+<p><img loading="lazy" alt="종목 상세" src="images/web/14-stock-detail.png" /></p>
+<ul>
+<li>위쪽에 <strong>종목 검색창</strong>이 있습니다(이름이나 6자리 코드, 자동완성).</li>
+<li>종가, CANSLIM 점수, 통과 수를 보여 줍니다.</li>
+<li>일봉은 기간을 6개월, 1년, 3년 중에서 고릅니다. 50일선, 52주 고점, 피벗과 돌파 마커가 표시됩니다.</li>
+<li><strong>차트 패턴</strong> 카드: 현재 베이스, 피벗, 깊이와 길이, 상태, 베이스 이력.</li>
+<li><strong>주도주 분석</strong> 카드: C·A·N·S·L·I·M 7개 항목의 설명과 기준, 점수 추이.</li>
+<li>스크리너의 주도주, 조건검색, 패턴, 테마 상세에 있는 "종목 상세 보기 →" 링크로 들어옵니다.</li>
+<li>API: GraphQL <code>StockSearch</code>, <code>CanslimScore</code>, <code>PatternBases</code>, <code>GameDailyCandles</code></li>
+<li>상태: <strong>완료</strong>(커밋 8d7d3c7)</li>
+</ul>
+<h2 id="web-16">8. 내정보 — <code>/me</code></h2>
+<p><img loading="lazy" alt="내정보" src="images/web/04-me.png" /></p>
+<ul>
+<li><strong>로그인 전</strong>: 로그인 안내 카드가 보입니다.</li>
+<li><strong>로그인 후</strong>: 닉네임 카드, 바로가기(🎮 트레이딩 게임, 💰 내 펀드 수익), 로그아웃, 회원 탈퇴가 있습니다. 회원 탈퇴는 <code>DELETE /auth/me</code>이고 확인 모달을 거칩니다.</li>
+<li>상태: <strong>완료</strong>. 알림 설정 같은 항목은 앱에만 있습니다.</li>
+</ul>
+<h2 id="web-17">9. 내 펀드 수익 — <code>/me/funds</code>, <code>/me/funds/:id</code></h2>
+<p><img loading="lazy" alt="펀드 목록" src="images/web/13-funds.png" /></p>
+<ul>
+<li>앱과 같은 펀드 현황 기능의 <strong>웹 버전</strong>입니다. 로그인해야 들어올 수 있습니다.</li>
+<li><strong>목록</strong></li>
+<li>fund.ivyro.net 주소를 넣어 추가하고, 지울 수 있습니다.</li>
+<li>목록 화면에서 기준일, 마지막 확인 시각, "확인 중…" 상태를 보여 줍니다.</li>
+<li>목록과 캐시는 <strong>브라우저 localStorage에만</strong> 저장됩니다.</li>
+<li><strong>리포트</strong>: 캐시를 먼저 보여 준 뒤 원본을 다시 가져옵니다. 가져오기 실패, 형식 변경, 누락이 생기면 배너를 보여 줍니다.</li>
+<li>리포트 화면은 실명과 금액이 나와서 캡처하지 않았습니다.</li>
+<li><strong>데이터 흐름</strong></li>
+<li>브라우저가 fund.ivyro.net에 직접 <code>fetch</code>합니다. 원본이 CORS를 허용합니다.</li>
+<li>백엔드는 갱신 신호(SSE <code>fund_report_updated</code>)만 보냅니다.</li>
+<li><strong>앱과 코드 공유</strong>: 파싱·표시 로직의 원본은 <code>mobile/src/features/fund/core/</code>이고, <code>web_client/src/lib/fundCore/</code>에 같은 내용을 복사해 씁니다. 두 곳이 같은지는 <code>scripts/check-fund-core-sync.sh</code>로 검사합니다.</li>
+<li>웹에서 일부러 뺀 것: 수익 히스토리, Drive 백업, 웹과 앱 사이 목록 동기화.</li>
+<li>상태: <strong>완료</strong>(웹 범위 기준)</li>
+</ul>
+<h2 id="web-18">10. 간편 로그인 완료 — <code>/auth/complete</code> (캡처 없음)</h2>
+<ul>
+<li>소셜 로그인 콜백이 돌아오는 경로입니다. 화면에는 "로그인 중…"만 잠깐 보입니다.</li>
+<li><code>?code=</code>를 받으면 PKCE verifier와 함께 교환해서 JWT를 저장하고, 로그인 전에 있던 경로로 돌아갑니다.</li>
+<li><code>?error=</code>를 받으면 사유를 보여 줍니다: 취소, 이용 제한, 만료, 실패.</li>
+<li>상태: <strong>완료</strong></li>
+</ul></section></main>
+<div id="lightbox"><img alt=""></div>
+<script>
+(function(){
+  var lb=document.getElementById('lightbox'),lbi=lb.querySelector('img');
+  document.querySelectorAll('main img').forEach(function(i){i.addEventListener('click',function(){lbi.src=i.src;lb.style.display='flex';});});
+  lb.addEventListener('click',function(){lb.style.display='none';});
+  document.addEventListener('keydown',function(e){if(e.key==='Escape')lb.style.display='none';});
+  var side=document.getElementById('side');
+  document.getElementById('menu').onclick=function(){side.classList.toggle('open');};
+  side.addEventListener('click',function(e){if(e.target.tagName==='A')side.classList.remove('open');});
+  var root=document.documentElement;
+  try{var t=localStorage.getItem('fr-theme');if(t)root.dataset.theme=t;}catch(e){}
+  document.getElementById('theme').onclick=function(){
+    var dark=root.dataset.theme?root.dataset.theme==='dark':matchMedia('(prefers-color-scheme: dark)').matches;
+    root.dataset.theme=dark?'light':'dark';
+    try{localStorage.setItem('fr-theme',root.dataset.theme);}catch(e){}
+  };
+  var links=[].slice.call(document.querySelectorAll('.nav-group li a'));
+  var obs=new IntersectionObserver(function(es){es.forEach(function(en){if(en.isIntersecting){links.forEach(function(l){l.classList.toggle('on',l.getAttribute('href')==='#'+en.target.id);});}});},{rootMargin:'0px 0px -75% 0px'});
+  document.querySelectorAll('main h2[id]').forEach(function(h){obs.observe(h);});
+})();
+</script>
+</body>
+</html>
