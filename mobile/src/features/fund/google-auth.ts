@@ -45,6 +45,16 @@ export async function accessToken(): Promise<string> {
   }
 }
 
+/** 지금 이 기기에 로그인된 Google 계정 이메일(accessToken() 뒤에 부를 것 — 콜드 스타트엔 조용한 로그인 전까지 null) */
+export function currentGoogleEmail(): string | null {
+  ensureConfigured();
+  try {
+    return GoogleSignin.getCurrentUser()?.user.email ?? null;
+  } catch {
+    return null;
+  }
+}
+
 /** 연결 해제 — 권한 반납 + 로그아웃. Drive 의 백업 파일은 남는다. */
 export async function disconnect(): Promise<void> {
   ensureConfigured();

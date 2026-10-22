@@ -1,14 +1,17 @@
-// 백업 상태(SecureStore, 토큰 없음) — 연결 여부·계정 이메일·마지막 성공 시각·마지막 오류 문구.
+// 백업 상태(SecureStore, 토큰 없음) — 연결 여부·계정 이메일·마지막 성공 시각·마지막 오류 문구. 앱 계정별 키.
 import * as SecureStore from 'expo-secure-store';
+
+import { currentOwnerId, currentOwnerIdOrNull } from './owner';
 
 export type BackupState = { connected: boolean; email: string; lastBackupAt: number | null; lastError: string };
 
-const KEY = 'fund_backup_state_v1';
+export const backupStateKey = (uid: number): string => `fund_backup_state_v1_u${uid}`;
+/** 계정별 저장 전 옛 키(기기 공용) — 가져오기·버리기에서만 쓴다 */
+export const LEGACY_BACKUP_STATE_KEY = 'fund_backup_state_v1';
 export const INITIAL_BACKUP_STATE: BackupState = { connected: false, email: '', lastBackupAt: null, lastError: '' };
 
-export async function loadBackupState(): Promise<BackupState> {
+export function parseBackupState(raw: string | null): BackupState {
   try {
-    const raw = await SecureStore.getItemAsync(KEY);
     const d = raw ? (JSON.parse(raw) as Partial<BackupState> | null) : null;
     if (!d || typeof d !== 'object') return INITIAL_BACKUP_STATE;
     return {
@@ -22,12 +25,28 @@ export async function loadBackupState(): Promise<BackupState> {
   }
 }
 
-export async function saveBackupState(patch: Partial<BackupState>): Promise<BackupState> {
-  const next = { ...(await loadBackupState()), ...patch };
-  await SecureStore.setItemAsync(KEY, JSON.stringify(next));
+/** 로그인 안 됨이면 초기 상태(연결 안 됨) */
+export async function loadBackupState(uid: number | null = currentOwnerIdOrNull()): Promise<BackupState> {
+  if (uid === null) return INITIAL_BACKUP_STATE;
+  try {
+    return parseBackupState(await SecureStore.getItemAsync(backupStateKey(uid)));
+  } catch {
+    return INITIAL_BACKUP_STATE;
+  }
+}
+
+/** 로그인 안 됨이면 던진다 — 공용 키에 쓰지 않는다 */
+export async function saveBackupState(patch: Partial<BackupState>, uid: number = currentOwnerId()): Promise<BackupState> {
+  const next = { ...(await loadBackupState(uid)), ...patch };
+  await SecureStore.setItemAsync(backupStateKey(uid), JSON.stringify(next));
   return next;
 }
 
-export async function resetBackupState(): Promise<void> {
-  await SecureStore.setItemAsync(KEY, JSON.stringify(INITIAL_BACKUP_STATE));
+export async function resetBackupState(uid: number = currentOwnerId()): Promise<void> {
+  await SecureStore.setItemAsync(backupStateKey(uid), JSON.stringify(INITIAL_BACKUP_STATE));
+}
+
+/** 회원 탈퇴 정리용 */
+export async function deleteBackupState(uid: number): Promise<void> {
+  await SecureStore.deleteItemAsync(backupStateKey(uid));
 }

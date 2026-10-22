@@ -1,5 +1,13 @@
 import { BACKUP_FILE } from './core';
-import { downloadBackup, findBackupId, isDriveError, uploadBackup, type DriveDeps } from './drive-backup';
+import {
+  accountBackupFile,
+  downloadBackup,
+  findBackupId,
+  isDriveError,
+  LEGACY_BACKUP_FILE,
+  uploadBackup,
+  type DriveDeps,
+} from './drive-backup';
 
 type Call = { url: string; init: RequestInit };
 type Fake = { status: number; body: string };
@@ -82,5 +90,27 @@ describe('drive-backup', () => {
       }) as unknown as typeof fetch,
     };
     expect(isDriveError(await findBackupId(deps).catch((e: unknown) => e), 'network')).toBe(true);
+  });
+});
+
+describe('drive-backup 파일 이름', () => {
+  it('계정별 이름으로 찾고 새로 만든다', async () => {
+    const { calls, deps } = mockDrive({
+      [LIST]: json({ files: [] }),
+      'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart': json({ id: 'NEW' }),
+    });
+    await uploadBackup(deps, '{"v":1}', accountBackupFile(7));
+    expect(accountBackupFile(7)).toBe('fund-backup-v1-u7.json');
+    expect(calls[0].url).toContain(encodeURIComponent(`name='fund-backup-v1-u7.json' and trashed=false`));
+    expect(String(calls[1].init.body)).toContain(
+      JSON.stringify({ name: 'fund-backup-v1-u7.json', parents: ['appDataFolder'] }),
+    );
+  });
+
+  it('이름을 안 주면 옛 파일(fund-backup-v1.json)', async () => {
+    expect(LEGACY_BACKUP_FILE).toBe('fund-backup-v1.json');
+    const { calls, deps } = mockDrive({ [LIST]: json({ files: [] }) });
+    expect(await downloadBackup(deps)).toBeNull();
+    expect(calls[0].url).toContain(encodeURIComponent(`name='fund-backup-v1.json' and trashed=false`));
   });
 });
