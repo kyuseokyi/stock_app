@@ -3,7 +3,7 @@ import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
 import { TvChart, type TvChartData } from '@/features/game/components/tv-chart';
-import type { ChartColors } from '@/features/game/lib/chart-bridge';
+import type { ChartColors, ChartLine } from '@/features/game/lib/chart-bridge';
 
 import {
   MA50_COLOR,
@@ -17,7 +17,16 @@ import { useDailyCandles } from '../use-daily-candles';
 const CHART_H = 260;
 
 /** 종목 상세 일봉 차트 — 캔들 + 50일선 + 52주 고점 점선(볼린저 끔). 실패하면 차트 자리만 "다시 시도" */
-export function StockDailyChart({ ticker, high52w }: { ticker: string; high52w: number | null }) {
+export function StockDailyChart({
+  ticker,
+  high52w,
+  extraLines,
+}: {
+  ticker: string;
+  high52w: number | null;
+  /** 추가 가격선(차트 패턴 피벗·매수·손절 등) — 52주 고점 점선과 함께 그린다. 없으면 기존과 같다 */
+  extraLines?: ChartLine[];
+}) {
   const { theme } = useUnistyles();
   const d = useDailyCandles(ticker, STOCK_CHART_LOOKBACK_DAYS);
   const colors = useMemo<ChartColors>(
@@ -30,7 +39,10 @@ export function StockDailyChart({ ticker, high52w }: { ticker: string; high52w: 
     }),
     [theme.colors.up, theme.colors.down, theme.colors.textSecondary, theme.colors.background, theme.colors.border],
   );
-  const lines = useMemo(() => stockChartLines(high52w, theme.colors.textSecondary), [high52w, theme.colors.textSecondary]);
+  const lines = useMemo(
+    () => [...stockChartLines(high52w, theme.colors.textSecondary), ...(extraLines ?? [])],
+    [high52w, theme.colors.textSecondary, extraLines],
+  );
   const view = useMemo<TvChartData | null>(
     () => (d.rows ? { data: { kind: 'day', rows: d.rows }, seq: d.seq, keepView: false } : null),
     [d.rows, d.seq],
@@ -41,6 +53,9 @@ export function StockDailyChart({ ticker, high52w }: { ticker: string; high52w: 
       <View style={styles.legend}>
         <Text style={[styles.legendText, { color: MA50_COLOR }]}>━ 50일선</Text>
         <Text style={styles.legendText}>┄ 52주 고점</Text>
+        {extraLines && extraLines.length > 0 ? (
+          <Text style={styles.legendText}>{extraLines.map((l) => `${l.dashed ? '┄' : '━'} ${l.title}`).join('  ')}</Text>
+        ) : null}
       </View>
       <View>
         <TvChart

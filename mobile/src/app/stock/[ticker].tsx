@@ -1,6 +1,7 @@
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
+import { useCallback, useMemo } from 'react';
 import { ActivityIndicator, Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
-import { StyleSheet } from 'react-native-unistyles';
+import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
 import { high52w, resolveTickerParam, scoreView } from '@/features/leaders/canslim';
 import { ScoreHistory } from '@/features/leaders/components/score-history';
@@ -8,6 +9,9 @@ import { ScoreTable } from '@/features/leaders/components/score-table';
 import { StockDailyChart } from '@/features/leaders/components/stock-daily-chart';
 import { useCanslimScore } from '@/features/leaders/use-canslim-score';
 import { formatIndex } from '@/features/market/format';
+import { PatternSummary } from '@/features/patterns/components/pattern-summary';
+import { currentBase, patternChartLines } from '@/features/patterns/patterns';
+import { usePatternBases } from '@/features/patterns/use-pattern-bases';
 import { usePullRefresh } from '@/hooks/use-pull-refresh';
 import { Button, ListState } from '@/ui';
 
@@ -40,7 +44,29 @@ function NotFound() {
 
 function StockDetailBody({ ticker, fallbackName }: { ticker: string; fallbackName: string }) {
   const score = useCanslimScore(ticker);
-  const { refreshing, onRefresh } = usePullRefresh(score.refresh);
+  const patterns = usePatternBases(ticker);
+  const { theme } = useUnistyles();
+  // 당겨서 새로고침 — 점수 실패는 토스트(throw), 패턴은 독립 조회라 실패해도 영역만 숨는다
+  const { reload: reloadPatterns } = patterns;
+  const { refresh: refreshScore } = score;
+  const refreshAll = useCallback(async () => {
+    void reloadPatterns();
+    await refreshScore();
+  }, [reloadPatterns, refreshScore]);
+  const { refreshing, onRefresh } = usePullRefresh(refreshAll);
+  const pattern = currentBase(patterns.data?.bases);
+  const patternZones = patterns.data?.zones ?? null;
+  const patternLines = useMemo(
+    () =>
+      pattern
+        ? patternChartLines(pattern.pivot, patternZones, {
+            pivot: theme.colors.primary,
+            buy: theme.colors.up,
+            stop: theme.colors.down,
+          })
+        : undefined,
+    [pattern, patternZones, theme.colors.primary, theme.colors.up, theme.colors.down],
+  );
   const view = scoreView(score);
   const data = score.data;
   const n = data?.letters.find((l) => l.key === 'n');
@@ -79,8 +105,12 @@ function StockDetailBody({ ticker, fallbackName }: { ticker: string; fallbackNam
       </View>
 
       <View style={styles.card}>
-        <StockDailyChart ticker={ticker} high52w={high} />
+        <StockDailyChart ticker={ticker} high52w={high} extraLines={patternLines} />
       </View>
+
+      {pattern ? (
+        <PatternSummary base={pattern} close={patterns.data?.close ?? null} date={patterns.data?.date ?? null} />
+      ) : null}
 
       {view === 'loading' ? (
         <View style={styles.card}>
