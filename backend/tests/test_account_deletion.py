@@ -411,3 +411,25 @@ async def test_unseen_rewards_and_ack_ignore_anonymized_rows(maker):
         assert [u["rank"] for u in unseen] == [2]
         anon_id = await db.scalar(select(WeeklyRankingResult.id).where(WeeklyRankingResult.user_id.is_(None)).limit(1))
         assert await weekly_service.ack_reward(db, me.id, anon_id) is False
+
+
+async def test_open_sockets_notified_after_deletion(ctx, monkeypatch):
+    """탈퇴 뒤 플랫폼별 세션마다 종료 알림 — 열린 게임 소켓을 즉시 닫게(다음 접속까지 기다리지 않게)."""
+    from apps.auth.services import account_deletion as ad
+    from shared.models import UserSession
+
+    calls = []
+
+    async def fake_publish(redis, user_id, platform, sid):
+        calls.append((user_id, platform, sid))
+
+    monkeypatch.setattr(ad, "publish_session_ended", fake_publish)
+    async with ctx.maker() as db:
+        me = await _seed_user(db)
+        db.add_all([UserSession(user_id=me.id, platform="app", sid="sid-app"),
+                    UserSession(user_id=me.id, platform="web", sid="sid-web")])
+        await db.commit()
+        me_id = me.id
+    r = await ctx.client.request("DELETE", ME, json=CONFIRM, headers=_auth(me))
+    assert r.status_code == 204, r.text
+    assert sorted(calls) == [(me_id, "app", "sid-app"), (me_id, "web", "sid-web")]

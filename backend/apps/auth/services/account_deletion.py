@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from shared.game_models import GameSeason, HallOfFame, WeeklyRankingResult
 from shared.models import AuthProvider, RefreshToken, User, UserRole, UserSession
+from shared.sessions import publish_session_ended
 
 log = logging.getLogger("auth.account_deletion")
 
@@ -60,6 +61,9 @@ async def delete_account(
     # 커밋 후 ORM 객체에 기대지 않도록 미리 잡아 둔다.
     uid, provider, provider_id = user.id, user.provider, user.provider_id
     season_ids = list((await db.execute(select(GameSeason.id))).scalars())
+    # 탈퇴 뒤 열린 게임 소켓을 즉시 닫도록 지우기 전의 플랫폼별 세션을 잡아 둔다
+    sessions = list((await db.execute(
+        select(UserSession.platform, UserSession.sid).where(UserSession.user_id == uid))).all())
 
     try:
         await db.execute(
@@ -79,6 +83,9 @@ async def delete_account(
         await db.rollback()
         raise
     log.info("회원 탈퇴 완료 user=%s", uid)
+
+    for platform, sid in sessions:
+        await publish_session_ended(redis, uid, platform, sid)
 
     await _cleanup_rankings(redis, uid, season_ids)
     if provider == AuthProvider.KAKAO and kakao_admin_key and provider_id:
