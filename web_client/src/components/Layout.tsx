@@ -60,7 +60,7 @@ export default function Layout() {
             ) : (
               <button
                 onClick={() => setLoginOpen(true)}
-                className="rounded-field bg-brand px-3 py-1.5 text-sm font-medium text-white hover:brightness-95"
+                className="rounded-field bg-brand px-3 py-1.5 text-sm font-medium text-ink hover:brightness-95"
               >
                 로그인
               </button>

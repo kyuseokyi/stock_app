@@ -121,7 +121,7 @@ export default function AcademyModal({ onClose }: { onClose: () => void }) {
               제출
             </Button>
           ) : result.unlocked ? (
-            <p className="text-center font-semibold text-brand">🔓 5배 레버리지가 해금됐어요</p>
+            <p className="text-center font-semibold text-brand-strong">🔓 5배 레버리지가 해금됐어요</p>
           ) : (
             <Button full variant="secondary" onClick={retry}>
               다시 도전

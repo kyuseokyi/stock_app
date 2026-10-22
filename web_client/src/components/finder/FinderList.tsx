@@ -7,7 +7,7 @@ type Tone = 'up' | 'down' | 'brand' | 'muted'
 const TONE: Record<Tone, string> = {
   up: 'bg-up-soft text-up',
   down: 'bg-down-soft text-down',
-  brand: 'bg-brand-soft text-brand',
+  brand: 'bg-brand-soft text-brand-strong',
   muted: 'bg-fill text-ink-muted',
 }
 

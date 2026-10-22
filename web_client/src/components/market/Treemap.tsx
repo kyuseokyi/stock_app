@@ -103,7 +103,7 @@ export default function Treemap({ groups, period, nested, height, onGroupSelect,
           </button>
           <span className="truncate text-sm font-bold text-ink">{current.name}</span>
           {onGroupSelect ? (
-            <button type="button" onClick={() => onGroupSelect(current.id)} className="shrink-0 text-sm font-medium text-brand">
+            <button type="button" onClick={() => onGroupSelect(current.id)} className="shrink-0 text-sm font-medium text-brand-strong">
               자세히
             </button>
           ) : <span />}

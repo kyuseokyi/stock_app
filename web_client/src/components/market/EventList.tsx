@@ -9,7 +9,7 @@ function dayLabel(iso: string, today: string): string {
 }
 
 const CATEGORY_STYLE: Record<string, string> = {
-  공모주: 'bg-brand-soft text-brand',
+  공모주: 'bg-brand-soft text-brand-strong',
   경제지표: 'bg-up-soft text-up',
 }
 
@@ -25,7 +25,7 @@ export default function EventList({ events, today }: { events: CalendarEvent[]; 
     <div className="space-y-4">
       {days.map(([day, list]) => (
         <section key={day}>
-          <h3 className={`mb-1.5 text-sm font-bold ${day === today ? 'text-brand' : 'text-ink'}`}>{dayLabel(day, today)}</h3>
+          <h3 className={`mb-1.5 text-sm font-bold ${day === today ? 'text-brand-strong' : 'text-ink'}`}>{dayLabel(day, today)}</h3>
           <ul className="space-y-1.5">
             {list.map((e, i) => (
               <li key={`${e.title}-${i}`} className="flex items-start gap-2 rounded-btn bg-fill px-3 py-2.5">

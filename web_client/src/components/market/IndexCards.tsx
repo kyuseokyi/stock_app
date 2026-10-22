@@ -32,7 +32,7 @@ export function IndexCards({ indices }: { indices: MarketIndex[] }) {
             <div className="flex items-baseline justify-between gap-1">
               <span className="truncate text-sm font-medium text-ink">{ix.name}</span>
               {badge?.live ? (
-                <span className="shrink-0 rounded-full bg-brand-soft px-1.5 text-[11px] font-semibold text-brand">
+                <span className="shrink-0 rounded-full bg-brand-soft px-1.5 text-[11px] font-semibold text-brand-strong">
                   <span className="sr-only">장중 </span>
                   <span aria-hidden="true">●</span> {badge.label}
                 </span>

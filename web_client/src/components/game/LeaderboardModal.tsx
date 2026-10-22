@@ -137,7 +137,7 @@ export default function LeaderboardModal({ seasonId, myUserId, seasonPeriod, onC
                   <span className="w-8 shrink-0 font-bold tabular-nums text-ink">{r.rank}</span>
                   <span className="flex-1 truncate text-ink">
                     {r.nickname ?? '익명'}
-                    {mine && <span className="ml-1 text-xs font-semibold text-brand">나</span>}
+                    {mine && <span className="ml-1 text-xs font-semibold text-brand-strong">나</span>}
                   </span>
                   <span className={`w-16 text-right font-semibold tabular-nums ${pnlClass(r.roi_pct)}`}>
                     {formatPct(r.roi_pct)}
@@ -165,7 +165,7 @@ export default function LeaderboardModal({ seasonId, myUserId, seasonPeriod, onC
                       <span className="flex min-w-0 flex-1 items-center gap-1.5">
                         <span className="truncate text-ink">{r.nickname}</span>
                         {r.trading_mbti && (
-                          <span className="shrink-0 rounded-full bg-brand-soft px-2 py-0.5 text-xs font-medium text-brand">
+                          <span className="shrink-0 rounded-full bg-brand-soft px-2 py-0.5 text-xs font-medium text-brand-strong">
                             {r.trading_mbti}
                           </span>
                         )}

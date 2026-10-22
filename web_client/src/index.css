@@ -4,6 +4,17 @@
 
 body {
   @apply bg-canvas text-ink antialiased;
+  caret-color: theme('colors.brand.strong');
+}
+
+/* 브라우저 기본 표면도 팔레트로 — 선택 영역·키보드 포커스 링(마우스 클릭엔 안 보임) */
+::selection {
+  background-color: theme('colors.brand.soft');
+  color: theme('colors.ink.DEFAULT');
+}
+:focus-visible {
+  outline: 2px solid theme('colors.brand.strong');
+  outline-offset: 2px;
 }
 
 /* 게시글 본문(관리자 HTML) 기본 서식 */

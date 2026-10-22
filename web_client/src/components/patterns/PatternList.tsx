@@ -34,7 +34,7 @@ export default function PatternList({ items, selected, onSelect, renderInline }:
                   <span className="shrink-0 text-xs text-ink-muted">{it.ticker}</span>
                 </div>
                 <div className="mt-1 flex flex-wrap items-center gap-1.5">
-                  <span className="rounded-md bg-brand-soft px-1.5 py-0.5 text-[11px] font-medium text-brand">
+                  <span className="rounded-md bg-brand-soft px-1.5 py-0.5 text-[11px] font-medium text-brand-strong">
                     {patternLabel(it.patternType)}
                   </span>
                   <span className="rounded-md bg-fill px-1.5 py-0.5 text-[11px] font-medium text-ink-muted">

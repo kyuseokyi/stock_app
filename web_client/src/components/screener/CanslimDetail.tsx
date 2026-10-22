@@ -56,7 +56,7 @@ export default function CanslimDetail({ ticker }: { ticker: string }) {
 
       <ScoreHistory history={data.history} />
       <p className="text-xs text-ink-muted">실적(C·A)은 최신 공시 기준이라 지난 날짜의 점수에도 같은 실적이 쓰여요.</p>
-      <Link to={`/stock/${encodeURIComponent(data.ticker)}`} className="inline-block text-sm font-medium text-brand">
+      <Link to={`/stock/${encodeURIComponent(data.ticker)}`} className="inline-block text-sm font-medium text-brand-strong">
         종목 상세 보기 →
       </Link>
     </div>

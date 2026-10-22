@@ -13,7 +13,7 @@ import { formatPct, kstDateString, pnlClass } from '../../lib/format'
 import type { CalendarEvent, GroupItem, MarketOverview, TreemapGroup } from '../../types/market'
 
 function More({ to }: { to: string }) {
-  return <Link to={to} className="text-sm font-medium text-brand">더 보기</Link>
+  return <Link to={to} className="text-sm font-medium text-brand-strong">더 보기</Link>
 }
 
 function addDays(iso: string, days: number): string {

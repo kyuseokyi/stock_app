@@ -4,7 +4,7 @@ import type { HTMLAttributes } from 'react'
 // eslint-disable-next-line react-refresh/only-export-components -- 칩 클래스 함수를 같은 파일에서 공유(개발 중 Fast Refresh 에만 영향)
 export function chipClass(active: boolean): string {
   return `inline-flex items-center whitespace-nowrap rounded-full px-3 py-1.5 text-sm font-medium transition ${
-    active ? 'bg-brand-soft text-brand' : 'bg-fill text-ink-muted hover:brightness-95'
+    active ? 'bg-brand-soft text-brand-strong' : 'bg-fill text-ink-muted hover:brightness-95'
   }`
 }
 

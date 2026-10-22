@@ -51,7 +51,7 @@ function FundReportBody({ id, uid }: { id: string | undefined; uid: number }) {
     return (
       <div className="rounded-card bg-surface p-6 text-center">
         <p className="font-semibold text-ink">펀드를 찾을 수 없어요</p>
-        <Link to="/me/funds" className="mt-3 inline-block text-sm text-brand">
+        <Link to="/me/funds" className="mt-3 inline-block text-sm text-brand-strong">
           목록으로
         </Link>
       </div>

@@ -54,7 +54,7 @@ export function BaseHistoryTable({ name, bases }: { name: string; bases: Pattern
               <tr key={b.rimDate ? `${b.patternType}-${b.rimDate}` : `${b.patternType}-i${i}`} className={`border-t border-line/60 ${b.isCurrent ? 'bg-brand-soft/50 font-medium' : ''}`}>
                 <td className="py-1.5 pr-2 text-ink">
                   {patternLabel(b.patternType)}
-                  {b.isCurrent && <span className="ml-1 rounded bg-brand-soft px-1 text-[10px] text-brand">현재</span>}
+                  {b.isCurrent && <span className="ml-1 rounded bg-brand-soft px-1 text-[10px] text-brand-strong">현재</span>}
                 </td>
                 <td className="py-1.5 pr-2 text-ink">{stageLabel(b.stage, b.label)}</td>
                 <td className="py-1.5 pr-2 text-right text-ink">{depthText(b.depth)}</td>

@@ -43,7 +43,7 @@ function NumField({ label, value, unit, onChange }: { label: string; value: stri
         placeholder={label}
         aria-label={label}
         onChange={(e) => onChange(e.target.value)}
-        className="w-24 rounded-btn bg-fill px-2 py-1.5 text-sm text-ink placeholder:text-ink-muted/70 focus:outline-none focus:ring-1 focus:ring-brand"
+        className="w-24 rounded-btn bg-fill px-2 py-1.5 text-sm text-ink placeholder:text-ink-muted focus:outline-none focus:ring-1 focus:ring-brand"
       />
       {unit && <span className="text-xs text-ink-muted">{unit}</span>}
     </span>

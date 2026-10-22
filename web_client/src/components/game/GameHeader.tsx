@@ -39,7 +39,7 @@ export default function GameHeader({
         <h1 className="min-w-0 truncate text-base font-bold text-ink sm:text-lg">
           {season.stock_name} <span className="text-xs font-medium text-ink-muted sm:text-sm">{season.ticker}</span>
         </h1>
-        <span className="ml-auto shrink-0 text-xs font-semibold text-brand">
+        <span className="ml-auto shrink-0 text-xs font-semibold text-brand-strong">
           {season.season_number}기{dday !== null && ` · D-${dday}`}
         </span>
         {showStreak && (

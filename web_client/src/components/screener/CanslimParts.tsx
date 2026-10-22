@@ -17,7 +17,7 @@ export function ScoreHistory({ history }: { history: CanslimHistoryPoint[] }) {
         <span>{first.date} {first.score}점 → {history[history.length - 1].score}점</span>
       </div>
       <svg viewBox={`0 0 ${w} ${h}`} className="h-10 w-full" preserveAspectRatio="none" aria-hidden>
-        <polyline points={pts} fill="none" stroke="currentColor" strokeWidth={1.5} className="text-brand" />
+        <polyline points={pts} fill="none" stroke="currentColor" strokeWidth={1.5} className="text-brand-strong" />
       </svg>
     </div>
   )

@@ -147,7 +147,7 @@ export default function LoginModal({ open, onClose, onSuccess }: LoginModalProps
             <button
               type="submit"
               disabled={loading}
-              className="mt-3 w-full rounded-btn bg-brand px-4 py-2.5 text-sm font-semibold text-white hover:brightness-95 disabled:opacity-50"
+              className="mt-3 w-full rounded-btn bg-brand px-4 py-2.5 text-sm font-semibold text-ink hover:brightness-95 disabled:opacity-50"
             >
               {loading ? '로그인 중…' : '닉네임으로 시작'}
             </button>

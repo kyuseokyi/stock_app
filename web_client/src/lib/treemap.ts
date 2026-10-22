@@ -78,8 +78,8 @@ export function squarify(items: Item[], rect: Rect): Placed[] {
 
 // 등락률 색 — 기간별 상한에서 가장 진하다(1일 ±5%, 5일 ±10%, 20일 ±20%). 상승 빨강·하락 파랑(앱 공통 규칙, tailwind up/down 토큰).
 const CAP: Record<string, number> = { '1d': 5, '5d': 10, '20d': 20 }
-const UP = ['#fbd6e4', '#f0aec7', '#e384a8', '#d65d8a', '#c93a6c']
-const DOWN = ['#d8e3fd', '#b3c5f5', '#8fa8ec', '#6c8ce2', '#4f73d9']
+const UP = ['#fbd6e4', '#f0aec7', '#e384a8', '#de6491', '#b6265d']
+const DOWN = ['#d8e3fd', '#b3c5f5', '#8fa8ec', '#6c8ce2', '#3c5dc1']
 const FLAT = '#efebfb'
 
 function step(chg: number, period: string): number {
@@ -92,8 +92,8 @@ export function chgColor(chg: number | null | undefined, period: string): string
   return chg > 0 ? UP[step(chg, period)] : DOWN[step(chg, period)]
 }
 
-/** 진한 칸(뒤쪽 2단계)은 흰 글씨, 나머지는 본문색(ink) */
+/** 가장 진한 칸(마지막 단계)만 흰 글씨, 나머지는 본문색(ink) — 각 칸에서 4.5:1 이상이 되는 쪽(3단계는 ink 기준으로 색을 맞춤) */
 export function chgTextColor(chg: number | null | undefined, period: string): string {
   if (chg == null || Math.abs(chg) < 0.05) return '#25223a'
-  return step(chg, period) >= 3 ? '#ffffff' : '#25223a'
+  return step(chg, period) >= UP.length - 1 ? '#ffffff' : '#25223a'
 }

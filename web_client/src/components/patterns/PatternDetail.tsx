@@ -86,7 +86,7 @@ export default function PatternDetail({ item }: { item: PatternItem }) {
       {state === 'ready' && current && <CurrentBaseSummary base={current} />}
       {state === 'ready' && data && <BaseHistoryTable name={item.name} bases={data.bases} />}
 
-      <Link to={`/stock/${encodeURIComponent(item.ticker)}`} className="inline-block text-sm font-medium text-brand">
+      <Link to={`/stock/${encodeURIComponent(item.ticker)}`} className="inline-block text-sm font-medium text-brand-strong">
         종목 상세 보기 →
       </Link>
     </div>

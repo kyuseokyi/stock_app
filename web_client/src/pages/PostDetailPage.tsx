@@ -67,13 +67,13 @@ export default function PostDetailPage() {
 
   return (
     <div>
-      <Link to={board ? `/boards/${board.id}` : '/'} className="text-sm text-ink-muted hover:text-brand">
+      <Link to={board ? `/boards/${board.id}` : '/'} className="text-sm text-ink-muted hover:text-brand-strong">
         ← 목록으로
       </Link>
 
       <Card as="article" className="mt-3 sm:p-6">
         {board && (
-          <span className="mb-2 inline-block rounded-full bg-brand-soft px-2 py-0.5 text-xs text-brand">
+          <span className="mb-2 inline-block rounded-full bg-brand-soft px-2 py-0.5 text-xs text-brand-strong">
             {board.name}
           </span>
         )}
@@ -89,7 +89,7 @@ export default function PostDetailPage() {
 
       <Card as="section" className="mt-6 sm:p-6">
         <h2 className="mb-4 text-lg font-bold text-ink">
-          댓글 <span className="text-brand">{comments.length}</span>
+          댓글 <span className="text-brand-strong">{comments.length}</span>
         </h2>
 
         <ul className="space-y-3">
@@ -140,7 +140,7 @@ export default function PostDetailPage() {
         ) : (
           <button
             onClick={() => setLoginOpen(true)}
-            className="mt-5 w-full rounded-field bg-canvas px-4 py-3 text-center text-sm text-brand hover:brightness-95"
+            className="mt-5 w-full rounded-field bg-canvas px-4 py-3 text-center text-sm text-brand-strong hover:brightness-95"
           >
             로그인하고 댓글 작성하기
           </button>

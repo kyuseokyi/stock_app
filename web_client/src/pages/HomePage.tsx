@@ -33,7 +33,7 @@ export default function HomePage() {
       ) : items.length === 0 && !error ? (
         <div className="py-10 text-center text-ink-muted">
           <p>아직 추천 글이 없습니다.</p>
-          <Link to="/community" className="mt-3 inline-block text-sm font-medium text-brand hover:underline">
+          <Link to="/community" className="mt-3 inline-block text-sm font-medium text-brand-strong hover:underline">
             커뮤니티 둘러보기 ›
           </Link>
         </div>

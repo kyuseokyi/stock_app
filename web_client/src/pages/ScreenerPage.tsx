@@ -71,7 +71,7 @@ export default function ScreenerPage() {
         <Card>
           <div className="mb-2 flex items-center justify-between">
             <span className="text-xs font-medium text-ink-muted">테마·업종에서 고른 종목</span>
-            <button type="button" onClick={() => setParams({}, { replace: true })} className="text-sm font-medium text-brand">
+            <button type="button" onClick={() => setParams({}, { replace: true })} className="text-sm font-medium text-brand-strong">
               닫기
             </button>
           </div>

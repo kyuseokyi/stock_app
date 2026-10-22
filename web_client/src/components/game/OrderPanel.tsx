@@ -32,7 +32,7 @@ const selectClass = (active: boolean) =>
 
 function ChipSelect({ active, children, ...props }: { active: boolean } & SelectHTMLAttributes<HTMLSelectElement>) {
   return (
-    <span className={`relative inline-flex items-center ${active ? 'text-brand' : 'text-ink-muted'}`}>
+    <span className={`relative inline-flex items-center ${active ? 'text-brand-strong' : 'text-ink-muted'}`}>
       <select {...props} className={selectClass(active)}>
         {children}
       </select>
@@ -151,7 +151,7 @@ export default function OrderPanel({
           {onOpenRules && (
             <>
               {' · '}
-              <button type="button" onClick={onOpenRules} className="font-semibold text-brand underline-offset-2 hover:underline">
+              <button type="button" onClick={onOpenRules} className="font-semibold text-brand-strong underline-offset-2 hover:underline">
                 규칙 보기
               </button>
             </>
@@ -200,7 +200,7 @@ export default function OrderPanel({
               className="mb-2 flex w-full items-center justify-between rounded-btn bg-fill px-3 py-2 text-xs text-ink-muted"
             >
               <span className="truncate">{orderSummary(ratio, leverage, stopLoss, takeProfit)}</span>
-              <span className="ml-2 shrink-0 font-semibold text-brand">설정 ▾</span>
+              <span className="ml-2 shrink-0 font-semibold text-brand-strong">설정 ▾</span>
             </button>
           )}
           <div className="grid grid-cols-2 gap-2">
@@ -215,7 +215,7 @@ export default function OrderPanel({
           <button
             type="button"
             onClick={() => setSheetOpen(false)}
-            className="mt-4 h-12 w-full rounded-btn bg-brand text-base font-bold text-white"
+            className="mt-4 h-12 w-full rounded-btn bg-brand text-base font-bold text-ink"
           >
             확인
           </button>

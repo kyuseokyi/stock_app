@@ -62,7 +62,7 @@ function Links({ links }: { links: FundLink[] }) {
       href={href}
       target="_blank"
       rel="noopener noreferrer"
-      className="mr-3 mt-2.5 inline-block text-sm font-semibold text-brand hover:underline"
+      className="mr-3 mt-2.5 inline-block text-sm font-semibold text-brand-strong hover:underline"
     >
       {label} →
     </a>
@@ -188,7 +188,7 @@ function StepsBlock({ s }: { s: StepsView }) {
           {s.steps.map((st, i) => (
             <div key={i}>
               <div
-                className={`text-sm font-bold text-brand ${i === 0 ? 'pb-[9px]' : 'border-t border-line pb-[9px] pt-3.5'}`}
+                className={`text-sm font-bold text-brand-strong ${i === 0 ? 'pb-[9px]' : 'border-t border-line pb-[9px] pt-3.5'}`}
               >
                 {st.no} · {st.name}
               </div>

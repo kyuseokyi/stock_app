@@ -7,10 +7,10 @@ export default function QuizBanner({ onOpen }: { onOpen: () => void }) {
       className="flex w-full items-center justify-between gap-3 rounded-card bg-sky-soft px-4 py-3 text-left transition hover:brightness-95"
     >
       <span>
-        <span className="block text-sm font-bold text-brand">🧩 야간 차트 퀴즈 도전!</span>
+        <span className="block text-sm font-bold text-brand-strong">🧩 야간 차트 퀴즈 도전!</span>
         <span className="mt-0.5 block text-xs text-ink-muted">차트만 보고 며칠 뒤 방향을 맞혀 보세요</span>
       </span>
-      <span className="text-brand">›</span>
+      <span className="text-brand-strong">›</span>
     </button>
   )
 }

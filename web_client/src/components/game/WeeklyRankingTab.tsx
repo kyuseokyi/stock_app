@@ -84,7 +84,7 @@ export default function WeeklyRankingTab({ seasonId, myUserId, period = 'week' }
                 <span className="w-8 shrink-0 font-bold tabular-nums text-ink">{r.rank}</span>
                 <span className="flex-1 truncate text-ink">
                   {r.nickname ?? '익명'}
-                  {mine && <span className="ml-1 text-xs font-semibold text-brand">나</span>}
+                  {mine && <span className="ml-1 text-xs font-semibold text-brand-strong">나</span>}
                 </span>
                 <span className={`w-16 text-right font-semibold tabular-nums ${pnlClass(r.roi)}`}>
                   {formatPct(r.roi)}

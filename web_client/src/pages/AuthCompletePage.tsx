@@ -59,7 +59,7 @@ export default function AuthCompletePage() {
         <Link
           to="/"
           replace
-          className="inline-flex h-11 items-center justify-center rounded-btn bg-brand px-4 text-sm font-semibold text-white hover:brightness-95"
+          className="inline-flex h-11 items-center justify-center rounded-btn bg-brand px-4 text-sm font-semibold text-ink hover:brightness-95"
         >
           홈으로
         </Link>
