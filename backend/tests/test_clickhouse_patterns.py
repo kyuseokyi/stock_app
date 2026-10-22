@@ -1,6 +1,8 @@
 """차트 패턴 CH 입출력 — DDL·봉 로드·기준일 삭제 후 적재(가짜 CH 클라이언트)."""
 from datetime import date, timedelta
 
+import pytest
+
 from apps.collector.repositories import clickhouse_patterns as cp
 
 D1, D2 = date(2026, 10, 15), date(2026, 10, 16)
@@ -31,6 +33,7 @@ def test_ddl_columns():
     assert "PARTITION BY toYYYYMM(date)" in ddl and "ORDER BY (date, ticker, rim_date)" in ddl
     for col in cp.ROW_COLUMNS:
         assert f"\n    {col} " in ddl, col
+    assert "ingested_at DateTime64(3)" in ddl
     for frag in ("low_date Nullable(Date)", "low_price Nullable(Float64)", "is_active UInt8", "is_current UInt8",
                  "breakout_date Nullable(Date)", "days_since_breakout Nullable(Int32)", "points String",
                  "prior_uptrend_pct Nullable(Float64)"):
@@ -58,14 +61,34 @@ def test_load_bars_without_tickers_and_empty_tickers():
     assert cp.load_bars(D2, client=ch, tickers=[]) == {} and len(ch.queries) == 1
 
 
-def test_replace_day_deletes_then_inserts():
+def test_replace_day_inserts_then_deletes_older_with_same_t0():
     ch = _FakeCH()
     row = {c: None for c in cp.ROW_COLUMNS} | {"date": D2, "ticker": "AAA"}
-    assert cp.replace_day(D2, [row], ch) == 1
-    assert [o[0] for o in ch.ops] == ["command", "insert"]
-    assert ch.ops[0][1].startswith("DELETE FROM") and ".chart_pattern_daily WHERE date = %(d)s" in ch.ops[0][1]
-    assert ch.ops[0][2] == {"d": D2}
-    assert ch.ops[1][2] == [[row[c] for c in cp.ROW_COLUMNS]] and ch.ops[1][3] == cp.ROW_COLUMNS
+    row2 = dict(row, ticker="BBB")
+    assert cp.replace_day(D2, [row, row2], ch) == 2
+    assert [o[0] for o in ch.ops] == ["insert", "command"]
+    ins, dele = ch.ops
+    assert ins[3] == cp.ROW_COLUMNS and "ingested_at" in cp.ROW_COLUMNS
+    idx = cp.ROW_COLUMNS.index("ingested_at")
+    t0s = {r[idx] for r in ins[2]}
+    assert len(t0s) == 1
+    t0 = t0s.pop()
+    assert t0.tzinfo is not None and t0.microsecond % 1000 == 0
+    assert [r[cp.ROW_COLUMNS.index("ticker")] for r in ins[2]] == ["AAA", "BBB"]
+    assert dele[1].startswith("DELETE FROM") and "date = %(d)s AND ingested_at < toDateTime64(%(t0)s, 3" in dele[1]
+    assert dele[2]["d"] == D2 and dele[2]["t0"] == t0.strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+
+
+def test_replace_day_insert_failure_skips_delete():
+    class Boom(_FakeCH):
+        def insert(self, table, rows, column_names):
+            raise RuntimeError("insert down")
+
+    ch = Boom()
+    row = {c: None for c in cp.ROW_COLUMNS}
+    with pytest.raises(RuntimeError):
+        cp.replace_day(D2, [row], ch)
+    assert ch.ops == []  # DELETE 호출 없음
 
 
 def test_replace_day_empty_rows_touches_nothing():

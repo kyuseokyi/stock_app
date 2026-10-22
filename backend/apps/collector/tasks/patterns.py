@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import time
 from collections import Counter
 from datetime import date
@@ -16,6 +17,8 @@ from shared.database import SyncSessionLocal
 log = logging.getLogger(__name__)
 
 MAX_FAIL_RATIO = 0.05      # 조건검색과 같은 기준 — 시도한 종목 중 이 비율 이상 실패하면 적재하지 않는다
+# 기준일 봉이 없는 종목 비율 상한 — 일봉이 부분 수집된 날에 완전한 기존 결과를 부분 결과로 덮어쓰지 않게 한다.
+MAX_SKIP_RATIO = 0.20
 
 
 def _universe() -> list[tuple[str, str, str]]:
@@ -23,16 +26,34 @@ def _universe() -> list[tuple[str, str, str]]:
         return market_repo.analysis_universe(db)
 
 
+def _num(v, default=None):
+    """비유한(NaN·inf) 값은 default(Nullable 컬럼은 None, NOT NULL 은 0.0)로."""
+    if v is None:
+        return default
+    try:
+        return v if math.isfinite(v) else default
+    except TypeError:
+        return v
+
+
+def _clean_point(p) -> dict:
+    if isinstance(p, dict) and "price" in p:
+        return {**p, "price": _num(p["price"])}
+    return p
+
+
 def _row(as_of: date, ticker: str, market: str, close: float, b, is_current: bool) -> dict:
     return {
         "date": as_of, "ticker": ticker, "market": market, "pattern_type": b.pattern_type,
-        "rim_date": b.rim_date, "low_date": b.low_date, "low_price": b.low_price, "pivot": b.pivot,
-        "depth": b.depth, "length": b.length, "is_active": 1 if b.is_active else 0,
+        "rim_date": b.rim_date, "low_date": b.low_date, "low_price": _num(b.low_price), "pivot": _num(b.pivot, 0.0),
+        "depth": _num(b.depth, 0.0), "length": b.length, "is_active": 1 if b.is_active else 0,
         "is_current": 1 if is_current else 0, "breakout_date": b.breakout_date,
-        "breakout_price_pct": b.breakout_price_pct, "breakout_vol_pct": b.breakout_vol_pct,
+        "breakout_price_pct": _num(b.breakout_price_pct), "breakout_vol_pct": _num(b.breakout_vol_pct),
         "days_since_breakout": b.days_since_breakout, "base_count": b.base_count, "subcount": b.subcount,
-        "totalcount": b.totalcount, "label": b.label, "prior_uptrend_pct": b.prior_uptrend_pct,
-        "confidence": b.confidence, "points": json.dumps(list(b.points), ensure_ascii=False), "close": close,
+        "totalcount": b.totalcount, "label": b.label, "prior_uptrend_pct": _num(b.prior_uptrend_pct),
+        "confidence": _num(b.confidence, 0.0),
+        "points": json.dumps([_clean_point(p) for p in b.points], ensure_ascii=False, allow_nan=False),
+        "close": _num(close, 0.0),
     }
 
 
@@ -75,6 +96,9 @@ def compute_patterns(as_of: str | None = None) -> dict:
     attempted = tickers + failed
     if universe and not rows:
         out["error"] = f"차트 패턴 계산 결과 0행(대상 {len(universe)}종목, 실패 {failed}, 기준일 봉 없음 {skipped})"
+    elif universe and skipped / len(universe) >= MAX_SKIP_RATIO:
+        out["error"] = (f"차트 패턴 기준일 봉 없는 종목 과다({skipped}/{len(universe)}, 기준 {MAX_SKIP_RATIO:.0%} 이상)"
+                        " — 일봉 부분 수집 가능성, 기존 결과 유지")
     elif attempted and failed / attempted >= MAX_FAIL_RATIO:
         out["error"] = f"차트 패턴 종목 계산 실패 과다({failed}/{attempted}, 기준 {MAX_FAIL_RATIO:.0%} 이상)"
     else:

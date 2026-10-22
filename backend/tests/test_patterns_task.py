@@ -24,8 +24,12 @@ def fake(monkeypatch):
     st = {"replaced": [], "bars": {}, "bases": {}, "universe": [("AAA", "에이", "KOSPI"), ("BBB", "비", "KOSDAQ")]}
     monkeypatch.setattr(task.cp, "ensure_patterns_table", lambda: None)
     monkeypatch.setattr(task.cp, "latest_trading_date", lambda: D)
-    monkeypatch.setattr(task.cp, "load_bars", lambda as_of, bars=770, client=None, tickers=None:
-                        st.setdefault("load", (as_of, tickers)) and st["bars"])
+
+    def load_bars(as_of, bars=770, client=None, tickers=None):
+        st["load"] = (as_of, tickers)
+        return st["bars"]
+
+    monkeypatch.setattr(task.cp, "load_bars", load_bars)
     monkeypatch.setattr(task.cp, "replace_day", lambda d, rows: st["replaced"].append((d, rows)) or len(rows))
     monkeypatch.setattr(task, "_universe", lambda: st["universe"])
 
@@ -55,7 +59,7 @@ def test_rows_is_current_points_close_market(fake):
     assert d == D and [r["is_current"] for r in rows] == [0, 1] and [r["is_active"] for r in rows] == [0, 1]
     assert rows[1]["market"] == "KOSPI" and rows[1]["close"] == 7.0 and rows[1]["date"] == D
     assert json.loads(rows[1]["points"]) == [{"role": "rim", "date": "2026-08-01", "price": 100.0}]
-    assert set(rows[0]) == set(task.cp.ROW_COLUMNS)
+    assert set(rows[0]) == set(task.cp.ROW_COLUMNS) - {"ingested_at"}  # ingested_at 은 replace_day 가 채운다
 
 
 def test_breakout_today_counts_current_only(fake):
@@ -81,6 +85,37 @@ def test_failure_ratio_is_error_and_not_replaced(fake):
     fake["bases"] = {i: ([_base()] if i else RuntimeError("x")) for i in range(20)}  # 1/20 = 5%
     out = task.compute_patterns()
     assert "error" in out and out["failed"] == 1 and fake["replaced"] == []
+
+
+def test_skip_ratio_is_error_and_not_replaced(fake):
+    fake["universe"] = [(f"T{i}", "n", "KOSPI") for i in range(10)]
+    # 2/10 = 20% 가 기준일 봉 없음 -> 부분 수집 의심, 적재 안 함
+    fake["bars"] = {f"T{i}": _bars(i, last=(date(2026, 10, 15) if i < 2 else D)) for i in range(10)}
+    fake["bases"] = {i: [_base()] for i in range(10)}
+    out = task.compute_patterns()
+    assert "error" in out and out["skipped_no_bar"] == 2 and fake["replaced"] == []
+
+
+def test_skip_ratio_below_limit_replaces(fake):
+    fake["universe"] = [(f"T{i}", "n", "KOSPI") for i in range(10)]
+    fake["bars"] = {f"T{i}": _bars(i, last=(date(2026, 10, 15) if i < 1 else D)) for i in range(10)}  # 10%
+    fake["bases"] = {i: [_base()] for i in range(10)}
+    out = task.compute_patterns()
+    assert "error" not in out and len(fake["replaced"]) == 1
+
+
+def test_row_non_finite_values():
+    nan, inf = float("nan"), float("inf")
+    b = _base(low_price=nan, pivot=inf, depth=nan, breakout_price_pct=inf, breakout_vol_pct=nan,
+              prior_uptrend_pct=-inf, confidence=nan,
+              points=({"role": "rim", "date": "2026-08-01", "price": nan}, {"role": "low", "date": "d", "price": 5.0}))
+    r = task._row(D, "AAA", "KOSPI", nan, b, True)
+    assert r["low_price"] is None and r["breakout_price_pct"] is None and r["breakout_vol_pct"] is None
+    assert r["prior_uptrend_pct"] is None
+    assert r["pivot"] == 0.0 and r["depth"] == 0.0 and r["confidence"] == 0.0 and r["close"] == 0.0
+    assert json.loads(r["points"]) == [{"role": "rim", "date": "2026-08-01", "price": None},
+                                       {"role": "low", "date": "d", "price": 5.0}]
+    assert "NaN" not in r["points"]
 
 
 def test_zero_rows_is_error_not_replaced(fake):

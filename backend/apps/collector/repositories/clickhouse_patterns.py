@@ -1,11 +1,12 @@
 """차트 패턴 CH 입출력 — 일봉(시가 포함) 로드·chart_pattern_daily DDL·기준일 삭제 후 적재.
 
 결과 테이블은 ReplacingMergeTree(ingested_at) 이지만, 다시 계산해서 사라진 베이스는 덮어쓰기로 지워지지 않는다.
-→ 같은 기준일을 먼저 지운 뒤(경량 DELETE) 넣는다. 호출부는 빈 결과일 때 replace_day 를 부르지 않는다.
+→ 새 결과를 먼저 넣고(ingested_at=t0), 성공하면 같은 기준일의 t0 이전 행만 지운다(경량 DELETE).
+  INSERT 가 실패하면 DELETE 를 부르지 않아 기존 결과가 남는다. 호출부는 빈 결과일 때 replace_day 를 부르지 않는다.
 """
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 
 from apps.collector.repositories.clickhouse_canslim import latest_trading_date  # noqa: F401
 from shared.clickhouse_schema import CLICKHOUSE_DB, get_client
@@ -17,8 +18,12 @@ ROW_COLUMNS = [
     "date", "ticker", "market", "pattern_type", "rim_date", "low_date", "low_price", "pivot", "depth", "length",
     "is_active", "is_current", "breakout_date", "breakout_price_pct", "breakout_vol_pct", "days_since_breakout",
     "base_count", "subcount", "totalcount", "label", "prior_uptrend_pct", "confidence", "points", "close",
+    "ingested_at",
 ]
 
+# 주의: CREATE TABLE IF NOT EXISTS 라 이미 만들어진 테이블의 컬럼 타입은 이 DDL 로 바뀌지 않는다.
+# ingested_at 은 DateTime64(3)(밀리초)여야 replace_day 의 `ingested_at < t0` 비교가 같은 초의 이전 실행 행을 정확히 가른다.
+# (초 단위 DateTime 으로 만들어진 테이블이 있다면 ALTER TABLE ... MODIFY COLUMN ingested_at DateTime64(3) 이 필요하다.)
 DAILY_DDL = f"""
 CREATE TABLE IF NOT EXISTS {CLICKHOUSE_DB}.chart_pattern_daily
 (
@@ -81,11 +86,17 @@ def load_bars(as_of: date, bars: int = BARS, client=None, tickers=None) -> dict[
 
 
 def replace_day(as_of: date, rows: list[dict], client=None) -> int:
-    """기준일 행을 지우고 rows 를 넣는다. rows 가 비면 아무것도 하지 않는다(기존 데이터 보존)."""
+    """rows 를 먼저 넣고(ingested_at=t0), 성공하면 기준일의 t0 이전 행(이전 계산 결과)만 지운다.
+    rows 가 비면 아무것도 하지 않는다(기존 데이터 보존). INSERT 실패 시 예외를 전파하고 DELETE 는 하지 않는다."""
     if not rows:
         return 0
     cl = client or get_client()
-    cl.command(f"DELETE FROM {CLICKHOUSE_DB}.chart_pattern_daily WHERE date = %(d)s", parameters={"d": as_of})
-    cl.insert(f"{CLICKHOUSE_DB}.chart_pattern_daily", [[r.get(c) for c in ROW_COLUMNS] for r in rows],
-              column_names=ROW_COLUMNS)
+    t0 = datetime.now(timezone.utc)
+    t0 = t0.replace(microsecond=(t0.microsecond // 1000) * 1000)  # DateTime64(3) 정밀도(밀리초)로 맞춘다
+    data = [[t0 if c == "ingested_at" else r.get(c) for c in ROW_COLUMNS] for r in rows]
+    cl.insert(f"{CLICKHOUSE_DB}.chart_pattern_daily", data, column_names=ROW_COLUMNS)
+    # 문자열 파라미터라 밀리초가 잘리지 않는다(datetime 파라미터는 초 단위로 직렬화될 수 있음)
+    cl.command(f"DELETE FROM {CLICKHOUSE_DB}.chart_pattern_daily "
+               "WHERE date = %(d)s AND ingested_at < toDateTime64(%(t0)s, 3, 'UTC')",
+               parameters={"d": as_of, "t0": t0.strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]})
     return len(rows)

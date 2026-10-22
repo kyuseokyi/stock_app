@@ -95,11 +95,11 @@ def test_filters_whitelist(ch):
     sql, params = fake.sqls("ORDER BY")[0]
     assert "pattern_type =" not in sql and "market =" not in sql and "DROP" not in sql and "OR '1" not in sql
     assert "pattern_type" not in params and "market" not in params
-    assert "ORDER BY abs(close / pivot - 1) ASC, ticker" in sql
+    assert "ORDER BY abs(close / nullIf(pivot, 0) - 1) ASC NULLS LAST, ticker" in sql
 
 
 @pytest.mark.parametrize("sort, order", [
-    ("pivot_dist", "abs(close / pivot - 1) ASC, ticker"),
+    ("pivot_dist", "abs(close / nullIf(pivot, 0) - 1) ASC NULLS LAST, ticker"),
     ("breakout_vol", "breakout_vol_pct DESC NULLS LAST, ticker"),
     ("depth", "depth ASC, ticker"),
     ("length", "length DESC, ticker"),
@@ -181,10 +181,12 @@ def test_bases_forming_zones_and_points(ch):
     (145.01, 90.0, False),   # 고가 > 피벗×1.45
     (120.0, 79.99, False),   # 저가 < 피벗×0.80
     (120.0, 85.0, True),
-    (None, None, True),      # 일봉 없음
+    (0.0, 0.0, True),        # 일봉 없음: CH 는 빈 집합에도 (0, 0, 0) 한 행 -> count 0 이라 숨기지 않는다
+    (None, None, True),
 ])
 def test_zones_hide_boundaries(ch, hi, lo, shown):
-    out, fake = _bases(ch, [_base_row(bo=BO)], extremes=(hi, lo))
+    n = 0 if not hi and not lo else 5
+    out, fake = _bases(ch, [_base_row(bo=BO)], extremes=(hi, lo, n))
     assert (out["zones"] is not None) is shown
     sql, params = fake.sqls("daily_prices")[0]
     assert "FINAL" in sql and params == {"t": "AAA", "bo": BO, "d": D}
@@ -208,3 +210,32 @@ def test_points_parsing():
     assert pq._points("not json") == [] and pq._points("") == [] and pq._points(None) == []
     assert pq._points('[1, "x", {"role": "end", "date": "d", "price": 2}]') == [
         {"role": "end", "date": "d", "price": 2}]
+
+
+def test_sector_missing_table_is_none(monkeypatch, caplog):
+    def boom(sql, params=None):
+        raise DatabaseError("Code: 60. (UNKNOWN_TABLE)", code=60, name="UNKNOWN_TABLE")
+
+    monkeypatch.setattr(pq, "_query", boom)
+    assert pq._sector_by_ticker(D, ["AAA"]) == {}
+    assert "screener_daily 테이블 없음" in caplog.text
+
+
+def test_sector_other_errors_raise(monkeypatch, caplog):
+    def boom(sql, params=None):
+        raise OperationalError("Error executing HTTP request")
+
+    monkeypatch.setattr(pq, "_query", boom)
+    with pytest.raises(OperationalError):
+        pq._sector_by_ticker(D, ["AAA"])
+    assert "업종명 조회 실패" in caplog.text
+
+
+def test_sector_no_rows_logs_info(monkeypatch, caplog):
+    import logging
+
+    monkeypatch.setattr(pq, "_query", lambda sql, params=None: [])
+    monkeypatch.setattr(pq, "_sector_names", lambda codes: {})
+    with caplog.at_level(logging.INFO):
+        assert pq._sector_by_ticker(D, ["AAA"]) == {}
+    assert "행 없음" in caplog.text

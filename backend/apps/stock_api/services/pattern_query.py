@@ -37,7 +37,7 @@ REPORTS = {
 }
 DEFAULT_REPORT = "forming"
 SORTS = {
-    "pivot_dist": "abs(close / pivot - 1) ASC, ticker",
+    "pivot_dist": "abs(close / nullIf(pivot, 0) - 1) ASC NULLS LAST, ticker",
     "breakout_vol": "breakout_vol_pct DESC NULLS LAST, ticker",
     "depth": "depth ASC, ticker",
     "length": "length DESC, ticker",
@@ -97,17 +97,23 @@ def _iso(d) -> str | None:
 
 
 def _sector_by_ticker(d: date, tickers: list[str]) -> dict[str, str]:
-    """같은 기준일 screener_daily 의 sector_m → 업종명. 보조 정보라 실패하면 로그만 남기고 빈 값."""
+    """같은 기준일 screener_daily 의 sector_m → 업종명. 보조 정보: 테이블이 아직 없으면(UNKNOWN_TABLE) 경고 후 빈 값,
+    그 밖의 오류(연결·타임아웃 등)는 로그 후 그대로 올린다(screener_query 와 같은 규칙)."""
     if not tickers:
         return {}
     try:
         rows = _query(f"SELECT ticker, sector_m FROM {CLICKHOUSE_DB}.screener_daily FINAL "
                       "WHERE date = %(d)s AND ticker IN %(tickers)s", {"d": d, "tickers": tuple(tickers)})
-        codes = {t: s for t, s in rows if s}
-        names = _sector_names(sorted(set(codes.values())))
-    except Exception:  # noqa: BLE001
-        log.warning("패턴 업종명 조회 실패 — 업종 없이 응답", exc_info=True)
-        return {}
+    except Exception as exc:  # noqa: BLE001
+        if _is_missing_table(exc):
+            log.warning("screener_daily 테이블 없음 — 업종 없이 응답")
+            return {}
+        log.exception("패턴 업종명 조회 실패")
+        raise
+    if not rows:
+        log.info("screener_daily 에 %s 기준 행 없음 — 업종 없이 응답", d)
+    codes = {t: s for t, s in rows if s}
+    names = _sector_names(sorted(set(codes.values())))
     return {t: names[s] for t, s in codes.items() if s in names}
 
 
@@ -164,11 +170,12 @@ def _zones(ticker: str, d: date, current: dict) -> dict | None:
     if not pivot or pivot <= 0:
         return None
     if current["breakout_date"] is not None:
-        rows = _query(f"SELECT max(high), min(low) FROM {CLICKHOUSE_DB}.daily_prices FINAL "
+        rows = _query(f"SELECT max(high), min(low), count() FROM {CLICKHOUSE_DB}.daily_prices FINAL "
                       "WHERE ticker = %(t)s AND date >= %(bo)s AND date <= %(d)s",
                       {"t": ticker, "bo": current["breakout_date"], "d": d})
-        hi, lo = (rows[0] if rows else (None, None))
-        if (hi is not None and hi > pivot * HIDE_ABOVE_MULT) or (lo is not None and lo < pivot * HIDE_BELOW_MULT):
+        # 집계는 행이 없어도 (0, 0, 0) 한 행을 돌려준다 -> count 가 0 이면 일봉 없음이라 숨김 판정을 하지 않는다
+        hi, lo, n = (rows[0] if rows else (None, None, 0))
+        if n and ((hi is not None and hi > pivot * HIDE_ABOVE_MULT) or (lo is not None and lo < pivot * HIDE_BELOW_MULT)):
             return None
     return {"buy_low": pivot, "buy_high": pivot * BUY_HIGH_MULT, "stop_low": pivot * STOP_LOW_MULT,
             "stop_high": pivot * STOP_HIGH_MULT}
