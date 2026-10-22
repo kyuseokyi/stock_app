@@ -31,7 +31,8 @@ describe('purgeFundAccount(회원 탈퇴 성공 후)', () => {
     const disconnect = jest.fn(async () => {});
     await purgeFundAccount(7, { disconnect });
 
-    expect([...secureMem.keys()].sort()).toEqual(['fund_backup_state_v1_u8', 'fund_list_v1_u8']);
+    expect([...secureMem.keys()].sort()).toEqual(['fund_backup_state_v1_u8', 'fund_list_v1_u8', 'fund_owners_v1']);
+    expect(JSON.parse(secureMem.get('fund_owners_v1')!)).toEqual([8]); // 탈퇴 계정은 소유자 목록에서 빠진다
     expect([...fileMem.keys()]).toEqual(['fund-history-b.json']);
     expect(disconnect).toHaveBeenCalledTimes(1);
   });

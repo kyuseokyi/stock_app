@@ -22,7 +22,5 @@ export function currentOwnerIdOrNull(): number | null {
   }
 }
 
-// SecureStore 키 허용 문자 [A-Za-z0-9._-] — 숫자 id 라 안전
-export const fundListKey = (uid: number): string => `fund_list_v1_u${uid}`;
-/** 계정별 저장 전 옛 키(기기 공용) — 가져오기·버리기에서만 쓴다 */
-export const LEGACY_FUND_LIST_KEY = 'fund_list_v1';
+// 키 이름은 인증 스토어에 의존하지 않는 keys.ts 에 있다(iOS 첫 실행 정리가 hydrate 전에 쓰므로) — 기존 import 경로용 재수출
+export { fundListKey, LEGACY_FUND_LIST_KEY } from './keys';

@@ -12,6 +12,7 @@ import { callRefresh, isAccessTokenStale, registerTokensRefreshed, serverLogout 
 import { showToast } from '@/ui';
 
 import { deleteAccount as deleteAccountApi, fetchMe, guestLogin, toUserOrNull, type LoginResult } from './api';
+import { ensureInstallCleanup } from './install-cleanup';
 import { runBeforeLogout } from './logout-hooks';
 import type { User } from './types';
 
@@ -49,7 +50,8 @@ type AuthState = {
 let persistChain: Promise<void> = Promise.resolve();
 
 function persist(token: string | null, refreshToken: string | null, user: User | null): Promise<void> {
-  const run = persistChain.then(() => write(token, refreshToken, user));
+  // iOS 첫 실행 정리(install-cleanup.ts)가 끝난 뒤에 쓴다 — hydrate 전에 로그인해도 새 토큰이 정리에 지워지지 않게
+  const run = persistChain.then(() => ensureInstallCleanup()).then(() => write(token, refreshToken, user));
   persistChain = run.catch(() => {});
   return run;
 }
@@ -178,6 +180,9 @@ export const useAuthStore = create<AuthState>((set, get) => {
 
     hydrate: async () => {
       if (get().hydrated) return;
+      // iOS 재설치면 키체인에 남은 옛 로그인·펀드 키를 먼저 지운다(Android 는 즉시 통과, 실패해도 던지지 않음).
+      // 앱 시작(_layout)과 백그라운드 태스크(tasks.ts) 모두 여기를 지나므로 둘 다 덮인다.
+      await ensureInstallCleanup();
       try {
         const [token, rawUser, refreshToken] = await Promise.all([
           SecureStore.getItemAsync(TOKEN_KEY),

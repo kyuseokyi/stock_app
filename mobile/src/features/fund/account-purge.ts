@@ -6,6 +6,7 @@ import { deleteBackupState, loadBackupState } from './backup-state';
 import { deleteCache, deleteFundList, loadFunds } from './fund-store';
 import { disconnect } from './google-auth';
 import { deleteHistory } from './history-store';
+import { forgetFundOwner } from './keys';
 
 export async function purgeFundAccount(uid: number, deps = { disconnect }): Promise<void> {
   const { email } = await loadBackupState(uid); // 지우기 전에 읽는다
@@ -17,6 +18,7 @@ export async function purgeFundAccount(uid: number, deps = { disconnect }): Prom
   await deleteFundList(uid).catch(() => {});
   await deleteBackupState(uid).catch(() => {});
   removeFile(pendingFileName(uid));
+  await forgetFundOwner(uid); // 키를 지운 뒤 소유자 목록에서 뺀다(iOS 재설치 정리 대상에서 제외)
   if (!email) return;
   try {
     await deps.disconnect();

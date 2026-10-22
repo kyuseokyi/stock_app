@@ -4,6 +4,7 @@ import { File, Paths } from 'expo-file-system';
 import * as SecureStore from 'expo-secure-store';
 
 import { parseFundList, type CacheEntry, type CachePort, type FundEntry } from './core';
+import { rememberFundOwner } from './keys';
 import { currentOwnerId, fundListKey } from './owner';
 
 /** 현재 로그인 계정의 목록(uid 를 주면 그 계정). 로그인 안 됨·hydrate 전이면 던진다(owner.ts). */
@@ -13,6 +14,7 @@ export async function loadFunds(uid: number = currentOwnerId()): Promise<FundEnt
 
 /** 현재 로그인 계정의 목록에 저장(uid 를 주면 그 계정). 로그인 안 됨이면 던진다 — 공용 키에 쓰지 않는다. */
 export async function saveFunds(list: FundEntry[], uid: number = currentOwnerId()): Promise<void> {
+  await rememberFundOwner(uid); // iOS 재설치 정리가 이 계정 키를 찾을 수 있게(keys.ts)
   await SecureStore.setItemAsync(fundListKey(uid), JSON.stringify(list));
 }
 

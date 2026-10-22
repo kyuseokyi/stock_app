@@ -4,7 +4,9 @@ const mockAuth: { user: { id: number } | null; hydrated: boolean } = { user: nul
 jest.mock('@/features/auth/store', () => ({ useAuthStore: { getState: () => mockAuth } }));
 
 import { resetFakeStorage, secureMem } from './__fixtures__/fake-storage';
+import { resetBackupState, saveBackupState } from './backup-state';
 import { loadFunds, saveFunds } from './fund-store';
+import { forgetFundOwner, loadFundOwners, parseOwners, rememberFundOwner, resetFundOwnersMemoForTest } from './keys';
 import { currentOwnerId, isNoOwnerError } from './owner';
 
 const URL_A = 'https://fund.ivyro.net/dataroom/om_data/a.htm';
@@ -65,5 +67,41 @@ describe('계정별 펀드 목록', () => {
   it('hydrate 전이면 던진다', async () => {
     mockAuth.hydrated = false;
     await expect(loadFunds()).rejects.toThrow();
+  });
+});
+
+describe('소유자 목록(fund_owners_v1) — iOS 재설치 정리가 계정별 키를 찾는 데 쓴다', () => {
+  beforeEach(() => resetFundOwnersMemoForTest());
+
+  it('계정별 목록·백업 상태를 처음 쓸 때 그 id 를 한 번만 추가한다', async () => {
+    await saveFunds([fa]);
+    await saveFunds([fa, fb]);
+    mockAuth.user = { id: 8 };
+    await saveBackupState({ connected: true, email: 'b@gmail.com' });
+    await resetBackupState();
+    expect(JSON.parse(secureMem.get('fund_owners_v1')!)).toEqual([7, 8]);
+    expect(await loadFundOwners()).toEqual([7, 8]);
+  });
+
+  it('동시에 여러 계정이 추가돼도 서로 덮어쓰지 않는다', async () => {
+    await Promise.all([rememberFundOwner(1), rememberFundOwner(2), rememberFundOwner(3)]);
+    expect(await loadFundOwners()).toEqual([1, 2, 3]);
+  });
+
+  it('forgetFundOwner 로 빠지고, 다시 쓰면 다시 들어간다', async () => {
+    await saveFunds([fa]);
+    mockAuth.user = { id: 8 };
+    await saveFunds([fb]);
+    await forgetFundOwner(7);
+    expect(await loadFundOwners()).toEqual([8]);
+    mockAuth.user = { id: 7 };
+    await saveFunds([fa]);
+    expect(await loadFundOwners()).toEqual([8, 7]);
+  });
+
+  it('깨진 목록 값은 빈 목록으로 본다', () => {
+    expect(parseOwners('oops')).toEqual([]);
+    expect(parseOwners('{"a":1}')).toEqual([]);
+    expect(parseOwners('[1,"x",1,2.5,3]')).toEqual([1, 3]);
   });
 });

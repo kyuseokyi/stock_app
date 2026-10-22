@@ -16,6 +16,9 @@ jest.mock('expo-secure-store', () => ({
     mockMem.delete(k);
   }),
 }));
+// iOS 첫 실행 정리(install-cleanup.ts)는 따로 테스트 — 여기선 hydrate·persist 가 그것을 기다리는지만 본다
+const mockCleanup = { run: async () => {} };
+jest.mock('./install-cleanup', () => ({ ensureInstallCleanup: () => mockCleanup.run() }));
 const mockToasts: string[] = [];
 jest.mock('@/ui', () => ({ showToast: (m: string) => mockToasts.push(m) }));
 
@@ -56,6 +59,7 @@ beforeEach(() => {
   mockFetch(() => res(204));
   // 이전 테스트의 로그인 상태 정리(서버 호출 없이)
   useAuthStore.setState({ token: null, refreshToken: null, user: null, hydrated: false });
+  mockCleanup.run = async () => {};
 });
 afterEach(() => {
   global.fetch = realFetch;
@@ -89,6 +93,46 @@ describe('리프레시 토큰 저장·복원', () => {
     await useAuthStore.getState().hydrate();
     expect(useAuthStore.getState()).toMatchObject({ token: a, refreshToken: 'R9', hydrated: true });
     expect(getRefreshToken()).toBe('R9');
+  });
+
+  it('hydrate 는 설치 정리가 끝난 뒤에 읽는다(재설치로 지워진 옛 로그인은 복원하지 않음)', async () => {
+    mockMem.set('auth_token', fresh());
+    mockMem.set('auth_user', JSON.stringify(user));
+    mockMem.set(REFRESH_KEY, 'R9');
+    let release!: () => void;
+    mockCleanup.run = () =>
+      new Promise<void>((r) => {
+        release = () => {
+          mockMem.clear(); // 정리 = 키체인에 남은 키 삭제
+          r();
+        };
+      });
+    const p = useAuthStore.getState().hydrate();
+    await flush();
+    expect(useAuthStore.getState().hydrated).toBe(false); // 정리 끝나기 전엔 읽지 않는다
+    release();
+    await p;
+    expect(useAuthStore.getState()).toMatchObject({ token: null, refreshToken: null, user: null, hydrated: true });
+  });
+
+  it('정리 중에 로그인해도 저장은 정리 뒤에 — 새 토큰이 지워지지 않는다', async () => {
+    let release!: () => void;
+    mockCleanup.run = () =>
+      new Promise<void>((r) => {
+        release = () => {
+          mockMem.clear();
+          r();
+        };
+      });
+    const a = fresh();
+    useAuthStore.getState().loginWithToken({ accessToken: a, refreshToken: 'R1', user });
+    await flush();
+    expect(mockMem.has('auth_token')).toBe(false); // 아직 정리 대기 중
+    release();
+    await flush();
+    expect(mockMem.get('auth_token')).toBe(a);
+    expect(mockMem.get(REFRESH_KEY)).toBe('R1');
+    mockCleanup.run = async () => {};
   });
 
   it('갱신 성공 → store 상태·SecureStore 가 새 토큰 쌍으로', async () => {
