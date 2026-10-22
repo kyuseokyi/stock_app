@@ -12,6 +12,13 @@ const path = require('path');
 const DEFAULT_EAS_PROJECT_ID = 'fc55bccf-9c18-4cf5-bb8d-b9b5373c31cb'; // @kyuseokyi/stockapp
 const DEFAULT_GOOGLE_SERVICES_JSON = './secrets/google-services.json';
 const EAS_PROJECT_ID = process.env.EAS_PROJECT_ID || DEFAULT_EAS_PROJECT_ID;
+
+// OTA(EAS Update) 채널 — docs/app_update_management_spec.md 5-1.
+// eas.json 의 build.<profile>.channel 은 EAS 빌드에만 적용되고, 로컬 Gradle 빌드(scripts/build-dev-apk.sh·expo run)는
+// prebuild 때 이 requestHeaders 가 네이티브 설정(AndroidManifest·Expo.plist)에 들어가야 채널이 붙는다.
+// 기본은 APP_ENV(development→development, 그 외→production). preview 처럼 APP_ENV=production 이지만 채널이 다른 프로필은
+// EXPO_UPDATES_CHANNEL 로 덮는다 — eas.json 각 프로필의 channel 과 반드시 같은 값이어야 한다.
+const UPDATES_CHANNEL = process.env.EXPO_UPDATES_CHANNEL || (isDev ? 'development' : 'production');
 const GOOGLE_SERVICES_JSON =
   process.env.GOOGLE_SERVICES_JSON ||
   (fs.existsSync(path.join(__dirname, DEFAULT_GOOGLE_SERVICES_JSON)) ? DEFAULT_GOOGLE_SERVICES_JSON : undefined);
@@ -42,6 +49,19 @@ export default {
       predictiveBackGestureEnabled: false,
       ...(GOOGLE_SERVICES_JSON ? { googleServicesFile: GOOGLE_SERVICES_JSON } : {}),
     },
+    // OTA: 확인·다운로드 시점은 앱 코드(src/features/app-update)가 정한다 — 서버 정책(점검·스토어 강제면 OTA 생략,
+    //   SILENT/OPTIONAL/MANDATORY)을 먼저 받은 뒤 check→fetch 하므로 네이티브 자동 확인은 끈다('NEVER').
+    //   ON_LOAD_* 로 두면 정책과 무관하게 기동 시 네이티브가 먼저 내려받아(다음 실행 적용) 점검·강제 업데이트 중에도 번들이 바뀐다.
+    // fallbackToCacheTimeout 0: 기동 때 새 번들을 기다리지 않고 내장/캐시 번들로 바로 뜬다.
+    updates: {
+      url: `https://u.expo.dev/${EAS_PROJECT_ID}`,
+      checkAutomatically: 'NEVER',
+      fallbackToCacheTimeout: 0,
+      requestHeaders: { 'expo-channel-name': UPDATES_CHANNEL },
+    },
+    // 네이티브 구성(라이브러리·플러그인·권한 등)의 지문 — 바뀌면 runtimeVersion 이 달라져 옛 바이너리는 새 OTA 를 받지 않는다(크래시 방지).
+    //   즉 네이티브가 바뀐 변경은 OTA 가 아니라 새 빌드(스토어/APK)로 배포해야 한다.
+    runtimeVersion: { policy: 'fingerprint' },
     web: {
       output: 'static',
       favicon: './assets/images/favicon.png',

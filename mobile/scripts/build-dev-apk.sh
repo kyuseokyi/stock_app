@@ -8,6 +8,10 @@
 # 다른 기기에서 localhost 는 그 기기 자신이라 접속 불가 → 주소가 localhost 면 빌드 전에 멈춘다.
 #   개발 서버로 붙이려면 .env.development.local 에 EXPO_PUBLIC_*_URL 을 넣는다(git 제외 파일).
 #
+# OTA(expo-updates) 채널: Gradle 빌드는 eas.json 의 channel 을 읽지 않는다. prebuild:dev:android 때 app.config.js 의
+#   updates.requestHeaders('expo-channel-name': development)가 AndroidManifest 에 들어가므로, 이 APK 는 development 채널
+#   OTA(`eas update --channel development`)를 받는다. 채널을 바꾸려면 prebuild 를 다시 해야 한다(아래 APP_ENV 는 빌드 중 설정 생성용).
+#
 # 사용: npm run build:android:devapk
 # 결과: android/app/build/outputs/apk/release/app-release.apk (debug 키 서명 — 내부 테스트용, 스토어 업로드 불가)
 set -euo pipefail

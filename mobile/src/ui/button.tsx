@@ -8,6 +8,8 @@ type Props = {
   loading?: boolean;
   disabled?: boolean;
   fullWidth?: boolean;
+  /** 스크린리더 라벨 — 없으면 label 을 읽는다 */
+  accessibilityLabel?: string;
 };
 
 /** 토스 스타일 버튼. primary=블루 풀폭 CTA, secondary=회색. 높이 56, radius 14. */
@@ -18,12 +20,16 @@ export function Button({
   loading = false,
   disabled = false,
   fullWidth = true,
+  accessibilityLabel,
 }: Props) {
   const isDisabled = disabled || loading;
   return (
     <Pressable
       onPress={onPress}
       disabled={isDisabled}
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel ?? label}
+      accessibilityState={{ disabled: isDisabled, busy: loading }}
       style={({ pressed }) => [
         styles.base,
         fullWidth && styles.fullWidth,

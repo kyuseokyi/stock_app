@@ -9,6 +9,8 @@ type Props = {
   children: ReactNode;
   /** 입력칸이 있는 시트 — 키보드가 올라오면 시트를 밀어 올린다(기본 꺼짐: 기존 시트 동작 그대로) */
   avoidKeyboard?: boolean;
+  /** false 면 닫을 수 없는 시트 — ✕·배경 탭·Android 뒤로가기 모두 무시(필수 안내용). 기본 true(기존 동작) */
+  dismissible?: boolean;
 };
 
 /**
@@ -16,21 +18,27 @@ type Props = {
  * 투명 RN Modal + 반투명 배경(탭하면 닫힘), Android 뒤로가기는 onRequestClose.
  * 호출부가 열 때 마운트·닫을 때 언마운트한다.
  */
-export function BottomSheet({ title, onClose, children, avoidKeyboard = false }: Props) {
+export function BottomSheet({ title, onClose, children, avoidKeyboard = false, dismissible = true }: Props) {
   const insets = useSafeAreaInsets();
   const Overlay = avoidKeyboard ? KeyboardAvoidingView : View;
   const overlayProps = avoidKeyboard ? { behavior: Platform.OS === 'ios' ? ('padding' as const) : undefined } : {};
   return (
-    <Modal visible transparent animationType="fade" statusBarTranslucent onRequestClose={onClose}>
+    <Modal visible transparent animationType="fade" statusBarTranslucent onRequestClose={dismissible ? onClose : noop}>
       <Overlay style={styles.overlay} {...overlayProps}>
-        <Pressable style={styles.backdrop} onPress={onClose} accessibilityLabel="닫기" />
+        {dismissible ? (
+          <Pressable style={styles.backdrop} onPress={onClose} accessibilityLabel="닫기" />
+        ) : (
+          <View style={styles.backdrop} />
+        )}
         <View style={[styles.panel, { paddingBottom: insets.bottom + 16 }]}>
           <View style={styles.grabber} />
           <View style={styles.header}>
             <Text style={styles.title}>{title}</Text>
-            <Pressable onPress={onClose} hitSlop={12} accessibilityRole="button" accessibilityLabel="닫기">
-              <Text style={styles.close}>✕</Text>
-            </Pressable>
+            {dismissible && (
+              <Pressable onPress={onClose} hitSlop={12} accessibilityRole="button" accessibilityLabel="닫기">
+                <Text style={styles.close}>✕</Text>
+              </Pressable>
+            )}
           </View>
           <View style={styles.content}>{children}</View>
         </View>
@@ -38,6 +46,8 @@ export function BottomSheet({ title, onClose, children, avoidKeyboard = false }:
     </Modal>
   );
 }
+
+const noop = () => {};
 
 const styles = StyleSheet.create((theme) => ({
   overlay: { flex: 1, justifyContent: 'flex-end' },

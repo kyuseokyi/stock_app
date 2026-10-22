@@ -3,6 +3,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
 import { AppState } from 'react-native';
 
+import { AppUpdateGate } from '@/features/app-update/components/update-modal'; // 점검·스토어/OTA 업데이트 안내(실패는 조용히)
 import { useAuthStore } from '@/features/auth/store';
 import { useBackgroundTasks } from '@/features/fund/background/tasks';
 import { useFundAutoRefresh } from '@/features/fund/auto-refresh';
@@ -45,6 +46,7 @@ export default function RootLayout() {
       </Stack>
       <AppToaster />
       <ApiProgressBar />
+      <AppUpdateGate />
     </ThemeProvider>
   );
 }
