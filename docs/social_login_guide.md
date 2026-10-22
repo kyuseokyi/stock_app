@@ -87,42 +87,61 @@
 
 * **사이트 접속**: [카카오 데브톡 / 개발자 센터](https://developers.kakao.com/) 로그인
 
+---
+
+#### 🌟 [중요] 개발(Dev)과 상용(Prod) 분리 전략 (2가지 방법)
+
+아직 상용 서버가 구축되지 않았더라도, 개발과 상용은 반드시 분리되어야 합니다. 카카오에서는 다음 2가지 분리 방식을 제공합니다:
+
+* **방법 1 (권장): 카카오 [테스트 앱] 기능 활용 (완전 격리)**
+  1. 본 앱(`StockApp`)을 생성합니다 (이 앱은 향후 **상용 운영용**으로 사용).
+  2. 본 앱의 **[앱 설정]** > **[테스트 앱]** 메뉴에서 `StockApp-Dev` 테스트 앱을 생성합니다.
+  3. **장점**: 본 앱과 테스트 앱의 **REST API 키가 서로 분리**되므로, 개발 중 생성/삭제된 유저 ID가 상용 데이터베이스에 영향을 주지 않으며, 개발과 운영의 환경변수를 완벽히 분리할 수 있습니다.
+* **방법 2: 단일 앱 내에 개발/운영 URI 동시 등록 (간이 분리)**
+  - 하나의 카카오 앱 안에 개발용 주소(`localhost`)와 상용 도메인을 둘 다 등록하는 방식입니다.
+  - 앱 키가 1개이므로 관리는 간편하지만, 개발 테스트 유저와 상용 유저가 동일한 카카오 앱 회원번호를 공유하게 됩니다.
+
+> 💡 **현재 권장 조치**: 현재는 상용 서버가 없으므로 **방법 1(본 앱 생성 후 개발용 테스트 앱 생성)** 또는 **방법 2(단일 앱에 우선 로컬 주소 등록 후 추후 상용 주소 추가)** 중 편한 방식을 선택하셔도 좋습니다. 아래 안내는 두 방식 모두 완벽히 지원합니다.
+
+---
+
 #### [단계 1] 애플리케이션 생성
 1. **[내 애플리케이션]** > **[애플리케이션 추가하기]** 클릭
 2. 앱 이름(예: `StockApp` 또는 `주달`), 사업자명 입력 후 저장
+3. *(방법 1 선택 시)* **[앱 설정]** > **[테스트 앱]**에서 `StockApp-Dev` 생성 후 테스트 앱으로 전환
 
-#### [단계 2] 플랫폼 등록
+#### [단계 2] 플랫폼 등록 (개발 & 상용 분리)
 **[앱 설정]** > **[플랫폼]** 메뉴로 이동합니다.
 1. **Web 플랫폼 등록**:
-   - 사이트 도메인 추가:
-     - 개발용: `http://localhost:3000`, `http://localhost:8001`
-     - 운영용: 실제 서비스 도메인 (예: `https://stock.app`, `https://auth.stock.app`)
+   - 사이트 도메인에 개발과 상용을 모두 추가 (또는 테스트 앱/본 앱에 각각 분리 등록):
+     - **개발용**: `http://localhost:3000`, `http://localhost:8001`
+     - **상용용(향후)**: 실제 서비스 도메인 (예: `https://stock.app`, `https://auth.stock.app`)
 2. **Android 플랫폼 등록**:
-   - 패키지명:
-     - 개발 빌드: `com.stockapp.dev`
-     - 운영 빌드: `com.stockapp`
+   - 패키지명 (개발/상용 동시 등록 가능):
+     - **개발 빌드**: `com.stockapp.dev`
+     - **상용 빌드(향후)**: `com.stockapp`
    - 키 해시(Key Hash):
-     - 개발용(디버그 키스토어 해시) 및 배포용(Google Play Console 앱 서명 키 해시) 등록
+     - 개발용(로컬 디버그 키스토어 해시) 및 배포용(Google Play Console 서명 키 해시) 등록
 3. **iOS 플랫폼 등록**:
-   - 번들 ID:
-     - 개발 빌드: `com.stockapp.dev`
-     - 운영 빌드: `com.stockapp`
+   - 번들 ID (개발/상용 동시 등록 가능):
+     - **개발 빌드**: `com.stockapp.dev`
+     - **상용 빌드(향후)**: `com.stockapp`
 
 #### [단계 3] 카카오 로그인 활성화
 1. **[제품 설정]** > **[카카오 로그인]** 메뉴로 이동
 2. **활성화 설정**: `ON` 토글 클릭
 
-#### [단계 4] Redirect URI 등록 (가장 중요 ⚠️)
-인가 코드를 전달받을 백엔드 콜백 엔드포인트를 등록합니다.
-- **로컬 개발 환경**:
+#### [단계 4] Redirect URI 등록 (개발 & 상용 분리 ⚠️)
+인가 코드를 전달받을 백엔드 콜백 엔드포인트를 등록합니다. (카카오는 여러 개의 Redirect URI 등록을 지원합니다)
+- **개발 환경 (현재 필수 등록)**:
   - `http://localhost:8001/api/v1/auth/social/kakao/callback`
-- **운영/스테이징 환경**:
-  - `https://[인증서버도메인]/api/v1/auth/social/kakao/callback`
-  > 💡 카카오는 등록되지 않은 Redirect URI 요청 시 `KOE006` 에러를 반환합니다.
+- **상용 환경 (향후 서버 도메인 구축 시 추가 등록)**:
+  - `https://[상용인증도메인]/api/v1/auth/social/kakao/callback`
+  > 💡 등록되지 않은 Redirect URI 요청 시 카카오에서 `KOE006` 에러를 반환합니다.
 
 #### [단계 5] 동의 항목(Scope) 설정
 **[제품 설정]** > **[카카오 로그인]** > **[동의 항목]** 메뉴로 이동합니다.
-- **닉네임 (`profile_nickname`)**: **[필수 동의]** 로 설정 (수집 목적: 서비스 회원 식별 및 표시)
+- **닉네임 (`profile_nickname`)**: **[필수 동의]** 로 설정 (서비스 회원 식별 및 표시)
 - **프로필 사진 (`profile_image`)**: **[선택 동의]** 권장
 - **카카오계정(이메일) (`account_email`)**:
   - 개인 개발자 계정에서는 권한 검수가 필요할 수 있습니다.
@@ -130,21 +149,27 @@
 
 #### [단계 6] 보안 키 확인 및 설정
 1. **REST API 키 확인**:
-   - **[앱 설정]** > **[앱 키]** 에서 `REST API 키` 복사 → 백엔드 `KAKAO_REST_API_KEY`로 사용
+   - **[앱 설정]** > **[앱 키]** 에서 `REST API 키` 복사
 2. **Client Secret 활성화 (권장)**:
    - **[제품 설정]** > **[카카오 로그인]** > **[보안]** 메뉴로 이동
-   - `Client Secret` 코드 [생성] 클릭 후 활성화 상태를 `사용함`으로 변경
-   - 생성된 코드를 복사 → 백엔드 `KAKAO_CLIENT_SECRET`으로 사용
+   - `Client Secret` 코드 [생성] 클릭 후 활성화 상태를 `사용함`으로 변경 및 코드 복사
 3. **Admin 키 확인**:
-   - **[앱 설정]** > **[앱 키]** 에서 `Admin 키` 복사 → 백엔드 `KAKAO_ADMIN_KEY`로 사용 (회원 탈퇴 시 카카오 연결 끊기용)
+   - **[앱 설정]** > **[앱 키]** 에서 `Admin 키` 복사 (회원 탈퇴 시 카카오 연결 끊기용)
 
-#### [단계 7] 환경변수 파일에 입력할 값 요약
-백엔드 `.env.development` 또는 `.env.production`에 추가:
-```env
-KAKAO_REST_API_KEY="<발급받은 REST API 키>"
-KAKAO_CLIENT_SECRET="<발급받은 Client Secret (설정한 경우)>"
-KAKAO_ADMIN_KEY="<발급받은 Admin 키>"
-```
+#### [단계 7] 환경별 환경변수 파일 설정 비교
+프로젝트의 `.env.development`와 추후 상용 배포용 `.env.production`은 아래와 같이 완전히 분리 관리됩니다:
+
+| 구분 | 개발 환경 (`.env.development`) | 상용 환경 (`.env.production` - 향후) |
+| :--- | :--- | :--- |
+| **`APP_ENV`** | `development` | `production` |
+| **`KAKAO_REST_API_KEY`** | 개발용(또는 테스트앱) REST API 키 | 상용 앱 REST API 키 |
+| **`KAKAO_CLIENT_SECRET`**| 개발용 Client Secret | 상용 Client Secret |
+| **`KAKAO_ADMIN_KEY`**    | 개발용 Admin 키 | 상용 Admin 키 |
+| **`SOCIAL_REDIRECT_BASE`**| `http://localhost:8001/api/v1/auth/social` | `https://auth.yourdomain.com/api/v1/auth/social` |
+| **`SOCIAL_WEB_RETURN_URL`**| `http://localhost:3000/auth/complete` | `https://yourdomain.com/auth/complete` |
+| **`SOCIAL_APP_RETURN_URL_DEV`** | `stockapp-dev://auth` | `stockapp-dev://auth` |
+| **`SOCIAL_APP_RETURN_URL_PROD`**| `stockapp://auth` | `stockapp://auth` |
+| **`SOCIAL_FAKE_PROVIDER`** | `false` (필요시 true 로 가짜 로그인 가능) | 무조건 `false` (운영에선 강제 비활성화) |
 
 ---
 
@@ -375,8 +400,8 @@ const handleKakaoLogin = async () => {
 ## 4. 단계별 실행 체크리스트
 
 ### Phase 1: 개발 환경 사전 준비 (사용자 & 개발자)
-- [ ] [사용자] 카카오 개발자 센터에서 앱 생성 및 REST API 키 발급
-- [ ] [사용자] 카카오 로그인 활성화 및 Redirect URI 등록 (`http://localhost:8001/api/v1/auth/social/kakao/callback`)
+- [ ] [사용자] 카카오 개발자 센터에서 앱 생성 및 REST API 키 발급 (테스트 앱 생성 권장)
+- [ ] [사용자] 카카오 로그인 활성화 및 개발용 Redirect URI 등록 (`http://localhost:8001/api/v1/auth/social/kakao/callback`)
 - [ ] [사용자] 닉네임 동의 항목 활성화
 - [ ] [개발자] `backend/.env.development`에 `KAKAO_REST_API_KEY` 설정
 - [ ] [개발자] Redis 및 Postgres 컨테이너 기동 (`docker-compose -f docker-compose.dev.yml up -d`)
@@ -399,3 +424,10 @@ const handleKakaoLogin = async () => {
 - [ ] 네이버 개발자 센터 설정 및 `NAVER_CLIENT_ID`, `NAVER_CLIENT_SECRET` 등록
 - [ ] 구글 클라우드 콘솔 설정 및 `GoogleProvider` 구현
 - [ ] 애플 개발자 계정 설정 및 `AppleProvider` 구현 (iOS 배포 전 필수)
+
+### Phase 5: 상용(Production) 서버 오픈 시 이관 체크리스트 (향후 서버 구축 시)
+- [ ] [사용자] 카카오 개발자 센터에 상용 도메인 및 상용 Redirect URI 추가 (`https://[상용인증도메인]/api/v1/auth/social/kakao/callback`)
+- [ ] [사용자] 상용 Android 패키지명(`com.stockapp`) 및 배포 키 해시, iOS 번들 ID(`com.stockapp`) 등록
+- [ ] [개발자] 배포 서버의 `.env.production` (또는 Docker Secret)에 상용 키 및 상용 도메인 등록 (`SOCIAL_REDIRECT_BASE`, `SOCIAL_WEB_RETURN_URL` 등)
+- [ ] [개발자] 모바일 상용 프로필 빌드 (`eas build --profile production`) 및 딥링크(`stockapp://auth`) 동작 최종 검증
+
