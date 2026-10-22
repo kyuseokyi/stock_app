@@ -59,6 +59,8 @@ def test_eval_a_pass_and_boundaries():
     assert r.eval_a(slow).status == r.FAIL                                              # CAGR < 25
     assert r.eval_a(rows[:3]).status == r.NA                                            # 4년 미만
     assert r.eval_a([("202212", -5.0, 1.0)] + rows[1:]).status == r.FAIL                # 기준 연도 적자
+    turned_loss = r.eval_a(rows[:3] + [("202512", -40.0, -3.0)])                        # 최근 연도 적자 전환
+    assert turned_loss.status == r.FAIL and turned_loss.value is None                   # 복소수 CAGR 저장 실패 방지
 
 
 

@@ -112,7 +112,7 @@ def eval_a(rows) -> Verdict:
     roe = last4[-1][2]
     increasing = all(b > a for a, b in zip(eps, eps[1:]))
     extra = {"roe": roe, "years": [r[0] for r in last4]}
-    if eps[0] <= 0:
+    if eps[0] <= 0 or eps[-1] <= 0:  # 적자 구간은 연평균 성장률 정의 불가(음수의 세제곱근 → 파이썬은 복소수를 낸다)
         return Verdict(FAIL, None, extra)
     cagr = ((eps[-1] / eps[0]) ** (1 / 3) - 1) * 100
     ok = increasing and cagr >= A_MIN_CAGR and roe is not None and roe >= A_MIN_ROE
