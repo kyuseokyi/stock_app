@@ -207,6 +207,84 @@ class ScreenerScreen:
     items: list[ScreenerItem]
 
 
+# ---------------------------------------------------------------- 차트 패턴
+@strawberry.type
+class PatternItem:
+    ticker: str
+    name: str
+    market: str
+    sector_name: str | None
+    close: float
+    pattern_type: str  # cup | cup_with_handle | double_bottom | flat_base | consolidation | htf
+    label: str
+    stage: int  # 베이스 단계(base_count)
+    pivot: float
+    pivot_dist_pct: float | None  # (종가/피벗 - 1) × 100
+    depth: float
+    length: int
+    is_active: bool  # 돌파 전
+    breakout_date: str | None
+    breakout_price_pct: float | None
+    breakout_vol_pct: float | None
+    days_since_breakout: int | None
+
+
+@strawberry.type
+class PatternScreen:
+    date: str | None  # 계산된 날이 없으면 null(준비 중)
+    total: int
+    items: list[PatternItem]
+
+
+@strawberry.type
+class PatternPoint:
+    role: str
+    date: str | None
+    price: float | None
+
+
+@strawberry.type
+class PatternBase:
+    pattern_type: str
+    label: str
+    stage: int
+    subcount: int
+    totalcount: int
+    rim_date: str | None
+    low_date: str | None
+    low_price: float | None
+    pivot: float
+    depth: float
+    length: int
+    is_active: bool
+    is_current: bool
+    breakout_date: str | None
+    breakout_price_pct: float | None
+    breakout_vol_pct: float | None
+    days_since_breakout: int | None
+    prior_uptrend_pct: float | None
+    confidence: float
+    points: list[PatternPoint]
+
+
+@strawberry.type
+class PatternZones:
+    buy_low: float
+    buy_high: float
+    stop_low: float
+    stop_high: float
+
+
+@strawberry.type
+class PatternBases:
+    date: str | None
+    ticker: str
+    name: str
+    close: float | None
+    bases: list[PatternBase]
+    zones: PatternZones | None  # 현재 베이스가 없거나 돌파 후 크게 벗어났으면 null
+
+
 # ---------------------------------------------------------------- 시장 탭(지수·테마·업종·일정)
 @strawberry.type
 class MarketIndex:

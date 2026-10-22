@@ -28,6 +28,12 @@ from apps.stock_api.graphql.types import (
     MacroValue,
     MarketIndex,
     MarketOverview,
+    PatternBase,
+    PatternBases,
+    PatternItem,
+    PatternPoint,
+    PatternScreen,
+    PatternZones,
     ScreenerFilterInput,
     ScreenerItem,
     ScreenerScreen,
@@ -40,6 +46,7 @@ from apps.stock_api.graphql.types import (
 from apps.stock_api.seed_catalog import search as catalog_search
 from apps.stock_api.services import canslim_query
 from apps.stock_api.services import market_query
+from apps.stock_api.services import pattern_query
 from apps.stock_api.services import screener_query
 from apps.stock_api.services import chart as chart_service
 from apps.stock_api.services import clickhouse_source as ch_source
@@ -218,6 +225,31 @@ class Query:
                                     limit=limit, offset=offset)
         return ScreenerScreen(date=out["date"], total=out["total"], bb_sigma=out["bb_sigma"],
                               items=[ScreenerItem(**it) for it in out["items"]])
+
+    # ------------------------------------------------------------ 차트 패턴 (공개)
+    @strawberry.field(description="차트 패턴 목록 — report: breakout_today|recent_breakouts|near_pivot|forming, "
+                                  "sort: pivot_dist|breakout_vol|depth|length")
+    def pattern_screen(
+        self,
+        report: str = "forming",
+        pattern_type: str | None = None,
+        market: str | None = None,
+        sort: str = "pivot_dist",
+        limit: int = 50,
+        offset: int = 0,
+    ) -> PatternScreen:
+        out = pattern_query.screen(report=report, pattern_type=pattern_type, market=market, sort=sort, limit=limit,
+                                   offset=offset)
+        return PatternScreen(date=out["date"], total=out["total"], items=[PatternItem(**it) for it in out["items"]])
+
+    @strawberry.field(description="종목의 차트 패턴(베이스) 전부와 현재 베이스의 매수·손절 구간(숨김이면 null)")
+    def pattern_bases(self, ticker: str) -> PatternBases:
+        out = pattern_query.bases(ticker)
+        return PatternBases(
+            date=out["date"], ticker=out["ticker"], name=out["name"], close=out["close"],
+            bases=[PatternBase(**{**b, "points": [PatternPoint(**p) for p in b["points"]]}) for b in out["bases"]],
+            zones=PatternZones(**out["zones"]) if out["zones"] else None,
+        )
 
     # ------------------------------------------------------------ 시장 탭 (공개)
     @strawberry.field(description="시장 요약 — 국내·미국 지수(20일 스파크라인)·미국 거시 지표")
