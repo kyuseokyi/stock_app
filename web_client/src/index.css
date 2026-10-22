@@ -37,7 +37,7 @@ body {
   @apply my-3 border-l-4 border-line pl-4 text-ink-muted;
 }
 .post-content a {
-  @apply text-brand underline;
+  @apply text-brand-strong underline underline-offset-2;
 }
 .post-content img {
   @apply my-4 max-w-full rounded-lg;
