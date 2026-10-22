@@ -280,10 +280,11 @@ npm run build:android:devapk  # → android/app/build/outputs/apk/release/app-re
   - `PUT /api/v1/admin/app-versions/{platform}` — 관리자. `updated_by`(관리자 이메일, 없으면 닉네임)·`updated_at` 기록. 검증 실패는 422 `{detail: {code, message(한국어)}}`
 - **판별 규칙**: ① `is_maintenance` 면 `maintenance.is_active=true`(앱은 최우선 처리) ② `force_update_enabled` 이거나 현재 < 최소 지원 → `FORCE` ③ 현재 < 최신 → `RECOMMENDED` ④ 그 외 `NONE`.
   - 버전은 SemVer `major.minor.patch` 숫자 비교(`1.10.0 > 1.9.0`, 앞자리 0·접두사 `v`·프리릴리스 불가, 20자 이하). 관리자 입력은 서버·웹이 같은 규칙으로 검증하고 최소 지원 ≤ 최신이어야 한다.
-  - 앱이 보낸 `current_version` 형식이 틀리거나 비면 `store.update_type=NONE`(앱이 막히지 않게), 점검·OTA 정보는 그대로 준다. `platform` 은 android/ios 외 422.
+  - 강제 플래그(`force_update_enabled`)는 버전 값과 무관하게 `FORCE`(값이 빠지거나 틀려도 우회되지 않음). 플래그가 꺼져 있을 때 앱이 보낸 `current_version` 형식이 틀리거나 비면 `store.update_type=NONE`(버전을 못 읽은 정상 앱이 막히지 않게), 점검·OTA 정보는 그대로 준다. `platform` 은 android/ios 외 422. 응답은 `Cache-Control: no-store`(점검·강제 스위치가 캐시에 붙잡히지 않게).
+  - 관리자 저장 검증: 스토어 URL 은 https 주소만, 안내 문구 2,000자 이하, 점검 모드를 켜면 점검 안내 문구 필수(서버·관리자 화면 같은 규칙).
 - **OTA 정책 의미**: `SILENT` 백그라운드 다운로드 후 다음 실행 때 적용(알림 없음) · `OPTIONAL` 다운로드 후 안내 창 [나중에 하기]/[지금 재시작] · `MANDATORY` 닫을 수 없는 창으로 즉시 재시작.
 - **관리자 웹** `/app/versions`(사이드바 "앱 관리 > 📱 앱 버전 & 업데이트"): Android/iOS 탭, 긴급 조치(점검 모드·스토어 강제 스위치·점검 문구), 스토어 버전 카드, OTA 3단계 라디오, 저장 + 토스트. 점검 켬·강제 켬·MANDATORY 가 들어간 저장은 확인 창을 띄운다.
-- ⚠️ iOS 기본 스토어 링크는 플레이스홀더(`https://apps.apple.com/app/id0000000000`) — App Store 는 숫자 앱 ID 가 있어야 열리므로 출시 후 관리자 화면에서 실제 주소로 바꾼다. Android 는 `https://play.google.com/store/apps/details?id=com.stockapp`.
+- ⚠️ iOS 기본 스토어 링크는 플레이스홀더(`https://apps.apple.com/app/id0000000000`) — App Store 는 숫자 앱 ID 가 있어야 열리므로 출시 후 관리자 화면에서 실제 주소로 바꾼다(**iOS 출시 전 강제 업데이트를 켜지 말 것** — 잘못된 링크로 보냄). Android 는 `https://play.google.com/store/apps/details?id=com.stockapp`.
 
 ## 🔄 작업 재개(Resume) 가이드 & 환경 점검
 

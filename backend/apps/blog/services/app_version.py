@@ -69,6 +69,9 @@ def compare_semver(a: str, b: str) -> int:
     return (pa > pb) - (pa < pb)
 
 
+MESSAGE_MAX = 2000  # 공개 응답으로 그대로 나가는 안내 문구 상한
+
+
 def _check_platform(platform: str) -> None:
     if platform not in PLATFORMS:
         raise AppVersionError(422, "invalid_platform", "플랫폼은 android 또는 ios 만 가능합니다.")
@@ -76,12 +79,15 @@ def _check_platform(platform: str) -> None:
 
 # ── 판별 ────────────────────────────────────────────────────────────────────
 def decide_update_type(*, current: str, latest: str, minimum: str, force: bool) -> str:
-    """FORCE | RECOMMENDED | NONE. current 형식이 틀리면 NONE(앱이 막히지 않게)."""
+    """FORCE | RECOMMENDED | NONE.
+
+    강제 플래그는 버전과 무관하게 FORCE(관리자 화면 약속 — 버전 값이 빠지거나 틀려도 우회되지 않게).
+    그 밖에는 current 형식이 틀리면 NONE(정상 앱이 버전을 못 읽었을 때 최소 버전 비교로 막히지 않게)."""
+    if force:
+        return "FORCE"
     cur = parse_semver(current)
     if cur is None:
         return "NONE"
-    if force:
-        return "FORCE"
     min_v, latest_v = parse_semver(minimum), parse_semver(latest)
     if min_v is not None and cur < min_v:
         return "FORCE"
@@ -167,22 +173,24 @@ def validate_payload(payload: AppVersionIn) -> dict:
     if payload.ota_policy not in OTA_POLICIES:
         raise _err("invalid_ota_policy", "OTA 정책은 SILENT, OPTIONAL, MANDATORY 중 하나여야 합니다.")
     store_url = _text(payload.store_url, field="store_url", label="스토어 URL", max_len=255, required=True)
-    if not re.match(r"https?://", store_url, flags=re.IGNORECASE):
-        raise _err("invalid_store_url", "스토어 URL 은 http:// 또는 https:// 로 시작해야 합니다.")
+    if not re.match(r"https://[^/\s]+\.[^/\s]+", store_url, flags=re.IGNORECASE):
+        raise _err("invalid_store_url", "스토어 URL 은 https:// 로 시작하는 주소여야 합니다.")
+    maintenance_message = _text(
+        payload.maintenance_message, field="maintenance_message", label="점검 안내 문구", max_len=MESSAGE_MAX,
+        required=payload.is_maintenance,  # 점검을 켜면 앱에 빈 안내가 뜨지 않게 문구 필수
+    )
     return dict(
         latest_version=latest,
         min_supported_version=minimum,
         force_update_enabled=payload.force_update_enabled,
         store_url=store_url,
         store_title=_text(payload.store_title, field="store_title", label="스토어 안내 제목", max_len=100, required=True),
-        store_message=_text(payload.store_message, field="store_message", label="스토어 안내 문구", max_len=None, required=True),
+        store_message=_text(payload.store_message, field="store_message", label="스토어 안내 문구", max_len=MESSAGE_MAX, required=True),
         ota_policy=payload.ota_policy,
         ota_title=_text(payload.ota_title, field="ota_title", label="OTA 안내 제목", max_len=100, required=False),
-        ota_message=_text(payload.ota_message, field="ota_message", label="OTA 안내 문구", max_len=None, required=False),
+        ota_message=_text(payload.ota_message, field="ota_message", label="OTA 안내 문구", max_len=MESSAGE_MAX, required=False),
         is_maintenance=payload.is_maintenance,
-        maintenance_message=_text(
-            payload.maintenance_message, field="maintenance_message", label="점검 안내 문구", max_len=None, required=False
-        ),
+        maintenance_message=maintenance_message,
     )
 
 

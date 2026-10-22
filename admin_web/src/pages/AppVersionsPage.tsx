@@ -75,6 +75,8 @@ const toPayload = (f: FormState): AppVersionIn => ({
 })
 
 /** 서버와 같은 규칙으로 검증 — 문제가 있으면 첫 메시지 */
+const MESSAGE_MAX = 2000
+
 function validate(f: FormState): string | null {
   const latest = f.latest_version.trim()
   const min = f.min_supported_version.trim()
@@ -83,12 +85,17 @@ function validate(f: FormState): string | null {
   if (compareSemver(min, latest) === 1) return '최소 지원 버전은 최신 버전보다 높을 수 없습니다.'
   const url = f.store_url.trim()
   if (!url) return '스토어 URL을 입력하세요.'
-  if (!/^https?:\/\//i.test(url)) return '스토어 URL 은 http:// 또는 https:// 로 시작해야 합니다.'
+  if (!/^https:\/\/[^/\s]+\.[^/\s]+/i.test(url)) return '스토어 URL 은 https:// 로 시작하는 주소여야 합니다.'
   if (url.length > 255) return '스토어 URL은 255자 이하여야 합니다.'
   if (!f.store_title.trim()) return '스토어 안내 제목을 입력하세요.'
   if (f.store_title.trim().length > 100) return '스토어 안내 제목은 100자 이하여야 합니다.'
   if (!f.store_message.trim()) return '스토어 안내 문구를 입력하세요.'
   if (f.ota_title.trim().length > 100) return 'OTA 안내 제목은 100자 이하여야 합니다.'
+  // 서버와 같은 상한(공개 응답으로 그대로 나가는 문구)
+  if (f.store_message.trim().length > MESSAGE_MAX) return `스토어 안내 문구는 ${MESSAGE_MAX}자 이하여야 합니다.`
+  if (f.ota_message.trim().length > MESSAGE_MAX) return `OTA 안내 문구는 ${MESSAGE_MAX}자 이하여야 합니다.`
+  if (f.maintenance_message.trim().length > MESSAGE_MAX) return `점검 안내 문구는 ${MESSAGE_MAX}자 이하여야 합니다.`
+  if (f.is_maintenance && !f.maintenance_message.trim()) return '점검 모드를 켜면 점검 안내 문구를 입력해야 해요.'
   return null
 }
 

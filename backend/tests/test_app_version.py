@@ -69,8 +69,15 @@ def test_decide_latest_is_none():
     assert decide_update_type(current="2.0.0", latest="1.10.0", minimum="1.0.0", force=False) == "NONE"
 
 
-def test_decide_malformed_current_is_none_even_with_force():
-    assert decide_update_type(current="abc", latest="2.0.0", minimum="2.0.0", force=True) == "NONE"
+def test_decide_force_flag_wins_even_when_current_is_malformed():
+    # 강제 플래그는 버전 값이 빠지거나 틀려도 우회되지 않는다(관리자 화면 "모든 사용자" 약속)
+    assert decide_update_type(current="abc", latest="2.0.0", minimum="2.0.0", force=True) == "FORCE"
+    assert decide_update_type(current="", latest="2.0.0", minimum="1.0.0", force=True) == "FORCE"
+
+
+def test_decide_malformed_current_without_force_is_none():
+    # 강제 플래그가 꺼져 있으면 버전을 못 읽은 정상 앱이 최소 버전 비교로 막히지 않게 NONE
+    assert decide_update_type(current="abc", latest="2.0.0", minimum="2.0.0", force=False) == "NONE"
     assert decide_update_type(current="", latest="2.0.0", minimum="2.0.0", force=False) == "NONE"
 
 
@@ -324,6 +331,12 @@ async def test_admin_put_uses_nickname_when_no_email(api, maker):
         ({"store_title": ""}, "store_title_required"),
         ({"store_message": " "}, "store_message_required"),
         ({"store_title": "가" * 101}, "store_title_too_long"),
+        ({"store_url": "http://play.google.com/x"}, "invalid_store_url"),  # https 만
+        ({"store_url": "https://x"}, "invalid_store_url"),                 # 호스트 없는 주소
+        ({"store_url": "javascript:alert(1)"}, "invalid_store_url"),
+        ({"store_message": "가" * 2001}, "store_message_too_long"),
+        ({"ota_message": "가" * 2001}, "ota_message_too_long"),
+        ({"is_maintenance": True, "maintenance_message": " "}, "maintenance_message_required"),
     ],
 )
 async def test_admin_put_validation_422_korean(api, maker, override, code):
@@ -423,3 +436,18 @@ def test_migration_seed_matches_service_defaults():
     assert mod._OTA_MESSAGE == DEFAULTS["android"]["ota_message"]
     assert mod._ANDROID_URL == DEFAULTS["android"]["store_url"]
     assert mod._IOS_URL == DEFAULTS["ios"]["store_url"]
+
+
+async def test_version_check_no_store_header(api, maker):
+    # 점검·강제 스위치가 프록시·CDN 캐시에 붙잡히지 않게
+    client, _ = api
+    await _seed_row(maker)
+    r = await _check(client)
+    assert r.status_code == 200 and r.headers["cache-control"] == "no-store"
+
+
+async def test_version_check_force_flag_without_version(api, maker):
+    client, _ = api
+    await _seed_row(maker, force_update_enabled=True)
+    r = await client.get("/api/v1/app/version-check", params={"platform": "android"})
+    assert r.json()["store"]["update_type"] == "FORCE"
