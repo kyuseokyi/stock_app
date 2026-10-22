@@ -85,7 +85,7 @@
 - [x] **CANSLIM 스크리너(프로젝트 2)** — 7항목 판정·점수 매일 사전 계산(`canslim_daily`), GraphQL `canslimMarket·canslimScreen·canslimScore`, 웹 `/screener`(시장 방향·필터·목록·차트·점수표·추이). C 는 `FUNDAMENTALS_Q_CUMULATIVE=true` 로 켬(2026-10-22 실측: KIS 분기 EPS 누적, 운영 적용 완료). 스펙 `docs/superpowers/specs/2026-10-18-canslim-design.md` (2026-10-18). 앱 화면은 2026-10-21(모바일 '주도주' 칩·종목 상세)
 - [x] **스크리너 탭 — 시장·테마·업종·일정(프로젝트 3, 주달 화면)** — 메뉴 '스크리너' 안 탭(시장·테마·업종·일정·주도주), 종가 기준 하루 1회 사전 계산(`market_stock_daily`·`market_group_daily`) + 관리자 테마 보정 시 최신일 재계산, 테마/업종 순위·트리맵(시총/거래대금)·상세(순위 추이·대장주)·일정(공모주·경제지표), CANSLIM 탭 이름 '주도주'. 스펙 `docs/superpowers/specs/2026-10-19-market-dashboard-design.md` (2026-10-19). 다음: 관리자 테마 보정 UI, 뉴스·AI 요약(네이버 키·Ollama), 앱 화면
 - [x] 관리자 테마 보정 UI(admin_web) — `MarketThemes.tsx`(시장 지표 목록·정렬·숨김, 이름·설명 수정, 종목 검색 추가·제외·복구)
-- [ ] 차트 패턴(컵·컵핸들·쌍바닥·플랫 베이스·HTF)·베이스 카운트·돌파 리포트 — 참고: 기존 `ams/workspace/api` 의 `app/services/chart_pattern/`(MarketSurge 맞춤 기준값)
+- [x] 차트 패턴(컵·컵핸들·쌍바닥·플랫 베이스·박스권·HTF)·베이스 카운트·돌파 리포트 — 참고 v2 엔진 일봉 이식, `chart_pattern_daily`, GraphQL `patternScreen·patternBases`, 웹 '패턴' 탭·앱 '패턴' 칩·종목 상세 영역. 스펙 `docs/superpowers/specs/2026-10-22-chart-patterns-design.md` (2026-10-22). 일봉 37개월 백필 후 실데이터 검증·실기기 확인 대기. 주봉 패턴·국내 기준값 보정은 다음
 - [x] `stock_api` 스크리너 리졸버/엔드포인트(필터 조합) — GraphQL `screenerScreen`(2026-10-21)
 - [x] 프리셋(거래량급증/골든크로스/과매도/신고가) + 커스텀 필터(볼린저 σ·정/역배열·매물대·거래량·재무) — 웹 '조건검색' 탭·앱 '조건검색' 칩, 스펙 `docs/superpowers/specs/2026-10-21-screener-presets-design.md` (2026-10-21). 운영 백필·프리셋 건수 점검 완료(2026-10-22, 관리자 수동 실행 버튼 포함). 연간 재무는 결산이 끝난 해만 사용(KIS 최신 행=진행 중인 해 누적). 실기기 확인 대기. 배당수익률·MACD·저장 필터는 범위 밖
 - [x] 결과 카드 UI + 정렬, 차트 상세(웹 스플릿뷰) — 조건검색·주도주 탭에서 구현(2026-10-21)
