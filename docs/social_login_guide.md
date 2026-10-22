@@ -124,17 +124,18 @@
 #### [단계 2] 플랫폼 등록 (개발 & 상용 분리)
 **[앱 설정]** > **[플랫폼]** 메뉴로 이동합니다.
 1. **Web 플랫폼 등록**:
-   - 사이트 도메인에 개발과 상용을 모두 추가 (또는 테스트 앱/본 앱에 각각 분리 등록):
-     - **개발용**: `http://localhost:3000`, `http://localhost:8001`
-     - **상용용(향후)**: 실제 서비스 도메인 (예: `https://stock.app`, `https://auth.stock.app`)
+   - 사이트 도메인에 개발 서버(haezean.com)와 로컬을 모두 등록합니다:
+     - **개발 서버 (현재 구축된 서버)**: `https://app.haezean.com`, `https://auth.haezean.com`
+     - **로컬 개발 (내 PC)**: `http://localhost:3000`, `http://localhost:8001`
+     - **상용 운영 (향후 서버/도메인 확장 시)**: `https://stock.app` 등
 2. **Android 플랫폼 등록**:
-   - 패키지명 (개발/상용 동시 등록 가능):
+   - 패키지명:
      - **개발 빌드**: `com.stockapp.dev`
      - **상용 빌드(향후)**: `com.stockapp`
    - 키 해시(Key Hash):
      - 개발용(로컬 디버그 키스토어 해시) 및 배포용(Google Play Console 서명 키 해시) 등록
 3. **iOS 플랫폼 등록**:
-   - 번들 ID (개발/상용 동시 등록 가능):
+   - 번들 ID:
      - **개발 빌드**: `com.stockapp.dev`
      - **상용 빌드(향후)**: `com.stockapp`
 
@@ -142,13 +143,16 @@
 1. **[제품 설정]** > **[카카오 로그인]** 메뉴로 이동
 2. **활성화 설정**: `ON` 토글 클릭
 
-#### [단계 4] Redirect URI 등록 (개발 & 상용 분리 ⚠️)
-인가 코드를 전달받을 백엔드 콜백 엔드포인트를 등록합니다. (카카오는 여러 개의 Redirect URI 등록을 지원합니다)
-- **개발 환경 (현재 필수 등록)**:
-  - `http://localhost:8001/api/v1/auth/social/kakao/callback`
-- **상용 환경 (향후 서버 도메인 구축 시 추가 등록)**:
-  - `https://[상용인증도메인]/api/v1/auth/social/kakao/callback`
-  > 💡 등록되지 않은 Redirect URI 요청 시 카카오에서 `KOE006` 에러를 반환합니다.
+#### [단계 4] Redirect URI 등록 (개발 서버 & 로컬 ⚠️)
+인가 코드를 전달받을 백엔드 콜백 엔드포인트를 등록합니다. (카카오는 최대 10개까지 등록 가능하므로 **아래 2개를 모두 등록**해두면 로컬과 개발 서버 어디서든 자유롭게 테스트할 수 있습니다):
+1. **개발 서버 (haezean.com - 현재 운영 중)**:
+   - `https://auth.haezean.com/api/v1/auth/social/kakao/callback`
+2. **로컬 개발 (내 PC)**:
+   - `http://localhost:8001/api/v1/auth/social/kakao/callback`
+3. **상용 운영 (향후 신규 상용 도메인 구축 시 추가 등록)**:
+   - `https://[신규상용도메인]/api/v1/auth/social/kakao/callback`
+
+> 💡 등록되지 않은 Redirect URI 요청 시 카카오에서 `KOE006` 에러를 반환합니다.
 
 #### [단계 5] 동의 항목(Scope) 설정
 **[제품 설정]** > **[카카오 로그인]** > **[동의 항목]** 메뉴로 이동합니다.
@@ -167,20 +171,19 @@
 3. **Admin 키 확인**:
    - **[앱 설정]** > **[앱 키]** 에서 `Admin 키` 복사 (회원 탈퇴 시 카카오 연결 끊기용)
 
-#### [단계 7] 환경별 환경변수 파일 설정 비교
-프로젝트의 `.env.development`와 추후 상용 배포용 `.env.production`은 아래와 같이 완전히 분리 관리됩니다:
+#### [단계 7] 환경별 환경변수 파일 설정 비교 (haezean 개발서버 vs 로컬 vs 상용)
 
-| 구분 | 개발 환경 (`.env.development`) | 상용 환경 (`.env.production` - 향후) |
-| :--- | :--- | :--- |
-| **`APP_ENV`** | `development` | `production` |
-| **`KAKAO_REST_API_KEY`** | 개발용(또는 테스트앱) REST API 키 | 상용 앱 REST API 키 |
-| **`KAKAO_CLIENT_SECRET`**| 개발용 Client Secret | 상용 Client Secret |
-| **`KAKAO_ADMIN_KEY`**    | 개발용 Admin 키 | 상용 Admin 키 |
-| **`SOCIAL_REDIRECT_BASE`**| `http://localhost:8001/api/v1/auth/social` | `https://auth.yourdomain.com/api/v1/auth/social` |
-| **`SOCIAL_WEB_RETURN_URL`**| `http://localhost:3000/auth/complete` | `https://yourdomain.com/auth/complete` |
-| **`SOCIAL_APP_RETURN_URL_DEV`** | `stockapp-dev://auth` | `stockapp-dev://auth` |
-| **`SOCIAL_APP_RETURN_URL_PROD`**| `stockapp://auth` | `stockapp://auth` |
-| **`SOCIAL_FAKE_PROVIDER`** | `false` (필요시 true 로 가짜 로그인 가능) | 무조건 `false` (운영에선 강제 비활성화) |
+| 환경변수 키 | 로컬 개발 (`.env.development`) | 개발 서버 (haezean.com 배포) | 상용 서버 (향후 신규 구축) |
+| :--- | :--- | :--- | :--- |
+| **`APP_ENV`** | `development` | `development` (또는 `production`) | `production` |
+| **`KAKAO_REST_API_KEY`** | 개발용 `StockApp Dev` 키 | 개발용 `StockApp Dev` 키 | 상용용 `StockApp` 키 |
+| **`KAKAO_CLIENT_SECRET`**| 개발용 Client Secret | 개발용 Client Secret | 상용 Client Secret |
+| **`KAKAO_ADMIN_KEY`**    | 개발용 Admin 키 | 개발용 Admin 키 | 상용 Admin 키 |
+| **`SOCIAL_REDIRECT_BASE`**| `http://localhost:8001/api/v1/auth/social` | `https://auth.haezean.com/api/v1/auth/social` | `https://auth.domain.com/api/v1/auth/social` |
+| **`SOCIAL_WEB_RETURN_URL`**| `http://localhost:3000/auth/complete` | `https://app.haezean.com/auth/complete` | `https://domain.com/auth/complete` |
+| **`SOCIAL_APP_RETURN_URL_DEV`** | `stockapp-dev://auth` | `stockapp-dev://auth` | `stockapp-dev://auth` |
+| **`SOCIAL_APP_RETURN_URL_PROD`**| `stockapp://auth` | `stockapp://auth` | `stockapp://auth` |
+| **`SOCIAL_FAKE_PROVIDER`** | `false` (테스트시 true 가능) | `false` | 무조건 `false` (운영 강제 무시) |
 
 ---
 
