@@ -600,7 +600,8 @@ cd backend && uv run --with pykrx python -m apps.collector.verify.spot_check --n
 - **API**: GraphQL `patternScreen(report, patternType, market, sort, limit, offset)`·`patternBases(ticker)`(stock_api, 공개).
 - **계산**: `daily_market_pipeline` 마지막 단계(조건검색 다음, 20:30 시작). 최신 거래일 하나만 계산(과거 날짜 백필 없음 — 리포트는 최신 스냅샷만 씀). 새 결과를 먼저 넣고 성공하면 그날 이전 결과를 지운다(실패해도 기존 데이터 유지). 0행·종목 실패 5% 이상·기준일 봉 없는 종목 20% 이상이면 저장하지 않고 실패로 기록. 실측 약 35초(봉 로드 6초 + 감지 27초, 2,583종목).
 - **전제 — 일봉 약 3년**: 엔진은 종목당 최근 770봉(표시 520 + 앞쪽 여유 250)을 본다. 처음 한 번 전종목 일봉을 37개월로 백필해야 긴 베이스·단계가 맞게 나온다(서버 워커 컨테이너에서):
-  `docker exec $(docker ps -qf name=stock_celery_worker -f status=running | head -1) celery -A apps.collector.celery_app call collector.backfill_all_daily --kwargs '{"months": 37}'` — KIS 호출이 많아 약 1시간+, 20:30 수집과 겹치지 않게. ⚠️ 장중에 돌리면 오늘의 미완성 봉이 들어가 그날 20:30 전까지 최신 기준일이 장중 값이 된다(20:30 수집이 덮어씀) — 그 사이 수동 계산 버튼을 누르지 않는다.
+  `docker exec $(docker ps -qf name=stock_celery_worker -f status=running | head -1) celery -A apps.collector.celery_app call collector.backfill_all_daily --kwargs '{"months": 37}'` — KIS 호출이 많아 약 1시간+, 20:30 수집과 겹치지 않게. 끝 날짜(`end`, YYYYMMDD)를 주지 않으면 마지막 확정 거래일(KST 평일 20:30 이후 오늘, 아니면 직전 평일)까지만 받아 장중 미완성 봉이 들어가지 않는다.
+  **새 서버는 이 명령 대신 관리자 '초기 데이터 준비' 버튼**(일봉 37개월 → 지수·수급·재무 → 계산 전부를 순서대로, `docs/server_setup.md` §7-2)으로 한 번에 채운다.
 - **수동 실행**: 관리자 작업 '차트 패턴 계산'(`collector.compute_patterns`).
 - **알려진 한계**
   - 기준값은 미국 종목 MarketSurge 화면에 맞춘 값이다. 국내 상·하한가(±30%)·변동성 차이는 반영하지 않았다(실데이터 분포를 보고 조정 예정).
