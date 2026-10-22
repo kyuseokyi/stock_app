@@ -10,15 +10,21 @@ import { forgetFundOwner } from './keys';
 
 export async function purgeFundAccount(uid: number, deps = { disconnect }): Promise<void> {
   const { email } = await loadBackupState(uid); // 지우기 전에 읽는다
-  const funds = await loadFunds(uid).catch(() => []);
-  for (const f of funds) {
-    deleteCache(f.id);
-    deleteHistory(f.id);
+  // 목록을 못 읽으면 목록 키·소유자 목록 항목을 남긴다 — 지우면 캐시·기록 파일을 찾을 길이 없어 고아가 된다(다음 정리 기회에 다시)
+  const funds = await loadFunds(uid).catch((e: unknown) => {
+    console.warn('[fund] 탈퇴 정리: 목록을 읽지 못해 목록 키를 남겨 둡니다', e);
+    return null;
+  });
+  if (funds) {
+    for (const f of funds) {
+      deleteCache(f.id);
+      deleteHistory(f.id);
+    }
+    await deleteFundList(uid).catch(() => {});
   }
-  await deleteFundList(uid).catch(() => {});
   await deleteBackupState(uid).catch(() => {});
   removeFile(pendingFileName(uid));
-  await forgetFundOwner(uid); // 키를 지운 뒤 소유자 목록에서 뺀다(iOS 재설치 정리 대상에서 제외)
+  if (funds) await forgetFundOwner(uid); // 키를 지운 뒤 소유자 목록에서 뺀다(iOS 재설치 정리 대상에서 제외)
   if (!email) return;
   try {
     await deps.disconnect();

@@ -1,4 +1,12 @@
-jest.mock('expo-secure-store', () => require('./__fixtures__/fake-storage').secureStoreMock);
+// 읽기 실패 주입: mockFailKey 키를 읽으면 던진다
+let mockFailKey: string | null = null;
+jest.mock('expo-secure-store', () => {
+  const fake = require('./__fixtures__/fake-storage').secureStoreMock;
+  return {
+    ...fake,
+    getItemAsync: (k: string) => (k === mockFailKey ? Promise.reject(new Error('keychain')) : fake.getItemAsync(k)),
+  };
+});
 jest.mock('expo-file-system', () => require('./__fixtures__/fake-storage').fileSystemMock);
 const mockAuth: { user: { id: number } | null; hydrated: boolean } = { user: null, hydrated: true };
 jest.mock('@/features/auth/store', () => ({ useAuthStore: { getState: () => mockAuth } }));
@@ -12,6 +20,7 @@ const url = (n: number) => `https://fund.ivyro.net/dataroom/om_data/f${n}.htm`;
 
 beforeEach(() => {
   resetFakeStorage();
+  mockFailKey = null;
   mockAuth.user = { id: 7 };
 });
 
@@ -54,5 +63,26 @@ describe('purgeFundAccount(회원 탈퇴 성공 후)', () => {
       },
     });
     expect(secureMem.size).toBe(0);
+  });
+
+  it('목록을 못 읽으면 목록 키·소유자 목록 항목을 남긴다(캐시·기록 파일이 고아가 되지 않게 다음에 다시 정리)', async () => {
+    await saveFunds([{ id: 'a', name: 'A', url: url(1) }]);
+    fileMem.set('fund-cache-a.json', '{}');
+    fileMem.set('fund-history-a.json', '{}');
+    secureMem.set('fund_backup_state_v1_u7', JSON.stringify({ connected: true, email: 'a@gmail.com' }));
+    mockFailKey = 'fund_list_v1_u7';
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const disconnect = jest.fn(async () => {});
+      await purgeFundAccount(7, { disconnect });
+      expect(secureMem.has('fund_list_v1_u7')).toBe(true);
+      expect(JSON.parse(secureMem.get('fund_owners_v1')!)).toEqual([7]);
+      expect(fileMem.has('fund-cache-a.json')).toBe(true);
+      expect(fileMem.has('fund-history-a.json')).toBe(true);
+      expect(secureMem.has('fund_backup_state_v1_u7')).toBe(false); // 백업 상태·Google 로그아웃은 그대로 진행
+      expect(disconnect).toHaveBeenCalledTimes(1);
+    } finally {
+      warn.mockRestore();
+    }
   });
 });

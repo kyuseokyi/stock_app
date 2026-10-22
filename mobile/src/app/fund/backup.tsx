@@ -17,6 +17,7 @@ function errorText(e: unknown): string {
   if (isDriveError(e, 'auth')) return 'Google 연결이 끊겼어요. 다시 연결해 주세요.';
   if (isDriveError(e, 'invalid')) return 'Drive 백업 파일을 읽을 수 없어요. 덮어쓰지 않았어요.';
   if (isDriveError(e, 'network')) return '연결을 확인하고 다시 시도해 주세요.';
+  if (isDriveError(e, 'unverified')) return 'Google 계정을 확인하지 못했어요. 잠시 후 다시 시도해 주세요.';
   return '처리하지 못했어요. 다시 시도해 주세요.';
 }
 

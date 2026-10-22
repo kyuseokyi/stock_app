@@ -116,10 +116,14 @@ describe('Google 계정 확인', () => {
     expect(await loadBackupState()).toMatchObject({ connected: false, lastError: '다시 연결해 주세요' });
   });
 
-  it('Google 로그인 정보가 없어도(null) 연결 안 됨', async () => {
+  it('Google 로그인 이메일을 일시적으로 확인할 수 없으면(null) 이번 작업만 건너뛰고 연결은 유지', async () => {
     mockGoogle.email = null;
-    expect(isDriveError(await restoreFromDrive().catch((x: unknown) => x), 'auth')).toBe(true);
+    await saveFunds([{ id: 'a', name: 'A', url: url(1) }]);
+    expect(isDriveError(await restoreFromDrive().catch((x: unknown) => x), 'unverified')).toBe(true);
+    expect(isDriveError(await backupNow(NOW).catch((x: unknown) => x), 'unverified')).toBe(true);
     expect(mockDriveCalls).toEqual([]);
+    expect(await loadBackupState()).toMatchObject({ connected: true, email: 'me@gmail.com' });
+    expect((await loadBackupState()).lastError).not.toBe('다시 연결해 주세요');
   });
 
   it('이메일 대소문자 차이는 같은 계정', async () => {

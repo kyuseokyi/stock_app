@@ -8,7 +8,8 @@ const UPLOAD = 'https://www.googleapis.com/upload/drive/v3/files';
 // JSON.stringify 결과엔 줄바꿈이 없어 본문에 "\r\n--경계" 가 생길 수 없다
 const BOUNDARY = 'fund_backup_part';
 
-export type DriveErrorCode = 'auth' | 'network' | 'invalid';
+// unverified = 지금 Google 로그인 이메일을 확인할 수 없음(콜드 스타트 등 일시 상태) — 연결 해제가 아니라 이번 작업만 건너뜀
+export type DriveErrorCode = 'auth' | 'network' | 'invalid' | 'unverified';
 export type DriveError = Error & { driveCode: DriveErrorCode };
 
 export const driveError = (code: DriveErrorCode, message: string): DriveError =>
