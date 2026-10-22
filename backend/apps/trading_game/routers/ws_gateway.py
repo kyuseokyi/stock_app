@@ -15,6 +15,7 @@ import jwt
 from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect
 from sqlalchemy import func, select
 
+from shared.auth import TOKEN_EXPIRED
 from shared.database import AsyncSessionLocal
 from shared.security import decode_token
 from shared.sessions import SESSION_REPLACED, check_session
@@ -111,6 +112,10 @@ async def game_stream(ws: WebSocket, token: str | None = Query(None)):
         if not sub:
             raise ValueError("missing sub")
         user_id = int(sub)
+    except jwt.ExpiredSignatureError:  # 앱은 reason 으로 "갱신 후 재연결"을 판단(PyJWTError 하위라 먼저)
+        await ws.accept()
+        await ws.close(code=4401, reason=TOKEN_EXPIRED)
+        return
     except (jwt.PyJWTError, ValueError, TypeError):
         await ws.accept()  # accept 후 close 해야 4401 코드가 클라이언트에 전달됨
         await ws.close(code=4401)

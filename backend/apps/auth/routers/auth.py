@@ -16,7 +16,7 @@ from shared.security import verify_password
 from .. import schemas
 from ..deps import get_redis
 from ..guest_gate import require_guest_enabled
-from ..services import account_deletion
+from ..services import account_deletion, refresh_tokens
 from ..services.session_login import issue_login_token
 from ..social.config import SocialSettings, get_social_settings
 from ..social.providers import get_http_transport
@@ -50,8 +50,8 @@ async def login(
     if not user.is_active:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "비활성화된 계정입니다.")
 
-    token = await issue_login_token(db, redis, user, "admin")  # /login 은 admin_web 전용
-    return schemas.TokenResponse(access_token=token, user=user)
+    tokens = await issue_login_token(db, redis, user, "admin")  # /login 은 admin_web 전용
+    return schemas.token_response(tokens, user)
 
 
 @router.post(
@@ -84,8 +84,30 @@ async def guest_login(
     if not user.is_active:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "비활성화된 계정입니다.")
 
-    token = await issue_login_token(db, redis, user, payload.platform)
-    return schemas.TokenResponse(access_token=token, user=user)
+    tokens = await issue_login_token(db, redis, user, payload.platform)
+    return schemas.token_response(tokens, user)
+
+
+@router.post("/refresh", response_model=schemas.TokenResponse)
+async def refresh(payload: schemas.RefreshRequest, db: AsyncSession = Depends(get_db)):
+    """앱 리프레시 토큰 → 새 접근 토큰 + 새 리프레시(회전, sid 유지). 접근 토큰은 필요 없다.
+
+    401 detail = {"code": REFRESH_INVALID|REFRESH_EXPIRED|REFRESH_REUSED|SESSION_REPLACED, "message"}.
+    """
+    try:
+        result = await refresh_tokens.rotate(db, payload.refresh_token)
+    except refresh_tokens.RefreshError as e:
+        raise HTTPException(
+            status.HTTP_401_UNAUTHORIZED, detail={"code": e.code, "message": e.message}
+        ) from e
+    return schemas.token_response(result, result.user)
+
+
+@router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
+async def logout(payload: schemas.RefreshRequest | None = Body(None), db: AsyncSession = Depends(get_db)) -> Response:
+    """서버 로그아웃(앱) — 그 리프레시의 sid 를 폐기하고 앱 세션을 끊는다. 존재 여부를 숨기려고 항상 204."""
+    await refresh_tokens.logout(db, payload.refresh_token if payload else "")
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("/me", response_model=schemas.UserOut)

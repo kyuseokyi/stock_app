@@ -40,6 +40,25 @@ class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
     user: UserOut
+    # 앱(platform=app) 로그인·갱신만 채움. 웹·관리자는 null(기존 클라이언트는 무시)
+    refresh_token: str | None = None
+    expires_in: int | None = Field(None, description="접근 토큰 수명(초)")
+
+
+def token_response(tokens, user) -> TokenResponse:
+    """로그인·갱신 공통 응답. tokens 는 access_token·refresh_token·expires_in 을 가진 객체(LoginTokens·RefreshResult)."""
+    return TokenResponse(
+        access_token=tokens.access_token,
+        refresh_token=tokens.refresh_token,
+        expires_in=tokens.expires_in,
+        user=user,
+    )
+
+
+class RefreshRequest(BaseModel):
+    """앱 리프레시 토큰. 누락·빈 값도 422 가 아니라 갱신은 401, 로그아웃은 204 로 처리하려고 기본값을 둔다."""
+
+    refresh_token: str = Field("", max_length=200)
 
 
 class SocialProvidersOut(BaseModel):

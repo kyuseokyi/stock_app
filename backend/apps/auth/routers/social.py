@@ -168,5 +168,5 @@ async def exchange(
         user, client = await redeem_exchange_code(db, store, payload.code, payload.code_verifier)
     except ExchangeError as exc:
         raise HTTPException(exc.status_code, exc.message) from exc
-    token = await issue_login_token(db, redis, user, client)
-    return schemas.TokenResponse(access_token=token, user=user)
+    tokens = await issue_login_token(db, redis, user, client)
+    return schemas.token_response(tokens, user)

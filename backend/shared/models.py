@@ -142,6 +142,34 @@ class UserSession(Base, TimestampMixin):
     sid: Mapped[str] = mapped_column(String(64), nullable=False)
 
 
+class RefreshToken(Base):
+    """앱 리프레시 토큰(원문은 클라이언트만, 여기엔 SHA-256 해시). 로그인 sid 에 묶이고 갱신마다 회전한다.
+
+    설계: docs/superpowers/specs/2026-10-22-mobile-refresh-token-design.md
+    """
+
+    __tablename__ = "refresh_tokens"
+    __table_args__ = (UniqueConstraint("token_hash", name="uq_refresh_tokens_token_hash"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    platform: Mapped[str] = mapped_column(String(16), nullable=False, default="app")
+    sid: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    token_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # 회전 후속 토큰. 정리(만료·폐기 7일 후 삭제) 때 참조 중인 행이 남아도 깨지지 않게 SET NULL
+    replaced_by_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("refresh_tokens.id", ondelete="SET NULL"), nullable=True
+    )
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
 class Board(Base, TimestampMixin):
     """게시판/메뉴 카테고리. 접근 최소 권한(min_role_required)을 가진다."""
 
