@@ -5,7 +5,7 @@ import { Link, useLocation } from 'react-router-dom'
 type Tab = 'market' | 'themes' | 'sectors' | 'calendar' | 'leaders' | 'finder' | 'patterns'
 
 const GROUPS: { key: string; label: string; tabs: { to: Tab; label: string }[] }[] = [
-  { key: 'flow', label: '시장 흐름', tabs: [{ to: 'market', label: '요약' }, { to: 'themes', label: '테마' }, { to: 'sectors', label: '업종' }] },
+  { key: 'flow', label: '시장 흐름', tabs: [{ to: 'market', label: '세계 시장' }, { to: 'themes', label: '테마' }, { to: 'sectors', label: '업종' }] },
   { key: 'calendar', label: '일정', tabs: [{ to: 'calendar', label: '일정' }] },
   { key: 'stocks', label: '종목 찾기', tabs: [{ to: 'leaders', label: '주도주' }, { to: 'finder', label: '조건검색' }, { to: 'patterns', label: '패턴' }] },
 ]

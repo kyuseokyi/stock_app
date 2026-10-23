@@ -133,7 +133,7 @@ export default function MarketNote() {
             <h2 className="text-base font-bold text-ink">
               업종 지도 <span className="text-xs font-normal text-ink-muted">면적 = 시가총액</span>
             </h2>
-            <More to="/screener/market" label="시장 전체" />
+            <More to="/screener/sectors" label="업종 전체" />
           </div>
           <Treemap groups={sectors} period="1d" nested={false} height={180} onGroupSelect={() => navigate('/screener/sectors')} />
         </Card>

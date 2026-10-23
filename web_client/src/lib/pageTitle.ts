@@ -2,7 +2,7 @@
 const BRAND = 'StockApp'
 
 const SCREENER: Record<string, string> = {
-  market: '시장 요약',
+  market: '세계 시장',
   themes: '테마',
   sectors: '업종',
   calendar: '일정',

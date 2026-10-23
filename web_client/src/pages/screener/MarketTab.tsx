@@ -1,20 +1,26 @@
-import { useEffect, useRef, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { Link } from 'react-router-dom'
 import Card from '../../components/ui/Card'
 import EmptyState from '../../components/ui/EmptyState'
+import { Skeleton } from '../../components/ui/Skeleton'
 import BasisNote from '../../components/market/BasisNote'
 import EventList from '../../components/market/EventList'
-import { IndexCards, MacroCards } from '../../components/market/IndexCards'
-import Treemap from '../../components/market/Treemap'
-import { getMarketCalendar, getMarketGroups, getMarketOverview, getMarketTreemap } from '../../api/market'
+import { MacroCards } from '../../components/market/IndexCards'
+import { getMarketCalendar, getMarketOverview } from '../../api/market'
 import { useVisibleInterval } from '../../hooks/useVisibleInterval'
 import { MARKET_REFRESH_MS, MARKET_REQUEST_TIMEOUT_MS } from '../../lib/marketLive'
 import { formatPct, kstDateString, pnlClass } from '../../lib/format'
-import type { CalendarEvent, GroupItem, MarketOverview, TreemapGroup } from '../../types/market'
+import type { CalendarEvent, MacroValue, MarketIndex, MarketOverview } from '../../types/market'
 import PageHeader from '../../components/ui/PageHeader'
 
-function More({ to }: { to: string }) {
-  return <Link to={to} className="-my-2 inline-flex min-h-11 items-center text-sm font-medium text-brand-strong">더 보기 ›</Link>
+// 미국 증시 카드 순서(KIS 해외지수). 국내 지수·주도 테마·업종 지도는 홈 '장 마감 노트'가 맡는다.
+const US_ORDER = ['US:SPX', 'US:COMP', 'US:NDX', 'US:SOX', 'US:DJI']
+// 돈의 흐름 카드로 올리는 FRED 금리 — 키가 없으면 데이터가 없어 줄이 그냥 빠진다. 나머지 FRED 지표는 '미국 경제지표' 카드.
+const RATE_SERIES = ['DGS10', 'DGS2']
+// 오르는 게 좋은 일이 아닌 지표 — 핑크(상승) 대신 회색에 부호, 뜻을 한 줄로(Pink-Is-a-Point)
+const NEUTRAL_HINT: Record<string, string> = {
+  'FX:USDKRW': '오르면 원화 약세',
+  'US:VIX': '공포지수 · 오르면 불안이 커졌다는 뜻',
 }
 
 function addDays(iso: string, days: number): string {
@@ -23,15 +29,60 @@ function addDays(iso: string, days: number): string {
   return d.toISOString().slice(0, 10)
 }
 
-// 시장 탭(요약) — 지수·거시 지표, 주도 테마 Top 5, 업종 지도, 다가오는 일정. 한 부분이 실패해도 나머지는 보여준다.
+const shortDate = (iso: string) => `${Number(iso.slice(5, 7))}/${Number(iso.slice(8, 10))}`
+const fmtIndex = (n: number) => n.toLocaleString('ko-KR', { maximumFractionDigits: 2 })
+
+function More({ to }: { to: string }) {
+  return <Link to={to} className="-my-2 inline-flex min-h-11 items-center text-sm font-medium text-brand-strong">더 보기 ›</Link>
+}
+
+function Row({ name, hint, value, sub, subClass = 'text-ink-muted' }: { name: string; hint?: ReactNode; value: string; sub?: string; subClass?: string }) {
+  return (
+    <li className="flex items-center gap-3 py-2.5">
+      <div className="min-w-0 flex-1">
+        <div className="truncate text-sm font-medium text-ink">{name}</div>
+        {hint && <div className="text-xs text-ink-muted">{hint}</div>}
+      </div>
+      <div className="shrink-0 text-right tabular-nums">
+        <div className="text-sm font-bold text-ink">{value}</div>
+        {sub && <div className={`text-xs font-medium ${subClass}`}>{sub}</div>}
+      </div>
+    </li>
+  )
+}
+
+function IndexRow({ ix }: { ix: MarketIndex }) {
+  const neutral = NEUTRAL_HINT[ix.code]
+  const live = ix.live && ix.asOf ? `장중 ${ix.asOf}` : null
+  return (
+    <Row
+      name={ix.name}
+      hint={[neutral, live].filter(Boolean).join(' · ') || undefined}
+      value={fmtIndex(ix.close)}
+      sub={ix.chg1d == null ? '—' : formatPct(ix.chg1d)}
+      subClass={neutral ? 'text-ink-muted' : pnlClass(ix.chg1d)}
+    />
+  )
+}
+
+function RateRow({ m }: { m: MacroValue }) {
+  const diff = m.prev == null ? null : m.value - m.prev
+  return (
+    <Row
+      name={m.name}
+      hint={`${shortDate(m.date)} 기준`}
+      value={`${m.value.toFixed(2)}${m.unit}`}
+      sub={diff == null ? undefined : `직전 대비 ${diff >= 0 ? '+' : ''}${diff.toFixed(2)}%p`}
+    />
+  )
+}
+
+// 시장 탭(세계 시장) — 밤사이 미국 증시, 돈의 흐름(원/달러·VIX·미 국채), 미국 경제지표, 다가오는 일정.
+// 내일 국내장에 영향을 줄 바깥 신호만 모은다. 한 부분이 실패해도 나머지는 보여준다.
 export default function MarketTab() {
-  const navigate = useNavigate()
   const today = kstDateString()
   const [overview, setOverview] = useState<MarketOverview | null>(null)
-  const [themes, setThemes] = useState<GroupItem[]>([])
-  const [sectors, setSectors] = useState<TreemapGroup[]>([])
   const [events, setEvents] = useState<CalendarEvent[]>([])
-  const [date, setDate] = useState<string | null>(null)
   const [state, setState] = useState<'loading' | 'ready'>('loading')
 
   // 개요 요청 번호 — 초기 로드와 30초 자동 새로고침이 겹쳐도 늦게 온 옛 응답이 최신 값을 덮지 않게 한다.
@@ -41,19 +92,9 @@ export default function MarketTab() {
   useEffect(() => {
     let cancelled = false
     const ovId = ++ovSeq.current
-    Promise.allSettled([
-      getMarketOverview(),
-      getMarketGroups('theme', '1d', 'chg', 0, 5),
-      getMarketTreemap('sector', 'mcap', '1d'),
-      getMarketCalendar(today, addDays(today, 60)),
-    ]).then(([ov, th, tm, ev]) => {
+    Promise.allSettled([getMarketOverview(), getMarketCalendar(today, addDays(today, 60))]).then(([ov, ev]) => {
       if (cancelled) return
       if (ov.status === 'fulfilled' && ovId === ovSeq.current) setOverview(ov.value)
-      if (th.status === 'fulfilled') {
-        setThemes(th.value.items)
-        setDate(th.value.date)
-      }
-      if (tm.status === 'fulfilled') setSectors(tm.value.groups)
       if (ev.status === 'fulfilled') setEvents(ev.value.slice(0, 5))
       setState('ready')
     })
@@ -62,9 +103,8 @@ export default function MarketTab() {
     }
   }, [today])
 
-  // 장중 지수 — 탭이 보이는 동안 30초마다 개요(지수·거시)만 조용히 다시 받는다.
-  // 첫 로드가 실패했거나 데이터가 없어도 같은 주기로 계속 시도한다(의도 — 자동 복구). 탭이 다시 보이면 즉시 1회.
-  // 실패는 무시(다음 주기에 재시도), 요청은 10초 제한(멈춘 요청이 영구 정지시키지 않게), 앞 요청이 끝나기 전에는 건너뛰고, 늦게 온 옛 응답은 번호로 버린다.
+  // 원/달러는 장중(09:00~15:35) 값이 덧씌워진다 — 탭이 보이는 동안 30초마다 개요만 조용히 다시 받는다.
+  // 실패는 무시(다음 주기에 재시도), 요청은 10초 제한, 앞 요청이 끝나기 전에는 건너뛰고, 늦게 온 옛 응답은 번호로 버린다.
   useVisibleInterval(() => {
     if (ovBusy.current) return
     ovBusy.current = true
@@ -79,60 +119,71 @@ export default function MarketTab() {
       })
   }, MARKET_REFRESH_MS, state === 'ready', { runOnVisible: true })
 
-  if (state === 'loading') return <p className="py-10 text-center text-sm text-ink-muted">불러오는 중…</p>
+  const header = <PageHeader title="밤사이 세계 시장" description="미국 장 마감 기준으로, 내일 국내장에 영향을 줄 바깥 신호를 모았어요." />
 
-  const nothing = !overview?.indices.length && !themes.length && !sectors.length && !events.length
+  if (state === 'loading') {
+    return (
+      <div aria-busy="true" className="space-y-3 sm:space-y-4">
+        {header}
+        <p role="status" className="sr-only">세계 시장을 불러오고 있어요</p>
+        <div className="grid gap-3 sm:gap-4 lg:grid-cols-2">
+          <Skeleton className="h-[324px] rounded-card" />
+          <Skeleton className="h-[324px] rounded-card" />
+        </div>
+      </div>
+    )
+  }
+
+  const indices = overview?.indices ?? []
+  const us = US_ORDER.flatMap((c) => indices.filter((i) => i.code === c))
+  const flow = ['FX:USDKRW', 'US:VIX'].flatMap((c) => indices.filter((i) => i.code === c))
+  const rates = (overview?.macro ?? []).filter((m) => RATE_SERIES.includes(m.seriesId))
+  const otherMacro = (overview?.macro ?? []).filter((m) => !RATE_SERIES.includes(m.seriesId))
+  const usDate = us[0]?.date ?? null
+  const nothing = !us.length && !flow.length && !rates.length && !events.length
+
   return (
     <div className="space-y-3 sm:space-y-4">
-      <PageHeader title="오늘 시장" description="국내·미국 지수와 주도 테마, 업종 흐름, 다가오는 일정을 한눈에 봐요." />
+      {header}
       {nothing && (
-        <Card><EmptyState emoji="🛠️" title="시장 데이터를 준비하고 있어요" description="매일 장 마감 후 갱신돼요." /></Card>
+        <Card><EmptyState emoji="🛠️" title="세계 시장 데이터를 준비하고 있어요" description="미국 장 마감 뒤(아침 6:30) 갱신돼요." /></Card>
       )}
-      {overview && <IndexCards indices={overview.indices} />}
-      {overview && <MacroCards macro={overview.macro} />}
 
-      <div className={`grid gap-3 sm:gap-4 ${themes.length > 0 && events.length > 0 ? 'lg:grid-cols-2' : ''}`}>
-        {themes.length > 0 && (
+      <div className={`grid gap-3 sm:gap-4 ${us.length > 0 && flow.length + rates.length > 0 ? 'lg:grid-cols-2 lg:items-start' : ''}`}>
+        {us.length > 0 && (
           <Card>
-            <div className="mb-1 flex items-center justify-between">
-              <h2 className="text-base font-bold text-ink">주도 테마 Top 5</h2>
-              <More to="/screener/themes" />
+            <div className="flex items-baseline justify-between">
+              <h2 className="text-base font-bold text-ink">미국 증시</h2>
+              {usDate && <span className="text-xs text-ink-muted">{shortDate(usDate)} 마감</span>}
             </div>
-            <ul className="divide-y divide-line">
-              {themes.map((t) => (
-                <li key={t.id} className="flex items-center gap-3 py-2.5">
-                  <span className="w-5 text-center text-sm font-bold text-ink-muted">{t.rank}</span>
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate text-sm font-bold text-ink">{t.name}</div>
-                    {t.leader && <div className="truncate text-xs text-ink-muted">대장 {t.leader.name}</div>}
-                  </div>
-                  <span className={`text-sm font-bold tabular-nums ${pnlClass(t.chg)}`}>{t.chg == null ? '—' : formatPct(t.chg)}</span>
-                </li>
-              ))}
+            <ul className="mt-1 divide-y divide-line">
+              {us.map((ix) => <IndexRow key={ix.code} ix={ix} />)}
             </ul>
           </Card>
         )}
-        {events.length > 0 && (
+        {flow.length + rates.length > 0 && (
           <Card>
-            <div className="mb-2 flex items-center justify-between">
-              <h2 className="text-base font-bold text-ink">다가오는 일정</h2>
-              <More to="/screener/calendar" />
-            </div>
-            <EventList events={events} today={today} />
+            <h2 className="text-base font-bold text-ink">돈의 흐름</h2>
+            <ul className="mt-1 divide-y divide-line">
+              {flow.map((ix) => <IndexRow key={ix.code} ix={ix} />)}
+              {rates.map((m) => <RateRow key={m.seriesId} m={m} />)}
+            </ul>
           </Card>
         )}
       </div>
 
-      {sectors.length > 0 && (
+      <MacroCards macro={otherMacro} />
+
+      {events.length > 0 && (
         <Card>
           <div className="mb-2 flex items-center justify-between">
-            <h2 className="text-base font-bold text-ink">업종 지도 <span className="text-xs font-normal text-ink-muted">면적 = 시가총액</span></h2>
-            <More to="/screener/sectors" />
+            <h2 className="text-base font-bold text-ink">다가오는 일정</h2>
+            <More to="/screener/calendar" />
           </div>
-          <Treemap groups={sectors} period="1d" nested={false} height={260} onGroupSelect={() => navigate('/screener/sectors')} />
+          <EventList events={events} today={today} />
         </Card>
       )}
-      <BasisNote date={date} />
+      <BasisNote date={usDate} />
     </div>
   )
 }
