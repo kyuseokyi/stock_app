@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
 import { StyleSheet } from 'react-native-unistyles';
 
@@ -12,13 +13,14 @@ import { IndexCard, MacroCard } from '../components/index-card';
 import type { GroupKind } from '../types';
 import { useAutoRefresh } from '../use-auto-refresh';
 import { useMarketOverview } from '../use-market-overview';
+import { groupOverview, NEUTRAL_HINT } from '../overview-groups';
 
 type Props = {
   onMore: (tab: 'theme' | 'calendar') => void;
   onOpenGroup: (kind: GroupKind, id: string) => void;
 };
 
-/** 시장 칩 — 지수 카드·거시 지표·주도 테마 Top 5·다가오는 일정 3건 */
+/** 시장 칩 — 국내 증시·밤사이 미국 증시·돈의 흐름(원/달러·VIX·미 국채)·미국 경제지표·주도 테마·다가오는 일정 3건 */
 export function MarketSection({ onMore, onOpenGroup }: Props) {
   const { data, loading, error, reload, refresh, silentRefresh } = useMarketOverview();
   const { refreshing, onRefresh } = usePullRefresh(refresh);
@@ -30,6 +32,7 @@ export function MarketSection({ onMore, onOpenGroup }: Props) {
 
   const indices = data?.overview.indices ?? [];
   const macro = data?.overview.macro ?? [];
+  const g = groupOverview(indices, macro);
   return (
     <ScrollView
       contentContainerStyle={[styles.content, (!data || indices.length === 0) && styles.grow]}
@@ -41,17 +44,30 @@ export function MarketSection({ onMore, onOpenGroup }: Props) {
         <ListState mode="empty" emoji="🛠️" title="시장 데이터를 준비하고 있어요" hint="매일 장 마감 후 갱신돼요" />
       ) : (
         <>
-          <View style={styles.grid}>
-            {indices.map((ix) => <IndexCard key={ix.code} index={ix} />)}
-          </View>
-          {macro.length > 0 ? (
-            <View style={styles.grid}>
-              {macro.map((m) => <MacroCard key={m.seriesId} macro={m} />)}
-            </View>
+          {g.kr.length > 0 ? (
+            <Group title="국내 증시">
+              {g.kr.map((ix) => <IndexCard key={ix.code} index={ix} />)}
+            </Group>
+          ) : null}
+          {g.us.length > 0 ? (
+            <Group title="밤사이 미국 증시">
+              {g.us.map((ix) => <IndexCard key={ix.code} index={ix} />)}
+            </Group>
+          ) : null}
+          {g.flow.length + g.rates.length > 0 ? (
+            <Group title="돈의 흐름">
+              {g.flow.map((ix) => <IndexCard key={ix.code} index={ix} hint={NEUTRAL_HINT[ix.code]} />)}
+              {g.rates.map((m) => <MacroCard key={m.seriesId} macro={m} />)}
+            </Group>
+          ) : null}
+          {g.otherMacro.length > 0 ? (
+            <Group title="미국 경제지표">
+              {g.otherMacro.map((m) => <MacroCard key={m.seriesId} macro={m} />)}
+            </Group>
           ) : null}
           {data && data.themes.length > 0 ? (
             <View style={styles.card}>
-              <SectionHead title="주도 테마 Top 5" onMore={() => onMore('theme')} />
+              <SectionHead title="주도 테마" onMore={() => onMore('theme')} />
               {data.themes.map((t) => <GroupRow key={t.id} item={t} onPress={() => onOpenGroup('theme', t.id)} />)}
             </View>
           ) : null}
@@ -69,6 +85,16 @@ export function MarketSection({ onMore, onOpenGroup }: Props) {
   );
 }
 
+/** 카드 묶음 — 제목 + 2열 격자 */
+function Group({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <View style={styles.group}>
+      <Text style={styles.groupTitle} accessibilityRole="header">{title}</Text>
+      <View style={styles.grid}>{children}</View>
+    </View>
+  );
+}
+
 function SectionHead({ title, onMore }: { title: string; onMore: () => void }) {
   return (
     <View style={styles.head}>
@@ -83,6 +109,8 @@ function SectionHead({ title, onMore }: { title: string; onMore: () => void }) {
 const styles = StyleSheet.create((theme) => ({
   content: { padding: theme.gap(2), gap: theme.gap(1.5) },
   grow: { flexGrow: 1 },
+  group: { gap: theme.gap(1) },
+  groupTitle: { fontSize: 16, fontWeight: '700', color: theme.colors.text },
   grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', rowGap: theme.gap(1.5) },
   card: { backgroundColor: theme.colors.surface, borderRadius: theme.radius.card, padding: theme.gap(2) },
   head: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: theme.gap(0.5) },
