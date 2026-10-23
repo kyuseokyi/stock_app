@@ -61,7 +61,7 @@ export default function AcademyModal({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <Modal title="🎓 아카데미" onClose={onClose}>
+    <Modal title="아카데미" onClose={onClose}>
       {state.kind === 'loading' && <p className="py-10 text-center text-sm text-ink-muted">불러오는 중…</p>}
       {state.kind === 'error' && (
         <div className="py-10 text-center">

@@ -15,7 +15,7 @@ export default function SentimentBar({ sentiment, intervalSec = 5 }: SentimentBa
 
   return (
     <div className="rounded-card bg-surface p-4">
-      <p className="mb-2 text-xs font-medium text-ink-muted">📊 유저 베팅 심리</p>
+      <p className="mb-2 text-xs font-medium text-ink-muted">유저 베팅 심리</p>
       {empty ? (
         <p className="text-sm text-ink-muted">아직 포지션이 없어요</p>
       ) : (
@@ -25,8 +25,8 @@ export default function SentimentBar({ sentiment, intervalSec = 5 }: SentimentBa
             <div className="bg-down transition-all" style={{ width: `${sentiment.short_pct}%` }} />
           </div>
           <div className="mt-1.5 flex justify-between text-sm font-semibold">
-            <span className="text-up">🔴 {sideLabel('LONG')} {sentiment.long_pct}%</span>
-            <span className="text-down">🔵 {sideLabel('SHORT')} {sentiment.short_pct}%</span>
+            <span className="text-up">{sideLabel('LONG')} {sentiment.long_pct}%</span>
+            <span className="text-down">{sideLabel('SHORT')} {sentiment.short_pct}%</span>
           </div>
           {total > 0 && (
             <p className="mt-1 text-xs text-ink-muted">

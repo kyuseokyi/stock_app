@@ -170,7 +170,7 @@ export default function OrderPanel({
         side === 'LONG' ? 'bg-up-soft text-up' : 'bg-down-soft text-down'
       }`}
     >
-      {side === 'LONG' ? '🔴' : '🔵'} {sideLabel(side)}에 걸기
+      {sideLabel(side)}에 걸기
     </button>
   )
 

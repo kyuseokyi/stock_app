@@ -12,6 +12,7 @@ import AppToaster from './AppToaster'
 import { showToast } from '../store/toast'
 import { useFundAutoRefresh } from '../lib/fundAutoRefresh'
 import ScrollRow from './ui/ScrollRow'
+import Button from './ui/Button'
 
 export default function Layout() {
   const { boards, fetchBoards } = useBoardStore()
@@ -61,12 +62,7 @@ export default function Layout() {
             {user ? (
               <UserMenu nickname={user.nickname} onLogout={logout} onDeleteAccount={() => setDeleteOpen(true)} />
             ) : (
-              <button
-                onClick={() => setLoginOpen(true)}
-                className="rounded-field bg-brand px-3 py-1.5 text-sm font-medium text-ink hover:brightness-95"
-              >
-                로그인
-              </button>
+              <Button onClick={() => setLoginOpen(true)}>로그인</Button>
             )}
           </div>
 

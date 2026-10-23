@@ -13,6 +13,7 @@ import type { CanslimItem, CanslimMarket, ScreenFilters } from '../types/screene
 import PageHeader from '../components/ui/PageHeader'
 import FilterPanel from '../components/ui/FilterPanel'
 import { ListSkeleton } from '../components/ui/Skeleton'
+import Button from '../components/ui/Button'
 
 // 스크리너 '주도주' 탭 — CANSLIM(윌리엄 오닐). 넓은 화면은 목록 + 오른쪽 상세, 좁은 화면은 행을 눌러 펼침.
 // ?ticker= 로 들어오면(테마·업종 상세의 종목) 그 종목 점수표를 바로 보여준다.
@@ -105,14 +106,9 @@ export default function ScreenerPage() {
               renderInline={wide ? undefined : (t) => <CanslimDetail ticker={t} />}
             />
             {items.length < total && (
-              <button
-                type="button"
-                onClick={loadMore}
-                disabled={loadingMore}
-                className="mt-2 w-full rounded-btn bg-fill py-2.5 text-sm font-medium text-ink disabled:opacity-60"
-              >
+              <Button variant="tertiary" full className="mt-2" onClick={loadMore} disabled={loadingMore}>
                 {loadingMore ? '불러오는 중…' : `더 보기 (${Math.min(PAGE_SIZE, total - items.length)}개)`}
-              </button>
+              </Button>
             )}
           </Card>
           {wide && shown && (

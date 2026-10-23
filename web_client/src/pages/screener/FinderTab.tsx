@@ -12,6 +12,7 @@ import type { FinderItem, FinderPreset, FinderQuery } from '../../types/finder'
 import PageHeader from '../../components/ui/PageHeader'
 import ScrollRow from '../../components/ui/ScrollRow'
 import { ListSkeleton } from '../../components/ui/Skeleton'
+import Button from '../../components/ui/Button'
 
 const INITIAL_QUERY: FinderQuery = { preset: null, sort: 'value', filters: DEFAULT_FINDER_FILTERS }
 
@@ -172,14 +173,9 @@ export default function FinderTab() {
               <p role="alert" className="mt-2 text-center text-xs text-danger">더 불러오지 못했어요. 다시 눌러 주세요.</p>
             )}
             {items.length < total && (
-              <button
-                type="button"
-                onClick={loadMore}
-                disabled={loadingMore}
-                className="mt-2 w-full rounded-btn bg-fill py-2.5 text-sm font-medium text-ink disabled:opacity-60"
-              >
+              <Button variant="tertiary" full className="mt-2" onClick={loadMore} disabled={loadingMore}>
                 {loadingMore ? '불러오는 중…' : `더 보기 (${Math.min(FINDER_PAGE, total - items.length)}개)`}
-              </button>
+              </Button>
             )}
           </Card>
           {wide && shownItem && (

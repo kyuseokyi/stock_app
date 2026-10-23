@@ -12,6 +12,7 @@ import PageHeader from '../../components/ui/PageHeader'
 import ScrollRow from '../../components/ui/ScrollRow'
 import FilterPanel from '../../components/ui/FilterPanel'
 import { ListSkeleton } from '../../components/ui/Skeleton'
+import Button from '../../components/ui/Button'
 
 const INITIAL_QUERY: PatternQuery = { report: 'forming', patternType: null, market: 'ALL', sort: 'pivot_dist' }
 
@@ -173,14 +174,9 @@ export default function PatternsTab() {
               <p role="alert" className="mt-2 text-center text-xs text-danger">더 불러오지 못했어요. 다시 눌러 주세요.</p>
             )}
             {items.length < total && (
-              <button
-                type="button"
-                onClick={loadMore}
-                disabled={loadingMore}
-                className="mt-2 w-full rounded-btn bg-fill py-2.5 text-sm font-medium text-ink disabled:opacity-60"
-              >
+              <Button variant="tertiary" full className="mt-2" onClick={loadMore} disabled={loadingMore}>
                 {loadingMore ? '불러오는 중…' : `더 보기 (${Math.min(PATTERN_PAGE, total - items.length)}개)`}
-              </button>
+              </Button>
             )}
           </Card>
           {wide && shownItem && (

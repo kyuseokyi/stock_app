@@ -60,10 +60,10 @@ export default function CalendarTab() {
         <Card className="space-y-4">
           {past.length > 0 && (
             <div>
-              <button type="button" onClick={() => setShowPast((v) => !v)} className="text-sm font-medium text-ink-muted">
+              <button type="button" aria-expanded={showPast} onClick={() => setShowPast((v) => !v)} className="-my-2 inline-flex min-h-11 items-center text-sm font-medium text-ink-muted hover:text-ink">
                 {showPast ? '지난 일정 접기 ▲' : `지난 7일 일정 ${past.length}개 보기 ▼`}
               </button>
-              {showPast && <div className="mt-3 opacity-70"><EventList events={past} today={today} /></div>}
+              {showPast && <div className="mt-3"><EventList events={past} today={today} /></div>}
             </div>
           )}
           {upcoming.length > 0 ? (

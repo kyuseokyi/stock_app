@@ -47,14 +47,9 @@ export default function DeleteAccountModal({ onClose, onDeleted }: Props) {
         </p>
       )}
       <div className="mt-4 flex flex-col gap-2">
-        <button
-          type="button"
-          onClick={handleDelete}
-          disabled={submitting}
-          className="inline-flex h-11 w-full items-center justify-center rounded-btn bg-danger-soft px-4 text-sm font-semibold text-danger transition hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-50"
-        >
+        <Button variant="danger" full onClick={handleDelete} disabled={submitting}>
           {submitting ? '탈퇴하는 중…' : '탈퇴하기'}
-        </button>
+        </Button>
         <Button variant="secondary" full onClick={onClose} disabled={submitting}>
           취소
         </Button>

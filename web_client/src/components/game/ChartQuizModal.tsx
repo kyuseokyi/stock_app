@@ -132,11 +132,11 @@ export default function ChartQuizModal({ onClose }: { onClose: () => void }) {
   )
 
   return (
-    <Modal title="🧩 야간 차트 퀴즈" onClose={onClose}>
+    <Modal title="야간 차트 퀴즈" onClose={onClose}>
       {phase.kind === 'intro' && (
         <div>
           <ul className="space-y-2 text-sm text-ink">
-            <li>📊 날짜·종목을 가린 차트를 보고 며칠(3·5·10거래일) 뒤 주가 방향·등락폭이나 차트 신호를 맞혀요.</li>
+            <li>날짜·종목을 가린 차트를 보고 며칠(3·5·10거래일) 뒤 주가 방향·등락폭이나 차트 신호를 맞혀요.</li>
             <li>⏱ 제한 시간은 10초(보기 4개 문제는 15초). 시간 안에 고르지 않으면 제출되지 않아요.</li>
             <li>🎁 정답이면 +₩200,000 (보상은 하루 3회까지).</li>
           </ul>
@@ -190,7 +190,7 @@ export default function ChartQuizModal({ onClose }: { onClose: () => void }) {
                 onClick={() => void choose('UP')}
                 className="h-14 rounded-btn bg-up-soft text-base font-bold text-up transition hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-40"
               >
-                오를까? 📈
+                오를까?
               </button>
               <button
                 type="button"
@@ -198,7 +198,7 @@ export default function ChartQuizModal({ onClose }: { onClose: () => void }) {
                 onClick={() => void choose('DOWN')}
                 className="h-14 rounded-btn bg-down-soft text-base font-bold text-down transition hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-40"
               >
-                내릴까? 📉
+                내릴까?
               </button>
             </div>
           )}

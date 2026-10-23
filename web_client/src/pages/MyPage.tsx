@@ -62,7 +62,7 @@ export default function MyPage() {
         <Button variant="secondary" full onClick={logout}>
           로그아웃
         </Button>
-        <Button variant="secondary" full onClick={() => setDeleteOpen(true)} className="text-danger">
+        <Button variant="danger" full onClick={() => setDeleteOpen(true)}>
           회원 탈퇴
         </Button>
       </div>

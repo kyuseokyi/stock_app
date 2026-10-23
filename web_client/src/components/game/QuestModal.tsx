@@ -116,7 +116,7 @@ export default function QuestModal({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <Modal title="🎯 퀘스트" onClose={onClose}>
+    <Modal title="퀘스트" onClose={onClose}>
       {state.kind === 'loading' && <p className="py-10 text-center text-sm text-ink-muted">불러오는 중…</p>}
       {state.kind === 'error' && (
         <div className="py-10 text-center">

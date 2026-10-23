@@ -11,6 +11,7 @@ import { useMediaQuery } from '../../hooks/useMediaQuery'
 import type { GroupItem, GroupKind, TreemapGroup } from '../../types/market'
 import PageHeader from '../../components/ui/PageHeader'
 import { ListSkeleton } from '../../components/ui/Skeleton'
+import Button from '../../components/ui/Button'
 
 const TEXT: Record<GroupKind, { title: string; desc: string; empty: string }> = {
   theme: {
@@ -113,10 +114,9 @@ export default function GroupTab({ kind }: { kind: GroupKind }) {
                   renderInline={wide ? undefined : (id) => <GroupDetailView kind={kind} id={id} />}
                 />
                 {items.length < total && (
-                  <button type="button" onClick={loadMore} disabled={loadingMore}
-                    className="mt-2 w-full rounded-btn bg-fill py-2.5 text-sm font-medium text-ink disabled:opacity-60">
+                  <Button variant="tertiary" full className="mt-2" onClick={loadMore} disabled={loadingMore}>
                     {loadingMore ? '불러오는 중…' : `더 보기 (${Math.min(GROUP_PAGE, total - items.length)}개)`}
-                  </button>
+                  </Button>
                 )}
               </>
             ) : (

@@ -14,7 +14,7 @@ import type { CalendarEvent, GroupItem, MarketOverview, TreemapGroup } from '../
 import PageHeader from '../../components/ui/PageHeader'
 
 function More({ to }: { to: string }) {
-  return <Link to={to} className="text-sm font-medium text-brand-strong">더 보기</Link>
+  return <Link to={to} className="-my-2 inline-flex min-h-11 items-center text-sm font-medium text-brand-strong">더 보기 ›</Link>
 }
 
 function addDays(iso: string, days: number): string {

@@ -15,7 +15,7 @@ export default function MarketStrip({ markets, date, loading = false }: { market
         {markets.map((m) => (
           <span key={m.market} className={`rounded-full px-3 py-1 text-sm font-medium ${marketToneClass(m.status)}`}>
             {m.market} {m.status}
-            <span className="ml-1 text-xs opacity-80">· 분산일 {m.distributionDays}일</span>
+            <span className="ml-1 text-xs font-normal">· 분산일 {m.distributionDays}일</span>
           </span>
         ))}
       </div>

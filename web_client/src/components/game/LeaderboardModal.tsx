@@ -89,7 +89,7 @@ export default function LeaderboardModal({ seasonId, myUserId, seasonPeriod, onC
   const current = tab === 'season' ? board : hof
 
   return (
-    <Modal title="🏆 랭킹" onClose={onClose}>
+    <Modal title="랭킹" onClose={onClose}>
       <div className="mb-4 flex gap-2" role="tablist">
         <button type="button" role="tab" aria-selected={tab === 'weekly'} onClick={() => setTab('weekly')} className={chipClass(tab === 'weekly')}>
           주간

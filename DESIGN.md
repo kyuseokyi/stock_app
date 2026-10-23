@@ -76,6 +76,18 @@ components:
     height: "44px"
   button-secondary-hover:
     backgroundColor: "{colors.hairline-lilac}"
+  button-tertiary:
+    backgroundColor: "{colors.lavender-fill}"
+    textColor: "{colors.night-ink}"
+    rounded: "{rounded.btn}"
+    padding: "0 16px"
+    height: "44px"
+  button-danger:
+    backgroundColor: "{colors.ember-danger-soft}"
+    textColor: "{colors.ember-danger}"
+    rounded: "{rounded.btn}"
+    padding: "0 16px"
+    height: "44px"
   chip:
     backgroundColor: "{colors.lavender-fill}"
     textColor: "{colors.dusk-ink}"
@@ -230,8 +242,14 @@ components:
 - **Primary:** Pastel Blue 배경에 Night Ink 글자. 화면당 하나의 주된 행동에 쓴다.
 - **Secondary:** Paper White 배경에 1px Hairline Lilac 안쪽 테두리, Night Ink 글자.
 - **Hover / Focus:** Primary는 명도를 5% 낮추고(`brightness-95`), Secondary는 Hairline Lilac 배경으로 바뀐다. 키보드 포커스는 Deep Periwinkle 2px 바깥선(간격 2px)이며 마우스 클릭에는 보이지 않는다.
+- **Tertiary:** Lavender Fill 배경에 Night Ink 글자. "더 보기"처럼 목록 끝의 보조 행동.
+- **Danger:** Ember Danger Soft 배경에 Ember Danger 글자. 탈퇴처럼 되돌리기 어려운 행동에만.
 - **Disabled:** 50% 불투명, 커서 금지.
-- **Text button:** "종목 상세 보기 →"처럼 배경 없이 Deep Periwinkle 글자로 쓴다.
+- **Text button:** "종목 상세 보기 →"처럼 배경 없이 Deep Periwinkle 글자로 쓴다. 보이는 글자는 작아도 누르는 영역은 44px(`min-h-11`, 위아래 음수 여백으로 줄 간격 유지).
+
+### Icons
+- 아이콘은 하단 탭바와 같은 **무채색 선 아이콘**(24 격자, 선 두께 1.8, `currentColor`)이다. 글자 라벨과 함께 쓰고, 의미는 라벨이 전한다.
+- **The No-Emoji-Controls Rule.** 버튼·탭·내비·라벨 같은 조작 요소에는 이모지를 쓰지 않는다(주문·퀴즈·게임 헤더 버튼 포함). 예외는 게임의 연속 출석 칩 🔥 하나이며, 화면 읽기에는 숨기고 칩에 "연속 출석 n일" 이름을 붙인다. 게임 토스트 아이콘(🎁🔓)·축하 장면(🎉)·빈 화면 그림처럼 조작이 아닌 놀이감 연출은 허용한다.
 
 ### Chips
 - **Style:** 알약 모양, 좌우 12px·위아래 6px, 14px 중간 굵기(500). 미선택은 Lavender Fill 배경에 Dusk Ink 글자.

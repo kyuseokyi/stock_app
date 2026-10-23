@@ -133,7 +133,7 @@ function RulesBody({ rules, season }: { rules: GameRules; season: GameRulesModal
         )}
       </Section>
 
-      <Section title="📊 유저 베팅 심리">
+      <Section title="유저 베팅 심리">
         <p>
           지금 시즌에 포지션을 보유 중인 사람들의 상승/하락 비율이에요. 인원 기준이라 금액·배율은 따지지 않아요.
         </p>
@@ -149,7 +149,7 @@ function RulesBody({ rules, season }: { rules: GameRules; season: GameRulesModal
 export default function GameRulesModal({ rulesState, season, onClose }: GameRulesModalProps) {
   const { rules, status, retry } = rulesState
   return (
-    <Modal title="📖 게임 규칙" onClose={onClose}>
+    <Modal title="게임 규칙" onClose={onClose}>
       {rules ? (
         <RulesBody rules={rules} season={season} />
       ) : status === 'error' ? (

@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-10-23T00:52:31+00:00",
+  "generatedAt": "2026-10-23T02:03:57+00:00",
   "title": "Design System: StockApp",
   "extensions": {
     "colorMeta": {
@@ -454,6 +454,11 @@
         "name": "The Flat-At-Rest Rule",
         "body": "페이지에 붙어 있는 카드에는 그림자를 주지 않는다. 그림자는 \"지금 위에 떠 있다\"는 뜻일 때만 쓴다.",
         "section": "elevation"
+      },
+      {
+        "name": "The No-Emoji-Controls Rule",
+        "body": "버튼·탭·내비·라벨 같은 조작 요소에는 이모지를 쓰지 않는다(주문·퀴즈·게임 헤더 버튼 포함). 예외는 게임의 연속 출석 칩 🔥 하나이며, 화면 읽기에는 숨기고 칩에 \"연속 출석 n일\" 이름을 붙인다. 게임 토스트 아이콘(🎁🔓)·축하 장면(🎉)·빈 화면 그림처럼 조작이 아닌 놀이감 연출은 허용한다.",
+        "section": "components"
       }
     ],
     "dos": [
