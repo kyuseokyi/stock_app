@@ -10,6 +10,8 @@ import { useMediaQuery } from '../../hooks/useMediaQuery'
 import { DEFAULT_FINDER_FILTERS, FINDER_PAGE, FINDER_SORTS, PRESETS, activeFilterCount, sameFinderQuery } from '../../lib/finder'
 import type { FinderItem, FinderPreset, FinderQuery } from '../../types/finder'
 import PageHeader from '../../components/ui/PageHeader'
+import ScrollRow from '../../components/ui/ScrollRow'
+import { ListSkeleton } from '../../components/ui/Skeleton'
 
 const INITIAL_QUERY: FinderQuery = { preset: null, sort: 'value', filters: DEFAULT_FINDER_FILTERS }
 
@@ -87,7 +89,7 @@ export default function FinderTab() {
       <PageHeader title="조건검색" description="자주 쓰는 조건(프리셋)이나 직접 고른 조건으로 종목을 찾습니다." />
 
       <Card>
-        <div className="flex gap-2 overflow-x-auto pb-1">
+        <ScrollRow>
           {PRESETS.map((p) => (
             <button
               key={p.key}
@@ -99,9 +101,9 @@ export default function FinderTab() {
               {p.label}
             </button>
           ))}
-        </div>
+        </ScrollRow>
         <p className="mt-2 text-sm text-ink-muted">{preset ? preset.description : '프리셋을 고르거나 필터로 조건을 정해 보세요.'}</p>
-        <div className="mt-3 flex items-center gap-2 overflow-x-auto pb-1">
+        <ScrollRow className="mt-3 items-center">
           <button
             type="button"
             aria-expanded={panelOpen}
@@ -122,7 +124,7 @@ export default function FinderTab() {
               {s.label}
             </button>
           ))}
-        </div>
+        </ScrollRow>
         {panelOpen && (
           <div className="mt-3 border-t border-line pt-3">
             <FinderFilters
@@ -148,7 +150,7 @@ export default function FinderTab() {
           </button>
         </Card>
       )}
-      {state === 'loading' && <p className="py-10 text-center text-sm text-ink-muted">불러오는 중…</p>}
+      {state === 'loading' && <ListSkeleton />}
       {state === 'ready' && date === null && (
         <Card><EmptyState emoji="🛠️" title="조건검색 데이터를 준비하고 있어요" description="매일 장 마감 후 계산돼요." /></Card>
       )}

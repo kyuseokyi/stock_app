@@ -8,6 +8,7 @@ import { getMarketCalendar } from '../../api/market'
 import { kstDateString } from '../../lib/format'
 import type { CalendarEvent } from '../../types/market'
 import PageHeader from '../../components/ui/PageHeader'
+import { ListSkeleton } from '../../components/ui/Skeleton'
 
 const CATEGORIES: [string | undefined, string][] = [[undefined, '전체'], ['공모주', '공모주'], ['경제지표', '경제지표']]
 
@@ -54,7 +55,7 @@ export default function CalendarTab() {
         ))}
       </div>
       {state === 'failed' && <Card><EmptyState emoji="⚠️" title="일정을 불러오지 못했어요" description="잠시 뒤 다시 시도해 주세요." /></Card>}
-      {state === 'loading' && <p className="py-10 text-center text-sm text-ink-muted">불러오는 중…</p>}
+      {state === 'loading' && <ListSkeleton rows={5} label="일정을 불러오고 있어요" />}
       {state === 'ready' && (
         <Card className="space-y-4">
           {past.length > 0 && (

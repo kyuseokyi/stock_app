@@ -14,6 +14,7 @@ import { formatPrice } from '../lib/format'
 import { overlayCaption, patternOverlay } from '../lib/patternOverlay'
 import type { PatternBases } from '../types/patterns'
 import type { CanslimScore } from '../types/screener'
+import { Skeleton } from '../components/ui/Skeleton'
 
 // 종목 상세 — 검색창 + 헤더(이름·종가·주도주 점수) + 일봉 차트(기간 선택, 50일선·52주 고점·현재 패턴 선)
 //   + 패턴(현재 베이스·이력) + 주도주(CANSLIM 7항목·점수 추이). 스크리너 상세 패널과 같은 부품을 쓴다.
@@ -182,7 +183,12 @@ export default function StockDetailPage() {
 
           <Card as="section" aria-label="차트 패턴" className="space-y-3">
             <h2 className="font-bold text-ink">차트 패턴</h2>
-            {bases.state === 'loading' && <p className="py-4 text-center text-sm text-ink-muted">불러오는 중…</p>}
+            {bases.state === 'loading' && (
+              <>
+                <p role="status" className="sr-only">패턴을 불러오고 있어요</p>
+                <Skeleton className="h-[23rem] sm:h-[17rem]" />
+              </>
+            )}
             {bases.state === 'failed' && <Retry text="패턴을 불러오지 못했어요" onRetry={() => setReload((k) => k + 1)} />}
             {basesData && (
               basesData.bases.length === 0 ? (
@@ -199,7 +205,12 @@ export default function StockDetailPage() {
 
         <Card as="section" aria-label="주도주 분석" className="space-y-3 lg:sticky lg:top-[7.5rem]">
           <h2 className="font-bold text-ink">주도주 분석 (CANSLIM)</h2>
-          {score.state === 'loading' && <p className="py-4 text-center text-sm text-ink-muted">불러오는 중…</p>}
+          {score.state === 'loading' && (
+            <>
+              <p role="status" className="sr-only">점수표를 불러오고 있어요</p>
+              <Skeleton className="h-80" />
+            </>
+          )}
           {score.state === 'failed' && <Retry text="점수표를 불러오지 못했어요" onRetry={() => setReload((k) => k + 1)} />}
           {score.state === 'ready' && !scoreData && (
             <p className="py-4 text-center text-sm text-ink-muted">주도주 분석 대상(보통주)이 아니에요</p>

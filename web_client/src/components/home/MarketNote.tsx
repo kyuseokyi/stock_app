@@ -10,6 +10,7 @@ import { MARKET_REFRESH_MS, MARKET_REQUEST_TIMEOUT_MS } from '../../lib/marketLi
 import { formatPct, pnlClass } from '../../lib/format'
 import { noteIndices, noteSummary, noteTitle } from '../../lib/marketSummary'
 import type { GroupItem, MarketOverview, TreemapGroup } from '../../types/market'
+import { Skeleton } from '../ui/Skeleton'
 
 // 홈 '오늘 시장 노트' — 날짜 제목 + 한 줄 요약 + 지수 3 + 주도 테마 3 + 업종 지도 미리보기.
 // 전체는 스크리너 시장 탭. 조각마다 따로 불러 하나가 실패해도 나머지는 보인다.
@@ -69,7 +70,22 @@ export default function MarketNote() {
   }, MARKET_REFRESH_MS, state === 'ready', { runOnVisible: true })
 
   if (state === 'loading') {
-    return <p role="status" className="py-10 text-center text-sm text-ink-muted">오늘 시장을 불러오고 있어요</p>
+    // 높이는 실제 화면 측정값(제목 84/60 · 지수 136 · 테마 230 · 업종 지도 248 · 안내 32/16)
+    return (
+      <section aria-busy="true" className="space-y-3">
+        <p role="status" className="sr-only">오늘 시장을 불러오고 있어요</p>
+        <div className="min-h-[84px] sm:min-h-[60px]">
+          <Skeleton className="h-8 w-56" />
+          <Skeleton className="mt-2 h-5 w-full sm:w-3/4" />
+        </div>
+        <div className="grid grid-cols-3 gap-2">
+          {[0, 1, 2].map((i) => <Skeleton key={i} className="h-[136px] rounded-card" />)}
+        </div>
+        <Skeleton className="h-[230px] rounded-card" />
+        <Skeleton className="h-[248px] rounded-card" />
+        <div className="h-8 sm:h-4" />
+      </section>
+    )
   }
 
   const indices = overview?.indices ?? []
@@ -79,7 +95,7 @@ export default function MarketNote() {
 
   return (
     <section aria-labelledby="note-title" className="space-y-3">
-      <header>
+      <header className="min-h-[84px] sm:min-h-[60px]">
         <h1 id="note-title" className="text-2xl font-bold text-ink">{title}</h1>
         {summary ? (
           <p className="mt-1 text-pretty text-base text-ink">{summary}</p>

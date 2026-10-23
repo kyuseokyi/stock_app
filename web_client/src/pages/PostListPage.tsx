@@ -56,7 +56,7 @@ export default function PostListPage() {
                 to={`/posts/${p.id}`}
                 className="block rounded-card bg-surface p-4 transition hover:bg-line"
               >
-                <h2 className="font-semibold text-ink">{p.title}</h2>
+                <h2 className="text-balance font-semibold text-ink">{p.title}</h2>
                 <p className="mt-1 line-clamp-2 text-sm text-ink-muted">
                   {toPreview(p.content)}
                 </p>

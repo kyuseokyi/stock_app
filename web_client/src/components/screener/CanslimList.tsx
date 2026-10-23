@@ -27,7 +27,7 @@ export default function CanslimList({ items, selected, onSelect, renderInline }:
             >
               <div className="flex h-10 w-10 shrink-0 flex-col items-center justify-center rounded-btn bg-fill">
                 <span className="text-base font-bold leading-none text-ink">{it.score}</span>
-                <span className="text-[10px] text-ink-muted">점</span>
+                <span className="text-xs text-ink-muted">점</span>
               </div>
               <div className="min-w-0 flex-1">
                 <div className="flex items-baseline gap-1.5">

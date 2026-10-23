@@ -10,6 +10,7 @@ import { GROUP_PAGE, getMarketGroups, getMarketTreemap } from '../../api/market'
 import { useMediaQuery } from '../../hooks/useMediaQuery'
 import type { GroupItem, GroupKind, TreemapGroup } from '../../types/market'
 import PageHeader from '../../components/ui/PageHeader'
+import { ListSkeleton } from '../../components/ui/Skeleton'
 
 const TEXT: Record<GroupKind, { title: string; desc: string; empty: string }> = {
   theme: {
@@ -89,7 +90,7 @@ export default function GroupTab({ kind }: { kind: GroupKind }) {
       {state === 'failed' && (
         <Card><EmptyState emoji="⚠️" title="불러오지 못했어요" description="잠시 뒤 다시 시도해 주세요." /></Card>
       )}
-      {state === 'loading' && <p className="py-10 text-center text-sm text-ink-muted">불러오는 중…</p>}
+      {state === 'loading' && <ListSkeleton />}
       {state === 'ready' && date === null && (
         <Card><EmptyState emoji="🛠️" title="시장 데이터를 준비하고 있어요" description="매일 장 마감 후 갱신돼요." /></Card>
       )}

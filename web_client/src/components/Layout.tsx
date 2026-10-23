@@ -11,6 +11,7 @@ import DeleteAccountModal from './DeleteAccountModal'
 import AppToaster from './AppToaster'
 import { showToast } from '../store/toast'
 import { useFundAutoRefresh } from '../lib/fundAutoRefresh'
+import ScrollRow from './ui/ScrollRow'
 
 export default function Layout() {
   const { boards, fetchBoards } = useBoardStore()
@@ -73,8 +74,9 @@ export default function Layout() {
           <TopNav section={section} />
 
           {/* 커뮤니티 섹션일 때만 게시판 탭 */}
-          {section === 'community' && (
-            <nav className="mt-3 flex gap-2 overflow-x-auto pb-1">
+          {section === 'community' && boards.length > 1 && (
+            <nav aria-label="게시판" className="mt-3">
+              <ScrollRow fade="canvas">
               {boards.map((b) => (
                 <NavLink
                   key={b.id}
@@ -84,6 +86,7 @@ export default function Layout() {
                   {b.name}
                 </NavLink>
               ))}
+              </ScrollRow>
             </nav>
           )}
         </div>

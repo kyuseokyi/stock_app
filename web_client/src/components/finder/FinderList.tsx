@@ -12,7 +12,7 @@ const TONE: Record<Tone, string> = {
 }
 
 function Badge({ tone, children }: { tone: Tone; children: ReactNode }) {
-  return <span className={`rounded-md px-1.5 py-0.5 text-[11px] font-medium ${TONE[tone]}`}>{children}</span>
+  return <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${TONE[tone]}`}>{children}</span>
 }
 
 // 지표 배지 — 신고가·골든크로스·RSI(과매도 파랑·과열 빨강)·배열(정배열 빨강·역배열 파랑)
@@ -66,7 +66,7 @@ export default function FinderList({ items, selected, onSelect, renderInline }: 
               <div className="shrink-0 text-right">
                 <div className="text-sm font-medium text-ink">{formatPrice(it.close)}</div>
                 <div className={`text-xs font-medium ${pnlClass(it.chg1d)}`}>{it.chg1d === null ? '–' : formatPct(it.chg1d)}</div>
-                <div className="text-[11px] text-ink-muted">{formatAmount(it.value)}</div>
+                <div className="text-xs text-ink-muted">{formatAmount(it.value)}</div>
               </div>
             </button>
             {renderInline && active && <div className="pb-4">{renderInline(it)}</div>}

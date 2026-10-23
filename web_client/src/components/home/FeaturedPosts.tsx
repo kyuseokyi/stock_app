@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { listBlogs } from '../../api/blog'
 import { withErrorCode } from '../../lib/errorCode'
 import type { BlogListOut } from '../../types/api'
+import { Skeleton } from '../ui/Skeleton'
 
 // 추천 글(관리자가 고른 글, featured_at 최신순) — 홈 아래쪽. 앱 홈 탭과 같은 데이터.
 const toPreview = (html: string, n = 100) => {
@@ -30,7 +31,10 @@ export default function FeaturedPosts({ limit }: { limit: number }) {
       </div>
       {error && <p className="rounded-field bg-danger-soft px-4 py-2 text-sm text-danger">{error}</p>}
       {loading ? (
-        <p className="py-6 text-center text-sm text-ink-muted">추천 글을 불러오고 있어요</p>
+        <div aria-busy="true" className="space-y-2">
+          <p role="status" className="sr-only">추천 글을 불러오고 있어요</p>
+          {Array.from({ length: limit }, (_, i) => <Skeleton key={i} className="h-[124px] rounded-card" />)}
+        </div>
       ) : items.length === 0 && !error ? (
         <p className="py-6 text-center text-sm text-ink-muted">아직 추천 글이 없어요.</p>
       ) : (

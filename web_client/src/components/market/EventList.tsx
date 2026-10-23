@@ -29,7 +29,7 @@ export default function EventList({ events, today }: { events: CalendarEvent[]; 
           <ul className="space-y-1.5">
             {list.map((e, i) => (
               <li key={`${e.title}-${i}`} className="flex items-start gap-2 rounded-btn bg-fill px-3 py-2.5">
-                <span className={`mt-0.5 shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold ${CATEGORY_STYLE[e.category] ?? 'bg-surface text-ink-muted'}`}>
+                <span className={`mt-0.5 shrink-0 rounded-full px-2 py-0.5 text-xs font-bold ${CATEGORY_STYLE[e.category] ?? 'bg-surface text-ink-muted'}`}>
                   {e.category}
                 </span>
                 <div className="min-w-0">

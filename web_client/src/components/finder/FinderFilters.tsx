@@ -72,8 +72,8 @@ export default function FinderFilters({ value, onApply }: Props) {
           </button>
         ))}
       </Row>
-      <label className="flex items-center gap-2 text-sm text-ink-muted">
-        <input type="checkbox" checked={draft.liquidOnly} onChange={(e) => set({ liquidOnly: e.target.checked })} />
+      <label className="flex min-h-11 cursor-pointer items-center gap-2.5 text-sm text-ink-muted">
+        <input type="checkbox" className="h-5 w-5 shrink-0 accent-brand-strong" checked={draft.liquidOnly} onChange={(e) => set({ liquidOnly: e.target.checked })} />
         거래가 활발한 종목만(하루 평균 거래대금 10억 원·주가 1,000원 이상)
       </label>
       <Row title="가격">{num('priceMin', '최소', '원')}<span className="text-ink-muted">~</span>{num('priceMax', '최대', '원')}</Row>

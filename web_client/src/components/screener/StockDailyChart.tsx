@@ -119,7 +119,7 @@ export default function StockDailyChart({
           {state === 'loading' ? '차트를 불러오는 중…' : '차트를 불러오지 못했어요'}
         </div>
       )}
-      <div className="pointer-events-none absolute left-2 top-1 flex gap-3 text-[11px] text-ink-muted">
+      <div className="pointer-events-none absolute left-2 top-1 flex gap-3 text-xs text-ink-muted">
         <span><span className="mr-1 inline-block h-0.5 w-3 align-middle" style={{ background: MA50_COLOR }} />50일선</span>
         <span>┄ 52주 고점</span>
       </div>

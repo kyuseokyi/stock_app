@@ -33,12 +33,12 @@ export function IndexCards({ indices, gridClass = 'grid-cols-2 sm:grid-cols-3 lg
             <div className="flex items-baseline justify-between gap-1">
               <span className="truncate text-sm font-medium text-ink">{ix.name}</span>
               {badge?.live ? (
-                <span className="shrink-0 rounded-full bg-brand-soft px-1.5 text-[11px] font-semibold text-brand-strong">
+                <span className="shrink-0 rounded-full bg-brand-soft px-1.5 text-xs font-semibold text-brand-strong">
                   <span className="sr-only">장중 </span>
                   <span aria-hidden="true">●</span> {badge.label}
                 </span>
               ) : (
-                <span className="shrink-0 text-[11px] text-ink-muted">{badge?.text ?? ''}</span>
+                <span className="shrink-0 text-xs text-ink-muted">{badge?.text ?? ''}</span>
               )}
             </div>
             <div className="mt-1 text-lg font-bold text-ink">{fmtIndex(ix.close)}</div>
@@ -66,7 +66,7 @@ export function MacroCards({ macro }: { macro: MacroValue[] }) {
             <Card key={m.seriesId} padding="sm">
               <div className="truncate text-xs text-ink-muted">{m.name}</div>
               <div className="mt-1 text-base font-bold text-ink">{fmtMacro(m, m.value)}</div>
-              <div className="text-[11px] text-ink-muted">
+              <div className="text-xs text-ink-muted">
                 {m.date.slice(0, 7)}
                 {diff != null && ` · 직전 대비 ${diff >= 0 ? '+' : ''}${m.unit === '천 명' ? Math.round(diff).toLocaleString('ko-KR') : diff.toFixed(2)}`}
               </div>

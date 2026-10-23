@@ -1,6 +1,7 @@
 import { chipClass } from '../ui/Chip'
 import { LETTER_KEYS, LETTER_NAMES, toggleRequired } from '../../lib/canslim'
 import type { CanslimSort, MarketFilter, ScreenFilters } from '../../types/screener'
+import ScrollRow from '../ui/ScrollRow'
 
 const MARKETS: { key: MarketFilter; label: string }[] = [
   { key: 'ALL', label: '전체' },
@@ -19,7 +20,7 @@ export default function CanslimFilters({ value, onChange }: { value: ScreenFilte
   const set = (patch: Partial<ScreenFilters>) => onChange({ ...value, ...patch })
   return (
     <div className="space-y-2">
-      <div className="flex gap-2 overflow-x-auto pb-1">
+      <ScrollRow>
         {MARKETS.map((m) => (
           <button key={m.key} type="button" className={chipClass(value.market === m.key)} onClick={() => set({ market: m.key })}>
             {m.label}
@@ -31,16 +32,16 @@ export default function CanslimFilters({ value, onChange }: { value: ScreenFilte
             {s.label}
           </button>
         ))}
-      </div>
-      <div className="flex items-center gap-2 overflow-x-auto pb-1">
+      </ScrollRow>
+      <ScrollRow className="items-center">
         <span className="shrink-0 text-xs text-ink-muted">통과</span>
         {MIN_PASS.map((n) => (
           <button key={n} type="button" className={chipClass(value.minPass === n)} onClick={() => set({ minPass: n })}>
             {n === 0 ? '전부' : `${n}개↑`}
           </button>
         ))}
-      </div>
-      <div className="flex items-center gap-2 overflow-x-auto pb-1">
+      </ScrollRow>
+      <ScrollRow className="items-center">
         <span className="shrink-0 text-xs text-ink-muted">꼭 통과</span>
         {LETTER_KEYS.map((k) => (
           <button
@@ -54,9 +55,9 @@ export default function CanslimFilters({ value, onChange }: { value: ScreenFilte
             {LETTER_NAMES[k]}
           </button>
         ))}
-      </div>
-      <label className="flex items-center gap-2 text-sm text-ink-muted">
-        <input type="checkbox" checked={value.liquidOnly} onChange={(e) => set({ liquidOnly: e.target.checked })} />
+      </ScrollRow>
+      <label className="flex min-h-11 cursor-pointer items-center gap-2.5 text-sm text-ink-muted">
+        <input type="checkbox" className="h-5 w-5 shrink-0 accent-brand-strong" checked={value.liquidOnly} onChange={(e) => set({ liquidOnly: e.target.checked })} />
         거래가 활발한 종목만(하루 평균 거래대금 10억 원·주가 1,000원 이상)
       </label>
     </div>

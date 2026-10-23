@@ -463,7 +463,7 @@ export default function TradingChart({ ticker, lastPrice, coach, position }: Tra
           </div>
         )}
         {showMa && loaded && !failed && !empty && (
-          <div className="pointer-events-none absolute left-2 top-1.5 z-10 flex gap-1.5 text-[11px] font-bold">
+          <div className="pointer-events-none absolute left-2 top-1.5 z-10 flex gap-1.5 text-xs font-bold">
             {MA_PERIODS.map((p) => (
               <span key={p} style={{ color: MA_COLORS[p] }}>
                 {p}

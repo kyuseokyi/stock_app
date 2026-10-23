@@ -21,6 +21,13 @@ export const DEFAULT_FILTERS: ScreenFilters = {
   liquidOnly: true,
 }
 
+/** 기본값과 다른 필터 수(모바일 '필터 · n개 적용' 표시) — 꼭 통과 항목은 하나씩 센다 */
+export function activeCanslimFilters(f: ScreenFilters): number {
+  const d = DEFAULT_FILTERS
+  return (f.market !== d.market ? 1 : 0) + (f.sort !== d.sort ? 1 : 0) + (f.minPass !== d.minPass ? 1 : 0)
+    + f.required.length + (f.liquidOnly !== d.liquidOnly ? 1 : 0)
+}
+
 /** 배지 색: 통과=브랜드 블루, 미달=회색, 부족·준비 중=점선 테두리 */
 export function letterBadgeClass(status: LetterStatus): string {
   if (status === 1) return 'bg-brand text-ink'

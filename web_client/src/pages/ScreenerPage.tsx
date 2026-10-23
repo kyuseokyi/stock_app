@@ -8,9 +8,11 @@ import CanslimList from '../components/screener/CanslimList'
 import MarketStrip from '../components/screener/MarketStrip'
 import { PAGE_SIZE, getCanslimScreen } from '../api/screener'
 import { useMediaQuery } from '../hooks/useMediaQuery'
-import { DEFAULT_FILTERS } from '../lib/canslim'
+import { DEFAULT_FILTERS, activeCanslimFilters } from '../lib/canslim'
 import type { CanslimItem, CanslimMarket, ScreenFilters } from '../types/screener'
 import PageHeader from '../components/ui/PageHeader'
+import FilterPanel from '../components/ui/FilterPanel'
+import { ListSkeleton } from '../components/ui/Skeleton'
 
 // 스크리너 '주도주' 탭 — CANSLIM(윌리엄 오닐). 넓은 화면은 목록 + 오른쪽 상세, 좁은 화면은 행을 눌러 펼침.
 // ?ticker= 로 들어오면(테마·업종 상세의 종목) 그 종목 점수표를 바로 보여준다.
@@ -74,15 +76,17 @@ export default function ScreenerPage() {
           <CanslimDetail ticker={linked} />
         </Card>
       )}
-      <MarketStrip markets={markets} date={date} />
+      <MarketStrip markets={markets} date={date} loading={state === 'loading'} />
       <Card>
-        <CanslimFilters value={filters} onChange={setFilters} />
+        <FilterPanel activeCount={activeCanslimFilters(filters)}>
+          <CanslimFilters value={filters} onChange={setFilters} />
+        </FilterPanel>
       </Card>
 
       {state === 'failed' && (
         <Card><EmptyState emoji="⚠️" title="목록을 불러오지 못했어요" description="잠시 뒤 다시 시도해 주세요." /></Card>
       )}
-      {state === 'loading' && <p className="py-10 text-center text-sm text-ink-muted">불러오는 중…</p>}
+      {state === 'loading' && <ListSkeleton />}
       {state === 'ready' && date === null && (
         <Card><EmptyState emoji="🛠️" title="분석 데이터를 준비하고 있어요" description="매일 장 마감 후 계산돼요." /></Card>
       )}

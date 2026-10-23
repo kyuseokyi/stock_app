@@ -21,7 +21,7 @@ function RankHistory({ history }: { history: GroupDetail['history'] }) {
   })
   return (
     <div>
-      <div className="mb-1 flex justify-between text-[11px] text-ink-muted">
+      <div className="mb-1 flex justify-between text-xs text-ink-muted">
         <span>순위 추이 ({n}거래일)</span>
         <span>1위 ↑ · {maxRank}위 ↓</span>
       </div>
@@ -38,7 +38,7 @@ function RankHistory({ history }: { history: GroupDetail['history'] }) {
 function Stat({ label, value, cls = 'text-ink' }: { label: string; value: string; cls?: string }) {
   return (
     <div className="rounded-btn bg-fill px-2.5 py-2">
-      <div className="text-[11px] text-ink-muted">{label}</div>
+      <div className="text-xs text-ink-muted">{label}</div>
       <div className={`text-sm font-bold ${cls}`}>{value}</div>
     </div>
   )
@@ -99,7 +99,7 @@ export default function GroupDetailView({ kind, id }: { kind: GroupKind; id: str
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-1.5">
                     <span className="truncate text-sm font-bold text-ink">{s.name}</span>
-                    {s.isLeader && <span className="shrink-0 rounded-full bg-fill px-1.5 py-0.5 text-[10px] font-bold text-ink">대장주</span>}
+                    {s.isLeader && <span className="shrink-0 rounded-full bg-fill px-2 py-0.5 text-xs font-bold text-ink">대장주</span>}
                   </div>
                   {s.reason && <div className="truncate text-xs text-ink-muted">{s.reason}</div>}
                 </div>

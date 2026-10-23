@@ -33,22 +33,24 @@ function Tile({ x, y, w, h, label, chg, period, onClick, title }: {
   x: number; y: number; w: number; h: number; label: string; chg: number | null; period: string
   onClick?: () => void; title: string
 }) {
-  const showText = w > 40 && h > 22
+  // 글자는 12px 고정 — 안 들어가는 작은 칸은 글자를 숨기고 title·aria-label 로만 알린다(10px 로 줄이지 않음)
+  const showText = w > 52 && h > 20
   const big = w > 90 && h > 44
   return (
     <button
       type="button"
       title={title}
+      aria-label={title}
       onClick={onClick}
       disabled={!onClick}
       className="absolute overflow-hidden border border-surface text-left leading-tight disabled:cursor-default"
       style={{ left: x, top: y, width: w, height: h, background: chgColor(chg, period), color: chgTextColor(chg, period) }}
     >
       {showText && (
-        <span className={`block truncate px-1 pt-0.5 ${big ? 'text-xs font-bold' : 'text-[10px] font-medium'}`}>{label}</span>
+        <span className={`block truncate px-1 pt-0.5 ${big ? 'text-xs font-bold' : 'text-xs font-medium'}`}>{label}</span>
       )}
-      {showText && h > 34 && (
-        <span className={`block truncate px-1 ${big ? 'text-xs' : 'text-[10px]'}`}>{chg == null ? '—' : formatPct(chg)}</span>
+      {showText && h > 36 && (
+        <span className="block truncate px-1 text-xs">{chg == null ? '—' : formatPct(chg)}</span>
       )}
     </button>
   )
@@ -76,7 +78,7 @@ export default function Treemap({ groups, period, nested, height, onGroupSelect,
       if (nested && p.w > 60 && p.h > HEADER + 24) {
         tiles.push(
           <button key={`h${g.id}`} type="button" title={title} onClick={() => onGroupSelect?.(g.id)}
-            className="absolute truncate border border-surface bg-ink/80 px-1 text-left text-[11px] font-bold text-white"
+            className="absolute truncate border border-surface bg-ink/80 px-1 text-left text-xs font-bold text-white"
             style={{ left: p.x, top: p.y, width: p.w, height: HEADER }}>
             {g.name} {g.chg == null ? '' : formatPct(g.chg)}
           </button>,

@@ -9,6 +9,9 @@ import { useMediaQuery } from '../../hooks/useMediaQuery'
 import { PATTERN_KINDS, PATTERN_MARKETS, PATTERN_PAGE, PATTERN_REPORTS, PATTERN_SORTS } from '../../lib/patterns'
 import type { PatternItem, PatternQuery } from '../../types/patterns'
 import PageHeader from '../../components/ui/PageHeader'
+import ScrollRow from '../../components/ui/ScrollRow'
+import FilterPanel from '../../components/ui/FilterPanel'
+import { ListSkeleton } from '../../components/ui/Skeleton'
 
 const INITIAL_QUERY: PatternQuery = { report: 'forming', patternType: null, market: 'ALL', sort: 'pivot_dist' }
 
@@ -80,7 +83,7 @@ export default function PatternsTab() {
       <PageHeader title="차트 패턴" description="컵·쌍바닥·플랫 베이스 같은 돌파 전후 패턴을 찾습니다." />
 
       <Card>
-        <div role="group" aria-label="리포트" className="flex gap-2 overflow-x-auto pb-1">
+        <ScrollRow role="group" aria-label="리포트">
           {PATTERN_REPORTS.map((r) => (
             <button
               key={r.key}
@@ -92,9 +95,10 @@ export default function PatternsTab() {
               {r.label}
             </button>
           ))}
-        </div>
+        </ScrollRow>
         <p className="mt-2 text-sm text-ink-muted">{report?.description}</p>
-        <div role="group" aria-label="패턴 종류" className="mt-3 flex gap-2 overflow-x-auto pb-1">
+        <FilterPanel activeCount={(query.patternType !== INITIAL_QUERY.patternType ? 1 : 0) + (query.market !== INITIAL_QUERY.market ? 1 : 0) + (query.sort !== INITIAL_QUERY.sort ? 1 : 0)}>
+        <ScrollRow role="group" aria-label="패턴 종류" className="mt-1 sm:mt-3">
           {PATTERN_KINDS.map((k) => (
             <button
               key={k.key ?? 'all'}
@@ -106,8 +110,8 @@ export default function PatternsTab() {
               {k.label}
             </button>
           ))}
-        </div>
-        <div role="group" aria-label="시장과 정렬" className="mt-3 flex items-center gap-2 overflow-x-auto pb-1">
+        </ScrollRow>
+        <ScrollRow role="group" aria-label="시장과 정렬" className="mt-3 items-center">
           {PATTERN_MARKETS.map((m) => (
             <button
               key={m.key}
@@ -131,7 +135,8 @@ export default function PatternsTab() {
               {s.label}
             </button>
           ))}
-        </div>
+        </ScrollRow>
+        </FilterPanel>
       </Card>
 
       {state === 'failed' && (
@@ -146,7 +151,7 @@ export default function PatternsTab() {
           </button>
         </Card>
       )}
-      {state === 'loading' && <p className="py-10 text-center text-sm text-ink-muted">불러오는 중…</p>}
+      {state === 'loading' && <ListSkeleton />}
       {state === 'ready' && date === null && (
         <Card><EmptyState emoji="🛠️" title="패턴 데이터를 준비하고 있어요" description="매일 장 마감 후 계산돼요." /></Card>
       )}
