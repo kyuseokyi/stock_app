@@ -52,10 +52,12 @@ export function StockDailyChart({
     <View style={styles.wrap}>
       <View style={styles.legend}>
         <Text style={[styles.legendText, { color: MA50_COLOR }]}>━ 50일선</Text>
-        <Text style={styles.legendText}>┄ 52주 고점</Text>
-        {extraLines && extraLines.length > 0 ? (
-          <Text style={styles.legendText}>{extraLines.map((l) => `${l.dashed ? '┄' : '━'} ${l.title}`).join('  ')}</Text>
-        ) : null}
+        {high52w !== null ? <Text style={styles.legendText}>┄ 52주 고점</Text> : null}
+        {(extraLines ?? []).map((l) => (
+          <Text key={l.title} style={styles.legendText}>
+            <Text style={{ color: l.color }}>{l.dashed ? '┄' : '━'}</Text> {l.title}
+          </Text>
+        ))}
       </View>
       <View>
         <TvChart
@@ -85,7 +87,7 @@ export function StockDailyChart({
 
 const styles = StyleSheet.create((theme) => ({
   wrap: { gap: theme.gap(0.5) },
-  legend: { flexDirection: 'row', gap: theme.gap(1.5) },
+  legend: { flexDirection: 'row', flexWrap: 'wrap', columnGap: theme.gap(1.5), rowGap: 2 },
   legendText: { fontSize: 11, color: theme.colors.textSecondary },
   overlay: {
     position: 'absolute', top: 0, right: 0, bottom: 0, left: 0,

@@ -151,7 +151,7 @@ const PAGE_SCRIPT = String.raw`
     priceLines = lineSpecs.map(function (s) {
       return series.createPriceLine({
         price: s.price, color: s.color, lineWidth: s.width,
-        lineStyle: s.dashed ? LW.LineStyle.Dashed : LW.LineStyle.Solid, axisLabelVisible: true, title: s.title,
+        lineStyle: s.dashed ? LW.LineStyle.Dashed : LW.LineStyle.Solid, axisLabelVisible: true, title: '', // 이름은 RN 범례에 — 차트 안 이름은 가까운 선끼리 겹친다(축 라벨은 라이브러리가 떼어 놓음)
       });
     });
   }

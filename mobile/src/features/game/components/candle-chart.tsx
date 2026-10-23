@@ -458,11 +458,19 @@ export function DailyChart({ ticker, lastPrice, coach, position }: DailyChartPro
             <ActivityIndicator size="small" />
           </View>
         ) : null}
-        {hasBars && showMa && chartReady ? (
+        {hasBars && chartReady && (showMa || lines.length > 0) ? (
+          // 가격선 이름(지지·저항·진입·손절·익절)도 여기 — 차트 안 이름은 가까운 선끼리 겹쳐서 뺐다
           <View style={styles.legend} pointerEvents="none">
-            {MA_PERIODS.map((p) => (
-              <Text key={p} style={[styles.legendText, { color: MA_COLORS[p] }]} allowFontScaling={false}>
-                {p}
+            {showMa
+              ? MA_PERIODS.map((p) => (
+                  <Text key={p} style={[styles.legendText, { color: MA_COLORS[p] }]} allowFontScaling={false}>
+                    {p}
+                  </Text>
+                ))
+              : null}
+            {lines.map((l) => (
+              <Text key={l.title} style={[styles.legendText, styles.legendLine]} allowFontScaling={false}>
+                <Text style={{ color: l.color }}>{l.dashed ? '┄' : '━'}</Text> {l.title}
               </Text>
             ))}
           </View>
@@ -553,10 +561,12 @@ const styles = StyleSheet.create((theme) => ({
     left: 0,
     right: 0,
     flexDirection: 'row',
+    flexWrap: 'wrap',
     justifyContent: 'center',
-    gap: theme.gap(0.75),
+    columnGap: theme.gap(0.75),
   },
   legendText: { fontSize: 10, fontWeight: '700' },
+  legendLine: { color: theme.colors.text },
   // 단위 전환 중(새 데이터 대기) — 이전 차트를 흐리게 + 가운데 위 작은 로딩
   staleChart: { opacity: 0.35 },
   staleSpinner: { position: 'absolute', top: theme.gap(1), left: 0, right: 0, alignItems: 'center' },
