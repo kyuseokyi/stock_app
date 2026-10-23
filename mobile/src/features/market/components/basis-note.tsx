@@ -5,7 +5,7 @@ import { StyleSheet } from 'react-native-unistyles';
 export function BasisNote({ date }: { date: string | null }) {
   return (
     <Text style={styles.note}>
-      {date ? `기준일 ${date} · ` : ''}국내 지수 장중 30초 · 15:40 확정 · 종목·테마·업종 20:30 · 미국 06:30 갱신 · 투자 권유가 아닙니다
+      {date ? `기준일 ${date} · ` : ''}국내 지수 장중 30초 · 15:40 확정 · 종목·테마·업종 20:30 · 미국 06:30 갱신 · 투자 권유가 아니에요
     </Text>
   );
 }

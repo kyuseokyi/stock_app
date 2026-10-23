@@ -88,7 +88,7 @@ export function FinderSection({ onOpenStock }: { onOpenStock: (ticker: string, n
                     <Text style={styles.moreText}>더 불러오지 못했어요 · 다시 시도</Text>
                   </Pressable>
                 ) : null}
-                <Text style={styles.basis}>{r.date} 종가 기준 · 매일 20:30 갱신 · 투자 권유가 아닙니다</Text>
+                <Text style={styles.basis}>{r.date} 종가 기준 · 매일 20:30 갱신 · 투자 권유가 아니에요</Text>
               </View>
             )
           }

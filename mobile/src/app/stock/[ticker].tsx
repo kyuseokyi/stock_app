@@ -139,7 +139,7 @@ function StockDetailBody({ ticker, fallbackName }: { ticker: string; fallbackNam
             <ScoreTable letters={data.letters} />
           </View>
           <ScoreHistory history={data.history} />
-          <Text style={styles.note}>실적(C·A)은 최신 공시 기준이며, 투자 권유가 아닙니다.</Text>
+          <Text style={styles.note}>실적(C·A)은 최신 공시 기준이며, 투자 권유가 아니에요.</Text>
         </>
       ) : null}
     </ScrollView>

@@ -24,7 +24,7 @@ export function MarketStrip({ markets, date }: { markets: CanslimMarket[]; date:
         })}
       </View>
       <Text style={styles.note}>
-        {date ? `${date} 종가 기준` : '분석 데이터를 준비하고 있어요'} · 매일 20:30 갱신 · 투자 권유가 아닙니다
+        {date ? `${date} 종가 기준` : '분석 데이터를 준비하고 있어요'} · 매일 20:30 갱신 · 투자 권유가 아니에요
       </Text>
     </View>
   );

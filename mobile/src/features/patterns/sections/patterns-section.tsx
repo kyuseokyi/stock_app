@@ -67,7 +67,7 @@ export function PatternsSection({ onOpenStock }: { onOpenStock: (ticker: string,
                   </Pressable>
                 ) : null}
                 <Text style={styles.basis}>
-                  {r.date ? `${r.date} 기준일 종가 · ` : ''}매일 20:30 갱신 · 패턴 판정은 참고용이며 투자 권유가 아닙니다
+                  {r.date ? `${r.date} 기준일 종가 · ` : ''}매일 20:30 갱신 · 패턴 판정은 참고용이며 투자 권유가 아니에요
                 </Text>
               </View>
             )

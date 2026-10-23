@@ -18,12 +18,13 @@ import { useAuthStore } from '@/features/auth/store';
 import { useBlogDetail } from '@/features/blog/use-blog-detail';
 import { useComments } from '@/features/blog/use-comments';
 import { useBoardStore } from '@/features/boards/store';
+import { formatKstShort } from '@/features/game/lib/weekly';
 import { usePullRefresh } from '@/hooks/use-pull-refresh';
 
 function fmtDateTime(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '';
-  return d.toLocaleString('ko-KR');
+  return formatKstShort(iso); // "10/23(목) 15:12" — 초 단위는 빼고 기기 시간대와 무관하게 KST
 }
 
 function buildHtml(content: string, colors: { background: string; text: string }): string {

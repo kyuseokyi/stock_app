@@ -82,8 +82,8 @@ export const fromMonthlyResult = (r: MonthlyResultMonth): PeriodResult => ({
 
 /** 기간별 화면 문구 */
 export const PERIOD_TEXT: Record<RankingPeriod, { myRank: string; lastTop: string; empty: string }> = {
-  week: { myRank: '내 주간 순위', lastTop: '지난주 Top 3', empty: '이번 주 순위가 아직 없어요' },
-  month: { myRank: '내 월간 순위', lastTop: '지난달 Top 3', empty: '이번 달 순위가 아직 없어요' },
+  week: { myRank: '내 주간 순위', lastTop: '지난주 1~3위', empty: '이번 주 순위가 아직 없어요' },
+  month: { myRank: '내 월간 순위', lastTop: '지난달 1~3위', empty: '이번 달 순위가 아직 없어요' },
 };
 
 // ---------------------------------------------------------------- 보상 설정(/reward-config)

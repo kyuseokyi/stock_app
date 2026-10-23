@@ -32,7 +32,7 @@ export function PatternSummary({ base, close, date }: { base: PatternBase; close
         <Cell k="깊이" v={`${base.depth.toFixed(0)}%`} />
         <Cell k="길이" v={`${base.length}일`} />
       </View>
-      <Text style={styles.note}>{date ? `${date} 종가 기준 · ` : ''}패턴 판정은 참고용이며 투자 권유가 아닙니다.</Text>
+      <Text style={styles.note}>{date ? `${date} 종가 기준 · ` : ''}패턴 판정은 참고용이며 투자 권유가 아니에요.</Text>
     </View>
   );
 }
