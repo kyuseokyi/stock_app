@@ -30,7 +30,7 @@ export default function PostListPage() {
     setLoading(true)
     listBlogs({ boardId: Number(boardId), page, size: PAGE_SIZE })
       .then(setData)
-      .catch((err) => setError(withErrorCode('게시글을 불러오지 못했습니다.', err)))
+      .catch((err) => setError(withErrorCode('게시글을 불러오지 못했어요.', err)))
       .finally(() => setLoading(false))
   }, [boardId, page])
 
@@ -47,7 +47,7 @@ export default function PostListPage() {
       {loading ? (
         <p className="py-10 text-center text-ink-muted">불러오는 중…</p>
       ) : data.items.length === 0 ? (
-        <p className="py-10 text-center text-ink-muted">아직 게시글이 없습니다.</p>
+        <p className="py-10 text-center text-ink-muted">아직 게시글이 없어요.</p>
       ) : (
         <ul className="space-y-3">
           {data.items.map((p) => (

@@ -87,7 +87,7 @@ export default function FinderTab() {
 
   return (
     <div className="space-y-3 sm:space-y-4">
-      <PageHeader title="조건검색" description="자주 쓰는 조건(프리셋)이나 직접 고른 조건으로 종목을 찾습니다." />
+      <PageHeader title="조건검색" description="자주 쓰는 조건(프리셋)이나 직접 고른 조건으로 종목을 찾아요." />
 
       <Card>
         <ScrollRow>

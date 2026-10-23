@@ -7,7 +7,7 @@ interface SentimentBarProps {
   intervalSec?: number
 }
 
-// 유저 베팅 심리(WS 주기 갱신). 미수신이면 숨김, 0/0 이면 안내 문구.
+// 참여자 상승·하락 비율(WS 주기 갱신). 미수신이면 숨김, 0/0 이면 안내 문구.
 export default function SentimentBar({ sentiment, intervalSec = 5 }: SentimentBarProps) {
   if (!sentiment) return null
   const empty = sentiment.long_pct === 0 && sentiment.short_pct === 0
@@ -15,7 +15,7 @@ export default function SentimentBar({ sentiment, intervalSec = 5 }: SentimentBa
 
   return (
     <div className="rounded-card bg-surface p-4">
-      <p className="mb-2 text-xs font-medium text-ink-muted">유저 베팅 심리</p>
+      <p className="mb-2 text-xs font-medium text-ink-muted">참여자 상승·하락 비율</p>
       {empty ? (
         <p className="text-sm text-ink-muted">아직 포지션이 없어요</p>
       ) : (

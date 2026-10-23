@@ -52,9 +52,9 @@ function ChipSelect({ active, children, ...props }: { active: boolean } & Select
   )
 }
 
-// 원클릭 주문 — 비중(칩 + ▾기타)·배율 칩 + 손절/익절 드롭다운 + 상승에 걸기(핑크)/하락에 걸기(블루).
+// 원클릭 주문 — 비중(칩 + ▾기타)·배율 칩 + 손절/익절 드롭다운 + 상승 주문(핑크)/하락 주문(블루).
 // 5x 는 아카데미 미해금 시 잠금. 비중 상태는 하나 — 칩 값이면 드롭다운은 '기타'로 표시(파생).
-// sm 이상: 카드(기존). 모바일 폭: 화면 아래 고정 바(설정 요약 + 걸기 버튼) — 요약을 누르면 설정 시트.
+// sm 이상: 카드(기존). 모바일 폭: 화면 아래 고정 바(설정 요약 + 주문 버튼) — 요약을 누르면 설정 시트.
 // 두 형태가 같은 state 를 쓰므로 화면 폭을 바꿔도 선택이 유지된다.
 export default function OrderPanel({
   hasPosition, academyUnlocked, submitting, onOrder, onLockedLeverage, feePct = null, onOpenRules,
@@ -170,7 +170,7 @@ export default function OrderPanel({
         side === 'LONG' ? 'bg-up-soft text-up' : 'bg-down-soft text-down'
       }`}
     >
-      {sideLabel(side)}에 걸기
+      {sideLabel(side)} 주문
     </button>
   )
 
@@ -186,7 +186,7 @@ export default function OrderPanel({
         {hasPosition && <p className="mt-2 text-center text-xs text-ink-muted">보유 포지션을 먼저 청산하세요</p>}
       </Card>
 
-      {/* lg 미만(모바일·태블릿·좁은 노트북 창): 차트를 보면서 바로 걸 수 있게 화면 아래 고정(GamePage 가 그만큼 아래 여백) */}
+      {/* lg 미만(모바일·태블릿·좁은 노트북 창): 차트를 보면서 바로 주문할 수 있게 화면 아래 고정(GamePage 가 그만큼 아래 여백) */}
       {/* 모바일 폭은 하단 탭바(3.5rem + safe-area, Layout BottomTabBar) 바로 위, sm 이상은 탭바가 없어 맨 아래 */}
       <div className="fixed inset-x-0 bottom-[calc(3.5rem+env(safe-area-inset-bottom))] z-30 !m-0 border-t border-line bg-surface/95 backdrop-blur sm:bottom-0 lg:hidden">
         <div className="mx-auto max-w-3xl px-4 pb-2 pt-2">

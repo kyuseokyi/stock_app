@@ -81,7 +81,7 @@ export default function PatternsTab() {
 
   return (
     <div className="space-y-3 sm:space-y-4">
-      <PageHeader title="차트 패턴" description="컵·쌍바닥·플랫 베이스 같은 돌파 전후 패턴을 찾습니다." />
+      <PageHeader title="차트 패턴" description="컵·쌍바닥·플랫 베이스 같은 돌파 전후 패턴을 찾아요." />
 
       <Card>
         <ScrollRow role="group" aria-label="리포트">
@@ -98,6 +98,26 @@ export default function PatternsTab() {
           ))}
         </ScrollRow>
         <p className="mt-2 text-sm text-ink-muted">{report?.description}</p>
+        <details className="group mt-1 text-sm">
+          <summary className="-my-1 inline-flex min-h-11 cursor-pointer list-none items-center gap-1 font-medium text-brand-strong">
+            용어 설명
+            <span aria-hidden className="inline-block text-xs transition group-open:rotate-180">▾</span>
+          </summary>
+          <dl className="mt-1 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5 rounded-field bg-fill/60 p-3 text-ink">
+            <dt className="font-semibold">베이스</dt>
+            <dd className="text-ink-muted">주가가 오른 뒤 쉬어 가며 만드는 횡보 구간이에요.</dd>
+            <dt className="font-semibold">피벗</dt>
+            <dd className="text-ink-muted">베이스를 벗어나는지 보는 기준 가격이에요. 종가가 이 가격을 넘으면 돌파로 봐요.</dd>
+            <dt className="font-semibold">깊이</dt>
+            <dd className="text-ink-muted">베이스 고점에서 가장 많이 내려간 폭이에요.</dd>
+            <dt className="font-semibold">길이</dt>
+            <dd className="text-ink-muted">베이스가 이어진 거래일 수예요.</dd>
+            <dt className="font-semibold">단계</dt>
+            <dd className="text-ink-muted">
+              상승 흐름에서 몇 번째 베이스인지예요. 앞 베이스보다 피벗이 20% 넘게 오르면 한 단계 올라가고, 덜 오르면 같은 단계에 a·b를 붙여요.
+            </dd>
+          </dl>
+        </details>
         <FilterPanel activeCount={(query.patternType !== INITIAL_QUERY.patternType ? 1 : 0) + (query.market !== INITIAL_QUERY.market ? 1 : 0) + (query.sort !== INITIAL_QUERY.sort ? 1 : 0)}>
         <ScrollRow role="group" aria-label="패턴 종류" className="mt-1 sm:mt-3">
           {PATTERN_KINDS.map((k) => (

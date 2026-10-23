@@ -16,7 +16,7 @@ export default function CommunityPage() {
       ) : !loaded ? (
         <p className="text-ink-muted">불러오는 중…</p>
       ) : (
-        <p className="text-ink-muted">표시할 게시판이 없습니다.</p>
+        <p className="text-ink-muted">아직 열린 게시판이 없어요.</p>
       )}
     </div>
   )

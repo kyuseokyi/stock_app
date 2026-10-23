@@ -57,8 +57,8 @@ function RulesBody({ rules, season }: { rules: GameRules; season: GameRulesModal
 
       <Section title="📈 상승·하락과 배율">
         <p>
-          <span className="font-semibold text-up">상승</span>에 걸면 주가가 오를 때,{' '}
-          <span className="font-semibold text-down">하락</span>에 걸면 주가가 내릴 때 수익이 나요.
+          <span className="font-semibold text-up">상승</span>으로 주문하면 주가가 오를 때,{' '}
+          <span className="font-semibold text-down">하락</span>으로 주문하면 주가가 내릴 때 수익이 나요.
         </p>
         <p className="rounded-field bg-fill px-3 py-2 text-center font-semibold">손익(%) = 주가 변동률 × 배율 − 수수료</p>
         <table className="w-full text-center tabular-nums">
@@ -72,13 +72,13 @@ function RulesBody({ rules, season }: { rules: GameRules; season: GameRulesModal
           </thead>
           <tbody>
             <tr>
-              <td className="py-1 text-ink-muted">상승에 걸면</td>
+              <td className="py-1 text-ink-muted">상승 주문</td>
               {example.map((e) => (
                 <td key={e.leverage} className="py-1 font-semibold text-up">{signedPct(e.roiPct)}</td>
               ))}
             </tr>
             <tr>
-              <td className="py-1 text-ink-muted">하락에 걸면</td>
+              <td className="py-1 text-ink-muted">하락 주문</td>
               {example.map((e) => (
                 <td key={e.leverage} className="py-1 font-semibold text-down">{signedPct(-e.roiPct)}</td>
               ))}
@@ -102,14 +102,14 @@ function RulesBody({ rules, season }: { rules: GameRules; season: GameRulesModal
           <li>직접 청산 — 원할 때 바로 정리해요.</li>
           <li>손절·익절 — 정해 둔 가격에 닿으면 자동으로 정리돼요.</li>
           <li>
-            자동 청산 — 수익률이 {marginCallText(rules.margin_call_roi_pct)}에 닿으면 정리돼요. 건 금액보다 더 잃지 않도록
+            자동 청산 — 수익률이 {marginCallText(rules.margin_call_roi_pct)}에 닿으면 정리돼요. 넣은 금액보다 더 잃지 않도록
             막아 주는 장치예요.
           </li>
           <li>시즌 종료 — 남은 포지션은 종가로 한꺼번에 정리돼요.</li>
         </ul>
         <Row label="자동 청산되는 주가 변동">{liquidationMovesText(rules)}</Row>
         <Note>
-          하락에 걸었다면 반대 방향(주가 상승)이에요. 손절·익절 %는 주가 기준(배율 미반영)이라, 높은 배율에선 손절보다 자동
+          하락으로 주문했다면 반대 방향(주가 상승)이에요. 손절·익절 %는 주가 기준(배율 미반영)이라, 높은 배율에선 손절보다 자동
           청산이 먼저 일어날 수 있어요.
         </Note>
       </Section>
@@ -133,7 +133,7 @@ function RulesBody({ rules, season }: { rules: GameRules; season: GameRulesModal
         )}
       </Section>
 
-      <Section title="유저 베팅 심리">
+      <Section title="참여자 상승·하락 비율">
         <p>
           지금 시즌에 포지션을 보유 중인 사람들의 상승/하락 비율이에요. 인원 기준이라 금액·배율은 따지지 않아요.
         </p>

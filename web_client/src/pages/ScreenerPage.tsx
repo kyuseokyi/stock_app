@@ -64,7 +64,7 @@ export default function ScreenerPage() {
 
   return (
     <div className="space-y-3 sm:space-y-4">
-      <PageHeader title="주도주 분석" description="윌리엄 오닐의 CANSLIM 7가지 기준으로 실적과 추세가 강한 종목을 찾습니다." />
+      <PageHeader title="주도주 분석" description="윌리엄 오닐의 CANSLIM 7가지 기준으로 실적과 추세가 강한 종목을 찾아요." />
       {linked && (
         // 목록 필터(유동성 등)에 걸려 목록에 없을 수도 있어 따로 보여준다
         <Card>

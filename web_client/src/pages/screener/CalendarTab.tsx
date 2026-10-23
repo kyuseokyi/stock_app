@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react'
 import Card from '../../components/ui/Card'
 import { chipClass } from '../../components/ui/Chip'
 import EmptyState from '../../components/ui/EmptyState'
-import BasisNote from '../../components/market/BasisNote'
 import EventList from '../../components/market/EventList'
 import { getMarketCalendar } from '../../api/market'
 import { kstDateString } from '../../lib/format'
@@ -73,7 +72,6 @@ export default function CalendarTab() {
           )}
         </Card>
       )}
-      <BasisNote date={null} />
     </div>
   )
 }

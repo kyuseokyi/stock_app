@@ -31,7 +31,7 @@ export default function PostDetailPage() {
         setPost(p)
         setComments(c)
       })
-      .catch((err) => setError(withErrorCode('게시글을 불러오지 못했습니다.', err)))
+      .catch((err) => setError(withErrorCode('게시글을 불러오지 못했어요.', err)))
       .finally(() => setLoading(false))
   }, [id])
 
@@ -48,11 +48,11 @@ export default function PostDetailPage() {
     } catch (err) {
       const status = (err as AxiosError).response?.status
       if (status === 401) {
-        setCommentError('로그인이 만료되었습니다. 다시 로그인해 주세요.')
+        setCommentError('로그인이 만료됐어요. 다시 로그인해 주세요.')
       } else if (status === 403) {
-        setCommentError('이 게시판은 댓글이 비활성화되어 있습니다.')
+        setCommentError('이 게시판은 댓글을 받지 않아요.')
       } else {
-        setCommentError('댓글 등록에 실패했습니다.')
+        setCommentError('댓글을 등록하지 못했어요. 잠시 후 다시 시도해 주세요.')
       }
     } finally {
       setSubmitting(false)
@@ -94,7 +94,7 @@ export default function PostDetailPage() {
 
         <ul className="space-y-3">
           {comments.length === 0 ? (
-            <li className="py-4 text-center text-sm text-ink-muted">아직 댓글이 없습니다.</li>
+            <li className="py-4 text-center text-sm text-ink-muted">아직 댓글이 없어요.</li>
           ) : (
             comments.map((c) => (
               <li key={c.id} className="rounded-field bg-canvas px-4 py-3">
@@ -113,7 +113,7 @@ export default function PostDetailPage() {
         {/* 댓글 작성 영역 */}
         {!commentsEnabled ? (
           <p className="mt-5 rounded-field bg-canvas px-4 py-3 text-center text-sm text-ink-muted">
-            이 게시판은 댓글이 비활성화되어 있습니다.
+            이 게시판은 댓글을 받지 않아요.
           </p>
         ) : user ? (
           <form onSubmit={submitComment} className="mt-5">

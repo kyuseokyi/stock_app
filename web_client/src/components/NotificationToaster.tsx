@@ -48,7 +48,7 @@ export default function NotificationToaster() {
         timers.add(t)
         return
       }
-      pushToast(payload.type === 'new_post' ? `새 글: ${payload.title}` : '새 알림이 도착했습니다.')
+      pushToast(payload.type === 'new_post' ? `새 글: ${payload.title}` : '새 알림이 왔어요.')
     }
     es.addEventListener('notification', onNotification)
     return () => {
