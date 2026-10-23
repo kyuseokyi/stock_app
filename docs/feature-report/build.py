@@ -16,6 +16,7 @@ DOCS = [  # (파일, 사이드바 제목, 섹션 id 접두어)
     ("admin.md", "관리자 웹", "admin"),
     ("app.md", "모바일 앱", "app"),
     ("web.md", "사용자 웹", "web"),
+    ("screener-guide.md", "스크리너 쉽게 이해하기", "guide"),
 ]
 
 
@@ -118,7 +119,7 @@ a{color:var(--accent)}
 <body>
 <button id="menu" aria-label="목차">☰ 목차</button>
 <button id="theme" aria-label="테마 전환">🌓</button>
-<aside id="side"><h1>📈 StockApp 기능 보고서</h1><div class="sub">2026-10-23 갱신 · dev 661f89e</div>{{NAV}}</aside>
+<aside id="side"><h1>📈 StockApp 기능 보고서</h1><div class="sub">2026-10-24 갱신 · dev e7c7e23</div>{{NAV}}</aside>
 <main>{{BODY}}</main>
 <div id="lightbox"><img alt=""></div>
 <script>

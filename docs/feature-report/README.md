@@ -10,8 +10,12 @@
 | [admin.md](admin.md) | 관리자 웹 `admin_web` | 17장 |
 | [app.md](app.md) | 모바일 앱 `mobile` | 18장 |
 | [web.md](web.md) | 사용자 웹 `web_client` | 19장 |
+| [screener-guide.md](screener-guide.md) | 초보자용 안내 — 주도주(CAN SLIM)·조건검색·패턴의 판정 로직, 용어, 근거와 정합성 | — |
 
 ## 업데이트 기록
+
+### 2026-10-24 — 스크리너 안내서 추가
+- [screener-guide.md](screener-guide.md): 주도주·조건검색·패턴이 종목을 고르는 방법을 초보자용으로 풀고, CAN SLIM·패턴 용어를 모두 설명. 설명과 실제 동작이 다른 곳 2개('오늘 볼 10개' +쪽 범위, 패턴 탭 유동성 필터)를 정리.
 
 ### 2026-10-23 — 내 펀드 로그인 계정별 저장, 앱 삭제·탈퇴 시 정리 (커밋 18개, `7bab524`~`661f89e`)
 
