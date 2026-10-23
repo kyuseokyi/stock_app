@@ -13,6 +13,7 @@ import type { CanslimItem, CanslimMarket, ScreenFilters } from '../types/screene
 import PageHeader from '../components/ui/PageHeader'
 import FilterPanel from '../components/ui/FilterPanel'
 import { ListSkeleton } from '../components/ui/Skeleton'
+import TodayPicks from '../components/screener/TodayPicks'
 import Button from '../components/ui/Button'
 
 // 스크리너 '주도주' 탭 — CANSLIM(윌리엄 오닐). 넓은 화면은 목록 + 오른쪽 상세, 좁은 화면은 행을 눌러 펼침.
@@ -78,6 +79,7 @@ export default function ScreenerPage() {
         </Card>
       )}
       <MarketStrip markets={markets} date={date} loading={state === 'loading'} />
+      <TodayPicks />
       <Card>
         <FilterPanel activeCount={activeCanslimFilters(filters)}>
           <CanslimFilters value={filters} onChange={setFilters} />

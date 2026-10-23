@@ -1,6 +1,6 @@
 import { gql } from './screener'
 import { PATTERN_PAGE } from '../lib/patterns'
-import type { PatternBases, PatternQuery, PatternScreen } from '../types/patterns'
+import type { PatternBases, PatternItem, PatternQuery, PatternScreen } from '../types/patterns'
 
 // stock_api GraphQL 차트 패턴(공개 — 로그인 불필요). 쿼리 문자열은 backend/tests/test_pattern_contract.py 가
 // 이 파일에서 그대로 읽어 실제 스키마로 실행한다 — `export const X_QUERY = \`...\`` 형식을 바꾸지 말 것.
@@ -41,6 +41,20 @@ export async function getPatternScreen(q: PatternQuery, offset = 0): Promise<Pat
     offset,
   })
   return res.patternScreen
+}
+
+/** 형성 중(활성) 패턴을 피벗에 가까운 순으로, 피벗까지 거리 절댓값이 maxAbs% 넘을 때까지(200개씩 최대 1000개) — '오늘 볼 10개' 후보 */
+export async function getPatternsNearPivot(maxAbs: number): Promise<PatternItem[]> {
+  const items: PatternItem[] = []
+  for (let offset = 0; offset < 1000; offset += 200) {
+    const { patternScreen } = await gql<{ patternScreen: PatternScreen }>(PATTERN_SCREEN_QUERY, {
+      report: 'forming', patternType: null, market: null, sort: 'pivot_dist', limit: 200, offset,
+    })
+    items.push(...patternScreen.items)
+    const last = patternScreen.items[patternScreen.items.length - 1]
+    if (patternScreen.items.length < 200 || !last || Math.abs(last.pivotDistPct ?? Infinity) > maxAbs) break
+  }
+  return items
 }
 
 /** 종목의 베이스 이력 + 매매 구간 */

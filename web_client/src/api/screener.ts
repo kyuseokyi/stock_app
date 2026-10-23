@@ -1,6 +1,6 @@
 import axios from 'axios'
 import { STOCK_API_URL } from '../config'
-import type { CanslimMarket, CanslimScore, CanslimScreen, ScreenFilters } from '../types/screener'
+import type { CanslimItem, CanslimMarket, CanslimScore, CanslimScreen, ScreenFilters } from '../types/screener'
 
 // stock_api GraphQL CANSLIM 조회(공개 — 로그인 불필요). api/stock 과 같은 axios POST 방식.
 
@@ -52,6 +52,24 @@ export async function getCanslimScreen(
     offset,
   })
   return { markets: res.canslimMarket, screen: res.canslimScreen }
+}
+
+const BULK = 200 // 서버 MAX_LIMIT
+
+/** 점수 높은 순으로 minScore 이상(유동성 통과 종목, 200개씩 최대 1000개) — '오늘 볼 10개' 후보. 같은 SCREEN_QUERY 를 변수만 바꿔 쓴다. */
+export async function getCanslimAbove(minScore: number): Promise<{ date: string | null; items: CanslimItem[] }> {
+  const items: CanslimItem[] = []
+  let date: string | null = null
+  for (let offset = 0; offset < 1000; offset += BULK) {
+    const { canslimScreen } = await gql<{ canslimScreen: CanslimScreen }>(SCREEN_QUERY, {
+      market: 'ALL', minPass: 0, required: [], sort: 'score', liquidOnly: true, limit: BULK, offset,
+    })
+    date = canslimScreen.date
+    items.push(...canslimScreen.items)
+    const last = canslimScreen.items[canslimScreen.items.length - 1]
+    if (canslimScreen.items.length < BULK || !last || last.score < minScore) break
+  }
+  return { date, items }
 }
 
 /** 종목 점수표(분석 대상이 아니면 null) */
