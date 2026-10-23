@@ -33,9 +33,12 @@ export const formatAmount = (won: number): string => {
 /** 가격(원 단위 콤마): 71200 → '71,200' */
 export const formatPrice = (n: number): string => KRW.format(n)
 
-/** 손익 색: 양수 빨강(up) / 음수 파랑(down) / 0·없음 기본 */
-export const pnlClass = (n: number | null | undefined): string =>
-  n == null || n === 0 ? 'text-ink' : n > 0 ? 'text-up' : 'text-down'
+/** 손익 색: 양수 핑크레드(up) / 음수 블루(down) / 없음 기본 / 화면에 0으로 보이는 값(소수 1자리 반올림 0 — 0.0%·₩0)은 회색 */
+export const pnlClass = (n: number | null | undefined): string => {
+  if (n == null) return 'text-ink'
+  const r = Math.round(n * 10) / 10
+  return r === 0 ? 'text-ink-muted' : r > 0 ? 'text-up' : 'text-down'
+}
 
 /** KST 기준 날짜 'YYYY-MM-DD' */
 export function kstDateString(d: Date = new Date()): string {

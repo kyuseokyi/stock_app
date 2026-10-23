@@ -12,7 +12,7 @@ export default function CommunityPage() {
   return (
     <div className="py-16 text-center">
       {error ? (
-        <p className="text-sm text-up">{error}</p>
+        <p className="text-sm text-danger">{error}</p>
       ) : !loaded ? (
         <p className="text-ink-muted">불러오는 중…</p>
       ) : (

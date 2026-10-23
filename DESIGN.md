@@ -16,6 +16,8 @@ colors:
   cobalt-down: "#3c5dc1"
   cobalt-down-soft: "#d8e3fd"
   plum-accent: "#aa5278"
+  ember-danger: "#a14f09"
+  ember-danger-soft: "#fde7d4"
   kakao-yellow: "#FEE500"
   naver-green: "#03C75A"
 typography:
@@ -153,6 +155,10 @@ components:
 ### Tertiary
 - **Plum Accent** (#aa5278): 내비게이션 선택 표시. 데스크톱 상단 메뉴의 밑줄, 모바일 하단 탭바의 선택 글자·아이콘에 쓴다. 이 밖에는 쓰지 않는다.
 
+### Danger
+- **Ember Danger** (#a14f09): 오류·실패 문구, 주문 차단 같은 막힘 안내, 탈퇴 같은 위험 행동, 입력 오류 테두리. 핑크레드(색상각 약 4°)와 구분되는 따뜻한 호박색(약 52°)이다. 흰 바탕 5.8:1, Lavender Fill 4.9:1, 자기 soft 4.8:1.
+- **Ember Danger Soft** (#fde7d4): 오류 띠·주의 안내 박스·탈퇴 버튼 배경. 위 글자는 Night Ink 또는 Ember Danger.
+
 ### Neutral
 - **Lavender Canvas** (#f7f5ff): 화면 바탕, 모달·시트 바탕, 헤더(90% 불투명 + 흐림).
 - **Paper White** (#ffffff): 모든 카드, 입력창, 드롭다운 목록, 하단 탭바.
@@ -169,7 +175,9 @@ components:
 
 **The Lightness-Only Rule.** 대비가 부족하면 색상(hue)과 채도는 그대로 두고 OKLCH 명도만 낮춘다. 새 색을 들여오지 않는다.
 
-**The Pink-Is-a-Point Rule.** 핑크 계열은 상승·BUY·내비 선택에만 쓴다. 핑크 카드나 핑크 배경 화면은 없다.
+**The Pink-Is-a-Point Rule.** 핑크 계열은 상승·수익·BUY(롱)·돌파·게임 보상 금액과 내비 선택에만 쓴다. 오류·위험·주의는 Ember Danger, 분류 배지("경제지표", "대장주", "N일째 상위")는 Lavender Fill + Night Ink로 쓴다. 핑크 카드나 핑크 배경 화면은 없다.
+
+**The Zero-Is-Neutral Rule.** 화면에 0으로 보이는 값(소수 1자리로 반올림해 0.0%, ₩0)은 상승도 하락도 아니므로 Dusk Ink로 쓴다. 판정은 표시 자릿수 기준이다(`pnlClass`).
 
 ## Typography
 
@@ -275,5 +283,6 @@ Lavender Canvas 바탕, 머리에 Title 글자와 닫기 버튼, 아래 1px 경�
 - **Don't** placeholder나 보조 글자에 투명도(`/70` 등)를 주지 않는다.
 - **Don't** 페이지에 붙은 카드에 그림자를 주지 않고, 카드 안에 카드를 넣지 않는다.
 - **Don't** 핑크로 카드나 화면 배경을 칠하지 않는다.
+- **Don't** 오류·실패·위험 행동에 핑크(up)를 쓰지 않는다. Ember Danger를 쓴다.
 - **Don't** 검은 바탕·원색 빨강/파랑의 증권사 MTS 스타일로 화면을 만들지 않는다.
 - **Don't** 카카오·네이버 버튼 색을 팔레트에 맞춰 바꾸지 않는다.

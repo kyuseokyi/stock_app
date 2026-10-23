@@ -169,7 +169,7 @@ export default function FinderTab() {
               renderInline={wide ? undefined : (it) => <FinderDetail item={it} bbSigma={bbSigma} date={date} />}
             />
             {moreFailed && (
-              <p role="alert" className="mt-2 text-center text-xs text-up">더 불러오지 못했어요. 다시 눌러 주세요.</p>
+              <p role="alert" className="mt-2 text-center text-xs text-danger">더 불러오지 못했어요. 다시 눌러 주세요.</p>
             )}
             {items.length < total && (
               <button

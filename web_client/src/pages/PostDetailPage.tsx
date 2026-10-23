@@ -60,7 +60,7 @@ export default function PostDetailPage() {
   }
 
   if (loading) return <p className="py-10 text-center text-ink-muted">불러오는 중…</p>
-  if (!post) return <p className="py-10 text-center text-up">{error}</p>
+  if (!post) return <p className="py-10 text-center text-danger">{error}</p>
 
   const board = boards.find((b) => b.id === post.board_id)
   const commentsEnabled = board?.comments_enabled ?? true
@@ -125,7 +125,7 @@ export default function PostDetailPage() {
               placeholder={`${user.nickname} 님, 댓글을 입력하세요`}
               className="w-full rounded-field border border-line bg-fill px-3 py-2 text-sm focus:border-brand focus:outline-none"
             />
-            {commentError && <p className="mt-1 text-sm text-up">{commentError}</p>}
+            {commentError && <p className="mt-1 text-sm text-danger">{commentError}</p>}
             <div className="mt-2 flex justify-end">
               <Button
                 type="submit"

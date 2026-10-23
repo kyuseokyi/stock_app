@@ -10,7 +10,7 @@ function dayLabel(iso: string, today: string): string {
 
 const CATEGORY_STYLE: Record<string, string> = {
   공모주: 'bg-brand-soft text-brand-strong',
-  경제지표: 'bg-up-soft text-up',
+  경제지표: 'bg-fill text-ink',
 }
 
 // 일정 — 날짜별로 묶은 목록. 종목 일정은 이름·코드, 상세 문장은 서버가 만든다.

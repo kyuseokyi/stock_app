@@ -100,10 +100,10 @@ function FundReportBody({ id, uid }: { id: string | undefined; uid: number }) {
 
 function Banner({ children, sourceUrl }: { children: ReactNode; sourceUrl?: string }) {
   return (
-    <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-field bg-up-soft px-4 py-3 text-sm text-ink">
+    <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-field bg-danger-soft px-4 py-3 text-sm text-ink">
       <span>{children}</span>
       {sourceUrl && (
-        <a href={sourceUrl} target="_blank" rel="noopener noreferrer" className="font-semibold text-up">
+        <a href={sourceUrl} target="_blank" rel="noopener noreferrer" className="font-semibold text-danger">
           원본 열기 →
         </a>
       )}

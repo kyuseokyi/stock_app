@@ -41,7 +41,7 @@ export default function GroupList({ items, selected, onSelect, renderInline, sho
                 <div className="flex items-center gap-1.5">
                   <span className="truncate font-bold text-ink">{it.name}</span>
                   {it.streak >= 2 && (
-                    <span className="shrink-0 rounded-full bg-up-soft px-1.5 py-0.5 text-[10px] font-bold text-up">{it.streak}일째 상위</span>
+                    <span className="shrink-0 rounded-full bg-fill px-1.5 py-0.5 text-[10px] font-bold text-ink">{it.streak}일째 상위</span>
                   )}
                 </div>
                 <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-ink-muted">

@@ -159,7 +159,7 @@ function FundListBody({ uid }: { uid: number }) {
           placeholder="비우면 투자자 번호로 정해져요"
           className={inputCls}
         />
-        {error && <p className="mt-2 text-sm text-up">{error}</p>}
+        {error && <p className="mt-2 text-sm text-danger">{error}</p>}
         <Button type="submit" full className="mt-4" disabled={!url.trim()}>
           추가
         </Button>
@@ -188,7 +188,7 @@ function FundListBody({ uid }: { uid: number }) {
               <button
                 type="button"
                 onClick={() => handleRemove(f)}
-                className="px-4 py-4 text-sm text-ink-muted hover:text-up"
+                className="px-4 py-4 text-sm text-ink-muted hover:text-danger"
               >
                 삭제
               </button>

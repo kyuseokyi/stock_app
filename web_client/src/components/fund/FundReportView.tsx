@@ -80,8 +80,8 @@ function Fold({ title, className = '', children }: { title: string; className?: 
 
 function Notice({ n }: { n: NoticeView }) {
   return (
-    <div className="mt-3 rounded-[14px] bg-up-soft px-3.5 py-2.5 text-sm text-ink">
-      <b className="mr-1.5 text-up">{n.label}</b>
+    <div className="mt-3 rounded-btn bg-danger-soft px-3.5 py-2.5 text-sm text-ink">
+      <b className="mr-1.5 text-danger">{n.label}</b>
       {n.message}
       {n.signals && <span className="mt-0.5 block text-xs text-ink-muted">{n.signals}</span>}
       {n.links.length > 0 && (

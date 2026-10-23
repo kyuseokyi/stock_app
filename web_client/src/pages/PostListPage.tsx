@@ -42,7 +42,7 @@ export default function PostListPage() {
       </h1>
 
       {error && (
-        <p className="mb-4 rounded-field bg-up/10 px-4 py-2 text-sm text-up">{error}</p>
+        <p className="mb-4 rounded-field bg-danger-soft px-4 py-2 text-sm text-danger">{error}</p>
       )}
 
       {loading ? (

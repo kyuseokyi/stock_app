@@ -46,7 +46,7 @@ export default function GameHeader({
           <button
             type="button"
             onClick={onOpenStreak}
-            className="shrink-0 rounded-full bg-fill px-2 py-0.5 text-xs font-semibold text-up transition hover:brightness-95"
+            className="shrink-0 rounded-full bg-fill px-2 py-0.5 text-xs font-semibold text-ink transition hover:brightness-95"
             title={`${streak.current_streak}일 연속 · 최고 기록 ${streak.highest_streak}일 · 연속 출석 보상 보기`}
           >
             🔥{streak.current_streak}

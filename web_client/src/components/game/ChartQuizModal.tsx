@@ -154,7 +154,7 @@ export default function ChartQuizModal({ onClose }: { onClose: () => void }) {
             <p className="font-semibold text-ink">{quizQuestionText(phase.quiz)}</p>
             {phase.kind === 'playing' ? (
               <span
-                className={`text-lg font-bold tabular-nums ${secondsLeft <= 3 ? 'text-up' : 'text-ink'}`}
+                className={`text-lg font-bold tabular-nums ${secondsLeft <= 3 ? 'text-danger' : 'text-ink'}`}
                 aria-live="polite"
               >
                 ⏱ {secondsLeft}초

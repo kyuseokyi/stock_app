@@ -99,7 +99,7 @@ export default function GroupDetailView({ kind, id }: { kind: GroupKind; id: str
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-1.5">
                     <span className="truncate text-sm font-bold text-ink">{s.name}</span>
-                    {s.isLeader && <span className="shrink-0 rounded-full bg-up-soft px-1.5 py-0.5 text-[10px] font-bold text-up">대장주</span>}
+                    {s.isLeader && <span className="shrink-0 rounded-full bg-fill px-1.5 py-0.5 text-[10px] font-bold text-ink">대장주</span>}
                   </div>
                   {s.reason && <div className="truncate text-xs text-ink-muted">{s.reason}</div>}
                 </div>

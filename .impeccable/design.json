@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-10-22T22:09:08+00:00",
+  "generatedAt": "2026-10-23T00:52:31+00:00",
   "title": "Design System: StockApp",
   "extensions": {
     "colorMeta": {
@@ -221,6 +221,36 @@
           "#ffe6f0"
         ]
       },
+      "ember-danger": {
+        "role": "danger",
+        "displayName": "Ember Danger",
+        "canonical": "oklch(52.0% 0.130 52.2)",
+        "tonalRamp": [
+          "#160701",
+          "#322016",
+          "#5d371f",
+          "#8c4f26",
+          "#bd6a30",
+          "#d5946d",
+          "#ebbfa5",
+          "#ffe9db"
+        ]
+      },
+      "ember-danger-soft": {
+        "role": "danger",
+        "displayName": "Ember Danger Soft",
+        "canonical": "oklch(94.1% 0.035 63.2)",
+        "tonalRamp": [
+          "#0e0a08",
+          "#282421",
+          "#494038",
+          "#6c5e52",
+          "#927e6d",
+          "#b1a295",
+          "#d1c7be",
+          "#f3ede9"
+        ]
+      },
       "kakao-yellow": {
         "role": "provider",
         "displayName": "Kakao Yellow",
@@ -402,7 +432,12 @@
       },
       {
         "name": "The Pink-Is-a-Point Rule",
-        "body": "핑크 계열은 상승·BUY·내비 선택에만 쓴다. 핑크 카드나 핑크 배경 화면은 없다.",
+        "body": "핑크 계열은 상승·수익·BUY(롱)·돌파·게임 보상 금액과 내비 선택에만 쓴다. 오류·위험·주의는 Ember Danger, 분류 배지(\"경제지표\", \"대장주\", \"N일째 상위\")는 Lavender Fill + Night Ink로 쓴다. 핑크 카드나 핑크 배경 화면은 없다.",
+        "section": "colors"
+      },
+      {
+        "name": "The Zero-Is-Neutral Rule",
+        "body": "화면에 0으로 보이는 값(소수 1자리로 반올림해 0.0%, ₩0)은 상승도 하락도 아니므로 Dusk Ink로 쓴다. 판정은 표시 자릿수 기준이다(`pnlClass`).",
         "section": "colors"
       },
       {
@@ -435,6 +470,7 @@
       "**Don't** placeholder나 보조 글자에 투명도(`/70` 등)를 주지 않는다.",
       "**Don't** 페이지에 붙은 카드에 그림자를 주지 않고, 카드 안에 카드를 넣지 않는다.",
       "**Don't** 핑크로 카드나 화면 배경을 칠하지 않는다.",
+      "**Don't** 오류·실패·위험 행동에 핑크(up)를 쓰지 않는다. Ember Danger를 쓴다.",
       "**Don't** 검은 바탕·원색 빨강/파랑의 증권사 MTS 스타일로 화면을 만들지 않는다.",
       "**Don't** 카카오·네이버 버튼 색을 팔레트에 맞춰 바꾸지 않는다."
     ]

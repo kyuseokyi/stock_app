@@ -136,14 +136,14 @@ function LoginDialog({ onClose, onSuccess }: Omit<LoginModalProps, 'open'>) {
           </button>
         ))}
         {socialError && (
-          <p role="alert" className="text-center text-sm text-up">
+          <p role="alert" className="text-center text-sm text-danger">
             {socialError}
           </p>
         )}
         {/* 공급자 조회 실패는 닉네임 로그인이 있어도 보인다 — 오류 코드로 원인 확인용 */}
         {providersState.status === 'error' && (
           <div role="alert" className="rounded-field bg-fill px-3 py-3 text-center">
-            <p className="text-sm text-up">로그인 서버에 연결할 수 없어요. (오류: {providersState.code})</p>
+            <p className="text-sm text-danger">로그인 서버에 연결할 수 없어요. (오류: {providersState.code})</p>
             <button
               type="button"
               onClick={() => {
@@ -183,10 +183,10 @@ function LoginDialog({ onClose, onSuccess }: Omit<LoginModalProps, 'open'>) {
             aria-invalid={error ? true : undefined}
             aria-describedby={error ? nicknameErrorId : undefined}
             // 모바일은 16px — iOS 가 16px 미만 입력창에 포커스하면 화면을 확대한다
-            className="w-full rounded-field border border-line bg-fill px-3 py-2 text-base text-ink placeholder:text-ink-muted focus:border-brand focus:outline-none aria-[invalid=true]:border-up sm:text-sm"
+            className="w-full rounded-field border border-line bg-fill px-3 py-2 text-base text-ink placeholder:text-ink-muted focus:border-brand focus:outline-none aria-[invalid=true]:border-danger sm:text-sm"
           />
           {error && (
-            <p id={nicknameErrorId} role="alert" className="mt-2 break-words text-sm text-up">
+            <p id={nicknameErrorId} role="alert" className="mt-2 break-words text-sm text-danger">
               {error}
             </p>
           )}

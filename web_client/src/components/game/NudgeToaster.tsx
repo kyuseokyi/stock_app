@@ -15,7 +15,7 @@ function ToastItem({ toast }: { toast: GameToast }) {
     <div
       role="status"
       className={`pointer-events-auto flex items-start gap-3 rounded-card border bg-surface px-4 py-3 shadow-lg ${
-        toast.kind === 'error' ? 'border-up/40' : 'border-line'
+        toast.kind === 'error' ? 'border-danger/40' : 'border-line'
       }`}
     >
       <span className="mt-0.5 text-lg">{toast.icon}</span>

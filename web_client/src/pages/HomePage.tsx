@@ -26,7 +26,7 @@ export default function HomePage() {
     <div>
       <h1 className="mb-5 text-xl font-bold text-ink">📌 추천 글</h1>
 
-      {error && <p className="mb-4 rounded-field bg-up/10 px-4 py-2 text-sm text-up">{error}</p>}
+      {error && <p className="mb-4 rounded-field bg-danger-soft px-4 py-2 text-sm text-danger">{error}</p>}
 
       {loading ? (
         <p className="py-10 text-center text-ink-muted">불러오는 중…</p>

@@ -24,12 +24,12 @@ const TITLE: Record<MarketStatus['state'], string> = {
 export default function MarketStatusBanner({ status }: { status: MarketStatus | null }) {
   if (!status || status.state === 'NORMAL') return null
   return (
-    <Card className={status.blocking ? 'bg-up-soft' : 'bg-sky-soft'}>
+    <Card className={status.blocking ? 'bg-danger-soft' : 'bg-sky-soft'}>
       <div role="status" aria-live="polite" className="flex items-start gap-2">
         <span aria-hidden>{ICON[status.state]}</span>
         <p className="flex-1 text-sm text-ink">
           <span className="font-semibold">{TITLE[status.state]}</span>
-          {status.blocking && <span className="ml-1.5 text-xs text-up">· 지금은 주문·청산이 안 돼요</span>}
+          {status.blocking && <span className="ml-1.5 text-xs text-danger">· 지금은 주문·청산이 안 돼요</span>}
           <span className="mt-0.5 block">{status.message}</span>
         </p>
       </div>
