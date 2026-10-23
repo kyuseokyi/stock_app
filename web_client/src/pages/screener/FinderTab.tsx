@@ -9,6 +9,7 @@ import { getFinderScreen } from '../../api/finder'
 import { useMediaQuery } from '../../hooks/useMediaQuery'
 import { DEFAULT_FINDER_FILTERS, FINDER_PAGE, FINDER_SORTS, PRESETS, activeFilterCount, sameFinderQuery } from '../../lib/finder'
 import type { FinderItem, FinderPreset, FinderQuery } from '../../types/finder'
+import PageHeader from '../../components/ui/PageHeader'
 
 const INITIAL_QUERY: FinderQuery = { preset: null, sort: 'value', filters: DEFAULT_FINDER_FILTERS }
 
@@ -83,10 +84,7 @@ export default function FinderTab() {
 
   return (
     <div className="space-y-3 sm:space-y-4">
-      <div>
-        <h1 className="text-xl font-bold text-ink">조건검색</h1>
-        <p className="mt-0.5 text-sm text-ink-muted">자주 쓰는 조건(프리셋)이나 직접 고른 조건으로 종목을 찾습니다.</p>
-      </div>
+      <PageHeader title="조건검색" description="자주 쓰는 조건(프리셋)이나 직접 고른 조건으로 종목을 찾습니다." />
 
       <Card>
         <div className="flex gap-2 overflow-x-auto pb-1">

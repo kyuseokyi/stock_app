@@ -11,6 +11,7 @@ import { useVisibleInterval } from '../../hooks/useVisibleInterval'
 import { MARKET_REFRESH_MS, MARKET_REQUEST_TIMEOUT_MS } from '../../lib/marketLive'
 import { formatPct, kstDateString, pnlClass } from '../../lib/format'
 import type { CalendarEvent, GroupItem, MarketOverview, TreemapGroup } from '../../types/market'
+import PageHeader from '../../components/ui/PageHeader'
 
 function More({ to }: { to: string }) {
   return <Link to={to} className="text-sm font-medium text-brand-strong">더 보기</Link>
@@ -83,17 +84,14 @@ export default function MarketTab() {
   const nothing = !overview?.indices.length && !themes.length && !sectors.length && !events.length
   return (
     <div className="space-y-3 sm:space-y-4">
-      <div>
-        <h1 className="text-xl font-bold text-ink">오늘 시장</h1>
-        <p className="mt-0.5 text-sm text-ink-muted">국내·미국 지수와 주도 테마, 업종 흐름, 다가오는 일정을 한눈에 봐요.</p>
-      </div>
+      <PageHeader title="오늘 시장" description="국내·미국 지수와 주도 테마, 업종 흐름, 다가오는 일정을 한눈에 봐요." />
       {nothing && (
         <Card><EmptyState emoji="🛠️" title="시장 데이터를 준비하고 있어요" description="매일 장 마감 후 갱신돼요." /></Card>
       )}
       {overview && <IndexCards indices={overview.indices} />}
       {overview && <MacroCards macro={overview.macro} />}
 
-      <div className="grid gap-3 sm:gap-4 lg:grid-cols-2">
+      <div className={`grid gap-3 sm:gap-4 ${themes.length > 0 && events.length > 0 ? 'lg:grid-cols-2' : ''}`}>
         {themes.length > 0 && (
           <Card>
             <div className="mb-1 flex items-center justify-between">

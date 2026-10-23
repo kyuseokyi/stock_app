@@ -22,7 +22,9 @@ export default function Layout() {
   // 섹션 판별: 경로로(별도 상태 불필요) — 게시판·글 상세는 커뮤니티
   const section = sectionOf(location.pathname)
   // 게임·스크리너는 넓은 화면(lg+)에서 2단(차트+주문 / 목록+상세) → 헤더·본문 폭을 함께 넓힌다(로고·메뉴 정렬 유지)
+  // 헤더는 항상 넓은 폭으로 고정 — 섹션이 바뀌어도 로고·메뉴 위치가 그대로. 본문 폭만 섹션별로 다르다.
   const width = section === 'game' || section === 'screener' ? 'max-w-3xl lg:max-w-6xl' : 'max-w-3xl'
+  const headerWidth = 'max-w-3xl lg:max-w-6xl'
   useFundAutoRefresh() // 접속·탭 복귀 시 등록 펀드 자동 갱신(로그인 상태일 때만)
 
   useEffect(() => {
@@ -50,7 +52,7 @@ export default function Layout() {
   return (
     <div className="min-h-screen">
       <header className="sticky top-0 z-30 border-b border-line bg-canvas/90 backdrop-blur">
-        <div className={`mx-auto ${width} px-4 py-3`}>
+        <div className={`mx-auto ${headerWidth} px-4 py-3`}>
           <div className="flex items-center justify-between">
             <Link to="/" className="text-lg font-bold text-ink">
               📈 StockApp

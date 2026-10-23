@@ -10,6 +10,7 @@ import { PAGE_SIZE, getCanslimScreen } from '../api/screener'
 import { useMediaQuery } from '../hooks/useMediaQuery'
 import { DEFAULT_FILTERS } from '../lib/canslim'
 import type { CanslimItem, CanslimMarket, ScreenFilters } from '../types/screener'
+import PageHeader from '../components/ui/PageHeader'
 
 // 스크리너 '주도주' 탭 — CANSLIM(윌리엄 오닐). 넓은 화면은 목록 + 오른쪽 상세, 좁은 화면은 행을 눌러 펼침.
 // ?ticker= 로 들어오면(테마·업종 상세의 종목) 그 종목 점수표를 바로 보여준다.
@@ -60,12 +61,7 @@ export default function ScreenerPage() {
 
   return (
     <div className="space-y-3 sm:space-y-4">
-      <div>
-        <h1 className="text-xl font-bold text-ink">주도주 분석</h1>
-        <p className="mt-0.5 text-sm text-ink-muted">
-          윌리엄 오닐의 CANSLIM 7가지 기준으로 실적과 추세가 강한 종목을 찾습니다.
-        </p>
-      </div>
+      <PageHeader title="주도주 분석" description="윌리엄 오닐의 CANSLIM 7가지 기준으로 실적과 추세가 강한 종목을 찾습니다." />
       {linked && (
         // 목록 필터(유동성 등)에 걸려 목록에 없을 수도 있어 따로 보여준다
         <Card>

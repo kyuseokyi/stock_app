@@ -2,6 +2,7 @@ import { formatPct, pnlClass } from '../../lib/format'
 import { indexBadge } from '../../lib/marketLive'
 import { THEME } from '../../lib/themeColors'
 import type { MacroValue, MarketIndex } from '../../types/market'
+import Card from '../ui/Card'
 
 // 지수 카드(종가·등락·20일 스파크라인) + 미국 거시 지표 카드. 국내·미국은 기준일이 달라 카드마다 날짜를 둔다.
 
@@ -28,7 +29,7 @@ export function IndexCards({ indices, gridClass = 'grid-cols-2 sm:grid-cols-3 lg
       {indices.map((ix) => {
         const badge = indexBadge(ix)
         return (
-          <div key={ix.code} className="rounded-card bg-surface p-3">
+          <Card key={ix.code} padding="sm">
             <div className="flex items-baseline justify-between gap-1">
               <span className="truncate text-sm font-medium text-ink">{ix.name}</span>
               {badge?.live ? (
@@ -43,7 +44,7 @@ export function IndexCards({ indices, gridClass = 'grid-cols-2 sm:grid-cols-3 lg
             <div className="mt-1 text-lg font-bold text-ink">{fmtIndex(ix.close)}</div>
             <div className={`text-sm font-medium ${pnlClass(ix.chg1d)}`}>{ix.chg1d == null ? '—' : formatPct(ix.chg1d)}</div>
             <Spark values={ix.spark} up={(ix.spark[ix.spark.length - 1] ?? 0) >= (ix.spark[0] ?? 0)} />
-          </div>
+          </Card>
         )
       })}
     </div>
@@ -62,14 +63,14 @@ export function MacroCards({ macro }: { macro: MacroValue[] }) {
         {macro.map((m) => {
           const diff = m.prev == null ? null : m.value - m.prev
           return (
-            <div key={m.seriesId} className="rounded-card bg-surface p-3">
+            <Card key={m.seriesId} padding="sm">
               <div className="truncate text-xs text-ink-muted">{m.name}</div>
               <div className="mt-1 text-base font-bold text-ink">{fmtMacro(m, m.value)}</div>
               <div className="text-[11px] text-ink-muted">
                 {m.date.slice(0, 7)}
                 {diff != null && ` · 직전 대비 ${diff >= 0 ? '+' : ''}${m.unit === '천 명' ? Math.round(diff).toLocaleString('ko-KR') : diff.toFixed(2)}`}
               </div>
-            </div>
+            </Card>
           )
         })}
       </div>

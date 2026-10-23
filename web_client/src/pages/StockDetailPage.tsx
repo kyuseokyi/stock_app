@@ -125,7 +125,7 @@ export default function StockDetailPage() {
         <div className="flex items-end justify-between gap-3">
           <div className="min-w-0">
             <div className="flex flex-wrap items-baseline gap-x-1.5">
-              <h1 className="truncate text-xl font-bold text-ink">{name ?? ticker}</h1>
+              <h1 className="truncate text-2xl font-bold text-ink">{name ?? ticker}</h1>
               <span className="text-xs text-ink-muted">{ticker}{sub ? ` · ${sub}` : ''}</span>
             </div>
             <p className="text-sm text-ink-muted">

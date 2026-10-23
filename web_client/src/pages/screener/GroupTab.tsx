@@ -9,6 +9,7 @@ import Treemap from '../../components/market/Treemap'
 import { GROUP_PAGE, getMarketGroups, getMarketTreemap } from '../../api/market'
 import { useMediaQuery } from '../../hooks/useMediaQuery'
 import type { GroupItem, GroupKind, TreemapGroup } from '../../types/market'
+import PageHeader from '../../components/ui/PageHeader'
 
 const TEXT: Record<GroupKind, { title: string; desc: string; empty: string }> = {
   theme: {
@@ -80,10 +81,7 @@ export default function GroupTab({ kind }: { kind: GroupKind }) {
 
   return (
     <div className="space-y-3 sm:space-y-4">
-      <div>
-        <h1 className="text-xl font-bold text-ink">{TEXT[kind].title}</h1>
-        <p className="mt-0.5 text-sm text-ink-muted">{TEXT[kind].desc}</p>
-      </div>
+      <PageHeader title={TEXT[kind].title} description={TEXT[kind].desc} />
       <Card>
         <GroupControls value={ctrl} onChange={setCtrl} />
       </Card>

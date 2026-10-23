@@ -7,6 +7,7 @@ import EventList from '../../components/market/EventList'
 import { getMarketCalendar } from '../../api/market'
 import { kstDateString } from '../../lib/format'
 import type { CalendarEvent } from '../../types/market'
+import PageHeader from '../../components/ui/PageHeader'
 
 const CATEGORIES: [string | undefined, string][] = [[undefined, '전체'], ['공모주', '공모주'], ['경제지표', '경제지표']]
 
@@ -44,10 +45,7 @@ export default function CalendarTab() {
 
   return (
     <div className="space-y-3 sm:space-y-4">
-      <div>
-        <h1 className="text-xl font-bold text-ink">일정</h1>
-        <p className="mt-0.5 text-sm text-ink-muted">공모주 청약·상장일과 미국 주요 경제지표 발표일이에요.</p>
-      </div>
+      <PageHeader title="일정" description="공모주 청약·상장일과 미국 주요 경제지표 발표일이에요." />
       <div className="flex gap-2">
         {CATEGORIES.map(([v, label]) => (
           <button key={label} type="button" aria-pressed={category === v} onClick={() => setCategory(v)} className={chipClass(category === v)}>

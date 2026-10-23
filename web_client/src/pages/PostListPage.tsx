@@ -4,6 +4,7 @@ import { listBlogs } from '../api/blog'
 import { useBoardStore } from '../store/boards'
 import { withErrorCode } from '../lib/errorCode'
 import type { BlogListOut } from '../types/api'
+import PageHeader from '../components/ui/PageHeader'
 
 const PAGE_SIZE = 10
 
@@ -37,9 +38,7 @@ export default function PostListPage() {
 
   return (
     <div>
-      <h1 className="mb-5 text-xl font-bold text-ink">
-        {boardName(Number(boardId)) || '게시판'}
-      </h1>
+      <PageHeader title={boardName(Number(boardId)) || '게시판'} className="mb-5" />
 
       {error && (
         <p className="mb-4 rounded-field bg-danger-soft px-4 py-2 text-sm text-danger">{error}</p>

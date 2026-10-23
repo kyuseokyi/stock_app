@@ -26,6 +26,8 @@ import {
 import { fundRefresher } from '../lib/fundAutoRefresh'
 import { useAuthStore } from '../store/auth'
 import { showToast } from '../store/toast'
+import PageHeader from '../components/ui/PageHeader'
+import Card from '../components/ui/Card'
 
 // 내 펀드 수익(/me/funds) — 이 브라우저에 저장한 fund.ivyro.net 펀드 현황 주소 목록. 서버에는 저장하지 않는다.
 // 목록은 로그인 계정별(2026-10-23). key={uid} 로 계정이 바뀌면 화면 상태를 새로 만든다 — 이전 계정 목록이 새 계정에 저장되지 않게.
@@ -108,23 +110,26 @@ function FundListBody({ uid }: { uid: number }) {
 
   return (
     <div>
-      <Link to="/me" className="text-sm text-ink-muted">
-        ‹ 내정보
-      </Link>
-      <h1 className="mb-5 mt-1 text-xl font-bold text-ink">
-        내 펀드 수익
-        {status.running && <span className="ml-2 text-xs font-normal text-ink-muted">확인 중…</span>}
-      </h1>
+      <PageHeader
+        back={{ to: '/me', label: '내정보' }}
+        className="mb-5"
+        title={
+          <>
+            내 펀드 수익
+            {status.running && <span className="ml-2 text-xs font-normal text-ink-muted">확인 중…</span>}
+          </>
+        }
+      />
 
       {legacy?.full && (
-        <div className="mb-4 flex items-center justify-between gap-3 rounded-card bg-surface p-5">
+        <Card className="mb-4 flex items-center justify-between gap-3">
           <p className="text-sm text-ink-muted">
             이 브라우저에 저장된 펀드 {legacy.count}개가 있지만, 이 계정은 등록 한도가 꽉 차서 더 가져올 수 없어요.
           </p>
           <Button variant="secondary" className="shrink-0" onClick={handleLegacyDiscard}>
             버리기
           </Button>
-        </div>
+        </Card>
       )}
       {legacy && !legacy.full && !legacyClosed && (
         <LegacyImportModal
@@ -135,7 +140,7 @@ function FundListBody({ uid }: { uid: number }) {
         />
       )}
 
-      <form onSubmit={handleAdd} className="rounded-card bg-surface p-5">
+      <form onSubmit={handleAdd} className="rounded-card bg-surface p-4">
         <label htmlFor="fund-url" className="block text-sm text-ink-muted">
           펀드 현황 주소
         </label>
@@ -170,7 +175,7 @@ function FundListBody({ uid }: { uid: number }) {
           등록한 펀드가 없어요. fund.ivyro.net 에서 받은 내 펀드 현황 주소를 붙여 넣어 주세요.
         </p>
       ) : (
-        <ul className="mt-4 overflow-hidden rounded-card bg-surface">
+        <Card as="ul" padding="none" className="mt-4 overflow-hidden">
           {funds.map((f) => (
             <li key={f.id} className="flex items-center border-b border-line last:border-0">
               <Link
@@ -194,7 +199,7 @@ function FundListBody({ uid }: { uid: number }) {
               </button>
             </li>
           ))}
-        </ul>
+        </Card>
       )}
     </div>
   )

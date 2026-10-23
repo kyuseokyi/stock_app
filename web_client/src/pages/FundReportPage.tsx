@@ -15,6 +15,7 @@ import {
 import { loadFunds, localCache, saveFunds } from '../lib/fundStore'
 import { useAuthStore } from '../store/auth'
 import { fundRefresher } from '../lib/fundAutoRefresh'
+import Card from '../components/ui/Card'
 
 // 펀드 리포트(/me/funds/:id) — 캐시를 먼저 보여주고 열 때마다 원본을 다시 가져온다.
 export default function FundReportPage() {
@@ -49,12 +50,12 @@ function FundReportBody({ id, uid }: { id: string | undefined; uid: number }) {
 
   if (!fund) {
     return (
-      <div className="rounded-card bg-surface p-6 text-center">
+      <Card className="py-6 text-center">
         <p className="font-semibold text-ink">펀드를 찾을 수 없어요</p>
         <Link to="/me/funds" className="mt-3 inline-block text-sm text-brand-strong">
           목록으로
         </Link>
-      </div>
+      </Card>
     )
   }
 
@@ -66,7 +67,7 @@ function FundReportBody({ id, uid }: { id: string | undefined; uid: number }) {
           <Link to="/me/funds" className="text-sm text-ink-muted">
             ‹ 내 펀드
           </Link>
-          <h1 className="mt-1 text-xl font-bold text-ink">{displayName(fund)}</h1>
+          <h1 className="mt-1 text-2xl font-bold text-ink">{displayName(fund)}</h1>
           {entry && (
             <p className="mt-0.5 text-sm text-ink-muted">
               {evalDate ? `기준일 ${evalDate} · ` : ''}마지막 확인 {formatChecked(entry.fetchedAt, Date.now())}
@@ -85,12 +86,12 @@ function FundReportBody({ id, uid }: { id: string | undefined; uid: number }) {
       {entry ? (
         <FundReportView report={entry.report} />
       ) : error === 'fetch' ? (
-        <div className="rounded-card bg-surface p-6 text-center">
+        <Card className="py-6 text-center">
           <p className="font-semibold text-ink">펀드 현황을 가져오지 못했어요</p>
           <Button className="mt-4" onClick={refresh}>
             다시 시도
           </Button>
-        </div>
+        </Card>
       ) : error ? null : (
         <p className="py-16 text-center text-ink-muted">불러오는 중…</p>
       )}

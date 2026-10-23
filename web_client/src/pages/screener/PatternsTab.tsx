@@ -8,6 +8,7 @@ import { getPatternScreen } from '../../api/patterns'
 import { useMediaQuery } from '../../hooks/useMediaQuery'
 import { PATTERN_KINDS, PATTERN_MARKETS, PATTERN_PAGE, PATTERN_REPORTS, PATTERN_SORTS } from '../../lib/patterns'
 import type { PatternItem, PatternQuery } from '../../types/patterns'
+import PageHeader from '../../components/ui/PageHeader'
 
 const INITIAL_QUERY: PatternQuery = { report: 'forming', patternType: null, market: 'ALL', sort: 'pivot_dist' }
 
@@ -76,10 +77,7 @@ export default function PatternsTab() {
 
   return (
     <div className="space-y-3 sm:space-y-4">
-      <div>
-        <h1 className="text-xl font-bold text-ink">차트 패턴</h1>
-        <p className="mt-0.5 text-sm text-ink-muted">컵·쌍바닥·플랫 베이스 같은 돌파 전후 패턴을 찾습니다.</p>
-      </div>
+      <PageHeader title="차트 패턴" description="컵·쌍바닥·플랫 베이스 같은 돌파 전후 패턴을 찾습니다." />
 
       <Card>
         <div role="group" aria-label="리포트" className="flex gap-2 overflow-x-auto pb-1">
