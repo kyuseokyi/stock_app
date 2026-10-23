@@ -10,6 +10,7 @@ import { activeFilterCount, listView } from '../canslim';
 import { FilterSheet } from '../components/filter-sheet';
 import { LeaderRow } from '../components/leader-row';
 import { MarketStrip } from '../components/market-strip';
+import { TodayPicks } from '../components/today-picks';
 import type { CanslimSort } from '../types';
 import { useCanslimScreen } from '../use-canslim-screen';
 
@@ -53,6 +54,7 @@ export function LeadersSection({ onOpenStock }: { onOpenStock: (ticker: string, 
             view === 'error' ? null : (
               <View style={styles.header}>
                 <MarketStrip markets={r.markets} date={r.date} />
+                <TodayPicks onOpenStock={onOpenStock} />
                 {view === 'list' ? <Text style={styles.total}>총 {formatIndex(r.total)}개</Text> : null}
               </View>
             )
