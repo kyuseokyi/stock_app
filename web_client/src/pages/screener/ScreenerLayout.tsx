@@ -2,7 +2,7 @@ import { Suspense } from 'react'
 import { Outlet } from 'react-router-dom'
 import ScreenerNav from '../../components/screener/ScreenerNav'
 
-// 스크리너 공통 틀 — 3그룹 탭(시장 흐름·일정·종목 찾기) + 탭 화면. 탭마다 주소가 있어 새로고침·뒤로 가기·공유가 그대로 된다.
+// 스크리너 공통 틀 — 한 줄 탭(시장 · 종목 찾기 두 묶음) + 탭 화면. 탭마다 주소가 있어 새로고침·뒤로 가기·공유가 그대로 된다.
 
 export default function ScreenerLayout() {
   return (
