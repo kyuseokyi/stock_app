@@ -23,10 +23,10 @@ export default function Layout() {
   const navigate = useNavigate()
   // 섹션 판별: 경로로(별도 상태 불필요) — 게시판·글 상세는 커뮤니티
   const section = sectionOf(location.pathname)
-  // 게임·스크리너는 넓은 화면(lg+)에서 2단(차트+주문 / 목록+상세) → 헤더·본문 폭을 함께 넓힌다(로고·메뉴 정렬 유지)
-  // 헤더는 항상 넓은 폭으로 고정 — 섹션이 바뀌어도 로고·메뉴 위치가 그대로. 본문 폭만 섹션별로 다르다.
-  const width = section === 'game' || section === 'screener' ? 'max-w-3xl lg:max-w-6xl' : 'max-w-3xl'
+  // 헤더·본문 바깥 틀은 항상 같은 폭 — 로고·제목·본문의 왼쪽 선이 모든 화면에서 같다.
+  // 넓은 화면(lg+)에서 2단을 쓰는 곳(홈·게시판 목록·게임·스크리너)만 전체 폭, 나머지(글 상세·내 정보)는 읽기 폭을 왼쪽에 붙인다.
   const headerWidth = 'max-w-3xl lg:max-w-6xl'
+  const wide = section === 'game' || section === 'screener' || section === 'home' || location.pathname.startsWith('/boards/')
   useFundAutoRefresh() // 접속·탭 복귀 시 등록 펀드 자동 갱신(로그인 상태일 때만)
 
   useEffect(() => {
@@ -89,8 +89,10 @@ export default function Layout() {
       </header>
 
       {/* 모바일 폭은 하단 탭바(3.5rem + safe-area)만큼 아래 여백 */}
-      <main className={`mx-auto ${width} px-4 pb-[calc(5rem+env(safe-area-inset-bottom))] pt-6 sm:py-6`}>
-        <Outlet />
+      <main className={`mx-auto ${headerWidth} px-4 pb-[calc(5rem+env(safe-area-inset-bottom))] pt-6 sm:py-6`}>
+        <div className={wide ? '' : 'max-w-3xl'}>
+          <Outlet />
+        </div>
       </main>
 
       <BottomTabBar section={section} />

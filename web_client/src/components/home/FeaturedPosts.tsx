@@ -11,7 +11,8 @@ const toPreview = (html: string, n = 100) => {
   return text.length > n ? text.slice(0, n) + '…' : text
 }
 
-export default function FeaturedPosts({ limit }: { limit: number }) {
+// more=false: 커뮤니티 안 옆 칸처럼 '커뮤니티 ›' 링크가 제자리를 가리킬 때 숨긴다.
+export default function FeaturedPosts({ limit, more = true }: { limit: number; more?: boolean }) {
   const [items, setItems] = useState<BlogListOut['items']>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -27,7 +28,11 @@ export default function FeaturedPosts({ limit }: { limit: number }) {
     <section aria-labelledby="featured-title">
       <div className="mb-2 flex items-baseline justify-between">
         <h2 id="featured-title" className="text-lg font-bold text-ink">추천 글</h2>
-        <Link to="/community" className="text-sm font-medium text-brand-strong">커뮤니티 ›</Link>
+        {more && (
+          <Link to="/community" className="-my-2 inline-flex min-h-11 items-center text-sm font-medium text-brand-strong">
+            커뮤니티 ›
+          </Link>
+        )}
       </div>
       {error && <p className="rounded-field bg-danger-soft px-4 py-2 text-sm text-danger">{error}</p>}
       {loading ? (

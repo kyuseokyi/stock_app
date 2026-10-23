@@ -5,6 +5,8 @@ import { useBoardStore } from '../store/boards'
 import { withErrorCode } from '../lib/errorCode'
 import type { BlogListOut } from '../types/api'
 import PageHeader from '../components/ui/PageHeader'
+import FeaturedPosts from '../components/home/FeaturedPosts'
+import { useMediaQuery } from '../hooks/useMediaQuery'
 
 const PAGE_SIZE = 10
 
@@ -35,60 +37,69 @@ export default function PostListPage() {
   }, [boardId, page])
 
   const totalPages = Math.max(1, Math.ceil(data.total / PAGE_SIZE))
+  // 넓은 화면(lg+): 목록 + 추천 글 옆 칸 2단. 좁은 화면은 옆 칸을 그리지 않는다(불필요한 요청 없음).
+  const wide = useMediaQuery('(min-width: 1024px)')
 
   return (
-    <div>
-      <PageHeader title={boardName(Number(boardId)) || '게시판'} className="mb-5" />
+    <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-start lg:gap-8">
+      <div>
+        <PageHeader title={boardName(Number(boardId)) || '게시판'} className="mb-5" />
 
-      {error && (
-        <p className="mb-4 rounded-field bg-danger-soft px-4 py-2 text-sm text-danger">{error}</p>
-      )}
+        {error && (
+          <p className="mb-4 rounded-field bg-danger-soft px-4 py-2 text-sm text-danger">{error}</p>
+        )}
 
-      {loading ? (
-        <p className="py-10 text-center text-ink-muted">불러오는 중…</p>
-      ) : data.items.length === 0 ? (
-        <p className="py-10 text-center text-ink-muted">아직 게시글이 없어요.</p>
-      ) : (
-        <ul className="space-y-3">
-          {data.items.map((p) => (
-            <li key={p.id}>
-              <Link
-                to={`/posts/${p.id}`}
-                className="block rounded-card bg-surface p-4 transition hover:bg-line"
-              >
-                <h2 className="text-balance font-semibold text-ink">{p.title}</h2>
-                <p className="mt-1 line-clamp-2 text-sm text-ink-muted">
-                  {toPreview(p.content)}
-                </p>
-                <p className="mt-2 text-xs text-ink-muted">
-                  {new Date(p.created_at).toLocaleDateString('ko-KR')} · 조회 {p.view_count}
-                </p>
-              </Link>
-            </li>
-          ))}
-        </ul>
-      )}
+        {loading ? (
+          <p className="py-10 text-center text-ink-muted">불러오는 중…</p>
+        ) : data.items.length === 0 ? (
+          <p className="py-10 text-center text-ink-muted">아직 게시글이 없어요.</p>
+        ) : (
+          <ul className="space-y-3">
+            {data.items.map((p) => (
+              <li key={p.id}>
+                <Link
+                  to={`/posts/${p.id}`}
+                  className="block rounded-card bg-surface p-4 transition hover:bg-line"
+                >
+                  <h2 className="text-balance font-semibold text-ink">{p.title}</h2>
+                  <p className="mt-1 line-clamp-2 text-sm text-ink-muted">
+                    {toPreview(p.content)}
+                  </p>
+                  <p className="mt-2 text-xs text-ink-muted">
+                    {new Date(p.created_at).toLocaleDateString('ko-KR')} · 조회 {p.view_count}
+                  </p>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        )}
 
-      {data.total > PAGE_SIZE && (
-        <div className="mt-6 flex items-center justify-center gap-3 text-sm text-ink-muted">
-          <button
-            disabled={page <= 1}
-            onClick={() => setPage((p) => p - 1)}
-            className="rounded-field bg-surface px-3 py-1 disabled:opacity-40"
-          >
-            이전
-          </button>
-          <span>
-            {page} / {totalPages}
-          </span>
-          <button
-            disabled={page >= totalPages}
-            onClick={() => setPage((p) => p + 1)}
-            className="rounded-field bg-surface px-3 py-1 disabled:opacity-40"
-          >
-            다음
-          </button>
-        </div>
+        {data.total > PAGE_SIZE && (
+          <div className="mt-6 flex items-center justify-center gap-3 text-sm text-ink-muted">
+            <button
+              disabled={page <= 1}
+              onClick={() => setPage((p) => p - 1)}
+              className="rounded-field bg-surface px-3 py-1 disabled:opacity-40"
+            >
+              이전
+            </button>
+            <span>
+              {page} / {totalPages}
+            </span>
+            <button
+              disabled={page >= totalPages}
+              onClick={() => setPage((p) => p + 1)}
+              className="rounded-field bg-surface px-3 py-1 disabled:opacity-40"
+            >
+              다음
+            </button>
+          </div>
+        )}
+      </div>
+      {wide && (
+        <aside aria-label="추천 글">
+          <FeaturedPosts limit={4} more={false} />
+        </aside>
       )}
     </div>
   )
