@@ -21,10 +21,10 @@ function Spark({ values, up }: { values: number[]; up: boolean }) {
 
 const fmtIndex = (n: number) => n.toLocaleString('ko-KR', { maximumFractionDigits: 2 })
 
-export function IndexCards({ indices }: { indices: MarketIndex[] }) {
+export function IndexCards({ indices, gridClass = 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-5' }: { indices: MarketIndex[]; gridClass?: string }) {
   if (!indices.length) return null
   return (
-    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
+    <div className={`grid gap-2 ${gridClass}`}>
       {indices.map((ix) => {
         const badge = indexBadge(ix)
         return (
