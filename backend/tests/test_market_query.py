@@ -518,3 +518,13 @@ def test_mobile_leaders_queries_match_schema(monkeypatch):
     assert res.data["canslimScore"]["history"][0]["passCount"] == 6
     res = asyncio.run(schema.execute(queries["SCORE_QUERY"], variable_values={"ticker": "ETF1"}))
     assert res.errors is None and res.data["canslimScore"] is None  # 비대상은 null(앱이 "분석 대상 아님" 표시)
+
+
+def test_overview_macro_window_covers_lagging_yoy(ch):
+    # 근원 PCE 는 발표가 두 달 늦다(10월에 최신값이 8월분) — 1년 전 비교값까지 읽어야 카드가 빠지지 않는다(430일이면 빠졌음)
+    pce = [("PCEPILFE", date(2025, 7, 1), 125.0), ("PCEPILFE", date(2026, 7, 1), 128.75)]
+    fake = ch([[], pce])
+    out = mq.overview()
+    since = fake.queries[-1][1]["since"]
+    assert since < date(2025, 7, 1)  # 석 달 늦은 값의 1년 전까지 덮는다
+    assert [m["series_id"] for m in out["macro"]] == ["PCEPILFE"]

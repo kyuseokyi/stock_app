@@ -47,6 +47,9 @@ MACRO_NAMES = {
     "T10Y2Y": ("장단기 금리차(10년-2년)", "%p"),
 }
 YOY_SERIES = frozenset({"CPIAUCSL", "CPILFESL", "PCEPILFE"})  # 물가 '지수'라 수준값 대신 전년 대비 % 로 보여준다
+# 거시 지표 읽는 기간 — 전년 대비는 최신값의 1년 전 값이 필요한데, 근원 PCE 는 발표가 두 달가량 늦어
+# '오늘 기준 1년 + 한 달'(430일)로는 비교값이 빠진다. 석 달 늦은 값까지 덮게 넉넉히.
+MACRO_LOOKBACK_DAYS = 500
 
 _GROUP_COLUMNS = ["group_id", "name", "members", "chg_1d", "chg_5d", "chg_20d", "value", "mcap", "up", "down",
                   "flat", "leader_ticker", "leader_chg", "rank"]
@@ -220,7 +223,7 @@ def _macro() -> list[dict]:
                              f"SELECT series_id, date, value FROM {CLICKHOUSE_DB}.macro_series FINAL "
                              "WHERE series_id IN %(ids)s AND date > %(since)s AND value IS NOT NULL "
                              "ORDER BY series_id, date",
-                             {"ids": tuple(MACRO_NAMES), "since": today - timedelta(days=430)})
+                             {"ids": tuple(MACRO_NAMES), "since": today - timedelta(days=MACRO_LOOKBACK_DAYS)})
     except Exception:  # noqa: BLE001
         return []
     series: dict[str, list[tuple]] = {}

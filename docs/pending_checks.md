@@ -22,7 +22,7 @@
 - [ ] **재무**(토 10:00 또는 수동 1회): 연간·분기 기간 수(CANSLIM C 는 분기 5개↑, A 는 연간 4개↑ 필요), **분기 EPS 가 누적(연초부터 합산)인지** — `SELECT stac_yymm, eps FROM stock_data.fundamentals_periodic FINAL WHERE ticker='005930' AND period='Q' ORDER BY stac_yymm`
 - [ ] **모의(vps) 키라면**: 재무·투자자·해외 지수 `rt_cd` 오류 여부(국내·해외 지수 예제는 모의도 같은 TR ID)
 - [ ] **공모주**: `stock_events` 의 `subscr_dt`·`list_dt` 날짜 형식이 파싱됐는지, 상장 전 종목은 제목이 종목코드로 나옴 — `payload` 에 회사명 필드가 있으면 제목에 쓰도록 수정
-- [ ] **FRED**: 키 발급 후 첫 수집 로그 `FRED 수집: ok=9 …`, 캘린더는 CPI·고용보고서·PCE 발표일만(금리·국채는 매 영업일이라 제외)
+- [x] **FRED**: 키 발급 후 첫 수집 로그 `FRED 수집: ok=9 …`, 캘린더는 CPI·고용보고서·PCE 발표일만(금리·국채는 매 영업일이라 제외) — 2026-10-23 확인: ok=9 failed=0, 관측 1,707건·발표일 6건, 운영 API 반영. 근원 PCE 가 전년 대비 비교값을 못 찾아 빠지던 문제는 읽는 기간 430→500일로 수정
 
 ### CANSLIM 스크리너(프로젝트 2 배포 후)
 - [ ] 20:30 파이프라인 끝 로그 `CANSLIM 계산: {'date': …, 'rows': ~2,600, 'pass5': …}` → 웹 `/screener` 목록·상세가 뜨는지(넓은 화면 스플릿·좁은 화면 펼침)
@@ -79,7 +79,7 @@
 - [ ] **간편 로그인 키 발급**: 카카오 REST 키, 네이버 Client ID/Secret(+검수, 검수 전엔 테스트 계정만), Redirect URI 등록(README 목록), `SOCIAL_STATE_SECRET` 설정
 - [ ] **모바일 dev build 재생성**: 개발 앱 스킴이 `stockapp-dev` 로 바뀜(`npm run prebuild:dev` 후 재설치)
 - [ ] 에뮬레이터 사용 시 `adb reverse tcp:8003 tcp:8003` 추가
-- [ ] **FRED API 키 발급**(미국 CPI·고용·금리 등 거시 지표) — fred.stlouisfed.org 계정 → My Account → API Keys(무료) → 서버 `.env.production` 에 `FRED_API_KEY`. 없으면 거시 지표 수집만 건너뜀 (스펙 `docs/superpowers/specs/2026-10-18-market-data-foundation-design.md` 10절)
+- [x] **FRED API 키 발급**(2026-10-23 로컬·운영 env 등록, 운영 Deploy Server 재배포로 적용) (미국 CPI·고용·금리 등 거시 지표) — fred.stlouisfed.org 계정 → My Account → API Keys(무료) → 서버 `.env.production` 에 `FRED_API_KEY`. 없으면 거시 지표 수집만 건너뜀 (스펙 `docs/superpowers/specs/2026-10-18-market-data-foundation-design.md` 10절)
 - [ ] **네이버 검색 Open API 키 발급**(주달 뉴스, 프로젝트 3 때) — developers.naver.com → 애플리케이션 등록 → 검색 API(무료, 일 25,000건) → `NAVER_SEARCH_CLIENT_ID`·`NAVER_SEARCH_CLIENT_SECRET`(간편 로그인 키 `NAVER_CLIENT_ID`/`NAVER_CLIENT_SECRET` 와 별개 — 이름 충돌 방지)
 
 ## 5. 주의할 점 (운영 규칙)
