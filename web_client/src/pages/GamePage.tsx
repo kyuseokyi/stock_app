@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import LoginModal from '../components/LoginModal'
 import Button from '../components/ui/Button'
+import Card from '../components/ui/Card'
 import EmptyState from '../components/ui/EmptyState'
 import AcademyModal from '../components/game/AcademyModal'
 import ActivePositionCard from '../components/game/ActivePositionCard'
@@ -154,7 +155,16 @@ export default function GamePage() {
           {position && (
             <ActivePositionCard position={position} lastPrice={lastPrice} closing={closing} onClose={() => closePosition()} />
           )}
-          {!loggedIn && <p className="rounded-card bg-surface p-4 text-sm text-ink-muted">로그인하면 주문할 수 있어요</p>}
+          {!loggedIn && (
+            // 비로그인 — 주문 버튼은 눌러도 로그인 창만 뜨므로, 무엇을 하는 곳인지와 참여 방법을 먼저 알린다
+            <Card className="flex flex-col gap-3 sm:flex-row sm:items-center">
+              <div className="min-w-0 flex-1">
+                <h2 className="text-base font-bold text-ink">로그인하고 참여해 보세요</h2>
+                <p className="mt-0.5 text-sm text-ink-muted">가상 자금으로 실시간 시세에 상승·하락 주문을 넣고 주간 순위를 겨뤄요. 실제 돈은 들지 않아요.</p>
+              </div>
+              <Button onClick={() => setLoginOpen(true)} className="shrink-0">로그인</Button>
+            </Card>
+          )}
           <CoachBanner coach={coach} />
           <SentimentBar sentiment={sentiment} intervalSec={rulesState.rules?.sentiment_interval_sec} />
           {primeTime && !quizDisabled && <QuizBanner onOpen={() => openPrivate('quiz')} />}

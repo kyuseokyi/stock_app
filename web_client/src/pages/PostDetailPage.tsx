@@ -4,6 +4,7 @@ import { createComment, getBlog, listComments } from '../api/blog'
 import { useBoardStore } from '../store/boards'
 import { useAuthStore } from '../store/auth'
 import { withErrorCode } from '../lib/errorCode'
+import { formatKstShort } from '../lib/format'
 import LoginModal from '../components/LoginModal'
 import Card from '../components/ui/Card'
 import Button from '../components/ui/Button'
@@ -81,7 +82,7 @@ export default function PostDetailPage() {
         )}
         <h1 className="mb-2 text-2xl font-bold text-ink">{post.title}</h1>
         <p className="mb-6 text-sm text-ink-muted">
-          {new Date(post.created_at).toLocaleString('ko-KR')} · 조회 {post.view_count}
+          {formatKstShort(post.created_at)} · 조회 {post.view_count}
         </p>
         <div
           className="post-content text-ink"
@@ -103,7 +104,7 @@ export default function PostDetailPage() {
                 <p className="text-sm font-medium text-ink">
                   {c.author_name || '익명'}
                   <span className="ml-2 text-xs font-normal text-ink-muted">
-                    {new Date(c.created_at).toLocaleString('ko-KR')}
+                    {formatKstShort(c.created_at)}
                   </span>
                 </p>
                 <p className="mt-1 text-sm text-ink">{c.content}</p>

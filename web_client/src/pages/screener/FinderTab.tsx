@@ -186,7 +186,7 @@ export default function FinderTab() {
         </div>
       )}
 
-      <p className="text-xs text-ink-muted">{date ?? '–'} 종가 기준 · 매일 20:30 갱신 · 투자 권유가 아닙니다</p>
+      <p className="text-xs text-ink-muted">{date ?? '–'} 종가 기준 · 매일 20:30 갱신 · 투자 권유가 아니에요</p>
     </div>
   )
 }

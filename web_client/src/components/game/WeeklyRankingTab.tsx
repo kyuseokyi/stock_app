@@ -13,8 +13,8 @@ interface WeeklyRankingTabProps {
 const MEDAL = ['🥇', '🥈', '🥉']
 
 const LABEL = {
-  week: { my: '내 주간 순위', last: '지난주 Top 3', empty: '이번 주 순위가 아직 없어요', rule: '그 주 신규 주문 1회 이상 · 시즌 마지막 주는 기록만' },
-  month: { my: '내 월간 순위', last: '지난달 Top 3', empty: '이번 달 순위가 아직 없어요', rule: '그 달 신규 주문 1회 이상 · 시즌 마지막 달은 기록만' },
+  week: { my: '내 주간 순위', last: '지난주 1~3위', empty: '이번 주 순위가 아직 없어요', rule: '그 주 신규 주문 1회 이상 · 시즌 마지막 주는 기록만' },
+  month: { my: '내 월간 순위', last: '지난달 1~3위', empty: '이번 달 순위가 아직 없어요', rule: '그 달 신규 주문 1회 이상 · 시즌 마지막 달은 기록만' },
 } as const
 
 // 주간/월간 탭 — 이번 기간·내 순위·지난 기간 Top 3·Top 100. 내 순위·지난 기간은 실패해도 목록은 표시.

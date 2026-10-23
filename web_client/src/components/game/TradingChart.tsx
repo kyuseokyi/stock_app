@@ -379,32 +379,41 @@ export default function TradingChart({ ticker, lastPrice, coach, position }: Tra
     const lines: IPriceLine[] = []
     if (support !== null) {
       lines.push(series.createPriceLine({
-        price: support, color: SUPPORT, lineWidth: 1, lineStyle: LineStyle.Dashed, axisLabelVisible: true, title: '지지',
+        price: support, color: SUPPORT, lineWidth: 1, lineStyle: LineStyle.Dashed, axisLabelVisible: true, title: '',
       }))
     }
     if (resistance !== null) {
       lines.push(series.createPriceLine({
-        price: resistance, color: RESIST, lineWidth: 1, lineStyle: LineStyle.Dashed, axisLabelVisible: true, title: '저항',
+        price: resistance, color: RESIST, lineWidth: 1, lineStyle: LineStyle.Dashed, axisLabelVisible: true, title: '',
       }))
     }
     if (entry !== null && side !== null) {
       lines.push(series.createPriceLine({
         price: entry, color: side === 'LONG' ? UP : DOWN, lineWidth: 2, lineStyle: LineStyle.Solid,
-        axisLabelVisible: true, title: '진입',
+        axisLabelVisible: true, title: '',
       }))
     }
     if (stopLoss !== null) {
       lines.push(series.createPriceLine({
-        price: stopLoss, color: STOP_LOSS, lineWidth: 1, lineStyle: LineStyle.Dashed, axisLabelVisible: true, title: '손절',
+        price: stopLoss, color: STOP_LOSS, lineWidth: 1, lineStyle: LineStyle.Dashed, axisLabelVisible: true, title: '',
       }))
     }
     if (takeProfit !== null) {
       lines.push(series.createPriceLine({
-        price: takeProfit, color: TAKE_PROFIT, lineWidth: 1, lineStyle: LineStyle.Dashed, axisLabelVisible: true, title: '익절',
+        price: takeProfit, color: TAKE_PROFIT, lineWidth: 1, lineStyle: LineStyle.Dashed, axisLabelVisible: true, title: '',
       }))
     }
     linesRef.current = lines
   }, [support, resistance, entry, side, stopLoss, takeProfit, loaded, interval])
+
+  // 가격선 이름은 범례에 — 차트 안 이름(title)은 진입·손절처럼 가까운 선끼리 겹친다(축 라벨은 라이브러리가 떼어 놓음)
+  const lineLegend = [
+    support !== null && { label: '지지', color: SUPPORT, dashed: true },
+    resistance !== null && { label: '저항', color: RESIST, dashed: true },
+    entry !== null && side !== null && { label: '진입', color: side === 'LONG' ? UP : DOWN, dashed: false },
+    stopLoss !== null && { label: '손절', color: STOP_LOSS, dashed: true },
+    takeProfit !== null && { label: '익절', color: TAKE_PROFIT, dashed: true },
+  ].filter((x): x is { label: string; color: string; dashed: boolean } => Boolean(x))
 
   return (
     <div>
@@ -462,13 +471,24 @@ export default function TradingChart({ ticker, lastPrice, coach, position }: Tra
             </button>
           </div>
         )}
-        {showMa && loaded && !failed && !empty && (
-          <div className="pointer-events-none absolute left-2 top-1.5 z-10 flex gap-2 rounded-field bg-surface/80 px-1.5 text-xs font-bold text-ink">
+        {(showMa || lineLegend.length > 0) && loaded && !failed && !empty && (
+          // 오른쪽 가격 축(약 56px)은 비워 둔다
+          <div className="pointer-events-none absolute left-2 right-16 top-1.5 z-10 flex flex-wrap gap-x-2 gap-y-0.5 text-xs font-bold text-ink">
             {/* 선 색은 견본으로만, 글자는 본문색 — 밝은 청록·주황 글자는 흰 바탕 대비가 3:1 미만 */}
-            {MA_PERIODS.map((p) => (
-              <span key={p} className="inline-flex items-center gap-1">
-                <span aria-hidden className="h-0.5 w-3 rounded-full" style={{ backgroundColor: MA_COLORS[p] }} />
-                {p}
+            {showMa && (
+              <span className="inline-flex gap-2 rounded-field bg-surface/80 px-1.5">
+                {MA_PERIODS.map((p) => (
+                  <span key={p} className="inline-flex items-center gap-1">
+                    <span aria-hidden className="h-0.5 w-3 rounded-full" style={{ backgroundColor: MA_COLORS[p] }} />
+                    {p}
+                  </span>
+                ))}
+              </span>
+            )}
+            {lineLegend.map((l) => (
+              <span key={l.label} className="inline-flex items-center gap-1 rounded-field bg-surface/80 px-1.5">
+                <span aria-hidden className={`w-3 border-t-2 ${l.dashed ? 'border-dashed' : ''}`} style={{ borderColor: l.color }} />
+                {l.label}
               </span>
             ))}
           </div>

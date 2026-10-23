@@ -152,7 +152,7 @@ export default function OrderPanel({
           {onOpenRules && (
             <>
               {' · '}
-              <button type="button" onClick={onOpenRules} className="font-semibold text-brand-strong underline-offset-2 hover:underline">
+              <button type="button" onClick={onOpenRules} className="relative font-semibold text-brand-strong underline-offset-2 after:absolute after:-inset-x-1 after:-inset-y-1.5 after:content-[''] hover:underline">
                 규칙 보기
               </button>
             </>
