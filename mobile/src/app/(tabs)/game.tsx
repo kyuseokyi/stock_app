@@ -27,7 +27,7 @@ import { useTradingGameStore } from '@/features/game/store';
 import type { Leverage, OrderOptions, Ratio, Side } from '@/features/game/types';
 import { useGameSocket } from '@/features/game/use-game-socket';
 import { reasonFromCode } from '@/lib/api/session-end';
-import { BottomSheet, Button, ListState } from '@/ui';
+import { BottomSheet, Button, Card, ListState } from '@/ui';
 
 const RANK_POLL_MS = 30_000;
 const PRIME_CHECK_MS = 60_000;
@@ -255,9 +255,12 @@ export default function GameScreen() {
           <PositionCard position={position} lastPrice={lastPrice} closing={closing} onClose={() => void closePosition()} />
         ) : null}
         {loggedIn ? null : (
-          <View style={styles.notice}>
-            <Text style={styles.noticeText}>로그인하면 주문할 수 있어요</Text>
-          </View>
+          // 비로그인 — 주문 버튼은 눌러도 로그인 안내만 뜨므로, 무엇을 하는 곳인지와 참여 방법을 먼저 알린다(웹과 같은 문구)
+          <Card>
+            <Text style={styles.guestTitle}>로그인하고 참여해 보세요</Text>
+            <Text style={styles.guestText}>가상 자금으로 실시간 시세에 상승·하락 주문을 넣고 주간 순위를 겨뤄요. 실제 돈은 들지 않아요.</Text>
+            <Button label="로그인" onPress={goLogin} />
+          </Card>
         )}
         <CoachBanner coach={coach} />
         <SentimentBar sentiment={sentiment} />
@@ -305,7 +308,7 @@ const styles = StyleSheet.create((theme) => ({
     paddingHorizontal: theme.gap(2.5),
     paddingTop: theme.gap(2),
   },
-  notice: { backgroundColor: theme.colors.surfaceBlue, borderRadius: theme.radius.card, padding: theme.gap(2) },
-  noticeText: { fontSize: 14, color: theme.colors.textSecondary },
+  guestTitle: { fontSize: 16, fontWeight: '700', color: theme.colors.text },
+  guestText: { fontSize: 14, lineHeight: 20, color: theme.colors.textSecondary, marginTop: theme.gap(0.5), marginBottom: theme.gap(1.5) },
   sheetText: { fontSize: 15, lineHeight: 22, color: theme.colors.textSecondary, marginBottom: theme.gap(0.5) },
 }));
