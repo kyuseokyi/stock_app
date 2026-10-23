@@ -34,6 +34,7 @@ from apps.stock_api.graphql.types import (
     PatternPoint,
     PatternScreen,
     PatternZones,
+    ScreenerFeatures,
     ScreenerFilterInput,
     ScreenerItem,
     ScreenerScreen,
@@ -47,6 +48,7 @@ from apps.stock_api.seed_catalog import search as catalog_search
 from apps.stock_api.services import canslim_query
 from apps.stock_api.services import market_query
 from apps.stock_api.services import pattern_query
+from apps.stock_api.services import screener_features
 from apps.stock_api.services import screener_query
 from apps.stock_api.services import chart as chart_service
 from apps.stock_api.services import clickhouse_source as ch_source
@@ -280,6 +282,11 @@ class Query:
             return None
         return GroupDetail(**{**out, "history": [GroupHistory(**h) for h in out["history"]],
                               "stocks": [GroupStock(**s) for s in out["stocks"]]})
+
+    @strawberry.field(description="스크리너 탭 보이기 스위치(조건검색·차트 패턴) — 행이 없거나 조회 실패면 꺼짐")
+    async def screener_features(self) -> ScreenerFeatures:
+        m = await run_in_threadpool(screener_features.enabled_map)
+        return ScreenerFeatures(finder=m["FINDER"], patterns=m["PATTERNS"])
 
     @strawberry.field(description="일정 — 공모주·경제지표(최대 92일)")
     def market_calendar(self, start: str, end: str, category: str | None = None) -> list[CalendarEvent]:

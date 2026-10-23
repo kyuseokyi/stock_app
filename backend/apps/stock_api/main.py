@@ -15,7 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from strawberry.fastapi import GraphQLRouter
 
 from apps.stock_api.graphql.schema import schema
-from apps.stock_api.routers import market_admin, themes_admin
+from apps.stock_api.routers import market_admin, screener_admin, themes_admin
 from shared.cors import build_allowed_origins
 from shared.health import add_health_routes
 
@@ -39,6 +39,9 @@ app.include_router(themes_admin.router)
 
 # 관리자 시장 데이터(관리자 JWT) — 데이터 현황, KIS 를 호출하지 않는 계산 수동 실행
 app.include_router(market_admin.router)
+
+# 스크리너 탭 보이기 스위치(관리자 JWT) — 조건검색·차트 패턴 탭 켜고 끄기(공개 읽기는 GraphQL screenerFeatures)
+app.include_router(screener_admin.router)
 
 
 @app.get("/health", tags=["health"])

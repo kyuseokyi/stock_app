@@ -1,6 +1,7 @@
 import { lazy, Suspense } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import Layout from './components/Layout'
+import ScreenerFeatureGate from './components/screener/ScreenerFeatureGate'
 import AuthCompletePage from './pages/AuthCompletePage'
 import CommunityPage from './pages/CommunityPage'
 import HomePage from './pages/HomePage'
@@ -57,8 +58,9 @@ export default function App() {
           <Route path="sectors" element={<GroupTab key="sector" kind="sector" />} />
           <Route path="calendar" element={<CalendarTab />} />
           <Route path="leaders" element={<ScreenerPage />} />
-          <Route path="finder" element={<FinderTab />} />
-          <Route path="patterns" element={<PatternsTab />} />
+          {/* 조건검색·패턴은 관리자 스위치(관리자 > 스크리너 설정)가 켜졌을 때만 — 꺼져 있으면 주도주로 */}
+          <Route path="finder" element={<ScreenerFeatureGate feature="finder"><FinderTab /></ScreenerFeatureGate>} />
+          <Route path="patterns" element={<ScreenerFeatureGate feature="patterns"><PatternsTab /></ScreenerFeatureGate>} />
           <Route path="*" element={<Navigate to="market" replace />} />
         </Route>
         <Route path="stock/:ticker" element={

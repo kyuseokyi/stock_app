@@ -315,6 +315,12 @@ class MarketOverview:
     macro: list[MacroValue]
 
 
+@strawberry.type(description="스크리너 탭 보이기 스위치 — 관리자가 켜고 끈다. 꺼진 탭은 웹·모바일 메뉴에서 숨긴다")
+class ScreenerFeatures:
+    finder: bool
+    patterns: bool
+
+
 @strawberry.type
 class GroupLeader:
     ticker: str
