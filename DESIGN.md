@@ -254,6 +254,7 @@ components:
 ### Chips
 - **Style:** 알약 모양, 좌우 12px·위아래 6px, 14px 중간 굵기(500). 미선택은 Lavender Fill 배경에 Dusk Ink 글자.
 - **State:** 선택은 Pastel Blue Soft 배경에 Deep Periwinkle 글자. 게시판 탭, 스크리너 필터, 기간 선택이 같은 칩을 쓴다(`chipClass`).
+- **Target size (예외):** 칩은 보이는 높이 그대로 약 32px를 누르는 영역으로 쓴다. 44px 규칙의 의도된 예외이며, WCAG 2.2 AA 목표 크기(24px)는 넘고 칩 사이를 8px 이상 띄운다. 가로로 넘기는 칩 줄은 스크롤 영역이 위아래를 잘라서, 투명한 확장 영역을 붙이면 이웃 칩과 겹치거나 잘린다. 잠긴 선택지는 이모지 대신 선 자물쇠 아이콘과 "잠김" 이름을 붙인다.
 
 ### Cards / Containers
 - **Corner Style:** 20px.

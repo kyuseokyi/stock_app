@@ -463,9 +463,11 @@ export default function TradingChart({ ticker, lastPrice, coach, position }: Tra
           </div>
         )}
         {showMa && loaded && !failed && !empty && (
-          <div className="pointer-events-none absolute left-2 top-1.5 z-10 flex gap-1.5 text-xs font-bold">
+          <div className="pointer-events-none absolute left-2 top-1.5 z-10 flex gap-2 rounded-field bg-surface/80 px-1.5 text-xs font-bold text-ink">
+            {/* 선 색은 견본으로만, 글자는 본문색 — 밝은 청록·주황 글자는 흰 바탕 대비가 3:1 미만 */}
             {MA_PERIODS.map((p) => (
-              <span key={p} style={{ color: MA_COLORS[p] }}>
+              <span key={p} className="inline-flex items-center gap-1">
+                <span aria-hidden className="h-0.5 w-3 rounded-full" style={{ backgroundColor: MA_COLORS[p] }} />
                 {p}
               </span>
             ))}

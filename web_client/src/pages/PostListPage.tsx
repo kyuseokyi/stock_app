@@ -5,6 +5,8 @@ import { useBoardStore } from '../store/boards'
 import { withErrorCode } from '../lib/errorCode'
 import type { BlogListOut } from '../types/api'
 import PageHeader from '../components/ui/PageHeader'
+import Button from '../components/ui/Button'
+import { Skeleton } from '../components/ui/Skeleton'
 import FeaturedPosts from '../components/home/FeaturedPosts'
 import { useMediaQuery } from '../hooks/useMediaQuery'
 
@@ -50,7 +52,10 @@ export default function PostListPage() {
         )}
 
         {loading ? (
-          <p className="py-10 text-center text-ink-muted">불러오는 중…</p>
+          <div aria-busy="true" className="space-y-3">
+            <p role="status" className="sr-only">게시글을 불러오고 있어요</p>
+            {Array.from({ length: 5 }, (_, i) => <Skeleton key={i} className="h-[124px] rounded-card" />)}
+          </div>
         ) : data.items.length === 0 ? (
           <p className="py-10 text-center text-ink-muted">아직 게시글이 없어요.</p>
         ) : (
@@ -75,25 +80,17 @@ export default function PostListPage() {
         )}
 
         {data.total > PAGE_SIZE && (
-          <div className="mt-6 flex items-center justify-center gap-3 text-sm text-ink-muted">
-            <button
-              disabled={page <= 1}
-              onClick={() => setPage((p) => p - 1)}
-              className="rounded-field bg-surface px-3 py-1 disabled:opacity-40"
-            >
+          <nav aria-label="페이지" className="mt-6 flex items-center justify-center gap-3 text-sm text-ink-muted">
+            <Button variant="secondary" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
               이전
-            </button>
-            <span>
+            </Button>
+            <span aria-current="page" className="tabular-nums">
               {page} / {totalPages}
             </span>
-            <button
-              disabled={page >= totalPages}
-              onClick={() => setPage((p) => p + 1)}
-              className="rounded-field bg-surface px-3 py-1 disabled:opacity-40"
-            >
+            <Button variant="secondary" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)}>
               다음
-            </button>
-          </div>
+            </Button>
+          </nav>
         )}
       </div>
       {wide && (

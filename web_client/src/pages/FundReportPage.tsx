@@ -61,10 +61,10 @@ function FundReportBody({ id, uid }: { id: string | undefined; uid: number }) {
 
   const evalDate = entry ? formatValue('', evalDateOf(entry.report)).text : '' // YYYY.MM.DD
   return (
-    <div className="mx-auto max-w-[680px]">
+    <div>
       <div className="mb-4 flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <Link to="/me/funds" className="text-sm text-ink-muted">
+          <Link to="/me/funds" className="-my-2 inline-flex min-h-11 items-center text-sm text-ink-muted">
             ‹ 내 펀드
           </Link>
           <h1 className="mt-1 text-2xl font-bold text-ink">{displayName(fund)}</h1>

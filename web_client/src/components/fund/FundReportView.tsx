@@ -18,12 +18,12 @@ const TONE: Record<ViewCell['tone'], string> = { up: 'text-up', down: 'text-down
 
 // 구분선은 칸이 아닌 줄(이름+값 한 줄)에 그린다 — 글자 크기가 달라도 좌우 선이 어긋나지 않는다.
 // 값은 줄 오른쪽 끝에 붙어 카드 안 모든 값이 같은 오른쪽 기준선을 쓴다.
-const ROW = 'flex items-baseline justify-between gap-4 border-t border-line py-[9px] first:border-t-0 first:pt-0'
+const ROW = 'flex items-baseline justify-between gap-4 border-t border-line py-2 first:border-t-0 first:pt-0'
 const K = 'text-sm text-ink-muted'
 const V = 'whitespace-pre text-right tabular-nums' // 굵기는 쓰는 곳에서(유틸 순서상 semibold 가 extrabold 를 덮음)
-const CARD = 'mt-2.5 rounded-[18px] bg-surface p-[18px]'
+const CARD = 'mt-2.5 rounded-card bg-surface p-4'
 const SUMMARY =
-  "cursor-pointer list-none text-[13px] text-ink-muted before:content-['▸_'] group-open:before:content-['▾_'] [&::-webkit-details-marker]:hidden"
+  "cursor-pointer list-none text-sm text-ink-muted before:content-['▸_'] group-open:before:content-['▾_'] [&::-webkit-details-marker]:hidden"
 
 function Value({ c, className = '', title }: { c: ViewCell; className?: string; title?: string }) {
   return (
@@ -71,7 +71,7 @@ function Links({ links }: { links: FundLink[] }) {
 
 function Fold({ title, className = '', children }: { title: string; className?: string; children: ReactNode }) {
   return (
-    <details className={`group mt-2 text-[13px] text-ink-muted ${className}`}>
+    <details className={`group mt-2 text-sm text-ink-muted ${className}`}>
       <summary className={SUMMARY}>{title}</summary>
       {children}
     </details>
@@ -106,13 +106,13 @@ function AccountCard({ a }: { a: AccountView }) {
           // 대표값 + 요약 한 줄을 묶은 첫 줄(위 선 없음)
           <div className="pb-[9px]">
             <div className="flex items-baseline justify-between gap-4">
-              <div className="text-[15px] font-bold text-ink">{hero.label}</div>
+              <div className="text-base font-bold text-ink">{hero.label}</div>
               <div className={`${V} text-2xl font-extrabold tracking-tight`}>
                 <Value c={hero.value} />
               </div>
             </div>
             {a.summary.length > 0 && (
-              <div className="mt-[9px] whitespace-nowrap text-right text-[13px] font-semibold tabular-nums">
+              <div className="mt-2 whitespace-nowrap text-right text-sm font-semibold tabular-nums">
                 {a.summary.map((r, i) => (
                   <span key={i}>
                     {i > 0 && ' · '}
@@ -148,7 +148,7 @@ function AccountCard({ a }: { a: AccountView }) {
 }
 
 function SectionTitle({ children }: { children: ReactNode }) {
-  return <h2 className="mx-1 mb-2 mt-[26px] text-sm font-bold text-ink-muted">{children}</h2>
+  return <h2 className="mx-1 mb-2 mt-6 text-sm font-bold text-ink-muted">{children}</h2>
 }
 
 function AccountsBlock({ s }: { s: AccountsView }) {
@@ -218,7 +218,7 @@ function CertBlock({ s }: { s: CertView }) {
 export default function FundReportView({ report }: { report: FundReport }) {
   const view = useMemo(() => toReportView(report), [report])
   return (
-    <div className="text-[15px] leading-normal tracking-[-0.01em] [word-break:keep-all]">
+    <div className="text-base leading-normal tracking-[-0.01em] [word-break:keep-all]">
       {view.notice && <Notice n={view.notice} />}
       {view.sections.map((s, i) => (
         <section key={i}>
