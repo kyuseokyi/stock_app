@@ -6,7 +6,7 @@ import Card from '../ui/Card'
 
 // 지수 카드(종가·등락·20일 스파크라인) + 미국 거시 지표 카드. 국내·미국은 기준일이 달라 카드마다 날짜를 둔다.
 
-function Spark({ values, up }: { values: number[]; up: boolean }) {
+function Spark({ values, color }: { values: number[]; color: string }) {
   if (values.length < 2) return null
   const min = Math.min(...values)
   const max = Math.max(...values)
@@ -14,13 +14,22 @@ function Spark({ values, up }: { values: number[]; up: boolean }) {
   const pts = values.map((v, i) => `${(i / (values.length - 1)) * 100},${28 - ((v - min) / span) * 26}`).join(' ')
   return (
     <svg viewBox="0 0 100 30" preserveAspectRatio="none" className="mt-2 h-8 w-full" aria-hidden>
-      <polyline points={pts} fill="none" stroke={up ? THEME.up : THEME.down} strokeWidth={1.6}
+      <polyline points={pts} fill="none" stroke={color} strokeWidth={1.6}
         vectorEffect="non-scaling-stroke" strokeLinejoin="round" />
     </svg>
   )
 }
 
 const fmtIndex = (n: number) => n.toLocaleString('ko-KR', { maximumFractionDigits: 2 })
+
+// 선 색은 바로 위 숫자(오늘 등락)와 같은 기준 — 화면에 0.0% 로 보이면 회색(Zero-Is-Neutral). 등락이 없으면 20일 방향.
+function sparkColor(ix: MarketIndex): string {
+  if (ix.chg1d != null) {
+    const r = Math.round(ix.chg1d * 10) / 10
+    return r === 0 ? THEME.inkMuted : r > 0 ? THEME.up : THEME.down
+  }
+  return (ix.spark[ix.spark.length - 1] ?? 0) >= (ix.spark[0] ?? 0) ? THEME.up : THEME.down
+}
 
 export function IndexCards({ indices, gridClass = 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-5' }: { indices: MarketIndex[]; gridClass?: string }) {
   if (!indices.length) return null
@@ -42,8 +51,8 @@ export function IndexCards({ indices, gridClass = 'grid-cols-2 sm:grid-cols-3 lg
               )}
             </div>
             <div className="mt-1 text-lg font-bold text-ink">{fmtIndex(ix.close)}</div>
-            <div className={`text-sm font-medium ${pnlClass(ix.chg1d)}`}>{ix.chg1d == null ? '—' : formatPct(ix.chg1d)}</div>
-            <Spark values={ix.spark} up={(ix.spark[ix.spark.length - 1] ?? 0) >= (ix.spark[0] ?? 0)} />
+            <div className={`text-sm font-medium tabular-nums ${pnlClass(ix.chg1d)}`}>{ix.chg1d == null ? '—' : formatPct(ix.chg1d)}</div>
+            <Spark values={ix.spark} color={sparkColor(ix)} />
           </Card>
         )
       })}

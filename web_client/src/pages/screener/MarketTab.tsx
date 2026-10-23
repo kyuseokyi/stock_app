@@ -106,7 +106,7 @@ export default function MarketTab() {
                     <div className="truncate text-sm font-bold text-ink">{t.name}</div>
                     {t.leader && <div className="truncate text-xs text-ink-muted">대장 {t.leader.name}</div>}
                   </div>
-                  <span className={`text-sm font-bold ${pnlClass(t.chg)}`}>{t.chg == null ? '—' : formatPct(t.chg)}</span>
+                  <span className={`text-sm font-bold tabular-nums ${pnlClass(t.chg)}`}>{t.chg == null ? '—' : formatPct(t.chg)}</span>
                 </li>
               ))}
             </ul>

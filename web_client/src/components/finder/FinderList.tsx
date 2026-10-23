@@ -1,32 +1,26 @@
 import type { ReactNode } from 'react'
+import StockRow from '../screener/StockRow'
+import Tag from '../ui/Tag'
 import { gcLabel, maOrderLabel } from '../../lib/finder'
 import { formatAmount, formatPct, formatPrice, pnlClass } from '../../lib/format'
 import type { FinderItem } from '../../types/finder'
 
-type Tone = 'up' | 'down' | 'brand' | 'muted'
-const TONE: Record<Tone, string> = {
-  up: 'bg-up-soft text-up',
-  down: 'bg-down-soft text-down',
-  brand: 'bg-brand-soft text-brand-strong',
-  muted: 'bg-fill text-ink-muted',
-}
-
-function Badge({ tone, children }: { tone: Tone; children: ReactNode }) {
-  return <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${TONE[tone]}`}>{children}</span>
-}
-
-// 지표 배지 — 신고가·골든크로스·RSI(과매도 파랑·과열 빨강)·배열(정배열 빨강·역배열 파랑)
+// 지표 배지 — 신고가는 상승 사건(핑크), RSI 70 이상은 과열 주의(danger), 나머지(골든크로스·배열·RSI 수치)는 분류(중립).
+// 정배열·과매도 같은 '상태'를 상승·하락 색으로 칠하지 않는다(핑크=상승, 블루=하락에만).
 function Badges({ it }: { it: FinderItem }) {
   const gc = gcLabel(it.gcDays)
   const order = maOrderLabel(it.maOrder)
   return (
     <>
-      {it.isNewHigh && <Badge tone="up">신고가</Badge>}
-      {gc && <Badge tone="brand">{gc}</Badge>}
+      {it.isNewHigh && <Tag tone="up">신고가</Tag>}
+      {gc && <Tag>{gc}</Tag>}
       {it.rsi14 !== null && (
-        <Badge tone={it.rsi14 <= 30 ? 'down' : it.rsi14 >= 70 ? 'up' : 'muted'}>RSI {Math.round(it.rsi14)}</Badge>
+        <Tag tone={it.rsi14 >= 70 ? 'danger' : 'neutral'}>
+          RSI {Math.round(it.rsi14)}
+          {it.rsi14 >= 70 ? ' 과열' : it.rsi14 <= 30 ? ' 과매도' : ''}
+        </Tag>
       )}
-      {order && <Badge tone={it.maOrder === 1 ? 'up' : 'down'}>{order}</Badge>}
+      {order && <Tag>{order}</Tag>}
     </>
   )
 }
@@ -39,38 +33,33 @@ interface Props {
   renderInline?: (item: FinderItem) => ReactNode
 }
 
-// 조건검색 목록 — 종목·시장/업종·배지·종가·등락률(상승 빨강·하락 파랑)·거래대금
+// 조건검색 목록 — 종목·배지·시장/업종 / 오른쪽 종가·등락률(상승 핑크·하락 블루·0 회색)·거래대금. 행 틀은 StockRow.
 export default function FinderList({ items, selected, onSelect, renderInline }: Props) {
   return (
     <ul className="divide-y divide-line">
       {items.map((it) => {
         const active = it.ticker === selected
         return (
-          <li key={it.ticker}>
-            <button
-              type="button"
-              onClick={() => onSelect(it.ticker)}
-              aria-expanded={renderInline ? active : undefined}
-              className={`flex w-full items-center gap-3 px-1 py-3 text-left transition ${active ? 'bg-brand-soft/60' : 'hover:bg-fill/60'}`}
-            >
-              <div className="min-w-0 flex-1">
-                <div className="flex items-baseline gap-1.5">
-                  <span className="truncate font-bold text-ink">{it.name}</span>
-                  <span className="shrink-0 text-xs text-ink-muted">{it.ticker}</span>
-                </div>
-                <div className="mt-1 flex flex-wrap items-center gap-1.5">
-                  <Badges it={it} />
-                  <span className="text-xs text-ink-muted">{it.sectorName ?? it.market}</span>
-                </div>
-              </div>
-              <div className="shrink-0 text-right">
-                <div className="text-sm font-medium text-ink">{formatPrice(it.close)}</div>
-                <div className={`text-xs font-medium ${pnlClass(it.chg1d)}`}>{it.chg1d === null ? '–' : formatPct(it.chg1d)}</div>
-                <div className="text-xs text-ink-muted">{formatAmount(it.value)}</div>
-              </div>
-            </button>
-            {renderInline && active && <div className="pb-4">{renderInline(it)}</div>}
-          </li>
+          <StockRow
+            key={it.ticker}
+            name={it.name}
+            ticker={it.ticker}
+            active={active}
+            onSelect={() => onSelect(it.ticker)}
+            expandable={!!renderInline}
+            meta={
+              <>
+                <Badges it={it} />
+                <span className="text-xs text-ink-muted">{it.sectorName ?? it.market}</span>
+              </>
+            }
+            aside={[
+              formatPrice(it.close),
+              <span className={pnlClass(it.chg1d)}>{it.chg1d === null ? '–' : formatPct(it.chg1d)}</span>,
+              formatAmount(it.value),
+            ]}
+            inline={renderInline && active ? renderInline(it) : undefined}
+          />
         )
       })}
     </ul>

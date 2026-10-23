@@ -1,5 +1,7 @@
 import type { ReactNode } from 'react'
-import { formatPrice, pnlClass } from '../../lib/format'
+import StockRow from '../screener/StockRow'
+import Tag from '../ui/Tag'
+import { formatPrice } from '../../lib/format'
 import { breakoutText, depthText, lengthText, patternLabel, pivotDistText, pivotText, stageLabel } from '../../lib/patterns'
 import type { PatternItem } from '../../types/patterns'
 
@@ -11,7 +13,8 @@ interface Props {
   renderInline?: (item: PatternItem) => ReactNode
 }
 
-// 패턴 목록 — 종목·패턴·단계·피벗·피벗까지 %·깊이·길이·돌파 정보
+// 패턴 목록 — 종목·패턴(분류)·단계(상태)·깊이/길이·돌파 / 오른쪽 피벗·피벗까지 거리·종가. 행 틀은 StockRow.
+// 패턴 종류는 선택 칩과 헷갈리지 않게 중립 배지, '피벗까지 %'는 등락이 아닌 거리라 회색에 부호만.
 export default function PatternList({ items, selected, onSelect, renderInline }: Props) {
   return (
     <ul className="divide-y divide-line">
@@ -19,41 +22,28 @@ export default function PatternList({ items, selected, onSelect, renderInline }:
         const active = it.ticker === selected
         const bo = breakoutText(it.breakoutDate, it.daysSinceBreakout, it.breakoutVolPct)
         return (
-          <li key={it.ticker}>
-            <button
-              type="button"
-              onClick={() => onSelect(it.ticker)}
-              aria-expanded={renderInline ? active : undefined}
-              aria-pressed={renderInline ? undefined : active}
-              aria-current={!renderInline && active ? 'true' : undefined}
-              className={`flex w-full items-center gap-3 px-1 py-3 text-left transition ${active ? 'bg-brand-soft/60' : 'hover:bg-fill/60'}`}
-            >
-              <div className="min-w-0 flex-1">
-                <div className="flex items-baseline gap-1.5">
-                  <span className="truncate font-bold text-ink">{it.name}</span>
-                  <span className="shrink-0 text-xs text-ink-muted">{it.ticker}</span>
-                </div>
-                <div className="mt-1 flex flex-wrap items-center gap-1.5">
-                  <span className="rounded-full bg-brand-soft px-2 py-0.5 text-xs font-medium text-brand-strong">
-                    {patternLabel(it.patternType)}
-                  </span>
-                  <span className="rounded-full bg-fill px-2 py-0.5 text-xs font-medium text-ink-muted">
-                    {stageLabel(it.stage, it.label)}
-                  </span>
-                  <span className="text-xs text-ink-muted">깊이 {depthText(it.depth)} · {lengthText(it.length)}</span>
-                </div>
-                {bo && <div className="mt-1 text-xs text-up">{bo}</div>}
-              </div>
-              <div className="shrink-0 text-right">
-                <div className="text-sm font-medium text-ink">피벗 {pivotText(it.pivot)}</div>
-                <div className={`text-xs font-medium ${pnlClass(it.pivotDistPct)}`}>
-                  {it.pivotDistPct === null ? '–' : `피벗까지 ${pivotDistText(it.pivotDistPct)}`}
-                </div>
-                <div className="text-xs text-ink-muted">종가 {formatPrice(it.close)}</div>
-              </div>
-            </button>
-            {renderInline && active && <div className="pb-4">{renderInline(it)}</div>}
-          </li>
+          <StockRow
+            key={it.ticker}
+            name={it.name}
+            ticker={it.ticker}
+            active={active}
+            onSelect={() => onSelect(it.ticker)}
+            expandable={!!renderInline}
+            meta={
+              <>
+                <Tag>{patternLabel(it.patternType)}</Tag>
+                <Tag tone="outline">{stageLabel(it.stage, it.label)}</Tag>
+                <span className="text-xs text-ink-muted">깊이 {depthText(it.depth)} · {lengthText(it.length)}</span>
+                {bo && <span className="basis-full text-xs text-up">{bo}</span>}
+              </>
+            }
+            aside={[
+              `피벗 ${pivotText(it.pivot)}`,
+              <span className="text-ink-muted">{it.pivotDistPct === null ? '–' : `피벗까지 ${pivotDistText(it.pivotDistPct)}`}</span>,
+              `종가 ${formatPrice(it.close)}`,
+            ]}
+            inline={renderInline && active ? renderInline(it) : undefined}
+          />
         )
       })}
     </ul>
