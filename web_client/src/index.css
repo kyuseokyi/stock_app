@@ -5,6 +5,9 @@
 body {
   @apply bg-canvas text-ink antialiased;
   caret-color: theme('colors.brand.strong');
+  /* 한국어는 어절 단위로 줄바꿈("점 / 검" 방지). 칸을 넘는 긴 단어만 끊는다 — break-word 는 최소 폭 계산을 바꾸지 않아 좁은 칸의 숫자가 쪼개지지 않는다 */
+  word-break: keep-all;
+  overflow-wrap: break-word;
 }
 
 /* 브라우저 기본 표면도 팔레트로 — 선택 영역·키보드 포커스 링(마우스 클릭엔 안 보임) */

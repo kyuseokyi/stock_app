@@ -14,7 +14,7 @@ interface Props {
 function UpDownBar({ up, down, flat }: { up: number; down: number; flat: number }) {
   const total = up + down + flat || 1
   return (
-    <div className="flex h-1.5 w-16 overflow-hidden rounded-full bg-fill" title={`상승 ${up} · 보합 ${flat} · 하락 ${down}`}>
+    <div aria-hidden className="flex h-1.5 w-16 overflow-hidden rounded-full bg-fill" title={`상승 ${up} · 보합 ${flat} · 하락 ${down}`}>
       <div className="bg-up" style={{ width: `${(up / total) * 100}%` }} />
       <div className="bg-line" style={{ width: `${(flat / total) * 100}%` }} />
       <div className="bg-down" style={{ width: `${(down / total) * 100}%` }} />
@@ -46,7 +46,10 @@ export default function GroupList({ items, selected, onSelect, renderInline, sho
                 </div>
                 <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-ink-muted">
                   <UpDownBar up={it.up} down={it.down} flat={it.flat} />
-                  <span>{it.members}종목</span>
+                  {/* 막대는 그림일 뿐 — 같은 정보를 글자로도(색만으로 전달하지 않기) */}
+                  <span>
+                    {it.members}종목 중 <span className="text-up">{it.up}</span>개 상승
+                  </span>
                   {it.leader && (
                     <span className="truncate">
                       대장 {it.leader.name}

@@ -31,7 +31,7 @@ export function activeCanslimFilters(f: ScreenFilters): number {
 /** 배지 색: 통과=브랜드 블루, 미달=회색, 부족·준비 중=점선 테두리 */
 export function letterBadgeClass(status: LetterStatus): string {
   if (status === 1) return 'bg-brand text-ink'
-  if (status === 0) return 'bg-fill text-ink-muted'
+  if (status === 0) return 'ring-1 ring-inset ring-line text-ink-muted' // 미달 = 빈 테두리(통과 = 채움) — 색이 아니라 모양으로도 구분
   return 'border border-dashed border-line text-ink-muted'
 }
 

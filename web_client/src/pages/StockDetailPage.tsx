@@ -15,6 +15,7 @@ import { overlayCaption, patternOverlay } from '../lib/patternOverlay'
 import type { PatternBases } from '../types/patterns'
 import type { CanslimScore } from '../types/screener'
 import { Skeleton } from '../components/ui/Skeleton'
+import { useDocumentTitle } from '../hooks/useDocumentTitle'
 
 // 종목 상세 — 검색창 + 헤더(이름·종가·주도주 점수) + 일봉 차트(기간 선택, 50일선·52주 고점·현재 패턴 선)
 //   + 패턴(현재 베이스·이력) + 주도주(CANSLIM 7항목·점수 추이). 스크리너 상세 패널과 같은 부품을 쓴다.
@@ -81,6 +82,8 @@ export default function StockDetailPage() {
     () => (current ? patternOverlay(basesData?.zones ?? null, current, current.pivot) : null),
     [basesData, current],
   )
+
+  useDocumentTitle(valid ? scoreData?.name ?? info?.name : null)
 
   if (!valid) {
     return (

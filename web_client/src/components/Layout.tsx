@@ -13,9 +13,10 @@ import { showToast } from '../store/toast'
 import { useFundAutoRefresh } from '../lib/fundAutoRefresh'
 import ScrollRow from './ui/ScrollRow'
 import Button from './ui/Button'
+import { titleFor } from '../lib/pageTitle'
 
 export default function Layout() {
-  const { boards, fetchBoards } = useBoardStore()
+  const { boards, fetchBoards, boardName } = useBoardStore()
   const { user, logout } = useAuthStore()
   const [loginOpen, setLoginOpen] = useState(false)
   const [deleteOpen, setDeleteOpen] = useState(false)
@@ -28,6 +29,12 @@ export default function Layout() {
   const headerWidth = 'max-w-3xl lg:max-w-6xl'
   const wide = section === 'game' || section === 'screener' || section === 'home' || location.pathname.startsWith('/boards/')
   useFundAutoRefresh() // 접속·탭 복귀 시 등록 펀드 자동 갱신(로그인 상태일 때만)
+  // 경로별 탭 제목 — 값이 바뀔 때만 넣어서, 글·종목 상세가 구체화한 제목을 게시판 목록 갱신이 덮지 않게 한다
+  const routeTitle = titleFor(location.pathname, boardName)
+
+  useEffect(() => {
+    document.title = routeTitle
+  }, [routeTitle])
 
   useEffect(() => {
     fetchBoards()

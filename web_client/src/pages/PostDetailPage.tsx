@@ -9,6 +9,7 @@ import Card from '../components/ui/Card'
 import Button from '../components/ui/Button'
 import type { AxiosError } from 'axios'
 import type { BlogOut, CommentOut } from '../types/api'
+import { useDocumentTitle } from '../hooks/useDocumentTitle'
 
 export default function PostDetailPage() {
   // posts/:id 라우트 전용 → id 는 항상 존재(타입상 string | undefined). `!` 는 타입 표기용.
@@ -16,6 +17,7 @@ export default function PostDetailPage() {
   const boards = useBoardStore((s) => s.boards)
   const user = useAuthStore((s) => s.user)
   const [post, setPost] = useState<BlogOut | null>(null)
+  useDocumentTitle(post?.title)
   const [comments, setComments] = useState<CommentOut[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
