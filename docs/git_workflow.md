@@ -37,6 +37,28 @@ git fetch . dev:main
 - 기능 브랜치가 오래되어 dev 가 앞서 있으면, push 전이면 `git rebase dev`, push 했으면 `git merge dev`.
 - main 은 여전히 dev 의 fast-forward 만 받는다(main 에 직접 커밋 금지).
 
+### 0-1. 화면(UI) 변경 — 언제든 그 화면만 되돌릴 수 있게
+
+- **화면 변경은 `ui/<화면>` 브랜치로 따로** 만든다. 백엔드·데이터 로직과 같은 브랜치에 섞지 않는다.
+  기능에 둘 다 필요하면 `feature/<기능>`(API·로직, 옛 화면에서도 동작하게) 을 먼저 dev 에 합치고, 그다음 `ui/<화면>` 을 합친다.
+  → 화면 머지 커밋만 되돌려도 API·데이터는 그대로라 충돌·장애가 없다.
+- 머지 커밋 제목에 `[UI]` 를 붙인다: `Merge ui/screener-tabs: [UI] 스크리너 칩 두 묶음`.
+  화면 변경 목록: `git log --oneline --first-parent --grep='\[UI\]' dev`
+- main 으로 올릴 때마다 배포 태그를 단다: `git tag -a deploy/2026-10-25-1 main -m "<포함 기능 요약>"`,
+  push 는 `git push origin main dev --follow-tags`. "그때 화면" 비교: `git diff deploy/<이전> deploy/<이후> -- web_client mobile`.
+
+**화면 되돌리기 절차**
+
+```bash
+git log --oneline --first-parent --grep='\[UI\]' dev   # 되돌릴 화면 머지 커밋 찾기
+git switch dev
+git revert -m 1 <머지 커밋>                              # 그 화면 변경만 통째로 취소하는 커밋
+git fetch . dev:main && git push origin main dev          # Deploy Web 이 웹·관리자 웹 재배포
+# 모바일: 되돌린 코드로 OTA 재발행(npm run ota:prod 등) — 네이티브 변경이 없으면 스토어 빌드 불필요
+```
+
+- 되돌린 화면을 다시 살리려면 그 revert 커밋을 다시 revert 한다(`git revert <revert 커밋>`).
+
 ---
 
 ## 1. 기본 — dev 를 main 으로 머지 (브랜치 전환 없이)
