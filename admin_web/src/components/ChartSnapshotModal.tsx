@@ -7,7 +7,7 @@ import {
 import { getChartData, searchStocks } from '../api/stockClient'
 import { useChartDrawings } from '../hooks/useChartDrawings'
 import {
-  DrawingsPrimitive, HANDLE_RADIUS, VolumeProfilePrimitive, channelCenterAt, channelHandles, clampIdx, logicalToX, xToLogical,
+  DrawingsPrimitive, HANDLE_RADIUS, VolumeProfilePrimitive, channelCenterAt, channelHandles, clampIdx, hasSecond, logicalToX, xToLogical,
   type ChannelCoords, type ChannelHandleKey,
 } from '../lib/chartDrawings'
 import type { ChartData, MaOrder, Stock } from '../types/stock'
@@ -40,9 +40,11 @@ type EditHit =
   | { kind: 'handle'; id: string; key: Exclude<ChannelHandleKey, 'B'> }
   | { kind: 'move'; id: string }
   | { kind: 'rotate'; id: string }
-/** 끌기 중 상태 — 통째 이동은 시작 도형·커서, 회전은 시작 시점의 픽셀 기하(첫 선 가운데·두 번째 선 끝·커서 극좌표) */
+/** 끌기 중 상태 — 통째 이동은 시작 도형·커서, 회전은 시작 시점의 픽셀 기하(첫 선 가운데·두 번째 선 끝·커서 극좌표),
+ *  첫 선 끝은 시작 도형 + 잡은 끝·두 번째 선 끝의 픽셀(가운데 축 회전용) */
 type EditDragState =
-  | Exclude<EditHit, { kind: 'move' } | { kind: 'rotate' }>
+  | { kind: 'hline'; id: string }
+  | { kind: 'handle'; id: string; key: Exclude<ChannelHandleKey, 'B'>; orig: StoredChannel; m: Px; e0: Px; b1: Px; b2: Px }
   | { kind: 'move'; id: string; cxi: number; cprice: number; orig: StoredChannel }
   | { kind: 'rotate'; id: string; m: Px; b1: Px; b2: Px; r0: number; a0: number }
 /** 캔들 정보(마우스오버) 박스 위치·대상 캔들 */
@@ -461,7 +463,7 @@ export default function ChartSnapshotModal({ open, onClose, onInsert }: ChartSna
     const channels = shapes.filter((s): s is StoredChannel => s.type === 'channel')
     for (const ch of channels) {
       for (const pt of channelHandles(ch)) {
-        const q = toPx(pt.xi, pt.price, pt.key !== 'B')
+        const q = toPx(pt.xi, pt.price, false)
         if (q && Math.hypot(q.x - px, q.y - py) <= HANDLE_RADIUS + 5.5) {
           return pt.key === 'B' ? { kind: 'rotate', id: ch.id } : { kind: 'handle', id: ch.id, key: pt.key }
         }
@@ -532,6 +534,13 @@ export default function ChartSnapshotModal({ open, onClose, onInsert }: ChartSna
           const a0 = Math.atan2(p.py - m.y, p.px - m.x)
           editDragRef.current = { kind: 'rotate', id: hit.id, m, b1, b2, r0, a0 }
         }
+      } else if (hit.kind === 'handle') {
+        const a1 = ch && toPx(ch.x1, ch.y1, false), a2 = ch && toPx(ch.x2, ch.y2, false)
+        const b1 = ch && toPx(ch.bx1, ch.by1, false), b2 = ch && toPx(ch.bx2, ch.by2, false)
+        if (ch && a1 && a2 && b1 && b2) {
+          const m = { x: (a1.x + a2.x) / 2, y: (a1.y + a2.y) / 2 }
+          editDragRef.current = { kind: 'handle', id: hit.id, key: hit.key, orig: ch, m, e0: hit.key === 'C1' ? a1 : a2, b1, b2 }
+        }
       } else {
         editDragRef.current = hit
       }
@@ -587,10 +596,35 @@ export default function ChartSnapshotModal({ open, onClose, onInsert }: ChartSna
         if (e1 && e2) updateShape(d.id, { bx1: e1.xi, by1: e1.price, bx2: e2.xi, by2: e2.price })
         return
       }
-      // 첫 선 끝 핸들: 그 끝만 옮김(두 번째 선은 그대로)
-      const xi = clampIdx(p.xi, n)
-      if (d.key === 'C1' && xi !== ch.x2) updateShape(d.id, { x1: xi, y1: p.price })
-      else if (d.key === 'C2' && xi !== ch.x1) updateShape(d.id, { x2: xi, y2: p.price })
+      // 첫 선 끝 핸들: 첫 선 가운데를 축으로 — 잡은 끝은 커서로, 반대쪽 끝은 가운데 대칭점으로(길이·각도 함께 조절).
+      // 두 번째 선은 같은 축으로 같은 각도만큼 돌려 두 선의 간격·상대 각도를 유지한다(각도는 화면 픽셀 기준).
+      const api = apiRef.current
+      const candle = seriesRef.current?.candle
+      const fxi = api && xToLogical(api.timeScale(), p.px)
+      if (!api || !candle || fxi == null) return
+      const o = d.orig
+      const mxi = (o.x1 + o.x2) / 2, mprice = (o.y1 + o.y2) / 2
+      // 두 끝이 차트 안에 남고, 첫 선이 세로로 서지 않게(가운데에서 최소 0.25칸)
+      let xi = Math.max(Math.max(0, 2 * mxi - (n - 1)), Math.min(Math.min(n - 1, 2 * mxi), fxi))
+      if (Math.abs(xi - mxi) < 0.25) xi = mxi + (xi >= mxi ? 0.25 : -0.25)
+      const end = { xi, price: p.price }, opp = { xi: 2 * mxi - xi, price: 2 * mprice - p.price }
+      const [c1, c2] = d.key === 'C1' ? [end, opp] : [opp, end]
+      const base = { x1: c1.xi, y1: c1.price, x2: c2.xi, y2: c2.price }
+      if (!hasSecond(o)) {
+        updateShape(d.id, { ...base, bx1: base.x1, by1: base.y1, bx2: base.x2, by2: base.y2 }) // 두 번째 선 없음 유지
+        return
+      }
+      const ep = toPx(end.xi, end.price, false)
+      if (!ep) return
+      const dTheta = Math.atan2(ep.y - d.m.y, ep.x - d.m.x) - Math.atan2(d.e0.y - d.m.y, d.e0.x - d.m.x)
+      const toDataPt = (b: Px) => {
+        const q = rotate({ x: b.x - d.m.x, y: b.y - d.m.y }, dTheta)
+        const bxi = xToLogical(api.timeScale(), d.m.x + q.x)
+        const price = candle.coordinateToPrice(d.m.y + q.y)
+        return bxi === null || price === null ? null : { xi: bxi, price }
+      }
+      const e1 = toDataPt(d.b1), e2 = toDataPt(d.b2)
+      if (e1 && e2) updateShape(d.id, { ...base, bx1: e1.xi, by1: e1.price, bx2: e2.xi, by2: e2.price })
       return
     }
     setEditHover(hitTestEdit(p.px, p.py)?.kind ?? null)

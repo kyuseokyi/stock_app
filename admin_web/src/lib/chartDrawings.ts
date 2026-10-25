@@ -16,6 +16,8 @@ type Ctx = CanvasRenderingContext2D
 export type ChannelCoords = Omit<ChannelShape, 'type'>
 
 export const clampIdx = (i: number, len: number) => Math.max(0, Math.min(len - 1, Math.round(i)))
+/** 범위만 자름(반올림 없음) — 가운데 축 회전으로 캔들 사이에 걸친 2중추세선 첫 선 끝 */
+export const clampX = (i: number, len: number) => Math.max(0, Math.min(len - 1, i))
 
 // lightweight-charts 4.2.3 의 logicalToCoordinate 는 소수 인덱스면 0, coordinateToLogical 은 정수로 반올림한다.
 // 회전한 두 번째 선처럼 캔들 사이에 걸치는 점을 위해 이웃 두 캔들 좌표로 선형 보간한다(막대 간격 일정).
@@ -129,7 +131,7 @@ export const HANDLE_RADIUS = 6.5
 export type ChannelHandleKey = 'C1' | 'C2' | 'B'
 
 /** 두 번째 선이 아직 없음(첫 선만 그린 미리보기) — 두 선이 같은 위치 */
-const hasSecond = (ch: ChannelCoords) =>
+export const hasSecond = (ch: ChannelCoords) =>
   ch.bx1 !== ch.x1 || ch.by1 !== ch.y1 || ch.bx2 !== ch.x2 || ch.by2 !== ch.y2
 
 /** 2중추세선 핸들(위치·히트테스트 공용). 첫 선 끝은 캔들에 맞춘 정수 x, 두 번째 선은 회전 결과라 소수 x */
@@ -221,8 +223,8 @@ export class DrawingsPrimitive extends BasePrimitive {
 
   // 2중추세선: 첫 선(빨강)·두 번째 선(초록) 굵게, 같은 쪽 끝끼리 얇은 점선 연결, 두 선 가운데 중심선(노란 점선).
   private paintChannel(ctx: Ctx, ch: ChannelCoords, n: number) {
-    const x1 = clampIdx(ch.x1, n), x2 = clampIdx(ch.x2, n)
-    if (x1 === x2) return
+    const x1 = clampX(ch.x1, n), x2 = clampX(ch.x2, n)
+    if (Math.abs(x2 - x1) < 0.5) return
     this.line(ctx, x1, ch.y1, x2, ch.y2, '#f43f5e', 2)
     if (!hasSecond(ch)) return
     this.line(ctx, ch.bx1, ch.by1, ch.bx2, ch.by2, '#10b981', 2)
@@ -257,7 +259,7 @@ export class DrawingsPrimitive extends BasePrimitive {
 
   private paintHandles(ctx: Ctx, ch: ChannelCoords, n: number) {
     for (const pt of channelHandles(ch)) {
-      const x = this.x(pt.key === 'B' ? pt.xi : clampIdx(pt.xi, n)), y = this.y(pt.price)
+      const x = this.x(clampX(pt.xi, n)), y = this.y(pt.price)
       if (x === null || y === null) continue
       ctx.fillStyle = '#ffffff'
       ctx.strokeStyle = '#111827'
