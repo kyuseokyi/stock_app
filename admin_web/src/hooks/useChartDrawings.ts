@@ -25,8 +25,9 @@ export interface TextShape {
   text: string
 }
 /**
- * 2중추세선 — 중심선 (x1,y1)-(x2,y2)(x=캔들 인덱스, y=가격)과 양 끝의 세로 간격 o1·o2.
- * 한쪽 선 = 중심 + o, 반대쪽 선 = 중심 − o → 두 선은 중심선 기준 거리·각도 대칭(o1≠o2 면 기울기가 다름).
+ * 2중추세선 — 첫 선 (x1,y1)-(x2,y2)(x=캔들 인덱스, y=가격)과 두 번째 선 (bx1,by1)-(bx2,by2).
+ * 두 번째 선은 첫 선과 길이가 같은 복사본으로, 첫 선 가운데를 축으로 360° 회전·거리 조절된 결과를 저장한다
+ * (회전은 화면 픽셀에서 계산 → 데이터 좌표로 되돌려 저장, x 는 소수일 수 있음).
  */
 export interface ChannelShape {
   type: 'channel'
@@ -34,15 +35,17 @@ export interface ChannelShape {
   y1: number
   x2: number
   y2: number
-  o1: number
-  o2: number
+  bx1: number
+  by1: number
+  bx2: number
+  by2: number
 }
 
 /** addShape 입력(id 없음) */
 export type ShapeInput = HLineShape | RectShape | TextShape | ChannelShape
 /** 저장된 도형(id 부여됨) */
 export type Shape = ShapeInput & { id: string }
-/** updateShape 패치 — 수평선 끌기(price)·2중추세선 이동/핸들(x·y·o) */
+/** updateShape 패치 — 수평선 끌기(price)·2중추세선 이동/끝점/회전(x·y·bx·by) */
 export type ShapePatch = Partial<Omit<HLineShape, 'type'> & Omit<ChannelShape, 'type'>>
 
 /**
@@ -54,7 +57,7 @@ export type ShapePatch = Partial<Omit<HLineShape, 'type'> & Omit<ChannelShape, '
  *   { id, type:'hline', price }
  *   { id, type:'rect',  xi1, y1, xi2, y2 }
  *   { id, type:'text',  xi, price, text }
- *   { id, type:'channel', x1, y1, x2, y2, o1, o2 }
+ *   { id, type:'channel', x1, y1, x2, y2, bx1, by1, bx2, by2 }
  */
 export function useChartDrawings() {
   const [tool, setTool] = useState<DrawingTool | null>(null)
