@@ -17,5 +17,7 @@
     "**/*.tsx",
     ".expo/types/**/*.ts",
     "expo-env.d.ts"
-  ]
+  ],
+  // WebView 페이지 스크립트는 DOM·웹 설치본 타입으로 따로 검사(src/features/game/chart-web/page/tsconfig.json)
+  "exclude": ["node_modules", "src/features/game/chart-web/page"]
 }

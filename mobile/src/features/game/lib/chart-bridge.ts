@@ -77,6 +77,9 @@ export type ChartMessage =
   | { type: 'lines'; lines: ChartLine[] }
   | { type: 'vis'; ma: boolean; bb: boolean; vp: boolean };
 
+/** 페이지 → RN 메시지(ReactNativeWebView.postMessage) — 준비됨 / 일봉 왼쪽 끝(과거 요청) / 처리 중 오류 */
+export type PageEvent = { type: 'ready' } | { type: 'needOlder' } | { type: 'error'; message: string };
+
 /** 이동평균 기간(최대 3칸, 앞에서부터 ma5·ma20·ma60 칸에 들어감). 기본은 게임과 같은 MA_PERIODS(5·20·60) */
 export type MaPeriods = readonly number[];
 /** 전체 로드 선택 인자 — 종목 상세는 [50]·365일, 게임은 생략(기본값) */
