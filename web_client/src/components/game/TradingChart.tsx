@@ -14,6 +14,7 @@ import { mergeOlder, prependKeepingView, watchLeftEdge } from '../../lib/history
 import { MA_PERIODS, bollinger, sma, type MaPeriod } from '../../lib/indicators'
 import { kstDateString } from '../../lib/format'
 import { THEME } from '../../lib/themeColors'
+import { VolumeProfilePrimitive } from '../../lib/volumeProfile'
 import { useTradingGameStore } from '../../store/tradingGame'
 import { chipClass } from '../ui/Chip'
 import {
@@ -168,12 +169,14 @@ export default function TradingChart({ ticker, lastPrice, coach, position }: Tra
   // 자동 범위에 넣을 가격선(일봉=지지·저항·진입, 분봉=진입). 손절·익절은 멀 수 있어 캔들이 눌리지 않게 제외
   const fitPricesRef = useRef<number[]>([])
   const indRef = useRef<IndicatorSeries | null>(null)
+  const vpRef = useRef<VolumeProfilePrimitive | null>(null) // 매물대(보이는 구간)
   const reloadRef = useRef<(() => void) | null>(null) // 현재 차트의 캔들 재로드(스트림 재개 시)
   const barsRef = useRef<{ time: Time; close: number }[]>([]) // 지표 계산용 시각·종가
   // 마지막 설정(단위·지표)은 이 브라우저에 저장 — 다시 열면 그대로(lib/chartPrefs)
   const [initialPrefs] = useState(loadChartPrefs)
   const [showMa, setShowMa] = useState(initialPrefs.ma)
   const [showBb, setShowBb] = useState(initialPrefs.bb)
+  const [showVp, setShowVp] = useState(initialPrefs.vp)
   const [indOpen, setIndOpen] = useState(false) // 모바일 폭 지표 팝오버
   const [loaded, setLoaded] = useState(false)
   const [failed, setFailed] = useState(false)
@@ -189,8 +192,8 @@ export default function TradingChart({ ticker, lastPrice, coach, position }: Tra
   const interval: ChartInterval = usable ?? rules?.chart_interval_default ?? 'day'
 
   useEffect(() => {
-    saveChartPrefs({ interval: picked, ma: showMa, bb: showBb })
-  }, [picked, showMa, showBb])
+    saveChartPrefs({ interval: picked, ma: showMa, bb: showBb, vp: showVp })
+  }, [picked, showMa, showBb, showVp])
 
   // 1) 차트 생성 + 캔들 로드(종목·단위 바뀌면 재생성 — 일봉/분봉 time 형식이 달라 시리즈를 새로 만든다)
   useEffect(() => {
@@ -218,6 +221,9 @@ export default function TradingChart({ ticker, lastPrice, coach, position }: Tra
     seriesRef.current = series
     const ind = addIndicatorSeries(chart)
     indRef.current = ind
+    const vp = new VolumeProfilePrimitive()
+    series.attachPrimitive(vp)
+    vpRef.current = vp
     setLoaded(false)
     setFailed(false)
     setEmpty(false)
@@ -232,6 +238,7 @@ export default function TradingChart({ ticker, lastPrice, coach, position }: Tra
       series.setData(candles.map(toBar))
       barsRef.current = candles.map((c) => ({ time: c.date, close: c.close }))
       setIndicatorData(ind, barsRef.current)
+      vp.setPoints(candles.map((c) => ({ high: c.high, low: c.low, close: c.close, volume: c.volume ?? 0 })))
     }
     let initialDone = false // 첫 로드가 끝나기 전 재로드는 무시(첫 화면 구간 지정이 건너뛰어지지 않게)
     // initial=true: 첫 로드(화면 구간 지정·실패 표시). false: 재로드(스트림이 끊겼다 이어짐) — 화면 위치는 그대로,
@@ -257,6 +264,7 @@ export default function TradingChart({ ticker, lastPrice, coach, position }: Tra
         series.setData(bars.map(toIntradayBar))
         barsRef.current = bars.map((c) => ({ time: c.t as UTCTimestamp, close: c.close }))
         setIndicatorData(ind, barsRef.current)
+        vp.setPoints(bars.map((c) => ({ high: c.high, low: c.low, close: c.close, volume: c.volume })))
         lastIntradayRef.current = bars[bars.length - 1] ?? null
         // 분봉도 첫 화면은 최근 INTRADAY_VISIBLE_BARS 개(앞쪽은 지표 워밍업 — 왼쪽 스크롤로 보임)
         if (setRange && bars.length > INTRADAY_VISIBLE_BARS) {
@@ -322,6 +330,7 @@ export default function TradingChart({ ticker, lastPrice, coach, position }: Tra
       reloadRef.current = null
       seriesRef.current = null
       indRef.current = null
+      vpRef.current = null
       barsRef.current = []
       linesRef.current = []
       lastCandleRef.current = null
@@ -367,14 +376,18 @@ export default function TradingChart({ ticker, lastPrice, coach, position }: Tra
     try {
       if (interval === 'day') {
         const next = mergeTick(lastCandleRef.current, kstDateString(), lastPrice)
+        const isNew = barsRef.current[barsRef.current.length - 1]?.time !== next.date
         lastCandleRef.current = next
         series.update(toBar(next))
         barsRef.current = upsertLast(barsRef.current, next.date, next.close)
+        vpRef.current?.upsertLast({ high: next.high, low: next.low, close: next.close, volume: next.volume ?? 0 }, isNew)
       } else {
         const next = mergeTickIntraday(lastIntradayRef.current, bucketStartSec(Date.now(), interval), lastPrice)
+        const isNew = barsRef.current[barsRef.current.length - 1]?.time !== next.t
         lastIntradayRef.current = next
         series.update(toIntradayBar(next))
         barsRef.current = upsertLast(barsRef.current, next.t as UTCTimestamp, next.close)
+        vpRef.current?.upsertLast({ high: next.high, low: next.low, close: next.close, volume: next.volume }, isNew)
         setEmpty(false)
       }
       if (indRef.current) updateIndicatorLast(indRef.current, barsRef.current)
@@ -390,7 +403,8 @@ export default function TradingChart({ ticker, lastPrice, coach, position }: Tra
     for (const p of MA_PERIODS) ind.ma[p].applyOptions({ visible: showMa })
     for (const s of [ind.bbUpper, ind.bbMiddle, ind.bbLower]) s.applyOptions({ visible: showBb })
     ind.band.setVisible(showBb)
-  }, [showMa, showBb, ticker, interval])
+    vpRef.current?.setVisible(showVp)
+  }, [showMa, showBb, showVp, ticker, interval])
 
   // 3) 가격선(지지/저항/진입가/손절/익절) — 값이 바뀔 때만 재생성(손익 틱마다 재생성하지 않도록 원시값 의존)
   const support = coach?.support_price ?? null
@@ -463,13 +477,16 @@ export default function TradingChart({ ticker, lastPrice, coach, position }: Tra
             </button>
           ))}
         </div>
-        {/* 데스크톱: 지표 칩 2개 그대로 */}
+        {/* 데스크톱: 지표 칩 3개 그대로 */}
         <div role="group" aria-label="보조지표" className="ml-auto hidden shrink-0 gap-1.5 sm:flex">
           <button type="button" aria-pressed={showMa} onClick={() => setShowMa((v) => !v)} className={chipClass(showMa)}>
             이동평균
           </button>
           <button type="button" aria-pressed={showBb} onClick={() => setShowBb((v) => !v)} className={chipClass(showBb)}>
             볼린저
+          </button>
+          <button type="button" aria-pressed={showVp} onClick={() => setShowVp((v) => !v)} className={chipClass(showVp)}>
+            매물대
           </button>
         </div>
         {/* 모바일 폭: '지표 N ▾' 하나 → 차트 위 팝오버(앱과 같은 방식) */}
@@ -480,7 +497,7 @@ export default function TradingChart({ ticker, lastPrice, coach, position }: Tra
           onClick={() => setIndOpen((v) => !v)}
           className={`ml-auto shrink-0 sm:hidden ${chipClass(indOpen)} ${CHIP_COMPACT}`}
         >
-          지표{(showMa || showBb) && ` ${Number(showMa) + Number(showBb)}`} {indOpen ? '▴' : '▾'}
+          지표{(showMa || showBb || showVp) && ` ${Number(showMa) + Number(showBb) + Number(showVp)}`} {indOpen ? '▴' : '▾'}
         </button>
       </div>
       <div className="relative h-[260px] overflow-hidden rounded-card border border-line bg-surface sm:h-[320px]">
@@ -503,6 +520,9 @@ export default function TradingChart({ ticker, lastPrice, coach, position }: Tra
             </button>
             <button type="button" aria-pressed={showBb} onClick={() => setShowBb((v) => !v)} className={`${chipClass(showBb)} ${CHIP_COMPACT}`}>
               볼린저 20·2σ
+            </button>
+            <button type="button" aria-pressed={showVp} onClick={() => setShowVp((v) => !v)} className={`${chipClass(showVp)} ${CHIP_COMPACT}`}>
+              매물대
             </button>
           </div>
         )}

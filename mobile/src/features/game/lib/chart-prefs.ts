@@ -10,9 +10,11 @@ export type ChartPrefs = {
   interval: ChartInterval | null;
   ma: boolean;
   bb: boolean;
+  /** 매물대(보이는 구간 가격대별 거래량) */
+  vp: boolean;
 };
 
-export const DEFAULT_CHART_PREFS: ChartPrefs = { interval: null, ma: true, bb: false };
+export const DEFAULT_CHART_PREFS: ChartPrefs = { interval: null, ma: true, bb: false, vp: false };
 
 /** 저장 문자열 → 설정(형식이 틀린 필드는 기본값) */
 export function parseChartPrefs(raw: string | null): ChartPrefs {
@@ -23,6 +25,7 @@ export function parseChartPrefs(raw: string | null): ChartPrefs {
       interval: isChartInterval(v.interval) ? v.interval : null,
       ma: typeof v.ma === 'boolean' ? v.ma : DEFAULT_CHART_PREFS.ma,
       bb: typeof v.bb === 'boolean' ? v.bb : DEFAULT_CHART_PREFS.bb,
+      vp: typeof v.vp === 'boolean' ? v.vp : DEFAULT_CHART_PREFS.vp,
     };
   } catch {
     return DEFAULT_CHART_PREFS;

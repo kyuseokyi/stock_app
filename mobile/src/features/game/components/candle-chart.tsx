@@ -275,6 +275,7 @@ export function DailyChart({ ticker, lastPrice, coach, position }: DailyChartPro
   const interval: ChartInterval = picked ?? rules?.chart_interval_default ?? 'day';
   const [showMa, setShowMa] = useState(DEFAULT_CHART_PREFS.ma);
   const [showBb, setShowBb] = useState(DEFAULT_CHART_PREFS.bb);
+  const [showVp, setShowVp] = useState(DEFAULT_CHART_PREFS.vp);
 
   // 0) 마지막 설정(단위·지표)을 기기에서 복원 — 읽기 전에는 캔들을 로드하지 않아 기본값→저장값 이중 로드를 막는다.
   // SecureStore 미지원(web)·실패면 기본값(저장값 > 관리자 기본 단위 > 일봉)
@@ -289,6 +290,7 @@ export function DailyChart({ ticker, lastPrice, coach, position }: DailyChartPro
         setPicked(p.interval);
         setShowMa(p.ma);
         setShowBb(p.bb);
+        setShowVp(p.vp);
         setPrefsReady(true);
       });
     return () => {
@@ -297,10 +299,10 @@ export function DailyChart({ ticker, lastPrice, coach, position }: DailyChartPro
   }, []);
   useEffect(() => {
     if (!prefsReady) return;
-    SecureStore.setItemAsync(CHART_PREFS_KEY, serializeChartPrefs({ interval: picked, ma: showMa, bb: showBb })).catch(
+    SecureStore.setItemAsync(CHART_PREFS_KEY, serializeChartPrefs({ interval: picked, ma: showMa, bb: showBb, vp: showVp })).catch(
       () => undefined,
     );
-  }, [prefsReady, picked, showMa, showBb]);
+  }, [prefsReady, picked, showMa, showBb, showVp]);
   // 화면에 그리는 캔들 묶음(어느 종목·단위의 데이터인지 함께) — 단위를 바꾸면 새 데이터가 올 때까지 이전 것을 흐리게 유지
   const [shown, setShown] = useState<ShownSeries | null>(null);
   const shownRef = useRef<ShownSeries | null>(null); // 틱 병합이 최신 값을 읽도록(상태 갱신 함수 안 부수효과 방지)
@@ -456,7 +458,7 @@ export function DailyChart({ ticker, lastPrice, coach, position }: DailyChartPro
           ))}
           <View style={styles.indicatorBtn}>
             <MiniChip
-              label={`지표${showMa || showBb ? ` ${Number(showMa) + Number(showBb)}` : ''} ${indOpen ? '▴' : '▾'}`}
+              label={`지표${showMa || showBb || showVp ? ` ${Number(showMa) + Number(showBb) + Number(showVp)}` : ''} ${indOpen ? '▴' : '▾'}`}
               selected={indOpen}
               onPress={() => setIndOpen((v) => !v)}
             />
@@ -471,6 +473,7 @@ export function DailyChart({ ticker, lastPrice, coach, position }: DailyChartPro
             lines={lines}
             ma={showMa}
             bb={showBb}
+            vp={showVp}
             colors={colors}
             height={CHART_H}
             onReady={() => setChartReady(true)}
@@ -520,6 +523,7 @@ export function DailyChart({ ticker, lastPrice, coach, position }: DailyChartPro
         <View style={[styles.indicatorMenu, { top: chipsBottom + 4 }]}>
           <MiniChip label="이동평균 5·20·60" selected={showMa} onPress={() => setShowMa((v) => !v)} />
           <MiniChip label="볼린저 20·2σ" selected={showBb} onPress={() => setShowBb((v) => !v)} />
+          <MiniChip label="매물대" selected={showVp} onPress={() => setShowVp((v) => !v)} />
         </View>
       ) : null}
     </View>

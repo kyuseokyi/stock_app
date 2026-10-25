@@ -10,9 +10,11 @@ export interface ChartPrefs {
   interval: ChartInterval | null
   ma: boolean
   bb: boolean
+  /** 매물대(보이는 구간 가격대별 거래량) */
+  vp: boolean
 }
 
-export const DEFAULT_CHART_PREFS: ChartPrefs = { interval: null, ma: true, bb: false }
+export const DEFAULT_CHART_PREFS: ChartPrefs = { interval: null, ma: true, bb: false, vp: false }
 
 const isInterval = (v: unknown): v is ChartInterval => CHART_INTERVALS.includes(v as ChartInterval)
 
@@ -25,6 +27,7 @@ export function parseChartPrefs(raw: string | null): ChartPrefs {
       interval: isInterval(v.interval) ? v.interval : null,
       ma: typeof v.ma === 'boolean' ? v.ma : DEFAULT_CHART_PREFS.ma,
       bb: typeof v.bb === 'boolean' ? v.bb : DEFAULT_CHART_PREFS.bb,
+      vp: typeof v.vp === 'boolean' ? v.vp : DEFAULT_CHART_PREFS.vp,
     }
   } catch {
     return DEFAULT_CHART_PREFS

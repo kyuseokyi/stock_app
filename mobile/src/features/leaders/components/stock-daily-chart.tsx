@@ -55,6 +55,7 @@ export function StockDailyChart({
     <View style={styles.wrap}>
       <View style={styles.legend}>
         <Text style={[styles.legendText, { color: MA50_COLOR }]}>━ 50일선</Text>
+        <Text style={styles.legendText}>▤ 매물대</Text>
         {high52w !== null ? <Text style={styles.legendText}>┄ 52주 고점</Text> : null}
         {(extraLines ?? []).map((l) => (
           <Text key={l.title} style={styles.legendText}>
@@ -68,6 +69,7 @@ export function StockDailyChart({
           lines={lines}
           ma
           bb={false}
+          vp
           colors={colors}
           height={CHART_H}
           maPeriods={STOCK_CHART_MA}
