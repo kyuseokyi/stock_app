@@ -117,6 +117,8 @@ class Query:
         start_date: str,
         end_date: str,
         bb_std_dev: float = 2.0,
+        # true 면 실데이터가 없을 때 가짜 캔들 대신 빈 candles — 차트 과거 이어 불러오기의 '더 없음' 판단용
+        real_only: bool = False,
     ) -> ChartData | None:
         stock = chart_service.resolve_stock(symbol)
         if stock is None:
@@ -127,6 +129,11 @@ class Query:
         candles = ch_source.get_candles(symbol, _lookback_start(start_date), end_date)
         if candles:
             i0 = _display_start_index(candles, start_date)
+            if real_only and candles[i0].date < start_date:
+                candles, i0 = [], 0  # 표시 구간엔 없고 앞쪽 버퍼에만 있음 → 이 구간은 비어 있다
+        elif real_only:
+            # 보관 기간보다 과거 — 가짜를 붙이지 않고 빈 구간으로 돌려준다(지표 함수는 빈 목록 허용)
+            candles, i0 = [], 0
         else:
             # 온더플라이(가짜)는 버퍼 없이 표시 구간 그대로(누적 워크라 시작 변경 시 값이 달라짐)
             candles = chart_service.generate_candles(symbol, start_date, end_date)
