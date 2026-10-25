@@ -1,0 +1,19 @@
+{
+  // WebView 페이지 스크립트 전용 검사 — 브라우저(DOM)에서 도는 코드라 앱 tsconfig 와 분리.
+  // lightweight-charts 타입은 웹(web_client) 설치본에서 가져온다(gen-lwc-bundle.js 와 같은 출처·버전 4.2.3).
+  // 실행: npm run gen:chart-page (검사 후 page-script.generated.ts 생성)
+  "compilerOptions": {
+    "target": "ES2017",
+    "lib": ["DOM", "ES2020"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "types": [],
+    "paths": {
+      "lightweight-charts": ["../../../../../../web_client/node_modules/lightweight-charts"]
+    }
+  },
+  "include": ["chart-page-script.ts"]
+}

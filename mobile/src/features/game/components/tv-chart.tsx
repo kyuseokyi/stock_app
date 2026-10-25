@@ -13,6 +13,7 @@ import {
   type ChartMessage,
   type ChartRows,
   type MaPeriods,
+  type PageEvent,
 } from '../lib/chart-bridge';
 import { MA_PERIODS } from '../lib/indicators';
 
@@ -101,9 +102,9 @@ export function TvChart({
   }, [ready, ma, bb, vp]);
 
   const onMessage = (e: WebViewMessageEvent) => {
-    let msg: { type?: string; message?: string };
+    let msg: PageEvent;
     try {
-      msg = JSON.parse(e.nativeEvent.data);
+      msg = JSON.parse(e.nativeEvent.data) as PageEvent;
     } catch {
       return;
     }

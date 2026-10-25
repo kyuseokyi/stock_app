@@ -59,6 +59,7 @@
   },
   "scripts": {
     "start": "expo start",
+    "gen:chart-page": "node scripts/gen-chart-page.js",
     "start:dev": "cross-env APP_ENV=development expo start",
     "start:prod": "cross-env APP_ENV=production expo start",
     "web": "expo start --web",
