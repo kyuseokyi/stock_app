@@ -1,11 +1,41 @@
-# Git 작업 흐름 — dev → main 머지 (일직선 이력)
+# Git 작업 흐름 — feature → dev → main
 
-작업은 `dev`에서, 배포는 `main` push로. 머지는 **fast-forward만** 써서 머지 커밋 없이 이력을 일직선으로 유지한다.
+작업은 기능 브랜치(`feature/…`)에서, dev 에는 기능마다 머지 커밋 하나로 합치고, 배포는 dev 를 `main` 으로 **fast-forward** 해 push.
 
 | 브랜치 | 역할 |
 |---|---|
 | `dev` | 일상 작업·커밋 |
 | `main` | 배포 기준. **push 하면 자동 배포**(경로별 Deploy Server / Deploy Web — [`run_and_deploy.md`](./run_and_deploy.md) B-2) |
+| `feature/<기능>`·`fix/<내용>` | 기능 하나씩 작업(2026-10-25부터). dev 에서 갈라져 dev 로 합쳐진다 |
+
+---
+
+## 0. 기능 브랜치 — 기능 하나 = 브랜치 하나 = dev 의 머지 커밋 하나
+
+기능별로 이력을 묶어 "이 기능이 언제 들어갔는지·통째로 되돌리기"가 되게 한다.
+
+```bash
+# 1) dev 최신에서 갈라지기
+git switch dev
+git switch -c feature/us-stocks          # 이름: feature/<기능>, 버그는 fix/<내용>, 문서만은 docs/<내용>
+
+# 2) 작업·커밋(작은 단위로 여러 번)
+git commit -m "feat: ..."
+
+# 3) 끝나면(테스트 통과) dev 로 합치기 — 머지 커밋을 꼭 만든다
+git switch dev
+git merge --no-ff feature/us-stocks -m "Merge feature/us-stocks: 미국 개별 주식"
+git branch -d feature/us-stocks          # 합쳐진 브랜치만 지워진다(-d)
+
+# 4) 배포는 기존과 같다 — dev 를 main 으로 fast-forward(1번)
+git fetch . dev:main
+```
+
+- dev 이력: `git log --oneline --first-parent dev` 로 보면 **기능 단위 머지 커밋만** 한 줄씩 보인다.
+- 기능 통째로 되돌리기(push 후): `git revert -m 1 <머지 커밋>`.
+- 여러 기능을 동시에 벌리지 않는다(한 작업 폴더). 다른 기능으로 넘어갈 땐 지금 브랜치를 커밋하고 dev 에서 새로 갈라진다.
+- 기능 브랜치가 오래되어 dev 가 앞서 있으면, push 전이면 `git rebase dev`, push 했으면 `git merge dev`.
+- main 은 여전히 dev 의 fast-forward 만 받는다(main 에 직접 커밋 금지).
 
 ---
 
@@ -89,5 +119,5 @@ gh run list --limit 4                # 배포 워크플로 결과
 
 ```bash
 git config pull.rebase true          # pull 시 머지 커밋 대신 rebase
-git config merge.ff only             # git merge 가 fast-forward 만 허용(안 되면 실패)
+# merge.ff only 는 쓰지 않는다 — 기능 브랜치를 dev 에 --no-ff 로 합치기 때문
 ```
