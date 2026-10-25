@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { CrosshairMode, LineStyle, createChart, type IPriceLine, type ISeriesApi } from 'lightweight-charts'
-import { getDailyCandles } from '../../api/stock'
+import { getDailyCandles, getDailyCandlesBefore } from '../../api/stock'
+import { mergeOlder, prependKeepingView, watchLeftEdge } from '../../lib/historyScroll'
+import type { DailyCandle } from '../../types/game'
 import { sma } from '../../lib/indicators'
 import { THEME } from '../../lib/themeColors'
 
@@ -45,6 +47,8 @@ export default function StockDailyChart({
   // 배열은 렌더마다 새로 만들어지므로 내용으로 비교
   const extraKey = JSON.stringify([priceLines ?? null, markers ?? null])
   const [state, setState] = useState<'loading' | 'ready' | 'failed'>('loading')
+  const [olderBusy, setOlderBusy] = useState(false) // 왼쪽 끝 — 과거 캔들 받는 중
+  const [dataVersion, setDataVersion] = useState(0) // 과거를 붙일 때마다 +1 → 마커 다시 얹기
 
   // 차트 생성·일봉 조회 — 선/마커가 바뀌어도 다시 만들거나 다시 요청하지 않는다
   useEffect(() => {
@@ -66,27 +70,50 @@ export default function StockDailyChart({
     })
     const ma50 = chart.addLineSeries({ color: MA50_COLOR, lineWidth: 1, priceLineVisible: false, lastValueVisible: false })
     let cancelled = false
+    let rows: DailyCandle[] = []
+    let unwatch = () => {}
+    // 전체 행으로 캔들·50일선을 다시 그린다(과거를 붙여도 50일선이 이어지도록 처음부터 계산)
+    const draw = () => {
+      candles.setData(rows.map((c) => ({ time: c.date, open: c.open, high: c.high, low: c.low, close: c.close })))
+      const avg = sma(rows.map((c) => c.close), 50)
+      ma50.setData(rows.flatMap((c, i) => (avg[i] === null ? [] : [{ time: c.date, value: avg[i] as number }])))
+      timesRef.current = new Set(rows.map((c) => c.date))
+    }
+    // 왼쪽 끝 — 첫 캔들 이전 1년을 받아 앞에 붙인다. 빈 응답 = 저장된 기간의 처음(더 없음)
+    const loadOlder = async () => {
+      const first = rows[0]?.date
+      if (!first) return false
+      const older = await getDailyCandlesBefore(ticker, first)
+      if (cancelled || older.length === 0) return false
+      const merged = mergeOlder(older, rows)
+      const added = merged.length - rows.length
+      rows = merged
+      prependKeepingView(chart, added, draw)
+      setDataVersion((v) => v + 1)
+      return true
+    }
     setState('loading')
     getDailyCandles(ticker, undefined, lookbackDays)
-      .then((rows) => {
+      .then((loaded) => {
         if (cancelled) return
-        candles.setData(rows.map((c) => ({ time: c.date, open: c.open, high: c.high, low: c.low, close: c.close })))
-        const avg = sma(rows.map((c) => c.close), 50)
-        ma50.setData(rows.flatMap((c, i) => (avg[i] === null ? [] : [{ time: c.date, value: avg[i] as number }])))
+        rows = loaded
+        draw()
         if (high52w !== null) {
           candles.createPriceLine({
             price: high52w, color: THEME.inkMuted, lineWidth: 1, lineStyle: LineStyle.Dashed,
             axisLabelVisible: true, title: '', // 이름은 범례에 — 차트 안 이름은 가까운 선끼리 겹친다(축 라벨은 라이브러리가 떼어 놓음)
           })
         }
-        timesRef.current = new Set(rows.map((c) => c.date))
         seriesRef.current = candles
         chart.timeScale().fitContent()
+        unwatch = watchLeftEdge(chart, loadOlder, (busy) => !cancelled && setOlderBusy(busy))
         setState('ready')
       })
       .catch(() => !cancelled && setState('failed'))
     return () => {
       cancelled = true
+      unwatch()
+      setOlderBusy(false)
       seriesRef.current = null
       linesRef.current = []
       chart.remove()
@@ -114,7 +141,7 @@ export default function StockDailyChart({
         .map((m) => ({ time: m.date, position: m.position, shape: m.shape, color: m.color, text: m.text })),
     )
     extra.onMarkersDropped?.(all.length - shown.length)
-  }, [extraKey, state])
+  }, [extraKey, state, dataVersion])
 
   return (
     <div className={`relative ${heightClass} touch-pan-y`}>
@@ -122,6 +149,11 @@ export default function StockDailyChart({
       {state !== 'ready' && (
         <div className="absolute inset-0 flex items-center justify-center text-sm text-ink-muted">
           {state === 'loading' ? '차트를 불러오는 중…' : '차트를 불러오지 못했어요'}
+        </div>
+      )}
+      {olderBusy && (
+        <div className="pointer-events-none absolute bottom-8 left-2 rounded-field bg-surface/90 px-1.5 py-0.5 text-xs text-ink-muted">
+          이전 캔들을 불러오는 중…
         </div>
       )}
       {/* 범례 — 선 이름을 여기 모은다. 오른쪽 가격 축(약 56px)은 비워 둔다 */}
