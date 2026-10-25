@@ -127,20 +127,22 @@ export interface DrawingsState {
 
 export const HANDLE_RADIUS = 6.5
 
-/** 2중추세선 핸들 키 — C1·C2 = 첫 선 끝, B = 두 번째 선 가운데(잡고 끌면 회전·거리) */
-export type ChannelHandleKey = 'C1' | 'C2' | 'B'
+/** 2중추세선 핸들 키 — C1·C2 = 기준선(첫 선) 끝, D1·D2 = 대칭선(두 번째 선) 끝. 끌면 그 선만 자기 가운데 축 회전 */
+export type ChannelHandleKey = 'C1' | 'C2' | 'D1' | 'D2'
 
 /** 두 번째 선이 아직 없음(첫 선만 그린 미리보기) — 두 선이 같은 위치 */
 export const hasSecond = (ch: ChannelCoords) =>
   ch.bx1 !== ch.x1 || ch.by1 !== ch.y1 || ch.bx2 !== ch.x2 || ch.by2 !== ch.y2
 
-/** 2중추세선 핸들(위치·히트테스트 공용). 첫 선 끝은 캔들에 맞춘 정수 x, 두 번째 선은 회전 결과라 소수 x */
+/** 2중추세선 핸들(위치·히트테스트 공용). 회전 결과라 두 선 모두 소수 x 일 수 있음 */
 export function channelHandles(ch: ChannelCoords) {
   const pts: { key: ChannelHandleKey; xi: number; price: number }[] = [
     { key: 'C1', xi: ch.x1, price: ch.y1 },
     { key: 'C2', xi: ch.x2, price: ch.y2 },
   ]
-  if (hasSecond(ch)) pts.push({ key: 'B', xi: (ch.bx1 + ch.bx2) / 2, price: (ch.by1 + ch.by2) / 2 })
+  if (hasSecond(ch)) {
+    pts.push({ key: 'D1', xi: ch.bx1, price: ch.by1 }, { key: 'D2', xi: ch.bx2, price: ch.by2 })
+  }
   return pts
 }
 
