@@ -7,7 +7,7 @@ import {
 import { getChartData, searchStocks } from '../api/stockClient'
 import { useChartDrawings } from '../hooks/useChartDrawings'
 import {
-  DrawingsPrimitive, HANDLE_RADIUS, VolumeProfilePrimitive, channelCenterAt, channelHandles, clampIdx, hasSecond, logicalToX, xToLogical,
+  DrawingsPrimitive, HANDLE_RADIUS, VolumeProfilePrimitive, channelHandles, clampIdx, hasSecond, logicalToX, xToLogical,
   type ChannelCoords, type ChannelHandleKey,
 } from '../lib/chartDrawings'
 import type { ChartData, MaOrder, Stock } from '../types/stock'
@@ -136,14 +136,16 @@ const MA_ORDER_BADGE: Record<MaOrder, { label: string; cls: string }> = {
 }
 
 // 2중추세선: 1·2번 클릭 = 첫 선 두 끝(캔들 인덱스로 맞춤), 3번 클릭 = 두 번째 선 위치.
-// 두 번째 선(대칭선)은 처음엔 첫 선을 위아래로 옮긴 평행 복사본 — 이후 기준선과 같은 방식(끝 핸들 회전·몸통 이동)으로 따로 조절.
-// p3 가 없으면(2번째 클릭 전 미리보기) 두 번째 선 = 첫 선(그리지 않음).
+// 두 번째 선(대칭선)은 첫 선을 통째로 평행 이동해 그 가운데가 커서(p3)에 오게 한 복사본 — 좌우로도 따라가되 차트 범위 안으로 자른다.
+// 이후 기준선과 같은 방식(끝 핸들 회전·몸통 이동)으로 따로 조절. p3 가 없으면(2번째 클릭 전 미리보기) 두 번째 선 = 첫 선(그리지 않음).
 function makeChannel(n: number, a: DataPoint, b: DataPoint, p3?: DataPoint): ChannelCoords {
   const [l, r] = a.xi <= b.xi ? [a, b] : [b, a]
   const x1 = clampIdx(l.xi, n), x2 = clampIdx(r.xi, n)
   const first = { x1, y1: l.price, x2, y2: r.price }
-  const d = p3 ? p3.price - channelCenterAt({ ...first, bx1: 0, by1: 0, bx2: 0, by2: 0 }, p3.xi) : 0
-  return { ...first, bx1: x1, by1: l.price + d, bx2: x2, by2: r.price + d }
+  if (!p3) return { ...first, bx1: x1, by1: l.price, bx2: x2, by2: r.price }
+  const dxi = Math.max(-x1, Math.min(n - 1 - x2, Math.round(p3.xi - (x1 + x2) / 2)))
+  const dprice = p3.price - (l.price + r.price) / 2
+  return { ...first, bx1: x1 + dxi, by1: l.price + dprice, bx2: x2 + dxi, by2: r.price + dprice }
 }
 
 interface Segment {
@@ -826,14 +828,14 @@ export default function ChartSnapshotModal({ open, onClose, onInsert }: ChartSna
               <span className="text-xs text-slate-400">
                 {tool === 'hline' && '차트를 클릭해 수평선을 추가 · 그린 선은 잡고 위아래로 이동'}
                 {tool === 'channel' &&
-                  '3번 클릭: 첫 선 2점 → 두 번째 선 위치 1점 · 두 선 가운데 중심선, 끝은 점선으로 연결'}
+                  '3번 클릭: 첫 선 2점 → 두 번째 선 위치 1점(커서가 두 번째 선 가운데) · 두 선 가운데 중심선'}
                 {tool === 'rect' && '드래그해 사각형 영역을 지정'}
                 {tool === 'text' && '클릭한 위치에 텍스트를 입력'}
               </span>
             )}
             {shapes.some((s) => s.type === 'channel') && (
               <span className="text-xs text-slate-400">
-                편집: 기준선(빨강)·대칭선(초록) 모두 같은 방식 — 끝 핸들을 끌면 그 선만 가운데를 축으로 회전·길이 조절 · 선을 잡고 끌면 그 선만 이동
+                편집: 기준선(파랑)·대칭선(주황) 모두 같은 방식 — 끝 핸들을 끌면 그 선만 가운데를 축으로 회전·길이 조절 · 선을 잡고 끌면 그 선만 이동
               </span>
             )}
           </div>

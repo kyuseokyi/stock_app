@@ -127,6 +127,11 @@ export interface DrawingsState {
 
 export const HANDLE_RADIUS = 6.5
 
+/** 2중추세선 색 — 기준선·대칭선·중심선(편집 안내 문구와 맞출 것) */
+const CHANNEL_BASE = '#1d4ed8'
+const CHANNEL_SECOND = '#f97316'
+const CHANNEL_CENTER = '#8b5cf6'
+
 /** 2중추세선 핸들 키 — C1·C2 = 기준선(첫 선) 끝, D1·D2 = 대칭선(두 번째 선) 끝. 끌면 그 선만 자기 가운데 축 회전 */
 export type ChannelHandleKey = 'C1' | 'C2' | 'D1' | 'D2'
 
@@ -144,11 +149,6 @@ export function channelHandles(ch: ChannelCoords) {
     pts.push({ key: 'D1', xi: ch.bx1, price: ch.by1 }, { key: 'D2', xi: ch.bx2, price: ch.by2 })
   }
   return pts
-}
-
-/** 첫 선 위 x 에서의 가격 */
-export function channelCenterAt(ch: ChannelCoords, xi: number) {
-  return Math.abs(ch.x2 - ch.x1) < 0.5 ? ch.y1 : ch.y1 + ((ch.y2 - ch.y1) / (ch.x2 - ch.x1)) * (xi - ch.x1)
 }
 
 // 수평선·사각형·텍스트·2중추세선(+미리보기·핸들). 모든 시리즈 위에 오도록 마지막에 추가한
@@ -224,16 +224,23 @@ export class DrawingsPrimitive extends BasePrimitive {
     ctx.setLineDash([])
   }
 
-  // 2중추세선: 기준선(빨강)·대칭선(초록) 굵게, 기준선 가운데 → 대칭선 가운데 얇은 점선(대칭선을 돌리거나 옮겨도 따라감),
-  // 완성된 도형(complete)만 두 선 가운데 중심선(노란 점선) — 세 번째 클릭 전 미리보기에는 그리지 않는다.
+  // 2중추세선: 기준선(파랑)·대칭선(주황) 굵게, 두 선 가운데 중심선(얇은 보라 실선).
+  // 미리보기(complete=false): 첫 선만 있을 때는 첫 선을 얇은 점선으로, 두 번째 선 위치를 고르는 중에는
+  // 기준선 가운데 → 대칭선 가운데(커서)를 얇은 점선으로 잇는다. 완성된 도형에는 연결 점선을 그리지 않는다.
   private paintChannel(ctx: Ctx, ch: ChannelCoords, n: number, complete: boolean) {
     const x1 = clampX(ch.x1, n), x2 = clampX(ch.x2, n)
     if (Math.abs(x2 - x1) < 0.5) return
-    this.line(ctx, x1, ch.y1, x2, ch.y2, '#f43f5e', 2)
-    if (!hasSecond(ch)) return
-    this.line(ctx, ch.bx1, ch.by1, ch.bx2, ch.by2, '#10b981', 2)
-    this.line(ctx, (x1 + x2) / 2, (ch.y1 + ch.y2) / 2, (ch.bx1 + ch.bx2) / 2, (ch.by1 + ch.by2) / 2, '#94a3b8', 1, [2, 3])
-    if (complete) this.line(ctx, (x1 + ch.bx1) / 2, (ch.y1 + ch.by1) / 2, (x2 + ch.bx2) / 2, (ch.y2 + ch.by2) / 2, '#eab308', 1.5, [5, 4])
+    if (!hasSecond(ch)) {
+      if (complete) this.line(ctx, x1, ch.y1, x2, ch.y2, CHANNEL_BASE, 2)
+      else this.line(ctx, x1, ch.y1, x2, ch.y2, CHANNEL_BASE, 1, [3, 3])
+      return
+    }
+    this.line(ctx, (x1 + ch.bx1) / 2, (ch.y1 + ch.by1) / 2, (x2 + ch.bx2) / 2, (ch.y2 + ch.by2) / 2, CHANNEL_CENTER, 1)
+    this.line(ctx, x1, ch.y1, x2, ch.y2, CHANNEL_BASE, 2)
+    this.line(ctx, ch.bx1, ch.by1, ch.bx2, ch.by2, CHANNEL_SECOND, 2)
+    if (!complete) {
+      this.line(ctx, (x1 + x2) / 2, (ch.y1 + ch.y2) / 2, (ch.bx1 + ch.bx2) / 2, (ch.by1 + ch.by2) / 2, '#64748b', 1, [2, 3])
+    }
   }
 
   private paintText(ctx: Ctx, t: TextShape, n: number) {
