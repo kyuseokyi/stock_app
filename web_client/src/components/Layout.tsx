@@ -63,8 +63,14 @@ export default function Layout() {
       <header className="sticky top-0 z-30 border-b border-line bg-canvas/90 backdrop-blur">
         <div className={`mx-auto ${headerWidth} px-4 py-3`}>
           <div className="flex items-center justify-between">
-            <Link to="/" className="text-lg font-bold text-ink">
-              📈 StockApp
+            <Link to="/" className="inline-flex items-center gap-1.5 text-lg font-bold text-ink">
+              {/* 로고 표시 — 이모지 대신 선 그림(조작 요소에 이모지 쓰지 않음, DESIGN 규칙). 이름은 옆 글자로 읽힌다 */}
+              <svg aria-hidden viewBox="0 0 24 24" className="h-6 w-6 text-brand-strong" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="2.5" y="2.5" width="19" height="19" rx="5" className="fill-brand-soft" stroke="none" />
+                <path d="M6.5 15.5l3.5-4 3 2.5 4.5-6" />
+                <path d="M14.5 8h3v3" />
+              </svg>
+              StockApp
             </Link>
             {user ? (
               <UserMenu nickname={user.nickname} onLogout={logout} onDeleteAccount={() => setDeleteOpen(true)} />
