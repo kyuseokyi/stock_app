@@ -44,8 +44,11 @@ export function StockDailyChart({
     [high52w, theme.colors.textSecondary, extraLines],
   );
   const view = useMemo<TvChartData | null>(
-    () => (d.rows ? { data: { kind: 'day', rows: d.rows }, seq: d.seq, keepView: false } : null),
-    [d.rows, d.seq],
+    () =>
+      d.rows
+        ? { data: { kind: 'day', rows: d.rows }, seq: d.seq, keepView: d.prepended > 0, prepended: d.prepended }
+        : null,
+    [d.rows, d.seq, d.prepended],
   );
 
   return (
@@ -69,6 +72,7 @@ export function StockDailyChart({
           height={CHART_H}
           maPeriods={STOCK_CHART_MA}
           visibleDays={STOCK_CHART_VISIBLE_DAYS}
+          onNeedOlder={d.loadOlder}
         />
         {d.loading && !d.rows ? (
           <View style={styles.overlay} pointerEvents="none">

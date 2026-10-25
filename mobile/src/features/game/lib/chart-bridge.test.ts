@@ -2,6 +2,7 @@ import {
   initialRange,
   lastIndicatorValues,
   loadMessage,
+  mergeOlder,
   fitPrices,
   priceLines,
   tickMessage,
@@ -150,5 +151,29 @@ describe('이동평균 기간·첫 화면 일수 인자(종목 상세용)', () =
     const msg = loadMessage({ kind: 'day', rows }, false, NOW, { visibleDays: 10 });
     if (msg.type !== 'load') throw new Error('load 아님');
     expect(msg.range).toEqual({ from: 49, to: 59 });
+  });
+});
+
+describe('과거 이어 받기', () => {
+  const day = (date: string) => ({ date, open: 1, high: 1, low: 1, close: 1 });
+
+  test('mergeOlder — 과거를 앞에, 겹치는 날짜는 기존 행 유지', () => {
+    const rows = [{ ...day('2026-01-05'), close: 9 }, day('2026-01-06')];
+    const merged = mergeOlder([day('2026-01-02'), day('2026-01-05')], rows);
+    expect(merged.map((c) => c.date)).toEqual(['2026-01-02', '2026-01-05', '2026-01-06']);
+    expect(merged[1].close).toBe(9);
+  });
+
+  test('loadMessage — prepended·history 는 기본 0·false, history 는 일봉에서만', () => {
+    const rows = [day('2026-01-05')];
+    const plain = loadMessage({ kind: 'day', rows }, false);
+    if (plain.type !== 'load') throw new Error('load 아님');
+    expect([plain.prepended, plain.history]).toEqual([0, false]);
+    const hist = loadMessage({ kind: 'day', rows }, true, Date.now(), { prepended: 3, history: true });
+    if (hist.type !== 'load') throw new Error('load 아님');
+    expect([hist.prepended, hist.history]).toEqual([3, true]);
+    const min = loadMessage({ kind: 'min', rows: [] }, false, Date.now(), { history: true });
+    if (min.type !== 'load') throw new Error('load 아님');
+    expect(min.history).toBe(false);
   });
 });

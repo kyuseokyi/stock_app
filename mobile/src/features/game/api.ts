@@ -328,8 +328,33 @@ const DAILY_QUERY = `query GameDailyCandles($symbol: String!, $startDate: String
   }
 }`;
 
+// 차트 왼쪽 스크롤로 과거를 이어 받을 때 — realOnly: 저장된 기간보다 과거면 가짜 대신 빈 candles(= 더 없음). 웹과 같은 쿼리
+export const DAILY_HISTORY_QUERY = `query DailyHistory($symbol: String!, $startDate: String!, $endDate: String!) {
+  getChartData(symbol: $symbol, startDate: $startDate, endDate: $endDate, realOnly: true) {
+    candles { date open high low close }
+  }
+}`;
+
+/** 과거 이어 받기 한 번에 요청하는 달력일 수(약 250거래일) */
+export const HISTORY_PAGE_DAYS = 365;
+
 const LOOKBACK_DAYS = 180;
 const DAY_MS = 86_400_000;
+
+/** beforeDate(YYYY-MM-DD, 제외) 직전 days 달력일의 일봉. 저장된 기간보다 과거면 []. 오류면 throw */
+export async function getDailyCandlesBefore(
+  ticker: string,
+  beforeDate: string,
+  days: number = HISTORY_PAGE_DAYS,
+): Promise<DailyCandle[]> {
+  const end = Date.parse(`${beforeDate}T00:00:00Z`) - DAY_MS;
+  const data = await stockRequest<DailyResponse, DailyVars>(DAILY_HISTORY_QUERY, {
+    symbol: ticker,
+    startDate: new Date(end - days * DAY_MS).toISOString().slice(0, 10),
+    endDate: new Date(end).toISOString().slice(0, 10),
+  });
+  return (data.getChartData?.candles ?? []).filter((c) => c.date < beforeDate);
+}
 
 type DailyVars = { symbol: string; startDate: string; endDate: string };
 type DailyResponse = { getChartData: { candles: DailyCandle[] } | null };

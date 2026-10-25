@@ -55,3 +55,20 @@ def test_real_data_returned_for_display_range(monkeypatch):
     rows = [_candle("2019-12-30"), _candle("2020-01-02"), _candle("2020-01-03")]
     monkeypatch.setattr(ch_source, "get_candles", lambda *a: rows)
     assert [c["date"] for c in _run(True)["candles"]] == ["2020-01-02", "2020-01-03"]
+
+
+@pytest.mark.parametrize("rel_path", ["web_client/src/api/stock.ts", "mobile/src/features/game/api.ts"])
+def test_client_history_query_contract(monkeypatch, rel_path):
+    # 웹·모바일 파일의 DAILY_HISTORY_QUERY 를 그대로 실행 — realOnly 인자·필드 이름이 서버와 맞는지
+    import pathlib
+    import re
+
+    ts = (pathlib.Path(__file__).resolve().parents[2] / rel_path).read_text(encoding="utf-8")
+    m = re.search(r"export const DAILY_HISTORY_QUERY = `([^`]+)`", ts)
+    assert m, rel_path
+    monkeypatch.setattr(ch_source, "get_candles", lambda *a: None)
+    res = asyncio.run(schema.execute(
+        m.group(1), variable_values={"symbol": "005930", "startDate": "2020-01-01", "endDate": "2020-12-31"},
+    ))
+    assert res.errors is None, res.errors
+    assert res.data == {"getChartData": {"candles": []}}

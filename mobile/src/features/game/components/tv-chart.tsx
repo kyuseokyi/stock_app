@@ -16,8 +16,11 @@ import {
 } from '../lib/chart-bridge';
 import { MA_PERIODS } from '../lib/indicators';
 
-/** 화면에 그릴 캔들 묶음. seq 가 바뀌면 전체 로드, 같은 seq 에서 data 만 바뀌면 틱(마지막 봉 갱신) */
-export type TvChartData = { data: ChartRows; seq: number; keepView: boolean };
+/**
+ * 화면에 그릴 캔들 묶음. seq 가 바뀌면 전체 로드, 같은 seq 에서 data 만 바뀌면 틱(마지막 봉 갱신).
+ * prepended = 이번 로드에서 앞에 붙인 과거 캔들 수(보던 캔들 유지용)
+ */
+export type TvChartData = { data: ChartRows; seq: number; keepView: boolean; prepended?: number };
 
 type TvChartProps = {
   view: TvChartData | null;
@@ -31,6 +34,11 @@ type TvChartProps = {
   maPeriods?: MaPeriods;
   /** 일봉 첫 화면 일수(생략 = 180, 게임) */
   visibleDays?: number;
+  /**
+   * 일봉 왼쪽 끝까지 끌었을 때 과거 캔들 받기(생략 = 끔). 받아 붙였으면(view 를 prepended 와 함께 새 seq 로) true,
+   * 더 없으면 false. 실패는 throw → 다음에 다시 끌면 재시도
+   */
+  onNeedOlder?: () => Promise<boolean>;
 };
 
 const SOURCE = { html: CHART_HTML }; // 모듈 상수 — 렌더마다 새 객체면 WebView 가 다시 로드된다
@@ -49,6 +57,7 @@ export function TvChart({
   onReady,
   maPeriods = MA_PERIODS,
   visibleDays = DAILY_VISIBLE_DAYS,
+  onNeedOlder,
 }: TvChartProps) {
   const ref = useRef<WebView>(null);
   const [ready, setReady] = useState(false);
@@ -67,12 +76,20 @@ export function TvChart({
     if (!ready || view === null) return;
     if (sentSeq.current !== view.seq) {
       // 새 WebView(sentSeq=null)면 보던 위치가 없으니 첫 화면 구간부터
-      send(loadMessage(view.data, sentSeq.current !== null && view.keepView, Date.now(), { maPeriods, visibleDays }));
+      const continued = sentSeq.current !== null; // 새 WebView 가 아니면 보던 위치·붙인 과거를 이어 간다
+      send(
+        loadMessage(view.data, continued && view.keepView, Date.now(), {
+          maPeriods,
+          visibleDays,
+          prepended: continued ? view.prepended : 0,
+          history: onNeedOlder !== undefined,
+        }),
+      );
       sentSeq.current = view.seq;
     } else {
       send(tickMessage(view.data, maPeriods));
     }
-  }, [ready, view, maPeriods, visibleDays]);
+  }, [ready, view, maPeriods, visibleDays, onNeedOlder]);
   useEffect(() => {
     if (ready) send({ type: 'lines', lines });
   }, [ready, lines]);
@@ -91,6 +108,17 @@ export function TvChart({
       sentSeq.current = null;
       setReady(true);
       onReady?.();
+    } else if (msg.type === 'needOlder') {
+      if (!onNeedOlder) {
+        send({ type: 'older', more: false });
+        return;
+      }
+      // true 면 부모가 prepended 를 담은 새 view 를 넘긴다(그 load 가 페이지의 요청 중 상태를 푼다)
+      onNeedOlder()
+        .then((more) => {
+          if (!more) send({ type: 'older', more: false });
+        })
+        .catch(() => send({ type: 'older', more: true }));
     } else if (msg.type === 'error' && __DEV__) {
       console.warn('[TvChart]', msg.message);
     }

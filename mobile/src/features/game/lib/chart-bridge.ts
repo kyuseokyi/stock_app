@@ -57,7 +57,20 @@ export type VisibleRange = { from: number; to: number } | 'fit' | null;
 
 export type ChartMessage =
   | { type: 'init'; colors: ChartColors }
-  | { type: 'load'; mode: ChartMode; bars: Bar[]; ind: IndicatorData; range: VisibleRange; keepView: boolean }
+  | {
+      type: 'load';
+      mode: ChartMode;
+      bars: Bar[];
+      ind: IndicatorData;
+      range: VisibleRange;
+      keepView: boolean;
+      /** 앞에 붙인 과거 캔들 수 — 0 보다 크면 보던 캔들이 그대로 보이게 화면을 그만큼 옮긴다 */
+      prepended?: number;
+      /** 일봉 왼쪽 끝 과거 이어 받기 — 켜면 페이지가 끝에 닿을 때 {type:'needOlder'} 를 보낸다 */
+      history?: boolean;
+    }
+  /** 과거 요청 결과 — more=false(더 없음)면 왼쪽 끝 고정, true 는 다시 요청 가능(실패 등) */
+  | { type: 'older'; more: boolean }
   | { type: 'tick'; bar: Bar; ind: Partial<Record<IndicatorKey, number>> }
   | { type: 'lines'; lines: ChartLine[] }
   | { type: 'vis'; ma: boolean; bb: boolean };
@@ -68,6 +81,8 @@ export type MaPeriods = readonly number[];
 export interface LoadOptions {
   maPeriods?: MaPeriods;
   visibleDays?: number;
+  prepended?: number;
+  history?: boolean;
 }
 
 export const DAILY_VISIBLE_DAYS = 180; // 일봉 첫 화면(앞쪽은 지표 워밍업 — 왼쪽으로 끌면 보임). 웹과 같은 값
@@ -164,6 +179,8 @@ export function loadMessage(
     ind: indicatorData(bars, opts.maPeriods),
     range: initialRange(data.kind, bars, nowMs, opts.visibleDays),
     keepView,
+    prepended: opts.prepended ?? 0,
+    history: opts.history === true && data.kind === 'day',
   };
 }
 
@@ -204,6 +221,12 @@ export function priceLines(
     }
   }
   return out;
+}
+
+/** 과거 행 + 기존 행 — 날짜가 겹치면 기존 것을 남긴다(오름차순 유지). 웹 lib/historyScroll 과 같은 규칙 */
+export function mergeOlder<T extends { date: string }>(older: T[], rows: T[]): T[] {
+  const first = rows[0]?.date;
+  return [...older.filter((c) => first === undefined || c.date < first), ...rows];
 }
 
 /** injectJavaScript 로 넣을 코드 — 페이지의 window.__chart 로 전달(끝의 true; 는 Android 경고 방지) */

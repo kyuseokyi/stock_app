@@ -1,6 +1,6 @@
 // 게임 차트 WebView 페이지 — 웹 TradingChart.tsx 의 lightweight-charts 설정을 그대로 옮긴 것.
-// RN 이 lib/chart-bridge 의 메시지(init·load·tick·lines·vis)를 window.__chart 로 넣고,
-// 페이지는 준비되면 {type:'ready'} 를 보낸다. 차트 엔진을 바꿀 때는 이 파일만 교체하면 된다.
+// RN 이 lib/chart-bridge 의 메시지(init·load·tick·lines·vis·older)를 window.__chart 로 넣고,
+// 페이지는 준비되면 {type:'ready'}, 일봉 왼쪽 끝에 닿으면 {type:'needOlder'} 를 보낸다. 차트 엔진을 바꿀 때는 이 파일만 교체하면 된다.
 import { LWC_BUNDLE } from './lwc-bundle.generated';
 
 // 페이지 스크립트(ES2017, WebView 에서 그대로 실행) — Hermes 는 함수 소스를 보존하지 않아 문자열로 둔다
@@ -13,6 +13,17 @@ const PAGE_SCRIPT = String.raw`
   var vis = { ma: true, bb: true };
   var lineSpecs = [], priceLines = [];
   var MA = { ma5: '#14b8a6', ma20: '#f97316', ma60: '#a16207' };
+  // 일봉 과거 이어 받기 — on: RN 이 켬(load.history), armed: 사용자가 차트를 만진 뒤, busy: 요청 중, done: 더 없음
+  var hist = { on: false, armed: false, busy: false, done: false };
+  var EDGE_BARS = 10; // 첫 캔들까지 이만큼 남으면 미리 요청(웹 lib/historyScroll 과 같은 값)
+  function arm() { hist.armed = true; }
+  box.addEventListener('pointerdown', arm);
+  box.addEventListener('wheel', arm, { passive: true });
+  function onRange(r) {
+    if (!r || !hist.on || !hist.armed || hist.busy || hist.done || r.from > EDGE_BARS) return;
+    hist.busy = true;
+    post({ type: 'needOlder' });
+  }
   var BB = 'rgba(99, 102, 241, 0.7)';
   var BB_FILL = 'rgba(99, 102, 241, 0.07)';
 
@@ -115,6 +126,7 @@ const PAGE_SCRIPT = String.raw`
     };
     band = new BandFill(BB_FILL);
     ind.bbUpper.attachPrimitive(band);
+    chart.timeScale().subscribeVisibleLogicalRangeChange(onRange);
     priceLines = [];
     applyVis();
     applyLines();
@@ -175,13 +187,37 @@ const PAGE_SCRIPT = String.raw`
     load: function (m) {
       var fresh = !chart || mode !== m.mode;
       if (fresh) create(m.mode);
+      hist.on = !!m.history;
+      if (fresh || !m.keepView) {
+        // 새 차트·새 종목 — 과거 이어 받기 상태 초기화(왼쪽 끝 고정도 풀기)
+        hist.armed = false; hist.busy = false; hist.done = false;
+        chart.applyOptions({ timeScale: { fixLeftEdge: false } });
+      }
+      var ts = chart.timeScale();
+      var before = m.prepended ? ts.getVisibleLogicalRange() : null;
       series.setData(m.bars);
       for (var k in ind) ind[k].setData(m.ind[k] || []);
       band.setPoints(bandPoints(m.ind.bbUpper || [], m.ind.bbLower || []));
+      if (m.prepended) {
+        // 앞에 과거를 붙임 — 보던 캔들이 그대로 보이게(라이브러리가 이미 옮겼으면 그대로, 아니면 붙인 개수만큼)
+        var after = ts.getVisibleLogicalRange();
+        if (before && after && Math.abs(after.from - before.from - m.prepended) > 0.5) {
+          ts.setVisibleLogicalRange({ from: before.from + m.prepended, to: before.to + m.prepended });
+        }
+        hist.busy = false;
+        return;
+      }
       // 같은 단위 재조회(keepView)면 사용자가 보던 위치 유지. 새 차트면 첫 화면 구간 지정
       if (fresh || !m.keepView) {
-        if (m.range === 'fit') chart.timeScale().fitContent();
-        else if (m.range) chart.timeScale().setVisibleLogicalRange(m.range);
+        if (m.range === 'fit') ts.fitContent();
+        else if (m.range) ts.setVisibleLogicalRange(m.range);
+      }
+    },
+    older: function (m) {
+      hist.busy = false;
+      if (!m.more && chart) {
+        hist.done = true;
+        chart.applyOptions({ timeScale: { fixLeftEdge: true } }); // 더 없음 — 첫 캔들 왼쪽 빈 공간으로 밀리지 않게
       }
     },
     tick: function (m) {
