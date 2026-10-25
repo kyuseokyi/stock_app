@@ -172,7 +172,8 @@ export class DrawingsPrimitive extends BasePrimitive {
     for (const r of rectPreview ? [...rects, rectPreview] : rects) this.paintRect(ctx, r, n)
     for (const h of shapes.filter((s): s is HLineShape & { id: string } => s.type === 'hline')) this.paintHLine(ctx, h, width)
     const channels = shapes.filter((s): s is ChannelShape & { id: string } => s.type === 'channel')
-    for (const ch of channelPreview ? [...channels, channelPreview] : channels) this.paintChannel(ctx, ch, n)
+    for (const ch of channels) this.paintChannel(ctx, ch, n, true)
+    if (channelPreview) this.paintChannel(ctx, channelPreview, n, false)
     for (const t of shapes.filter((s): s is TextShape & { id: string } => s.type === 'text')) this.paintText(ctx, t, n)
     if (editable) for (const ch of channels) this.paintHandles(ctx, ch, n)
   }
@@ -221,16 +222,16 @@ export class DrawingsPrimitive extends BasePrimitive {
     ctx.setLineDash([])
   }
 
-  // 2중추세선: 첫 선(빨강)·두 번째 선(초록) 굵게, 같은 쪽 끝끼리 얇은 점선 연결, 두 선 가운데 중심선(노란 점선).
-  private paintChannel(ctx: Ctx, ch: ChannelCoords, n: number) {
+  // 2중추세선: 기준선(빨강)·대칭선(초록) 굵게, 기준선 가운데 → 대칭선 가운데 얇은 점선(대칭선을 돌리거나 옮겨도 따라감),
+  // 완성된 도형(complete)만 두 선 가운데 중심선(노란 점선) — 세 번째 클릭 전 미리보기에는 그리지 않는다.
+  private paintChannel(ctx: Ctx, ch: ChannelCoords, n: number, complete: boolean) {
     const x1 = clampX(ch.x1, n), x2 = clampX(ch.x2, n)
     if (Math.abs(x2 - x1) < 0.5) return
     this.line(ctx, x1, ch.y1, x2, ch.y2, '#f43f5e', 2)
     if (!hasSecond(ch)) return
     this.line(ctx, ch.bx1, ch.by1, ch.bx2, ch.by2, '#10b981', 2)
-    this.line(ctx, x1, ch.y1, ch.bx1, ch.by1, '#94a3b8', 1, [2, 3])
-    this.line(ctx, x2, ch.y2, ch.bx2, ch.by2, '#94a3b8', 1, [2, 3])
-    this.line(ctx, (x1 + ch.bx1) / 2, (ch.y1 + ch.by1) / 2, (x2 + ch.bx2) / 2, (ch.y2 + ch.by2) / 2, '#eab308', 1.5, [5, 4])
+    this.line(ctx, (x1 + x2) / 2, (ch.y1 + ch.y2) / 2, (ch.bx1 + ch.bx2) / 2, (ch.by1 + ch.by2) / 2, '#94a3b8', 1, [2, 3])
+    if (complete) this.line(ctx, (x1 + ch.bx1) / 2, (ch.y1 + ch.by1) / 2, (x2 + ch.bx2) / 2, (ch.y2 + ch.by2) / 2, '#eab308', 1.5, [5, 4])
   }
 
   private paintText(ctx: Ctx, t: TextShape, n: number) {
