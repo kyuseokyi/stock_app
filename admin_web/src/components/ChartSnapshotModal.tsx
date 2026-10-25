@@ -1,29 +1,25 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
-import ReactECharts from 'echarts-for-react'
+import { useEffect, useRef, useState } from 'react'
+import type { MouseEvent as ReactMouseEvent } from 'react'
+import {
+  CrosshairMode, LineType, createChart,
+  type IChartApi, type ISeriesApi, type LineData, type Logical, type MouseEventParams, type Time, type WhitespaceData,
+} from 'lightweight-charts'
 import { getChartData, searchStocks } from '../api/stockClient'
 import { useChartDrawings } from '../hooks/useChartDrawings'
-import type { ECharts } from 'echarts'
-import type { CustomSeriesRenderItemAPI, CustomSeriesRenderItemParams } from 'echarts'
-import type { Candle, ChartData, MaOrder, Stock, VolumeProfileBin } from '../types/stock'
-import type {
-  ChannelShape,
-  DrawingTool,
-  HLineShape,
-  RectShape,
-  Shape,
-  TextShape,
-} from '../hooks/useChartDrawings'
+import {
+  DrawingsPrimitive, HANDLE_RADIUS, VolumeProfilePrimitive, channelHandles, clampIdx, type ChannelCoords,
+} from '../lib/chartDrawings'
+import type { ChartData, MaOrder, Stock } from '../types/stock'
+import type { ChannelShape, DrawingTool, RectShape } from '../hooks/useChartDrawings'
 
 /** 저장된(id 부여) 채널 도형 */
 type StoredChannel = ChannelShape & { id: string }
 
-/** 데이터 좌표 점 (xi=카테고리 인덱스, price=가격) */
+/** 데이터 좌표 점 (xi=캔들 인덱스, price=가격) */
 interface DataPoint {
   xi: number
   price: number
 }
-/** 채널 좌표(makeChannel 반환) */
-type ChannelCoords = Omit<ChannelShape, 'type'>
 /** 사각형 드래그 미리보기 — setPreview 에 type 포함 객체를 넘긴다 */
 type RectPreview = RectShape
 /** 텍스트 입력 오버레이 위치 */
@@ -44,28 +40,11 @@ interface EditDragState {
   x2: number
   y2: number
 }
-/** zrender 포인터 이벤트 중 코드가 읽는 필드(버전차 폴백용으로 zrX/zrY 포함) */
-interface ZrPointerEvent {
-  offsetX?: number
-  offsetY?: number
-  zrX?: number
-  zrY?: number
-}
-/** custom series renderItem 의 cartesian2d coordSys 중 코드가 읽는 필드 */
-interface CartesianCoordSys {
-  type: string
+/** 캔들 정보(마우스오버) 박스 위치·대상 캔들 */
+interface HoverState {
   x: number
-  width: number
-}
-/** channelSeries 가 만드는 라인 시리즈 */
-interface ChannelLineSeries {
-  name: string
-  type: string
-  data: (number | null)[]
-  showSymbol: boolean
-  silent: boolean
-  connectNulls: boolean
-  lineStyle: { color: string; width: number; type: string }
+  y: number
+  idx: number
 }
 interface DateRange {
   start: string
@@ -77,72 +56,54 @@ interface ChartSnapshotModalProps {
   onInsert: (dataURL: string) => void
 }
 
-const clampIdx = (i: number, len: number) => Math.max(0, Math.min(len - 1, Math.round(i)))
+/** 차트 시리즈 묶음(범례 이름으로 보이기/숨기기) */
+interface SeriesSet {
+  candle: ISeriesApi<'Candlestick'>
+  lines: Record<string, ISeriesApi<'Line'>>
+  volume: ISeriesApi<'Histogram'>
+}
 
-// 드로잉 도형(데이터좌표) → ECharts markLine/markArea/markPoint 로 변환.
-// 데이터 좌표 native 라 리로드/리사이즈에도 정합, getDataURL 캡처에 포함된다.
-function buildMarks(chart: ChartData, shapes: Shape[], preview: RectPreview | null) {
-  const dates = chart.candles.map((c) => c.date.slice(5))
-  const digits = chart.currency === 'KRW' ? 0 : 2
-  const fmt = (v: number) =>
-    Number(v).toLocaleString(undefined, { maximumFractionDigits: digits })
+const UP = '#ef4444'
+const DOWN = '#3b82f6'
+const TRANSPARENT = 'rgba(0,0,0,0)'
+/** 범례 순서·색 — 클릭하면 그 시리즈를 숨긴다(BB중심은 범례에 없어 항상 표시) */
+const LEGEND = [
+  { name: '캔들', color: UP },
+  { name: 'MA5', color: '#f59e0b' },
+  { name: 'MA20', color: '#8b5cf6' },
+  { name: 'MA50', color: '#10b981' },
+  { name: 'MA120', color: '#64748b' },
+  { name: 'BB상단', color: '#0ea5e9' },
+  { name: 'BB하단', color: '#0ea5e9' },
+  { name: '거래량', color: '#94a3b8' },
+  { name: '매물대', color: 'rgba(100,116,139,0.5)' },
+] as const
+const LEGEND_OFF = '#cbd5e1'
+/** 캡처 PNG 위쪽 제목·범례 줄 높이(CSS px) — 화면의 차트 머리글과 같은 높이 */
+const HEADER_H = 44
 
-  const hlines = shapes.filter((s): s is HLineShape & { id: string } => s.type === 'hline')
-  const rects = shapes.filter((s): s is RectShape & { id: string } => s.type === 'rect')
-  const texts = shapes.filter((s): s is TextShape & { id: string } => s.type === 'text')
-  const allRects = preview ? [...rects, preview] : rects
+// 일봉 time 은 'YYYY-MM-DD' — 라이브러리가 BusinessDay 객체로 돌려줄 때도 같은 문자열로 맞춘다.
+function isoDate(t: Time): string {
+  if (typeof t === 'string') return t
+  if (typeof t === 'number') return new Date(t * 1000).toISOString().slice(0, 10)
+  return `${t.year}-${String(t.month).padStart(2, '0')}-${String(t.day).padStart(2, '0')}`
+}
+const mmdd = (t: Time) => isoDate(t).slice(5)
 
-  const markLine = hlines.length
-    ? {
-        symbol: 'none',
-        silent: true,
-        data: hlines.map((h) => ({
-          yAxis: h.price,
-          label: { formatter: fmt(h.price), position: 'end', color: '#e11d48' },
-        })),
-        lineStyle: { color: '#e11d48', width: 1.2 },
-      }
-    : undefined
+const fmtVolume = (v: number) =>
+  v >= 1e8 ? `${(v / 1e8).toFixed(0)}억` : v >= 1e4 ? `${(v / 1e4).toFixed(0)}만` : String(v)
 
-  const markArea = allRects.length
-    ? {
-        silent: true,
-        itemStyle: {
-          color: 'rgba(59,130,246,0.12)',
-          borderColor: '#3b82f6',
-          borderWidth: 1,
-        },
-        data: allRects.map((r) => [
-          { xAxis: dates[clampIdx(r.xi1, dates.length)], yAxis: Math.max(r.y1, r.y2) },
-          { xAxis: dates[clampIdx(r.xi2, dates.length)], yAxis: Math.min(r.y1, r.y2) },
-        ]),
-      }
-    : undefined
+function priceFormatter(currency: string) {
+  const digits = currency === 'KRW' ? 0 : 2
+  return (v: number) => Number(v).toLocaleString(undefined, { maximumFractionDigits: digits })
+}
 
-  const markPoint = texts.length
-    ? {
-        symbol: 'circle',
-        symbolSize: 5,
-        itemStyle: { color: '#0f172a' },
-        data: texts.map((t) => ({
-          coord: [dates[clampIdx(t.xi, dates.length)], t.price],
-          value: t.text,
-          label: {
-            formatter: t.text,
-            position: 'top',
-            color: '#0f172a',
-            backgroundColor: 'rgba(255,255,255,0.85)',
-            borderColor: '#94a3b8',
-            borderWidth: 1,
-            borderRadius: 3,
-            padding: [2, 4],
-            fontSize: 12,
-          },
-        })),
-      }
-    : undefined
-
-  return { markLine, markArea, markPoint }
+/** 지표 배열(null=계산 전) → 라인 데이터(null 은 빈 칸) */
+function lineData(times: string[], values: (number | null)[] | undefined): (LineData | WhitespaceData)[] {
+  return times.map((time, i) => {
+    const v = values?.[i]
+    return v == null ? { time } : { time, value: v }
+  })
 }
 
 // 기본 조회 기간: 최근 3개월
@@ -168,35 +129,6 @@ const MA_ORDER_BADGE: Record<MaOrder, { label: string; cls: string }> = {
   MIXED: { label: '혼조', cls: 'bg-slate-100 text-slate-500' },
 }
 
-// 매물대(Volume Profile): 우측에 가격대별 누적 거래량을 반투명 가로막대로 렌더
-function volumeProfileSeries(vp: VolumeProfileBin[]) {
-  const maxVol = Math.max(1, ...vp.map((b) => b.volume))
-  return {
-    name: '매물대',
-    type: 'custom',
-    z: 1,
-    silent: true,
-    // y축(가격) 범위를 왜곡하지 않도록 데이터는 '가격값'으로 둔다.
-    // (거래량은 아래 renderItem에서 클로저의 vp로 읽음)
-    data: vp.map((b) => b.priceHigh),
-    renderItem: (params: CustomSeriesRenderItemParams, api: CustomSeriesRenderItemAPI) => {
-      const bin = vp[params.dataIndex]
-      const yHigh = api.coord([0, bin.priceHigh])[1]
-      const yLow = api.coord([0, bin.priceLow])[1]
-      const cs = params.coordSys as CartesianCoordSys // echarts 타입은 coordSys 를 {type} 만 노출 — 실제 cartesian2d 는 x/y/width/height 보유
-      const w = (bin.volume / maxVol) * (cs.width * 0.28)
-      const top = Math.min(yHigh, yLow)
-      const h = Math.max(1, Math.abs(yLow - yHigh) - 1)
-      // 좌측 끝(cs.x)에서 오른쪽으로 뻗는 가로막대
-      return {
-        type: 'rect',
-        shape: { x: cs.x, y: top, width: w, height: h },
-        style: { fill: 'rgba(100,116,139,0.28)' },
-      }
-    },
-  }
-}
-
 // 3중추세선 데이터 모델(독립 2선):
 //   상단선 (ux1,uy1)-(ux2,uy2), 하단선 (lx1,ly1)-(lx2,ly2). 두 선은 서로 독립(각자 끝점 이동).
 //   중심선은 각 x에서 두 선의 중점으로 자동 계산. 문서(custom_candle_chart_idea.md)의 "독립 2선 채널".
@@ -204,7 +136,7 @@ function volumeProfileSeries(vp: VolumeProfileBin[]) {
 function makeChannel(x1: number, y1: number, x2: number, y2: number, x3: number, y3: number): ChannelCoords {
   const [xa, ya, xb, yb] = x1 <= x2 ? [x1, y1, x2, y2] : [x2, y2, x1, y1]
   if (Math.abs(xb - xa) < 0.5) {
-    return { ux1: xa, uy1: ya, ux2: xa, uy2: ya, lx1: xa, ly1: ya, lx2: xa, ly2: ya } // 퇴화 → compute가 null
+    return { ux1: xa, uy1: ya, ux2: xa, uy2: ya, lx1: xa, ly1: ya, lx2: xa, ly2: ya } // 퇴화 → 그리지 않음
   }
   const slope = (yb - ya) / (xb - xa)
   const dy = y3 - (ya + slope * (x3 - xa)) // 첫 선 대비 P3 세로 간격
@@ -216,223 +148,53 @@ function makeChannel(x1: number, y1: number, x2: number, y2: number, x3: number,
   }
 }
 
-// 독립 2선 모델 → 상단/중심/하단 시계열. 각 선은 자기 [iL,iR] 구간에만, 중심선은 두 선 겹치는 구간에만.
-function computeChannelLines(ch: ChannelCoords, dates: string[]) {
-  const n = dates.length
-  const { ux1, uy1, ux2, uy2, lx1, ly1, lx2, ly2 } = ch
-  const uOK = ux1 != null && Math.abs(ux2 - ux1) >= 0.5
-  const lOK = lx1 != null && Math.abs(lx2 - lx1) >= 0.5
-  if (!uOK && !lOK) return null
-  const at = (ax: number, ay: number, bx: number, by: number) => (i: number) => ay + ((by - ay) / (bx - ax)) * (i - ax)
-  const uAt = uOK ? at(ux1, uy1, ux2, uy2) : null
-  const lAt = lOK ? at(lx1, ly1, lx2, ly2) : null
-  const uiL = clampIdx(Math.min(ux1, ux2), n), uiR = clampIdx(Math.max(ux1, ux2), n)
-  const liL = clampIdx(Math.min(lx1, lx2), n), liR = clampIdx(Math.max(lx1, lx2), n)
-  const round = (v: number) => Math.round(v * 100) / 100
-  const mk = (fn: ((i: number) => number) | null, iL: number, iR: number) =>
-    dates.map((_, i) => (fn && i >= iL && i <= iR ? round(fn(i)) : null))
-  const miL = Math.max(uiL, liL), miR = Math.min(uiR, liR)
-  const midLine = dates.map((_, i) =>
-    uAt && lAt && i >= miL && i <= miR ? round((uAt(i) + lAt(i)) / 2) : null,
-  )
-  return {
-    upperLine: mk(uAt, uiL, uiR), // 상단 저항선
-    midLine, // 중심선(각 x 중점, 자동)
-    lowerLine: mk(lAt, liL, liR), // 하단 지지선
-  }
-}
-
-function channelSeries(chart: ChartData, channels: (StoredChannel)[], previewChannel: ChannelCoords | null) {
-  const dates = chart.candles.map((c) => c.date.slice(5))
-  const all = previewChannel ? [...channels, previewChannel] : channels
-  const out: ChannelLineSeries[] = []
-  all.forEach((ch, idx) => {
-    const lines = computeChannelLines(ch, dates)
-    if (!lines) return
-    const seg = (suffix: string, data: (number | null)[], type: string, color: string, width: number) => ({
-      name: `_ch${idx}_${suffix}`, // legend.data 에 없으므로 범례엔 숨김
-      type: 'line',
-      data,
-      showSymbol: false,
-      silent: true,
-      connectNulls: false,
-      lineStyle: { color, width, type },
-    })
-    // 역할별 색·굵기 구분(문서 custom_candle_chart_idea.md): 상·하단은 굵게(2), 중심선은 얇게(1).
-    out.push(seg('upper', lines.upperLine, 'solid', '#f43f5e', 2)) // 상단 저항선
-    out.push(seg('lower', lines.lowerLine, 'solid', '#10b981', 2)) // 하단 지지선
-    out.push(seg('mid', lines.midLine, 'dashed', '#eab308', 1)) // 중심선(미디언)
-  })
-  return out
-}
-
-function buildOption(chart: ChartData, shapes: Shape[] = [], preview: RectPreview | null = null, channelPreview: ChannelCoords | null = null, showVP = true, showTooltip = false, editable = false) {
-  const dates = chart.candles.map((c) => c.date.slice(5)) // MM-DD
-  const candles = chart.candles.map((c) => [c.open, c.close, c.low, c.high])
-  // 거래량: 상승(종가≥시가) 빨강 / 하락 파랑 (한국 관례)
-  const volumes = chart.candles.map((c) => ({
-    value: c.volume,
-    itemStyle: { color: c.close >= c.open ? '#ef4444' : '#3b82f6' },
-  }))
-  const bb = chart.bollinger
-  const { markLine, markArea, markPoint } = buildMarks(chart, shapes, preview)
-  const channels = shapes.filter((s): s is StoredChannel => s.type === 'channel')
-  const chSeries = channelSeries(chart, channels, channelPreview)
-  // 편집 모드(도구 미선택): 3중추세선 제어점 P1·P2·P3 에 드래그 핸들(흰 원) 표시.
-  const handleSeries =
-    editable && channels.length
-      ? [
-          {
-            name: '_handles',
-            type: 'scatter',
-            xAxisIndex: 0,
-            yAxisIndex: 0,
-            symbol: 'circle',
-            data: channels.flatMap((ch) => [
-              [dates[clampIdx(ch.ux1, dates.length)], ch.uy1], // 상단 좌
-              [dates[clampIdx(ch.ux2, dates.length)], ch.uy2], // 상단 우
-              [dates[clampIdx(ch.lx1, dates.length)], ch.ly1], // 하단 좌
-              [dates[clampIdx(ch.lx2, dates.length)], ch.ly2], // 하단 우
-            ]),
-            symbolSize: 13,
-            itemStyle: { color: '#ffffff', borderColor: '#111827', borderWidth: 2 },
-            z: 20,
-            silent: true, // 히트테스트는 zr 이벤트에서 수동으로 처리
-          },
-        ]
-      : []
-  const vpSeries = showVP ? [volumeProfileSeries(chart.volumeProfile)] : []
-  const legendData = ['캔들', 'MA5', 'MA20', 'MA50', 'MA120', 'BB상단', 'BB하단', '거래량']
-  if (showVP) legendData.push('매물대')
-  return {
-    animation: false,
-    // 상단=가격, 하단=거래량 2단 그리드
-    grid: [
-      { left: 15, right: 60, top: 45, height: '60%' },
-      { left: 15, right: 60, top: '72%', height: '18%' },
-    ],
-    title: {
-      text: `${chart.name} (${chart.symbol})`,
-      left: 'center',
-      textStyle: { fontSize: 14 },
-    },
-    // 캔들 인포창(마우스오버 툴팁) — 기본 off. 켤 때만 axis 트리거 + 십자선.
-    tooltip: showTooltip
-      ? { trigger: 'axis', axisPointer: { type: 'cross' } }
-      : { show: false },
-    axisPointer: { link: [{ xAxisIndex: 'all' }] }, // 두 그리드 크로스헤어 연동
-    legend: {
-      data: legendData,
-      top: 22,
-      right: 10,
-      type: 'scroll',
-    },
-    xAxis: [
-      {
-        type: 'category',
-        data: dates,
-        boundaryGap: true,
-        gridIndex: 0,
-        axisLine: { lineStyle: { color: '#94a3b8' } },
-        axisLabel: { show: false }, // 가격축 라벨은 숨기고 거래량축에만 표기
-      },
-      {
-        type: 'category',
-        data: dates,
-        boundaryGap: true,
-        gridIndex: 1,
-        axisLine: { lineStyle: { color: '#94a3b8' } },
-      },
-    ],
-    yAxis: [
-      {
-        scale: true,
-        position: 'right',
-        gridIndex: 0,
-        splitLine: { lineStyle: { color: '#f1f5f9' } },
-      },
-      {
-        scale: true,
-        position: 'right',
-        gridIndex: 1,
-        splitNumber: 2,
-        axisLabel: {
-          formatter: (v: number) =>
-            v >= 1e8 ? `${(v / 1e8).toFixed(0)}억` : v >= 1e4 ? `${(v / 1e4).toFixed(0)}만` : v,
-        },
-        splitLine: { show: false },
-      },
-    ],
-    series: [
-      ...vpSeries,
-      {
-        name: '캔들',
-        type: 'candlestick',
-        data: candles,
-        itemStyle: {
-          color: '#ef4444',
-          color0: '#3b82f6',
-          borderColor: '#ef4444',
-          borderColor0: '#3b82f6',
-        },
-        markLine,
-        markArea,
-        markPoint,
-      },
-      { name: 'MA5', type: 'line', data: chart.ma5, smooth: true, showSymbol: false, lineStyle: { width: 1, color: '#f59e0b' } },
-      { name: 'MA20', type: 'line', data: chart.ma20, smooth: true, showSymbol: false, lineStyle: { width: 1, color: '#8b5cf6' } },
-      { name: 'MA50', type: 'line', data: chart.ma50, smooth: true, showSymbol: false, lineStyle: { width: 1, color: '#10b981' } },
-      { name: 'MA120', type: 'line', data: chart.ma120, smooth: true, showSymbol: false, lineStyle: { width: 1, color: '#64748b' } },
-      {
-        name: 'BB상단',
-        type: 'line',
-        data: bb?.upper ?? [],
-        showSymbol: false,
-        lineStyle: { width: 1, type: 'solid', color: '#0ea5e9' },
-      },
-      {
-        name: 'BB중심',
-        type: 'line',
-        data: bb?.mid ?? [],
-        showSymbol: false,
-        lineStyle: { width: 1, type: 'solid', color: '#0ea5e9', opacity: 0.6 },
-      },
-      {
-        name: 'BB하단',
-        type: 'line',
-        data: bb?.lower ?? [],
-        showSymbol: false,
-        lineStyle: { width: 1, type: 'solid', color: '#0ea5e9' },
-        areaStyle: undefined,
-      },
-      {
-        name: '거래량',
-        type: 'bar',
-        xAxisIndex: 1,
-        yAxisIndex: 1,
-        data: volumes,
-        barWidth: '60%',
-        itemStyle: { color: '#94a3b8' }, // 범례 스와치용 중립색(막대는 개별 빨강/파랑 우선)
-      },
-      ...chSeries,
-      ...handleSeries,
-    ],
+/** 본문 삽입 PNG 머리글 — 제목(가운데)·범례(오른쪽, 숨긴 항목은 회색). 화면 머리글과 같은 배치 */
+function paintHeader(
+  ctx: CanvasRenderingContext2D, width: number, r: number, title: string,
+  legend: readonly { name: string; color: string }[], hidden: Set<string>,
+) {
+  ctx.fillStyle = '#0f172a'
+  ctx.font = `bold ${14 * r}px sans-serif`
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.fillText(title, width / 2, 12 * r)
+  ctx.font = `${12 * r}px sans-serif`
+  ctx.textAlign = 'left'
+  let x = width - 10 * r
+  const y = 32 * r
+  for (const item of [...legend].reverse()) {
+    const off = hidden.has(item.name)
+    x -= ctx.measureText(item.name).width
+    ctx.fillStyle = off ? LEGEND_OFF : '#334155'
+    ctx.fillText(item.name, x, y)
+    x -= 18 * r
+    ctx.fillStyle = off ? LEGEND_OFF : item.color
+    ctx.fillRect(x, y - 4 * r, 14 * r, 8 * r)
+    x -= 12 * r
   }
 }
 
 export default function ChartSnapshotModal({ open, onClose, onInsert }: ChartSnapshotModalProps) {
-  const chartRef = useRef<ReactECharts | null>(null)
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<Stock[]>([])
   const [selected, setSelected] = useState<Stock | null>(null)
   const [range, setRange] = useState(defaultRange)
   const [bbStdDev, setBbStdDev] = useState(2.0)
   const [showVP, setShowVP] = useState(true) // 매물대 표시 토글
-  const [showTooltip, setShowTooltip] = useState(false) // 캔들 인포창(마우스오버 툴팁) — 기본 off
+  const [showTooltip, setShowTooltip] = useState(false) // 캔들 인포창(마우스오버) — 기본 off
   const [chart, setChart] = useState<ChartData | null>(null)
   const [searching, setSearching] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [hidden, setHidden] = useState<Set<string>>(() => new Set()) // 범례에서 끈 시리즈
+  const [hover, setHover] = useState<HoverState | null>(null)
+
+  // 차트(lightweight-charts) 인스턴스 — 데이터가 바뀔 때만 다시 만든다. 도형은 primitive 상태만 갱신.
+  const boxRef = useRef<HTMLDivElement | null>(null)
+  const apiRef = useRef<IChartApi | null>(null)
+  const seriesRef = useRef<SeriesSet | null>(null)
+  const drawRef = useRef<DrawingsPrimitive | null>(null)
+  const vpRef = useRef<VolumeProfilePrimitive | null>(null)
 
   // 드로잉
   const { tool, toggleTool, setTool, shapes, addShape, removeShape, updateShape, clearAll } =
@@ -440,15 +202,9 @@ export default function ChartSnapshotModal({ open, onClose, onInsert }: ChartSna
   const [preview, setPreview] = useState<RectPreview | null>(null) // 사각형 드래그 미리보기
   const [channelPreview, setChannelPreview] = useState<ChannelCoords | null>(null) // 채널 미리보기
   const [textInput, setTextInput] = useState<TextInputState | null>(null) // { px, py, xi, price }
-  const toolRef = useRef(tool)
-  toolRef.current = tool
   const dragStartRef = useRef<DataPoint | null>(null) // 사각형 드래그 시작점
   const chPtsRef = useRef<DataPoint[]>([]) // 채널 진행 점들(첫 선 2점)
-  const candlesRef = useRef<Candle[]>([]) // 최신 캔들(스냅용) — handleChartReady 는 마운트 1회 바인딩이라 stale 클로저 방지
-  candlesRef.current = chart?.candles ?? []
-  const shapesRef = useRef<Shape[]>([]) // 최신 도형(편집 히트테스트용, stale 클로저 방지)
-  shapesRef.current = shapes
-  const editDragRef = useRef<EditDragState | null>(null) // 편집 드래그 중인 채널 선 (EditDragState)
+  const editDragRef = useRef<EditDragState | null>(null) // 편집 드래그 중인 채널 선
   const suppressClickRef = useRef(false) // 핸들 드래그 직후의 click(그리기 추가) 억제
 
   // 그리는 중 ESC → 진행 중 드로잉 취소(모달은 유지)
@@ -490,6 +246,137 @@ export default function ChartSnapshotModal({ open, onClose, onInsert }: ChartSna
     return () => clearTimeout(t)
   }, [query])
 
+  // 차트 생성 — 스크롤·확대 없는 고정 화면(기존 ECharts 와 같음, 그리기 드래그가 차트를 밀지 않게)
+  useEffect(() => {
+    const box = boxRef.current
+    if (!chart || !box) return
+    const digits = chart.currency === 'KRW' ? 0 : 2
+    const api = createChart(box, {
+      autoSize: true,
+      layout: { background: { color: '#ffffff' }, textColor: '#475569', fontSize: 11 },
+      grid: { vertLines: { visible: false }, horzLines: { color: '#f1f5f9' } },
+      // 위 = 가격(약 64%), 아래 = 거래량(약 20%) — 기존 2단 그리드 비율
+      rightPriceScale: { borderColor: '#94a3b8', scaleMargins: { top: 0.06, bottom: 0.3 } },
+      timeScale: {
+        borderColor: '#94a3b8',
+        fixLeftEdge: true,
+        fixRightEdge: true,
+        rightOffset: 0,
+        lockVisibleTimeRangeOnResize: true,
+        tickMarkFormatter: (t: Time) => mmdd(t),
+      },
+      localization: { timeFormatter: (t: Time) => isoDate(t), priceFormatter: priceFormatter(chart.currency) },
+      handleScroll: false,
+      handleScale: false,
+    })
+    const times = chart.candles.map((c) => c.date)
+    const common = { lastValueVisible: false, priceLineVisible: false } as const
+    const candle = api.addCandlestickSeries({
+      ...common,
+      upColor: UP, downColor: DOWN, borderUpColor: UP, borderDownColor: DOWN, wickUpColor: UP, wickDownColor: DOWN,
+      priceFormat: { type: 'price', precision: digits, minMove: digits ? 0.01 : 1 },
+    })
+    candle.setData(chart.candles.map((c, i) => ({ time: times[i], open: c.open, high: c.high, low: c.low, close: c.close })))
+    const line = (color: string, values: (number | null)[] | undefined, curved: boolean) => {
+      const s = api.addLineSeries({
+        ...common, color, lineWidth: 1, crosshairMarkerVisible: false,
+        lineType: curved ? LineType.Curved : LineType.Simple,
+      })
+      s.setData(lineData(times, values))
+      return s
+    }
+    const bb = chart.bollinger
+    const lines: Record<string, ISeriesApi<'Line'>> = {
+      MA5: line('#f59e0b', chart.ma5, true),
+      MA20: line('#8b5cf6', chart.ma20, true),
+      MA50: line('#10b981', chart.ma50, true),
+      MA120: line('#64748b', chart.ma120, true),
+      BB상단: line('#0ea5e9', bb?.upper, false),
+      BB중심: line('rgba(14,165,233,0.6)', bb?.mid, false),
+      BB하단: line('#0ea5e9', bb?.lower, false),
+    }
+    // 거래량: 상승(종가≥시가) 빨강 / 하락 파랑 (한국 관례), 아래 칸 overlay 스케일
+    const volume = api.addHistogramSeries({ ...common, priceScaleId: 'vol', priceFormat: { type: 'volume' } })
+    api.priceScale('vol').applyOptions({ scaleMargins: { top: 0.78, bottom: 0 } })
+    volume.setData(chart.candles.map((c, i) => ({ time: times[i], value: c.volume, color: c.close >= c.open ? UP : DOWN })))
+
+    const vp = new VolumeProfilePrimitive()
+    candle.attachPrimitive(vp)
+    vp.setBins(chart.volumeProfile)
+    // 도형 운반용 — 마지막에 추가해 모든 시리즈 위에 그려지고, 범례로 숨기는 일이 없다(종가 데이터·투명색).
+    const carrier = api.addLineSeries({
+      ...common, color: TRANSPARENT, lineVisible: false, pointMarkersVisible: false, crosshairMarkerVisible: false,
+    })
+    carrier.setData(chart.candles.map((c, i) => ({ time: times[i], value: c.close })))
+    const draw = new DrawingsPrimitive()
+    carrier.attachPrimitive(draw)
+    api.timeScale().fitContent()
+
+    apiRef.current = api
+    seriesRef.current = { candle, lines, volume }
+    vpRef.current = vp
+    drawRef.current = draw
+    return () => {
+      api.remove()
+      apiRef.current = null
+      seriesRef.current = null
+      vpRef.current = null
+      drawRef.current = null
+      setHover(null)
+    }
+  }, [chart])
+
+  // 범례·매물대 토글 → 시리즈 보이기/숨기기. 캔들은 색만 투명하게(도형이 캔들 시리즈에 붙어 있어 함께 사라지지 않게).
+  useEffect(() => {
+    const s = seriesRef.current
+    if (!s) return
+    const off = (name: string) => hidden.has(name)
+    s.candle.applyOptions(
+      off('캔들')
+        ? { upColor: TRANSPARENT, downColor: TRANSPARENT, borderVisible: false, wickVisible: false }
+        : { upColor: UP, downColor: DOWN, borderVisible: true, wickVisible: true },
+    )
+    for (const [name, series] of Object.entries(s.lines)) {
+      series.applyOptions({ visible: name === 'BB중심' || !off(name) })
+    }
+    s.volume.applyOptions({ visible: !off('거래량') })
+    vpRef.current?.setVisible(showVP && !off('매물대'))
+  }, [chart, hidden, showVP])
+
+  // 도형·미리보기 → 그리기 레이어
+  useEffect(() => {
+    if (!chart) return
+    drawRef.current?.setState({
+      shapes,
+      rectPreview: preview,
+      channelPreview,
+      editable: true,
+      candleCount: chart.candles.length,
+      formatPrice: priceFormatter(chart.currency),
+    })
+  }, [chart, shapes, preview, channelPreview])
+
+  // 캔들 정보 — 켤 때만 십자선 + 정보 박스. 끄면 십자선도 숨김(기존과 같음).
+  useEffect(() => {
+    const api = apiRef.current
+    if (!api) return
+    const shown = { visible: showTooltip, labelVisible: showTooltip }
+    api.applyOptions({ crosshair: { mode: CrosshairMode.Normal, vertLine: shown, horzLine: shown } })
+    if (!showTooltip) {
+      setHover(null)
+      return
+    }
+    const onMove = (p: MouseEventParams<Time>) => {
+      if (!p.point || p.logical == null || p.logical < 0) {
+        setHover(null)
+        return
+      }
+      setHover({ x: p.point.x, y: p.point.y, idx: Math.round(p.logical) })
+    }
+    api.subscribeCrosshairMove(onMove)
+    return () => api.unsubscribeCrosshairMove(onMove)
+  }, [chart, showTooltip])
+
   const loadChart = async (stock: Stock, r: DateRange, std: number) => {
     setLoading(true)
     setError('')
@@ -526,165 +413,150 @@ export default function ChartSnapshotModal({ open, onClose, onInsert }: ChartSna
     if (selected) loadChart(selected, range, val)
   }
 
-  const option = useMemo(
-    () => (chart ? buildOption(chart, shapes, preview, channelPreview, showVP, showTooltip, true) : null),
-    [chart, shapes, preview, channelPreview, showVP, showTooltip],
-  )
+  // 마우스 위치(차트 상자 기준) → 데이터 좌표
+  const toData = (e: ReactMouseEvent) => {
+    const api = apiRef.current
+    const candle = seriesRef.current?.candle
+    const box = boxRef.current
+    if (!api || !candle || !box) return null
+    const rect = box.getBoundingClientRect()
+    const px = e.clientX - rect.left
+    const py = e.clientY - rect.top
+    const xi = api.timeScale().coordinateToLogical(px)
+    const price = candle.coordinateToPrice(py)
+    if (xi == null || price == null || Number.isNaN(price)) return null
+    return { xi: Number(xi), price, px, py }
+  }
 
-  // 차트 인스턴스 준비 시 zrender 드로잉 핸들러 바인딩(마운트마다 1회)
-  const handleChartReady = (inst: ECharts) => {
-    const zr = inst.getZr()
-
-    // zrender 이벤트는 offsetX/offsetY 또는 zrX/zrY 로 좌표를 준다(버전차 폴백)
-    const toData = (e: ZrPointerEvent) => {
-      const px = e.offsetX ?? e.zrX
-      const py = e.offsetY ?? e.zrY
-      if (px == null || py == null) return null
-      const p = inst.convertFromPixel({ gridIndex: 0 }, [px, py]) as number[] // echarts 반환 number | number[] — 2D 좌표 배열
-      if (!p || Number.isNaN(p[0]) || Number.isNaN(p[1])) return null
-      return { xi: p[0], price: p[1], px, py }
-    }
-
-    // 편집 모드 히트테스트: 클릭 지점이 어느 3중추세선의 어느 제어점 핸들 위인지.
-    const HANDLE_HIT_PX = 12
-    const hitTestHandle = (e: ZrPointerEvent) => {
-      const px = e.offsetX ?? e.zrX
-      const py = e.offsetY ?? e.zrY
-      if (px == null || py == null) return null
-      const cs = candlesRef.current
-      for (const ch of shapesRef.current.filter((s): s is StoredChannel => s.type === 'channel')) {
-        const pts = [
-          { key: 'UL', xi: ch.ux1, price: ch.uy1 },
-          { key: 'UR', xi: ch.ux2, price: ch.uy2 },
-          { key: 'LL', xi: ch.lx1, price: ch.ly1 },
-          { key: 'LR', xi: ch.lx2, price: ch.ly2 },
-        ]
-        for (const pt of pts) {
-          const cat = cs[clampIdx(pt.xi, cs.length)]?.date.slice(5)
-          if (cat == null) continue
-          const q = inst.convertToPixel({ gridIndex: 0 }, [cat, pt.price]) as number[] // echarts 반환 number | number[] — 2D 픽셀 배열
-          if (q && Math.hypot(q[0] - px, q[1] - py) <= HANDLE_HIT_PX) {
-            return { id: ch.id, key: pt.key }
-          }
+  // 편집 모드 히트테스트: 마우스가 어느 3중추세선의 어느 끝점 핸들 위인지
+  const hitTestHandle = (px: number, py: number) => {
+    const api = apiRef.current
+    const candle = seriesRef.current?.candle
+    const n = chart?.candles.length ?? 0
+    if (!api || !candle || !n) return null
+    for (const ch of shapes.filter((s): s is StoredChannel => s.type === 'channel')) {
+      for (const pt of channelHandles(ch)) {
+        const x = api.timeScale().logicalToCoordinate(clampIdx(pt.xi, n) as Logical)
+        const y = candle.priceToCoordinate(pt.price)
+        if (x !== null && y !== null && Math.hypot(x - px, y - py) <= HANDLE_RADIUS + 5.5) {
+          return { id: ch.id, key: pt.key }
         }
       }
-      return null
     }
+    return null
+  }
 
-    zr.on('click', (e) => {
-      // 핸들을 잡아 드래그한 직후의 click 은 그리기 추가로 이어지지 않게 무시
-      if (suppressClickRef.current) {
-        suppressClickRef.current = false
-        return
-      }
-      const t = toolRef.current
-      if (t !== 'channel' && chPtsRef.current.length) {
+  const onChartClick = (e: ReactMouseEvent) => {
+    // 핸들을 잡아 드래그한 직후의 click 은 그리기 추가로 이어지지 않게 무시
+    if (suppressClickRef.current) {
+      suppressClickRef.current = false
+      return
+    }
+    if (tool !== 'channel' && chPtsRef.current.length) {
+      chPtsRef.current = []
+      setChannelPreview(null)
+    }
+    if (!tool || tool === 'rect') return
+    const p = toData(e)
+    if (!p) return
+    if (tool === 'hline') addShape({ type: 'hline', price: p.price })
+    else if (tool === 'text') setTextInput({ px: p.px, py: p.py, xi: p.xi, price: p.price })
+    else if (tool === 'channel') {
+      // 1·2번 클릭: 첫 선(가장자리), 3번 클릭: 대칭 평행선 위치(간격). 스냅 없이 클릭 위치 그대로.
+      const pts = [...chPtsRef.current, { xi: p.xi, price: p.price }]
+      chPtsRef.current = pts
+      if (pts.length === 3) {
+        addShape({
+          type: 'channel',
+          ...makeChannel(pts[0].xi, pts[0].price, pts[1].xi, pts[1].price, pts[2].xi, pts[2].price),
+        })
         chPtsRef.current = []
         setChannelPreview(null)
       }
-      if (!t || t === 'rect') return
-      const p = toData(e)
-      if (!p) return
-      if (t === 'hline') addShape({ type: 'hline', price: p.price })
-      else if (t === 'text')
-        setTextInput({ px: p.px, py: p.py, xi: p.xi, price: p.price })
-      else if (t === 'channel') {
-        // 1·2번 클릭: 첫 선(가장자리), 3번 클릭: 대칭 평행선 위치(간격). 스냅 없이 클릭 위치 그대로.
-        const pts = [...chPtsRef.current, { xi: p.xi, price: p.price }]
-        chPtsRef.current = pts
-        if (pts.length === 3) {
-          addShape({
-            type: 'channel',
-            ...makeChannel(
-              pts[0].xi, pts[0].price,
-              pts[1].xi, pts[1].price,
-              pts[2].xi, pts[2].price,
-            ),
-          })
-          chPtsRef.current = []
-          setChannelPreview(null)
-        }
-      }
-    })
+    }
+  }
 
-    zr.on('mousedown', (e) => {
-      // 핸들을 잡으면(도구 상태 무관) 그 '선 전체'를 평행이동하는 드래그 시작 + 뒤따르는 click 억제.
-      // 시작 시점의 커서·해당 선 끝점을 기록해, 이동 델타를 두 끝점에 동일 적용(각도 유지).
-      const hit = hitTestHandle(e)
-      if (hit) {
-        const p = toData(e)
-        const sh = shapesRef.current.find((s) => s.id === hit.id) as StoredChannel | undefined // hit.id 는 hitTestHandle 이 channel 도형에서만 뽑은 id
-        if (p && sh) {
-          const line = hit.key === 'UL' || hit.key === 'UR' ? 'upper' : 'lower'
-          const s =
-            line === 'upper'
-              ? { x1: sh.ux1, y1: sh.uy1, x2: sh.ux2, y2: sh.uy2 }
-              : { x1: sh.lx1, y1: sh.ly1, x2: sh.lx2, y2: sh.ly2 }
-          editDragRef.current = { id: hit.id, line, cxi: p.xi, cprice: p.price, ...s }
-          suppressClickRef.current = true
-        }
-        return
+  const onChartMouseDown = (e: ReactMouseEvent) => {
+    // 핸들을 잡으면(도구 상태 무관) 그 '선 전체'를 평행이동하는 드래그 시작 + 뒤따르는 click 억제.
+    // 시작 시점의 커서·해당 선 끝점을 기록해, 이동 델타를 두 끝점에 동일 적용(각도 유지).
+    const p = toData(e)
+    if (!p) return
+    const hit = hitTestHandle(p.px, p.py)
+    if (hit) {
+      const sh = shapes.find((s) => s.id === hit.id) as StoredChannel | undefined // hit.id 는 channel 도형에서만 뽑은 id
+      if (sh) {
+        const line = hit.key === 'UL' || hit.key === 'UR' ? 'upper' : 'lower'
+        const s =
+          line === 'upper'
+            ? { x1: sh.ux1, y1: sh.uy1, x2: sh.ux2, y2: sh.uy2 }
+            : { x1: sh.lx1, y1: sh.ly1, x2: sh.lx2, y2: sh.ly2 }
+        editDragRef.current = { id: hit.id, line, cxi: p.xi, cprice: p.price, ...s }
+        suppressClickRef.current = true
       }
-      if (toolRef.current !== 'rect') return
-      const p = toData(e)
-      if (!p) return
-      dragStartRef.current = { xi: p.xi, price: p.price }
-      setPreview(null)
-    })
+      return
+    }
+    if (tool !== 'rect') return
+    dragStartRef.current = { xi: p.xi, price: p.price }
+    setPreview(null)
+  }
 
-    zr.on('mousemove', (e) => {
-      const t = toolRef.current
-      const p = toData(e)
-      if (!p) return
-      // 편집 드래그: 잡은 '선 전체'를 각도(기울기) 유지한 채 평행이동(반대편 선은 그대로). 중심선 자동 재계산.
-      if (editDragRef.current) {
-        const n = candlesRef.current.length
-        const d = editDragRef.current
-        // x 델타는 두 끝점이 [0,n-1]을 벗어나지 않도록 균일 클램프 → 슬로프 불변.
-        const rawDxi = p.xi - d.cxi
-        const lo = -Math.min(d.x1, d.x2)
-        const hi = n - 1 - Math.max(d.x1, d.x2)
-        const dxi = Math.max(lo, Math.min(hi, rawDxi))
-        const dprice = p.price - d.cprice
-        const nx1 = d.x1 + dxi, nx2 = d.x2 + dxi
-        const patch =
-          d.line === 'upper'
-            ? { ux1: nx1, uy1: d.y1 + dprice, ux2: nx2, uy2: d.y2 + dprice }
-            : { lx1: nx1, ly1: d.y1 + dprice, lx2: nx2, ly2: d.y2 + dprice }
-        updateShape(d.id, patch)
-        return
-      }
-      const drag = dragStartRef.current
-      if (t === 'rect' && drag) {
-        setPreview({ type: 'rect', xi1: drag.xi, y1: drag.price, xi2: p.xi, y2: p.price })
-      } else if (t === 'channel' && chPtsRef.current.length) {
-        // 1점: 커서를 끝점으로 첫 선 미리보기 / 2점: 커서를 P3로 채널(간격) 미리보기 (스냅 없음)
-        const pts = chPtsRef.current
-        const cur = { xi: p.xi, price: p.price }
-        const a = pts[0]
-        const b = pts.length >= 2 ? pts[1] : cur
-        setChannelPreview(makeChannel(a.xi, a.price, b.xi, b.price, cur.xi, cur.price))
-      }
-    })
+  const onChartMouseMove = (e: ReactMouseEvent) => {
+    const p = toData(e)
+    if (!p) return
+    // 편집 드래그: 잡은 '선 전체'를 각도(기울기) 유지한 채 평행이동(반대편 선은 그대로). 중심선 자동 재계산.
+    if (editDragRef.current) {
+      const n = chart?.candles.length ?? 0
+      const d = editDragRef.current
+      // x 델타는 두 끝점이 [0,n-1]을 벗어나지 않도록 균일 클램프 → 기울기 불변.
+      const rawDxi = p.xi - d.cxi
+      const lo = -Math.min(d.x1, d.x2)
+      const hi = n - 1 - Math.max(d.x1, d.x2)
+      const dxi = Math.max(lo, Math.min(hi, rawDxi))
+      const dprice = p.price - d.cprice
+      const nx1 = d.x1 + dxi, nx2 = d.x2 + dxi
+      const patch =
+        d.line === 'upper'
+          ? { ux1: nx1, uy1: d.y1 + dprice, ux2: nx2, uy2: d.y2 + dprice }
+          : { lx1: nx1, ly1: d.y1 + dprice, lx2: nx2, ly2: d.y2 + dprice }
+      updateShape(d.id, patch)
+      return
+    }
+    const drag = dragStartRef.current
+    if (tool === 'rect' && drag) {
+      setPreview({ type: 'rect', xi1: drag.xi, y1: drag.price, xi2: p.xi, y2: p.price })
+    } else if (tool === 'channel' && chPtsRef.current.length) {
+      // 1점: 커서를 끝점으로 첫 선 미리보기 / 2점: 커서를 P3로 채널(간격) 미리보기 (스냅 없음)
+      const pts = chPtsRef.current
+      const a = pts[0]
+      const b = pts.length >= 2 ? pts[1] : p
+      setChannelPreview(makeChannel(a.xi, a.price, b.xi, b.price, p.xi, p.price))
+    }
+  }
 
-    zr.on('mouseup', (e) => {
-      // 편집 드래그 종료
-      if (editDragRef.current) {
-        editDragRef.current = null
-        return
-      }
-      const drag = dragStartRef.current
-      if (toolRef.current !== 'rect' || !drag) return
-      const p = toData(e)
-      if (p) {
-        addShape({ type: 'rect', xi1: drag.xi, y1: drag.price, xi2: p.xi, y2: p.price })
-      }
-      dragStartRef.current = null
-      setPreview(null)
-    })
+  const onChartMouseUp = (e: ReactMouseEvent) => {
+    // 편집 드래그 종료
+    if (editDragRef.current) {
+      editDragRef.current = null
+      return
+    }
+    const drag = dragStartRef.current
+    if (tool !== 'rect' || !drag) return
+    const p = toData(e)
+    if (p) addShape({ type: 'rect', xi1: drag.xi, y1: drag.price, xi2: p.xi, y2: p.price })
+    dragStartRef.current = null
+    setPreview(null)
   }
 
   if (!open) return null
+
+  const legend = LEGEND.filter((l) => showVP || l.name !== '매물대')
+  const toggleLegend = (name: string) =>
+    setHidden((prev) => {
+      const next = new Set(prev)
+      if (next.has(name)) next.delete(name)
+      else next.add(name)
+      return next
+    })
 
   const commitText = (val: string) => {
     if (textInput && val.trim()) {
@@ -693,11 +565,24 @@ export default function ChartSnapshotModal({ open, onClose, onInsert }: ChartSna
     setTextInput(null)
   }
 
+  // 본문 삽입 PNG = 머리글(제목·범례) + 차트 캔버스(도형 포함). 흰 배경.
   const handleInsert = () => {
-    const inst = chartRef.current?.getEchartsInstance()
-    if (!inst) return
-    const dataURL = inst.getDataURL({ type: 'png', pixelRatio: 2, backgroundColor: '#ffffff' })
-    onInsert(dataURL)
+    const api = apiRef.current
+    const box = boxRef.current
+    if (!api || !box || !chart) return
+    const shot = api.takeScreenshot()
+    const r = shot.width / Math.max(1, box.clientWidth) // 기기 픽셀 배율
+    const headerH = Math.round(HEADER_H * r)
+    const out = document.createElement('canvas')
+    out.width = shot.width
+    out.height = shot.height + headerH
+    const ctx = out.getContext('2d')
+    if (!ctx) return
+    ctx.fillStyle = '#ffffff'
+    ctx.fillRect(0, 0, out.width, out.height)
+    paintHeader(ctx, out.width, r, `${chart.name} (${chart.symbol})`, legend, hidden)
+    ctx.drawImage(shot, 0, headerH)
+    onInsert(out.toDataURL('image/png'))
     clearAll()
     setTool(null)
     setPreview(null)
@@ -705,6 +590,10 @@ export default function ChartSnapshotModal({ open, onClose, onInsert }: ChartSna
     chPtsRef.current = []
     onClose()
   }
+
+  const hoverCandle = hover && chart ? chart.candles[hover.idx] : undefined
+  const fmtPrice = chart ? priceFormatter(chart.currency) : String
+  const boxWidth = boxRef.current?.clientWidth ?? 0
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
@@ -907,46 +796,115 @@ export default function ChartSnapshotModal({ open, onClose, onInsert }: ChartSna
           </div>
         )}
 
-        {/* 차트 */}
-        <div
-          className="relative mt-3 h-[62vh] min-h-[340px] rounded-lg border border-slate-200"
-          style={{ cursor: tool ? 'crosshair' : 'default' }}
-        >
-          {loading ? (
+        {/* 차트 — 머리글(제목·범례) + 캔버스. 불러오는 동안에도 상자는 유지(차트 인스턴스 보존) */}
+        <div className="relative mt-3 flex h-[62vh] min-h-[340px] flex-col rounded-lg border border-slate-200">
+          {chart ? (
+            <>
+              <div className="flex shrink-0 flex-col items-center px-2.5" style={{ height: HEADER_H }}>
+                <p className="pt-1 text-sm font-bold text-slate-900">
+                  {chart.name} ({chart.symbol})
+                </p>
+                <div className="flex w-full flex-wrap justify-end gap-x-3 text-xs">
+                  {legend.map((l) => {
+                    const off = hidden.has(l.name)
+                    return (
+                      <button
+                        type="button"
+                        key={l.name}
+                        onClick={() => toggleLegend(l.name)}
+                        className="inline-flex items-center gap-1"
+                        style={{ color: off ? LEGEND_OFF : '#334155' }}
+                        aria-pressed={!off}
+                      >
+                        <span className="inline-block h-2 w-3.5" style={{ background: off ? LEGEND_OFF : l.color }} />
+                        {l.name}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+              <div
+                className="relative min-h-0 flex-1"
+                style={{ cursor: tool ? 'crosshair' : 'default' }}
+                onClick={onChartClick}
+                onMouseDown={onChartMouseDown}
+                onMouseMove={onChartMouseMove}
+                onMouseUp={onChartMouseUp}
+              >
+                <div ref={boxRef} className="absolute inset-0" />
+
+                {/* 캔들 정보(마우스오버) */}
+                {hover && hoverCandle && (
+                  <div
+                    className="pointer-events-none absolute z-10 rounded-md border border-slate-200 bg-white/95 px-2.5 py-1.5 text-xs text-slate-700 shadow"
+                    style={{
+                      left: hover.x + 180 > boxWidth ? hover.x - 172 : hover.x + 14,
+                      top: Math.max(4, hover.y - 60),
+                      width: 158,
+                    }}
+                  >
+                    <p className="mb-0.5 font-semibold text-slate-900">{hoverCandle.date}</p>
+                    {([
+                      ['시가', hoverCandle.open],
+                      ['고가', hoverCandle.high],
+                      ['저가', hoverCandle.low],
+                      ['종가', hoverCandle.close],
+                    ] as const).map(([k, v]) => (
+                      <p key={k} className="flex justify-between tabular-nums">
+                        <span className="text-slate-500">{k}</span>
+                        {fmtPrice(v)}
+                      </p>
+                    ))}
+                    {(['ma5', 'ma20', 'ma50', 'ma120'] as const).map((k) => {
+                      const v = chart[k][hover.idx]
+                      return v == null ? null : (
+                        <p key={k} className="flex justify-between tabular-nums">
+                          <span className="text-slate-500">{k.toUpperCase()}</span>
+                          {fmtPrice(v)}
+                        </p>
+                      )
+                    })}
+                    <p className="flex justify-between tabular-nums">
+                      <span className="text-slate-500">거래량</span>
+                      {fmtVolume(hoverCandle.volume)}
+                    </p>
+                  </div>
+                )}
+
+                {/* 텍스트 입력 오버레이 (임시 — 확정 시 그리기 레이어에 배치) */}
+                {textInput && (
+                  <input
+                    autoFocus
+                    defaultValue=""
+                    placeholder="텍스트 입력 후 Enter"
+                    onClick={(e) => e.stopPropagation()}
+                    onMouseDown={(e) => e.stopPropagation()}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') commitText((e.target as HTMLInputElement).value) // KeyboardEvent<input>.target 은 EventTarget
+                      else if (e.key === 'Escape') setTextInput(null)
+                    }}
+                    onBlur={(e) => commitText((e.target as HTMLInputElement).value)} // FocusEvent<input>.target 은 EventTarget
+                    style={{
+                      position: 'absolute',
+                      left: Math.max(0, Math.min(textInput.px, boxWidth - 170)),
+                      top: textInput.py,
+                    }}
+                    className="z-10 w-40 rounded border border-indigo-400 bg-white px-2 py-1 text-xs shadow"
+                  />
+                )}
+              </div>
+              {loading && (
+                <p className="absolute inset-0 z-20 flex items-center justify-center bg-white/70 text-sm text-slate-400">
+                  차트 불러오는 중…
+                </p>
+              )}
+            </>
+          ) : loading ? (
             <p className="py-32 text-center text-sm text-slate-400">차트 불러오는 중…</p>
-          ) : option ? (
-            <ReactECharts
-              ref={chartRef}
-              option={option}
-              notMerge
-              lazyUpdate={false}
-              onChartReady={handleChartReady}
-              style={{ height: '100%', width: '100%' }}
-            />
           ) : (
             <p className="py-32 text-center text-sm text-slate-400">
               종목을 검색해 선택하면 차트가 표시됩니다.
             </p>
-          )}
-
-          {/* 텍스트 입력 오버레이 (임시 — 확정 시 차트에 markPoint로 배치) */}
-          {textInput && (
-            <input
-              autoFocus
-              defaultValue=""
-              placeholder="텍스트 입력 후 Enter"
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') commitText((e.target as HTMLInputElement).value) // KeyboardEvent<input>.target 은 EventTarget
-                else if (e.key === 'Escape') setTextInput(null)
-              }}
-              onBlur={(e) => commitText((e.target as HTMLInputElement).value)} // FocusEvent<input>.target 은 EventTarget
-              style={{
-                position: 'absolute',
-                left: Math.min(textInput.px, 360),
-                top: textInput.py,
-              }}
-              className="z-10 w-40 rounded border border-indigo-400 bg-white px-2 py-1 text-xs shadow"
-            />
           )}
         </div>
 
