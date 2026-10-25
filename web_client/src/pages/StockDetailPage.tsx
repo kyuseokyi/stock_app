@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { getPatternBases } from '../api/patterns'
+import { getDailyCandles } from '../api/stock'
 import { getCanslimScore } from '../api/screener'
 import { findStock, type StockHit } from '../api/stockSearch'
 import { BaseHistoryTable, CurrentBaseSummary } from '../components/patterns/PatternParts'
@@ -10,9 +11,10 @@ import StockSearch from '../components/stock/StockSearch'
 import Card from '../components/ui/Card'
 import { chipClass } from '../components/ui/Chip'
 import { high52w } from '../lib/canslim'
-import { formatPrice } from '../lib/format'
+import { formatPct, formatPrice } from '../lib/format'
 import { overlayCaption, patternOverlay } from '../lib/patternOverlay'
 import type { PatternBases } from '../types/patterns'
+import type { DailyCandle } from '../types/game'
 import type { CanslimScore } from '../types/screener'
 import { Skeleton } from '../components/ui/Skeleton'
 import { useDocumentTitle } from '../hooks/useDocumentTitle'
@@ -44,6 +46,7 @@ export default function StockDetailPage() {
   const [period, setPeriod] = useState<PeriodKey>('1y')
   const [reload, setReload] = useState(0)
   const [dropped, setDropped] = useState(0)
+  const [recent, setRecent] = useState<DailyCandle[]>([]) // 전일 대비 등락률용 최근 일봉
 
   useEffect(() => {
     if (!valid) return
@@ -57,6 +60,10 @@ export default function StockDetailPage() {
     getPatternBases(ticker)
       .then((d) => !cancelled && setBases({ state: 'ready', data: d }))
       .catch(() => !cancelled && setBases({ state: 'failed' }))
+    setRecent([])
+    getDailyCandles(ticker, undefined, 14)
+      .then((rows) => !cancelled && setRecent(rows))
+      .catch(() => undefined) // 등락률만 빠진다
     return () => {
       cancelled = true
     }
@@ -99,6 +106,10 @@ export default function StockDetailPage() {
   const close = scoreData?.close ?? basesData?.close ?? null
   const date = scoreData?.date ?? basesData?.date ?? null
   const n = scoreData?.letters.find((l) => l.key === 'n')
+  // 전일 대비 — 헤더 종가 날짜의 봉과 그 전 봉(날짜를 못 찾으면 최근 두 봉)
+  const dayIdx = date ? recent.findIndex((c) => c.date === date) : recent.length - 1
+  const i = dayIdx >= 0 ? dayIdx : recent.length - 1
+  const dayChange = i >= 1 && recent[i - 1].close > 0 ? ((recent[i].close - recent[i - 1].close) / recent[i - 1].close) * 100 : null
   const days = PERIODS.find((p) => p.key === period)?.days ?? 370
 
   const goBack = () => {
@@ -132,8 +143,18 @@ export default function StockDetailPage() {
               <h1 className="truncate text-2xl font-bold text-ink">{name ?? ticker}</h1>
               <span className="text-xs text-ink-muted">{ticker}{sub ? ` · ${sub}` : ''}</span>
             </div>
-            <p className="text-sm text-ink-muted">
-              {close === null ? '종가 정보 없음' : `${formatPrice(close)}원${date ? ` · ${date} 종가` : ''}`}
+            <p className="text-sm text-ink-muted tabular-nums">
+              {close === null ? '종가 정보 없음' : (
+                <>
+                  {formatPrice(close)}원
+                  {dayChange !== null && (
+                    <span className={`ml-1.5 font-semibold ${dayChange > 0 ? 'text-up' : dayChange < 0 ? 'text-down' : ''}`}>
+                      {formatPct(dayChange)}
+                    </span>
+                  )}
+                  {date ? ` · ${date} 종가` : ''}
+                </>
+              )}
             </p>
           </div>
           {scoreData && (

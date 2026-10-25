@@ -6,6 +6,7 @@ import AuthCompletePage from './pages/AuthCompletePage'
 import CommunityPage from './pages/CommunityPage'
 import HomePage from './pages/HomePage'
 import MyPage from './pages/MyPage'
+import NotFoundPage from './pages/NotFoundPage'
 import PostListPage from './pages/PostListPage'
 import PostDetailPage from './pages/PostDetailPage'
 
@@ -69,7 +70,7 @@ export default function App() {
           </Suspense>
         } />
         <Route path="auth/complete" element={<AuthCompletePage />} />
-        <Route path="*" element={<Navigate to="/" replace />} />
+        <Route path="*" element={<NotFoundPage />} />
       </Route>
     </Routes>
   )

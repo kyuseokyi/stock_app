@@ -5,6 +5,7 @@ import { LetterList, ScoreHistory } from './CanslimParts'
 import { getCanslimScore } from '../../api/screener'
 import { high52w } from '../../lib/canslim'
 import { formatPrice } from '../../lib/format'
+import { Skeleton } from '../ui/Skeleton'
 import type { CanslimScore } from '../../types/screener'
 
 // 종목 상세 — 점수·통과 수, 일봉 차트, 7항목 점수표(통과 여부·근거·기준·설명), 점수 추이.
@@ -27,7 +28,7 @@ export default function CanslimDetail({ ticker }: { ticker: string }) {
     }
   }, [ticker])
 
-  if (state === 'loading') return <p className="py-8 text-center text-sm text-ink-muted">불러오는 중…</p>
+  if (state === 'loading') return <DetailSkeleton />
   if (state === 'failed') return <p className="py-8 text-center text-sm text-ink-muted">점수표를 불러오지 못했어요</p>
   if (state === 'none' || !data) {
     return <p className="py-8 text-center text-sm text-ink-muted">주도주 분석 대상(보통주)이 아니에요</p>
@@ -59,6 +60,38 @@ export default function CanslimDetail({ ticker }: { ticker: string }) {
       <Link to={`/stock/${encodeURIComponent(data.ticker)}`} className="-my-2 inline-flex min-h-11 items-center text-sm font-medium text-brand-strong">
         종목 상세 보기 →
       </Link>
+    </div>
+  )
+}
+
+// 로딩 뼈대 — 머리글(이름·종가 / 점수)·차트(h-64)·점수표 7줄 자리를 미리 잡아 도착할 때 아래가 밀리지 않게
+function DetailSkeleton() {
+  return (
+    <div className="space-y-4">
+      <p role="status" className="sr-only">점수표를 불러오고 있어요</p>
+      <div className="flex items-end justify-between">
+        <div className="space-y-1.5">
+          <Skeleton className="h-6 w-32" />
+          <Skeleton className="h-4 w-44" />
+        </div>
+        <div className="flex flex-col items-end space-y-1.5">
+          <Skeleton className="h-8 w-14" />
+          <Skeleton className="h-3 w-20" />
+        </div>
+      </div>
+      <Skeleton className="h-64 w-full" />
+      <div className="space-y-2">
+        {Array.from({ length: 7 }, (_, i) => (
+          <div key={i} className="flex gap-3 rounded-btn bg-fill/50 p-3">
+            <Skeleton className="h-8 w-8 shrink-0 rounded-md" />
+            <div className="flex-1 space-y-1.5">
+              <Skeleton className="h-4 w-1/3" />
+              <Skeleton className="h-3.5 w-1/2" />
+              <Skeleton className="h-3 w-3/4" />
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   )
 }
