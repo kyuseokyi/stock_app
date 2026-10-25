@@ -45,7 +45,7 @@ export function patternOverlay(
   }
   if (current) {
     for (const p of current.points) {
-      const m = pointMarker(p, p.role === 'pivot' ? THEME.up : THEME.inkMuted)
+      const m = pointMarker(p, p.role === 'pivot' ? THEME.up : THEME.inkMuted, current.patternType)
       if (m) markers.push(m)
     }
     if (current.breakoutDate) {

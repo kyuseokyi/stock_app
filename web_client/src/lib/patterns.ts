@@ -75,8 +75,15 @@ export const POINT_STYLE: Record<string, { text: string; position: 'aboveBar' | 
   end: { text: '우측 림', position: 'aboveBar', shape: 'circle' },
 }
 
-export function pointMarker(p: PatternPoint, color: string) {
-  const s = POINT_STYLE[p.role]
+// 컵핸들만 지점 뜻이 다르다(엔진 cup_with_handle.py): handle = 손잡이 시작 고점(오른쪽 림·피벗), end = 손잡이 저점.
+// 다른 패턴의 end 는 오른쪽 고점이라 '우측 림'이 맞다. 그대로 두면 컵핸들에서 두 글자가 같은 위쪽에 겹치고 뜻도 뒤바뀐다
+const CUP_HANDLE_STYLE: Record<string, (typeof POINT_STYLE)[string]> = {
+  handle: { text: '우측 림', position: 'aboveBar', shape: 'circle' },
+  end: { text: '핸들 저점', position: 'belowBar', shape: 'arrowUp' },
+}
+
+export function pointMarker(p: PatternPoint, color: string, patternType?: string) {
+  const s = (patternType === 'cup_with_handle' ? CUP_HANDLE_STYLE[p.role] : undefined) ?? POINT_STYLE[p.role]
   if (!s || !p.date) return null
   return { date: p.date, position: s.position, shape: s.shape, color, text: s.text }
 }
