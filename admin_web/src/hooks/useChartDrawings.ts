@@ -24,25 +24,26 @@ export interface TextShape {
   price: number
   text: string
 }
-/** 평행 채널 — 상단선(u*)/하단선(l*) 두 선의 끝점(x=카테고리 인덱스, y=가격) */
+/**
+ * 2중추세선 — 중심선 (x1,y1)-(x2,y2)(x=캔들 인덱스, y=가격)과 양 끝의 세로 간격 o1·o2.
+ * 한쪽 선 = 중심 + o, 반대쪽 선 = 중심 − o → 두 선은 중심선 기준 거리·각도 대칭(o1≠o2 면 기울기가 다름).
+ */
 export interface ChannelShape {
   type: 'channel'
-  ux1: number
-  uy1: number
-  ux2: number
-  uy2: number
-  lx1: number
-  ly1: number
-  lx2: number
-  ly2: number
+  x1: number
+  y1: number
+  x2: number
+  y2: number
+  o1: number
+  o2: number
 }
 
 /** addShape 입력(id 없음) */
 export type ShapeInput = HLineShape | RectShape | TextShape | ChannelShape
 /** 저장된 도형(id 부여됨) */
 export type Shape = ShapeInput & { id: string }
-/** updateShape 패치 — 현재 유일한 사용처는 채널 선 이동 */
-export type ShapePatch = Partial<Omit<ChannelShape, 'type'>>
+/** updateShape 패치 — 수평선 끌기(price)·2중추세선 이동/핸들(x·y·o) */
+export type ShapePatch = Partial<Omit<HLineShape, 'type'> & Omit<ChannelShape, 'type'>>
 
 /**
  * 차트 드로잉 상태 훅.
@@ -53,7 +54,7 @@ export type ShapePatch = Partial<Omit<ChannelShape, 'type'>>
  *   { id, type:'hline', price }
  *   { id, type:'rect',  xi1, y1, xi2, y2 }
  *   { id, type:'text',  xi, price, text }
- *   { id, type:'channel', ux1, uy1, ux2, uy2, lx1, ly1, lx2, ly2 }
+ *   { id, type:'channel', x1, y1, x2, y2, o1, o2 }
  */
 export function useChartDrawings() {
   const [tool, setTool] = useState<DrawingTool | null>(null)
