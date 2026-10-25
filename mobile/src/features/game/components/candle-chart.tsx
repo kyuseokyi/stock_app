@@ -1,14 +1,14 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as SecureStore from 'expo-secure-store';
 import { ActivityIndicator, Pressable, Text, View, type LayoutChangeEvent } from 'react-native';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
 
-import { getDailyCandles, getGameCandles, getSessionBar } from '../api';
+import { getDailyCandles, getDailyCandlesBefore, getGameCandles, getSessionBar } from '../api';
 import { applyTick, withSessionBar } from '../lib/candles';
 import { CHART_PREFS_KEY, DEFAULT_CHART_PREFS, parseChartPrefs, serializeChartPrefs } from '../lib/chart-prefs';
 import { layoutCandles, niceTicks, priceToY, type Ohlc } from '../lib/chart-layout';
-import { priceLines, type ChartColors } from '../lib/chart-bridge';
+import { mergeOlder, priceLines, type ChartColors } from '../lib/chart-bridge';
 import { formatPrice, kstDateString } from '../lib/format';
 import { lineSegments, MA_PERIODS } from '../lib/indicators';
 import { applyTickIntraday, axisLabelIndexes, bucketStartSec, CHART_INTERVALS, dayLabel, kstHm } from '../lib/intraday';
@@ -246,8 +246,14 @@ async function fetchSeries(ticker: string, interval: ChartInterval): Promise<Ser
   return { kind: 'min', ticker, interval, rows: await getGameCandles(interval) };
 }
 
-/** 화면에 그리는 캔들 + 전체 로드 번호(seq). 틱은 seq 를 유지한 채 series 만 바꾼다(→ WebView 에 tick) */
-type ShownSeries = { series: Series; seq: number; keepView: boolean };
+/** 화면에 그리는 캔들 + 전체 로드 번호(seq). 틱은 seq 를 유지한 채 series 만 바꾼다(→ WebView 에 tick). prepended = 앞에 붙인 과거 수 */
+type ShownSeries = { series: Series; seq: number; keepView: boolean; prepended?: number };
+
+/** 다시 받은 일봉(최근 구간)에 지금 화면의 과거 캔들(왼쪽 스크롤로 붙인 것)을 이어 붙인다 — 같은 종목 일봉일 때만 */
+const keepOlder = (next: Series, prev: ShownSeries | null): Series =>
+  next.kind === 'day' && prev?.series.kind === 'day' && prev.series.ticker === next.ticker && next.rows.length > 0
+    ? { ...next, rows: mergeOlder(prev.series.rows, next.rows) }
+    : next;
 let loadSeq = 0;
 
 type DailyChartProps = {
@@ -321,7 +327,7 @@ export function DailyChart({ ticker, lastPrice, coach, position }: DailyChartPro
         if (s.rows.length === 0 && cached) return; // 빈 재응답이 캐시를 지우지 않게
         seriesCache.set(key, s);
         // 캐시로 이미 첫 화면 구간을 잡았으면 사용자가 보던 위치 유지
-        if (!cancelled) show({ series: s, seq: ++loadSeq, keepView: cached !== undefined });
+        if (!cancelled) show({ series: keepOlder(s, shownRef.current), seq: ++loadSeq, keepView: cached !== undefined });
       })
       .catch(() => {
         if (!cancelled && !cached) setFailed(true); // 캐시가 있으면 그대로 보여 준다
@@ -370,7 +376,7 @@ export function DailyChart({ ticker, lastPrice, coach, position }: DailyChartPro
         if (s.rows.length === 0) return;
         seriesCache.set(cacheKey(t, iv), s);
         const prev = shownRef.current;
-        if (!cancelled && prev !== null && sameSeries(prev.series, t, iv)) show({ series: s, seq: ++loadSeq, keepView: true });
+        if (!cancelled && prev !== null && sameSeries(prev.series, t, iv)) show({ series: keepOlder(s, prev), seq: ++loadSeq, keepView: true });
       })
       .catch(() => undefined);
     return () => {
@@ -390,6 +396,22 @@ export function DailyChart({ ticker, lastPrice, coach, position }: DailyChartPro
     seriesCache.set(cacheKey(ticker, interval), next);
     show({ ...prev, series: next }); // seq 유지 → WebView 에는 마지막 봉만(tick)
   }, [lastPrice, interval, ticker]);
+
+  // 3) 일봉 왼쪽 끝 — 첫 캔들 이전 1년을 받아 앞에 붙인다(분봉은 서버 보관이 짧아 대상 아님). 빈 응답 = 더 없음
+  const loadOlder = useCallback(async () => {
+    const prev = shownRef.current;
+    if (prev === null || prev.series.kind !== 'day') return false;
+    const first = prev.series.rows[0]?.date;
+    if (!first) return false;
+    const got = await getDailyCandlesBefore(prev.series.ticker, first);
+    if (got.length === 0) return false;
+    const cur = shownRef.current;
+    // 그사이 단위·종목이 바뀌었으면 붙이지 않는다(새 로드가 차트 상태를 이미 초기화)
+    if (cur === null || cur.series.kind !== 'day' || cur.series.ticker !== prev.series.ticker) return true;
+    const rows = mergeOlder(got, cur.series.rows); // 틱이 반영된 오늘 봉은 cur 에 있으므로 그대로 남는다
+    show({ series: { ...cur.series, rows }, seq: ++loadSeq, keepView: true, prepended: rows.length - cur.series.rows.length });
+    return true;
+  }, []);
 
   // 가격선·색은 값이 바뀔 때만 새 객체(매 렌더 새 배열이면 WebView 에 매번 다시 보냄)
   const lines = useMemo(
@@ -414,6 +436,7 @@ export function DailyChart({ ticker, lastPrice, coach, position }: DailyChartPro
             data: shown.series.kind === 'day' ? { kind: 'day', rows: shown.series.rows } : { kind: 'min', rows: shown.series.rows },
             seq: shown.seq,
             keepView: shown.keepView,
+            prepended: shown.prepended,
           },
     [shown],
   );
@@ -451,6 +474,7 @@ export function DailyChart({ ticker, lastPrice, coach, position }: DailyChartPro
             colors={colors}
             height={CHART_H}
             onReady={() => setChartReady(true)}
+            onNeedOlder={interval === 'day' ? loadOlder : undefined}
           />
         </View>
         {stale && !failed ? (

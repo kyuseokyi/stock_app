@@ -4,12 +4,13 @@ import {
   type LineData, type Time, type UTCTimestamp,
 } from 'lightweight-charts'
 import { getGameCandles, getSessionBar } from '../../api/game'
-import { getDailyCandles } from '../../api/stock'
+import { getDailyCandles, getDailyCandlesBefore } from '../../api/stock'
 import { useGameRules } from '../../hooks/useGameRules'
 import { BandFill } from '../../lib/bandFill'
 import { widenRange } from '../../lib/autoscale'
 import { bucketStartSec, mergeTick, mergeTickIntraday, withSessionBar } from '../../lib/candles'
 import { loadChartPrefs, saveChartPrefs } from '../../lib/chartPrefs'
+import { mergeOlder, prependKeepingView, watchLeftEdge } from '../../lib/historyScroll'
 import { MA_PERIODS, bollinger, sma, type MaPeriod } from '../../lib/indicators'
 import { kstDateString } from '../../lib/format'
 import { THEME } from '../../lib/themeColors'
@@ -177,6 +178,7 @@ export default function TradingChart({ ticker, lastPrice, coach, position }: Tra
   const [loaded, setLoaded] = useState(false)
   const [failed, setFailed] = useState(false)
   const [empty, setEmpty] = useState(false)
+  const [olderBusy, setOlderBusy] = useState(false) // 일봉 왼쪽 끝 — 과거 캔들 받는 중
 
   // 단위: 사용자 선택(화면 상태만) > 관리자 기본값 > 일봉(규칙 로드 전·실패)
   const { rules } = useGameRules()
@@ -222,16 +224,23 @@ export default function TradingChart({ ticker, lastPrice, coach, position }: Tra
 
     let cancelled = false
     let seq = 0 // 늦게 온 이전 요청 응답은 버림(재로드가 겹칠 때)
+    // 일봉: 왼쪽 스크롤로 받아 붙인 과거(재로드는 최근 280일만 다시 받으므로 따로 들고 있다가 앞에 다시 붙인다)
+    let older: DailyCandle[] = []
+    let dayRows: DailyCandle[] = []
+    const drawDaily = (candles: DailyCandle[]) => {
+      dayRows = candles
+      series.setData(candles.map(toBar))
+      barsRef.current = candles.map((c) => ({ time: c.date, close: c.close }))
+      setIndicatorData(ind, barsRef.current)
+    }
     let initialDone = false // 첫 로드가 끝나기 전 재로드는 무시(첫 화면 구간 지정이 건너뛰어지지 않게)
     // initial=true: 첫 로드(화면 구간 지정·실패 표시). false: 재로드(스트림이 끊겼다 이어짐) — 화면 위치는 그대로,
     // 실패는 조용히(기존 캔들 유지). 서버(game_ws)는 클라이언트와 무관하게 분봉을 계속 저장하므로 빈 구간이 채워진다.
     // 받은 캔들을 시리즈·지표에 반영. setRange=true 면 첫 화면 구간 지정(최근 180일 / 최근 N개)
     const applyRows = (rows: CandleRows, setRange: boolean) => {
       if (interval === 'day') {
-        const candles = rows as DailyCandle[]
-        series.setData(candles.map(toBar))
-        barsRef.current = candles.map((c) => ({ time: c.date, close: c.close }))
-        setIndicatorData(ind, barsRef.current)
+        const candles = mergeOlder(older, rows as DailyCandle[])
+        drawDaily(candles)
         lastCandleRef.current = candles[candles.length - 1] ?? null
         if (setRange) {
           // 앞쪽은 지표 워밍업용 — 처음 화면은 최근 180일만(왼쪽으로 스크롤하면 더 보임)
@@ -287,8 +296,29 @@ export default function TradingChart({ ticker, lastPrice, coach, position }: Tra
       if (initialDone) load(false)
     }
 
+    // 일봉만: 왼쪽 끝까지 끌면 첫 캔들 이전 1년을 받아 앞에 붙인다(분봉은 서버 보관이 짧아 대상 아님)
+    const unwatch = interval === 'day'
+      ? watchLeftEdge(chart, async () => {
+          const first = dayRows[0]?.date
+          if (!first) return false
+          const got = await getDailyCandlesBefore(ticker, first)
+          if (cancelled || got.length === 0) return false
+          older = mergeOlder(got, older)
+          // 틱으로 바뀐 오늘 봉을 되돌리지 않게 마지막 캔들은 현재 값으로
+          const last = lastCandleRef.current
+          const base = last && dayRows.length && dayRows[dayRows.length - 1].date === last.date
+            ? [...dayRows.slice(0, -1), last]
+            : dayRows
+          const merged = mergeOlder(got, base)
+          prependKeepingView(chart, merged.length - base.length, () => drawDaily(merged))
+          return true
+        }, (busy) => !cancelled && setOlderBusy(busy))
+      : () => {}
+
     return () => {
       cancelled = true
+      unwatch()
+      setOlderBusy(false)
       reloadRef.current = null
       seriesRef.current = null
       indRef.current = null
@@ -457,6 +487,11 @@ export default function TradingChart({ ticker, lastPrice, coach, position }: Tra
         {/* pan-y: 세로 스크롤만 브라우저가 맡고 가로 제스처는 차트가 받음(첫 touchmove 를 브라우저가 가로채 차트가 안 움직이던 문제) */}
         {/* 차트를 누르면 지표 팝오버 닫기 */}
         <div ref={boxRef} className="h-full w-full touch-pan-y" onPointerDown={() => setIndOpen(false)} />
+        {olderBusy && (
+          <div className="pointer-events-none absolute bottom-8 left-2 rounded-field bg-surface/90 px-1.5 py-0.5 text-xs text-ink-muted">
+            이전 캔들을 불러오는 중…
+          </div>
+        )}
         {indOpen && (
           <div
             role="group"
