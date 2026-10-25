@@ -11,7 +11,7 @@ interface EmptyStateProps {
 export default function EmptyState({ emoji = '📭', title, description, action = null }: EmptyStateProps) {
   return (
     <div className="flex flex-col items-center justify-center py-16 text-center">
-      <div className="text-5xl">{emoji}</div>
+      <div aria-hidden className="text-5xl">{emoji}</div>
       <h2 className="mt-4 text-lg font-bold text-ink">{title}</h2>
       {description && <p className="mt-1.5 text-sm text-ink-muted">{description}</p>}
       {action && <div className="mt-6">{action}</div>}

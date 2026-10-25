@@ -32,7 +32,9 @@ export function titleFor(pathname: string, boardName: (id: number) => string): s
       return withBrand('종목 상세')
     case 'me':
       return withBrand(sub === 'funds' ? '내 펀드' : '내 정보')
-    default:
+    case 'auth':
       return BRAND
+    default:
+      return withBrand('페이지를 찾을 수 없어요') // App 의 404(NotFoundPage)와 같은 경로
   }
 }
