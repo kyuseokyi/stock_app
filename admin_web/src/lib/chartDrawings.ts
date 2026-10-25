@@ -95,7 +95,7 @@ export interface DrawingsState {
   shapes: Shape[]
   rectPreview: RectShape | null
   channelPreview: ChannelCoords | null
-  /** 편집 모드 — 저장된 3중추세선 끝점에 드래그 핸들(흰 원) */
+  /** 편집 모드 — 저장된 2중추세선 끝점에 드래그 핸들(흰 원). 본문 삽입 캡처 때는 끈다 */
   editable: boolean
   candleCount: number
   formatPrice: (v: number) => string
@@ -103,40 +103,44 @@ export interface DrawingsState {
 
 export const HANDLE_RADIUS = 6.5
 
-/** 3중추세선 끝점 4개(핸들 위치·히트테스트 공용) */
+/** 2중추세선 핸들 키 — C=중심선 끝, S=한쪽 선 끝, M=대칭선 끝(1=왼쪽 x1, 2=오른쪽 x2) */
+export type ChannelHandleKey = 'C1' | 'C2' | 'S1' | 'S2' | 'M1' | 'M2'
+
+/** 2중추세선 핸들 6개(위치·히트테스트 공용). 간격이 0 인 미리보기 단계는 중심선 끝만 */
 export function channelHandles(ch: ChannelCoords) {
-  return [
-    { key: 'UL' as const, xi: ch.ux1, price: ch.uy1 },
-    { key: 'UR' as const, xi: ch.ux2, price: ch.uy2 },
-    { key: 'LL' as const, xi: ch.lx1, price: ch.ly1 },
-    { key: 'LR' as const, xi: ch.lx2, price: ch.ly2 },
+  const pts: { key: ChannelHandleKey; xi: number; price: number }[] = [
+    { key: 'C1', xi: ch.x1, price: ch.y1 },
+    { key: 'C2', xi: ch.x2, price: ch.y2 },
   ]
+  if (ch.o1 === 0 && ch.o2 === 0) return pts
+  pts.push(
+    { key: 'S1', xi: ch.x1, price: ch.y1 + ch.o1 },
+    { key: 'S2', xi: ch.x2, price: ch.y2 + ch.o2 },
+    { key: 'M1', xi: ch.x1, price: ch.y1 - ch.o1 },
+    { key: 'M2', xi: ch.x2, price: ch.y2 - ch.o2 },
+  )
+  return pts
 }
 
-// 3중추세선(독립 2선) → 각 선은 자기 [iL,iR] 구간, 중심선은 두 선이 겹치는 구간에서 두 선의 중점.
-// 끝점은 캔들 인덱스로 반올림(기존 ECharts 카테고리 축 렌더와 같은 범위).
+/** 중심선 위 x 에서의 가격 */
+export function channelCenterAt(ch: ChannelCoords, xi: number) {
+  return Math.abs(ch.x2 - ch.x1) < 0.5 ? ch.y1 : ch.y1 + ((ch.y2 - ch.y1) / (ch.x2 - ch.x1)) * (xi - ch.x1)
+}
+
+// 2중추세선 → 중심선·위쪽 선·아래쪽 선 선분. 한쪽 선(중심+o)과 대칭선(중심−o) 중 가운데 간격이 + 인 쪽이 위.
 export function channelSegments(ch: ChannelCoords, n: number) {
-  const { ux1, uy1, ux2, uy2, lx1, ly1, lx2, ly2 } = ch
-  const uOK = Math.abs(ux2 - ux1) >= 0.5
-  const lOK = Math.abs(lx2 - lx1) >= 0.5
-  if (!uOK && !lOK) return null
-  const at = (ax: number, ay: number, bx: number, by: number) => (i: number) => ay + ((by - ay) / (bx - ax)) * (i - ax)
-  const uAt = uOK ? at(ux1, uy1, ux2, uy2) : null
-  const lAt = lOK ? at(lx1, ly1, lx2, ly2) : null
-  const uiL = clampIdx(Math.min(ux1, ux2), n), uiR = clampIdx(Math.max(ux1, ux2), n)
-  const liL = clampIdx(Math.min(lx1, lx2), n), liR = clampIdx(Math.max(lx1, lx2), n)
-  type Seg = { i1: number; p1: number; i2: number; p2: number } | null
-  const seg = (fn: ((i: number) => number) | null, iL: number, iR: number): Seg =>
-    fn && iR > iL ? { i1: iL, p1: fn(iL), i2: iR, p2: fn(iR) } : null
-  const miL = Math.max(uiL, liL), miR = Math.min(uiR, liR)
-  const mid: Seg =
-    uAt && lAt && miR > miL
-      ? { i1: miL, p1: (uAt(miL) + lAt(miL)) / 2, i2: miR, p2: (uAt(miR) + lAt(miR)) / 2 }
-      : null
-  return { upper: seg(uAt, uiL, uiR), mid, lower: seg(lAt, liL, liR) }
+  const x1 = clampIdx(ch.x1, n), x2 = clampIdx(ch.x2, n)
+  if (x1 === x2) return null
+  type Seg = { i1: number; p1: number; i2: number; p2: number }
+  const center: Seg = { i1: x1, p1: ch.y1, i2: x2, p2: ch.y2 }
+  if (ch.o1 === 0 && ch.o2 === 0) return { center, upper: null, lower: null }
+  const side: Seg = { i1: x1, p1: ch.y1 + ch.o1, i2: x2, p2: ch.y2 + ch.o2 }
+  const mirror: Seg = { i1: x1, p1: ch.y1 - ch.o1, i2: x2, p2: ch.y2 - ch.o2 }
+  const sideUp = ch.o1 + ch.o2 >= 0
+  return { center, upper: sideUp ? side : mirror, lower: sideUp ? mirror : side }
 }
 
-// 수평선·사각형·텍스트·3중추세선(+미리보기·핸들). 모든 시리즈 위에 오도록 마지막에 추가한
+// 수평선·사각형·텍스트·2중추세선(+미리보기·핸들). 모든 시리즈 위에 오도록 마지막에 추가한
 // 운반용 투명 시리즈(캔들과 같은 가격 스케일)에 normal 순서로 붙인다.
 export class DrawingsPrimitive extends BasePrimitive {
   private state: DrawingsState = {
@@ -208,13 +212,13 @@ export class DrawingsPrimitive extends BasePrimitive {
     ctx.setLineDash([])
   }
 
-  // 역할별 색·굵기(docs/custom_candle_chart_idea.md): 상단 저항선·하단 지지선은 굵게, 중심선은 얇은 점선.
+  // 역할별 색·굵기(docs/custom_candle_chart_idea.md): 위쪽 저항선·아래쪽 지지선은 굵게, 중심선은 점선.
   private paintChannel(ctx: Ctx, ch: ChannelCoords, n: number) {
     const s = channelSegments(ch, n)
     if (!s) return
     if (s.upper) this.line(ctx, s.upper.i1, s.upper.p1, s.upper.i2, s.upper.p2, '#f43f5e', 2, false)
     if (s.lower) this.line(ctx, s.lower.i1, s.lower.p1, s.lower.i2, s.lower.p2, '#10b981', 2, false)
-    if (s.mid) this.line(ctx, s.mid.i1, s.mid.p1, s.mid.i2, s.mid.p2, '#eab308', 1, true)
+    this.line(ctx, s.center.i1, s.center.p1, s.center.i2, s.center.p2, '#eab308', 1.5, true)
   }
 
   private paintText(ctx: Ctx, t: TextShape, n: number) {
