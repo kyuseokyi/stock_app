@@ -4,9 +4,11 @@ import { getDailyCandles, getDailyCandlesBefore } from '../../api/stock'
 import { mergeOlder, prependKeepingView, watchLeftEdge } from '../../lib/historyScroll'
 import type { DailyCandle } from '../../types/game'
 import { sma } from '../../lib/indicators'
+import { VolumeProfilePrimitive } from '../../lib/volumeProfile'
 import { THEME } from '../../lib/themeColors'
 
 const MA50_COLOR = '#f97316'
+const VP_LEGEND = 'rgba(100, 116, 139, 0.45)' // 매물대 범례 견본(차트 막대보다 조금 진하게)
 
 export interface ChartPriceLine { price: number; color: string; title?: string; dashed?: boolean }
 export interface ChartMarker {
@@ -69,6 +71,8 @@ export default function StockDailyChart({
       wickUpColor: THEME.up, wickDownColor: THEME.down,
     })
     const ma50 = chart.addLineSeries({ color: MA50_COLOR, lineWidth: 1, priceLineVisible: false, lastValueVisible: false })
+    const vp = new VolumeProfilePrimitive() // 매물대 — 보이는 구간 기준
+    candles.attachPrimitive(vp)
     let cancelled = false
     let rows: DailyCandle[] = []
     let unwatch = () => {}
@@ -78,6 +82,7 @@ export default function StockDailyChart({
       const avg = sma(rows.map((c) => c.close), 50)
       ma50.setData(rows.flatMap((c, i) => (avg[i] === null ? [] : [{ time: c.date, value: avg[i] as number }])))
       timesRef.current = new Set(rows.map((c) => c.date))
+      vp.setPoints(rows.map((c) => ({ high: c.high, low: c.low, close: c.close, volume: c.volume ?? 0 })))
     }
     // 왼쪽 끝 — 첫 캔들 이전 1년을 받아 앞에 붙인다. 빈 응답 = 저장된 기간의 처음(더 없음)
     const loadOlder = async () => {
@@ -159,6 +164,7 @@ export default function StockDailyChart({
       {/* 범례 — 선 이름을 여기 모은다. 오른쪽 가격 축(약 56px)은 비워 둔다 */}
       <div className="pointer-events-none absolute left-2 right-16 top-1 flex flex-wrap gap-x-3 text-xs text-ink-muted">
         <span className="rounded-field bg-surface/80 px-1"><Swatch color={MA50_COLOR} />50일선</span>
+        <span className="rounded-field bg-surface/80 px-1"><span aria-hidden className="mr-1 inline-block h-2 w-3 align-middle" style={{ background: VP_LEGEND }} />매물대</span>
         {high52w !== null && <span className="rounded-field bg-surface/80 px-1"><Swatch color={THEME.inkMuted} dashed />52주 고점</span>}
         {(priceLines ?? []).filter((l) => l.title).map((l) => (
           <span key={l.title} className="rounded-field bg-surface/80 px-1"><Swatch color={l.color} dashed={l.dashed} />{l.title}</span>

@@ -32,14 +32,14 @@ describe('initialRange', () => {
   const now = Date.parse('2026-10-15T03:00:00Z');
   it('일봉: 180일 전 이후부터', () => {
     const bars: Bar[] = [
-      { time: '2025-01-02', open: 1, high: 1, low: 1, close: 1 },
-      { time: '2026-05-01', open: 1, high: 1, low: 1, close: 1 },
-      { time: '2026-10-14', open: 1, high: 1, low: 1, close: 1 },
+      { time: '2025-01-02', open: 1, high: 1, low: 1, close: 1, volume: 0 },
+      { time: '2026-05-01', open: 1, high: 1, low: 1, close: 1, volume: 0 },
+      { time: '2026-10-14', open: 1, high: 1, low: 1, close: 1, volume: 0 },
     ];
     expect(initialRange('day', bars, now)).toEqual({ from: 1, to: 2 });
   });
   it('일봉이 모두 최근이면 전체 맞춤', () => {
-    expect(initialRange('day', [{ time: '2026-10-14', open: 1, high: 1, low: 1, close: 1 }], now)).toBe('fit');
+    expect(initialRange('day', [{ time: '2026-10-14', open: 1, high: 1, low: 1, close: 1, volume: 0 }], now)).toBe('fit');
   });
   it('분봉: 120개 넘으면 최근 120개, 아니면 전체, 없으면 null', () => {
     const many = toBars({ kind: 'min', rows: Array.from({ length: 150 }, (_, i) => min(i * 60, 1)) });
@@ -91,8 +91,8 @@ describe('priceLines', () => {
 });
 
 it('toInjectScript 는 window.__chart 호출 + true;', () => {
-  expect(toInjectScript({ type: 'vis', ma: true, bb: false })).toBe(
-    'window.__chart&&window.__chart({"type":"vis","ma":true,"bb":false});true;',
+  expect(toInjectScript({ type: 'vis', ma: true, bb: false, vp: false })).toBe(
+    'window.__chart&&window.__chart({"type":"vis","ma":true,"bb":false,"vp":false});true;',
   );
 });
 
@@ -155,7 +155,7 @@ describe('이동평균 기간·첫 화면 일수 인자(종목 상세용)', () =
 });
 
 describe('과거 이어 받기', () => {
-  const day = (date: string) => ({ date, open: 1, high: 1, low: 1, close: 1 });
+  const day = (date: string) => ({ date, open: 1, high: 1, low: 1, close: 1, volume: 0 });
 
   test('mergeOlder — 과거를 앞에, 겹치는 날짜는 기존 행 유지', () => {
     const rows = [{ ...day('2026-01-05'), close: 9 }, day('2026-01-06')];

@@ -14,6 +14,8 @@ export interface Bar {
   high: number;
   low: number;
   close: number;
+  /** 거래량(매물대용, 없으면 0) */
+  volume: number;
 }
 export interface LinePoint {
   time: BarTime;
@@ -73,7 +75,7 @@ export type ChartMessage =
   | { type: 'older'; more: boolean }
   | { type: 'tick'; bar: Bar; ind: Partial<Record<IndicatorKey, number>> }
   | { type: 'lines'; lines: ChartLine[] }
-  | { type: 'vis'; ma: boolean; bb: boolean };
+  | { type: 'vis'; ma: boolean; bb: boolean; vp: boolean };
 
 /** 이동평균 기간(최대 3칸, 앞에서부터 ma5·ma20·ma60 칸에 들어감). 기본은 게임과 같은 MA_PERIODS(5·20·60) */
 export type MaPeriods = readonly number[];
@@ -95,13 +97,13 @@ export const TAKE_PROFIT_COLOR = '#16a34a';
 /** 캔들 → 차트 막대. 분봉은 같은 t 중복 제거 + 오름차순(lightweight-charts 는 엄격 오름차순 요구) */
 export function toBars(data: ChartRows): Bar[] {
   if (data.kind === 'day') {
-    return data.rows.map((c) => ({ time: c.date, open: c.open, high: c.high, low: c.low, close: c.close }));
+    return data.rows.map((c) => ({ time: c.date, open: c.open, high: c.high, low: c.low, close: c.close, volume: c.volume ?? 0 }));
   }
   const byT = new Map<number, IntradayCandle>();
   for (const c of data.rows) byT.set(c.t, c);
   return [...byT.values()]
     .sort((a, b) => a.t - b.t)
-    .map((c) => ({ time: c.t, open: c.open, high: c.high, low: c.low, close: c.close }));
+    .map((c) => ({ time: c.t, open: c.open, high: c.high, low: c.low, close: c.close, volume: c.volume }));
 }
 
 /** 종가로 지표 전체 계산(값이 없는 앞 구간은 점을 빼서 선이 그 지점부터 시작). 기간이 없는 칸은 빈 배열 */

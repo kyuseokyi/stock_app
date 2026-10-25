@@ -8,9 +8,9 @@ const PAGE_SCRIPT = String.raw`
 (function () {
   var LW = window.LightweightCharts;
   var box = document.getElementById('c');
-  var chart = null, series = null, ind = null, band = null, mode = null;
+  var chart = null, series = null, ind = null, band = null, vpPrim = null, mode = null;
   var colors = { up: '#c93a6c', down: '#4f73d9', text: '#8e8aa6', grid: '#f7f5ff', border: '#ebe7f7' };
-  var vis = { ma: true, bb: true };
+  var vis = { ma: true, bb: true, vp: false };
   var lineSpecs = [], priceLines = [];
   var MA = { ma5: '#14b8a6', ma20: '#f97316', ma60: '#a16207' };
   // 일봉 과거 이어 받기 — on: RN 이 켬(load.history), armed: 사용자가 차트를 만진 뒤, busy: 요청 중, done: 더 없음
@@ -81,6 +81,50 @@ const PAGE_SCRIPT = String.raw`
     });
   };
 
+  // 매물대 — 보이는 캔들만으로 가격대별 누적 거래량(웹 lib/volumeProfile 과 같은 계산: 저가~고가 20칸, 거래량은 종가 칸에 합산).
+  // 그릴 때마다 보이는 구간을 다시 읽으므로 끌기·확대에 따라 바로 바뀐다. 왼쪽 끝에서 오른쪽으로(폭 최대 28%), 캔들 뒤
+  function volumeProfile(pts) {
+    var use = pts.filter(function (p) { return p.volume > 0; });
+    if (use.length === 0) return [];
+    var min = Infinity, max = -Infinity, total = 0;
+    use.forEach(function (p) { if (p.low < min) min = p.low; if (p.high > max) max = p.high; total += p.volume; });
+    if (max <= min) return [{ low: min, high: max, volume: total }];
+    var n = 20, w = (max - min) / n, buckets = [];
+    for (var i = 0; i < n; i++) buckets.push(0);
+    use.forEach(function (p) { buckets[Math.max(0, Math.min(n - 1, Math.floor((p.close - min) / w)))] += p.volume; });
+    return buckets.map(function (v, j) { return { low: min + j * w, high: min + (j + 1) * w, volume: v }; });
+  }
+  function VolumeProfile() {
+    var self = this;
+    this.points = []; this.visible = false; this.param = null;
+    var renderer = { draw: function (target) { self.draw(target); } };
+    this.view = { zOrder: function () { return 'bottom'; }, renderer: function () { return renderer; } };
+  }
+  VolumeProfile.prototype.attached = function (p) { this.param = p; };
+  VolumeProfile.prototype.detached = function () { this.param = null; };
+  VolumeProfile.prototype.paneViews = function () { return [this.view]; };
+  VolumeProfile.prototype.update = function () { if (this.param) this.param.requestUpdate(); };
+  VolumeProfile.prototype.draw = function (target) {
+    var p = this.param;
+    if (!p || !this.visible || this.points.length === 0) return;
+    var r = p.chart.timeScale().getVisibleLogicalRange();
+    if (!r) return;
+    var from = Math.max(0, Math.ceil(r.from)), to = Math.min(this.points.length - 1, Math.floor(r.to));
+    if (to < from) return;
+    var bins = volumeProfile(this.points.slice(from, to + 1));
+    if (bins.length === 0) return;
+    var maxVol = Math.max.apply(null, [1].concat(bins.map(function (b) { return b.volume; })));
+    target.useMediaCoordinateSpace(function (s) {
+      var c = s.context;
+      c.fillStyle = 'rgba(100, 116, 139, 0.22)';
+      bins.forEach(function (b) {
+        var yh = p.series.priceToCoordinate(b.high), yl = p.series.priceToCoordinate(b.low);
+        if (yh === null || yl === null || b.volume === 0) return;
+        c.fillRect(0, Math.min(yh, yl), (b.volume / maxVol) * s.mediaSize.width * 0.28, Math.max(1, Math.abs(yl - yh) - 1));
+      });
+    });
+  };
+
   // 볼린저 띠 점 = 상단·하단 선의 같은 time 끼리 묶음
   function bandPoints(upper, lower) {
     var lowBy = {}, out = [];
@@ -126,6 +170,8 @@ const PAGE_SCRIPT = String.raw`
     };
     band = new BandFill(BB_FILL);
     ind.bbUpper.attachPrimitive(band);
+    vpPrim = new VolumeProfile();
+    series.attachPrimitive(vpPrim);
     chart.timeScale().subscribeVisibleLogicalRangeChange(onRange);
     priceLines = [];
     applyVis();
@@ -137,6 +183,7 @@ const PAGE_SCRIPT = String.raw`
     ['ma5', 'ma20', 'ma60'].forEach(function (k) { ind[k].applyOptions({ visible: vis.ma }); });
     ['bbUpper', 'bbMiddle', 'bbLower'].forEach(function (k) { ind[k].applyOptions({ visible: vis.bb }); });
     band.setVisible(vis.bb);
+    vpPrim.visible = vis.vp; vpPrim.update();
   }
 
   // 가격선은 자동 범위에 들어가지 않아 범위 밖 지지·저항이 사라진다 — fit 규칙(chart-bridge fitPrices 와 동일)으로 넓힘
@@ -196,6 +243,7 @@ const PAGE_SCRIPT = String.raw`
       var ts = chart.timeScale();
       var before = m.prepended ? ts.getVisibleLogicalRange() : null;
       series.setData(m.bars);
+      vpPrim.points = m.bars; vpPrim.update();
       for (var k in ind) ind[k].setData(m.ind[k] || []);
       band.setPoints(bandPoints(m.ind.bbUpper || [], m.ind.bbLower || []));
       if (m.prepended) {
@@ -224,6 +272,9 @@ const PAGE_SCRIPT = String.raw`
       if (!series) return;
       try {
         series.update(m.bar);
+        var last = vpPrim.points[vpPrim.points.length - 1];
+        vpPrim.points = last && last.time === m.bar.time ? vpPrim.points.slice(0, -1).concat([m.bar]) : vpPrim.points.concat([m.bar]);
+        vpPrim.update();
         for (var k in m.ind) if (ind[k]) ind[k].update({ time: m.bar.time, value: m.ind[k] });
         if (m.ind.bbUpper !== undefined && m.ind.bbLower !== undefined) {
           var pts = band.points.filter(function (p) { return p.time !== m.bar.time; });
@@ -235,7 +286,7 @@ const PAGE_SCRIPT = String.raw`
       }
     },
     lines: function (m) { lineSpecs = m.lines; applyLines(); },
-    vis: function (m) { vis = { ma: m.ma, bb: m.bb }; applyVis(); },
+    vis: function (m) { vis = { ma: m.ma, bb: m.bb, vp: !!m.vp }; applyVis(); },
   };
 
   window.__chart = function (m) {

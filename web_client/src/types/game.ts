@@ -159,6 +159,8 @@ export interface DailyCandle {
   high: number
   low: number
   close: number
+  /** 거래량 — 매물대용. 당일 세션 봉·틱 병합 봉에는 없을 수 있다 */
+  volume?: number
 }
 
 /** 차트 단위(spec 2026-10-14 chart-intervals). 'day' = 일봉 */

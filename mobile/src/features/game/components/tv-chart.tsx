@@ -27,6 +27,8 @@ type TvChartProps = {
   lines: ChartLine[];
   ma: boolean;
   bb: boolean;
+  /** 매물대(보이는 구간 가격대별 거래량) — 생략 = 끔 */
+  vp?: boolean;
   colors: ChartColors;
   height: number;
   onReady?: () => void;
@@ -52,6 +54,7 @@ export function TvChart({
   lines,
   ma,
   bb,
+  vp = false,
   colors,
   height,
   onReady,
@@ -94,8 +97,8 @@ export function TvChart({
     if (ready) send({ type: 'lines', lines });
   }, [ready, lines]);
   useEffect(() => {
-    if (ready) send({ type: 'vis', ma, bb });
-  }, [ready, ma, bb]);
+    if (ready) send({ type: 'vis', ma, bb, vp });
+  }, [ready, ma, bb, vp]);
 
   const onMessage = (e: WebViewMessageEvent) => {
     let msg: { type?: string; message?: string };

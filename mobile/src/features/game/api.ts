@@ -324,14 +324,14 @@ export async function getSessionBar(): Promise<{ ticker: string; bar: DailyCandl
 
 const DAILY_QUERY = `query GameDailyCandles($symbol: String!, $startDate: String!, $endDate: String!) {
   getChartData(symbol: $symbol, startDate: $startDate, endDate: $endDate) {
-    candles { date open high low close }
+    candles { date open high low close volume }
   }
 }`;
 
 // 차트 왼쪽 스크롤로 과거를 이어 받을 때 — realOnly: 저장된 기간보다 과거면 가짜 대신 빈 candles(= 더 없음). 웹과 같은 쿼리
 export const DAILY_HISTORY_QUERY = `query DailyHistory($symbol: String!, $startDate: String!, $endDate: String!) {
   getChartData(symbol: $symbol, startDate: $startDate, endDate: $endDate, realOnly: true) {
-    candles { date open high low close }
+    candles { date open high low close volume }
   }
 }`;
 

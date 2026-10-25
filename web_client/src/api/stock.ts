@@ -7,7 +7,7 @@ import type { DailyCandle } from '../types/game'
 
 const QUERY = `query GameDailyCandles($symbol: String!, $startDate: String!, $endDate: String!) {
   getChartData(symbol: $symbol, startDate: $startDate, endDate: $endDate) {
-    candles { date open high low close }
+    candles { date open high low close volume }
   }
 }`
 
@@ -23,7 +23,7 @@ interface ChartResponse {
 // 차트 왼쪽 스크롤로 과거를 이어 받을 때 — realOnly: 저장된 기간보다 과거면 가짜 대신 빈 candles(= 더 없음)
 export const DAILY_HISTORY_QUERY = `query DailyHistory($symbol: String!, $startDate: String!, $endDate: String!) {
   getChartData(symbol: $symbol, startDate: $startDate, endDate: $endDate, realOnly: true) {
-    candles { date open high low close }
+    candles { date open high low close volume }
   }
 }`
 
