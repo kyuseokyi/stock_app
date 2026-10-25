@@ -20,6 +20,7 @@
     "echarts-for-react": "^3.0.6",
     "graphql": "^16.14.2",
     "graphql-request": "^7.4.0",
+    "lightweight-charts": "^4.2.3",
     "marked": "^15.0.12",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
