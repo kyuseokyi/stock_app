@@ -130,7 +130,7 @@ export const HANDLE_RADIUS = 6.5
 /** 2중추세선 색 — 기준선·대칭선·중심선(편집 안내 문구와 맞출 것) */
 const CHANNEL_BASE = '#1d4ed8'
 const CHANNEL_SECOND = '#f97316'
-const CHANNEL_CENTER = '#8b5cf6'
+const CHANNEL_CENTER = '#db2777' // MA20(보라 #8b5cf6)와 헷갈리지 않게 분홍
 
 /** 2중추세선 핸들 키 — C1·C2 = 기준선(첫 선) 끝, D1·D2 = 대칭선(두 번째 선) 끝. 끌면 그 선만 자기 가운데 축 회전 */
 export type ChannelHandleKey = 'C1' | 'C2' | 'D1' | 'D2'
@@ -224,7 +224,7 @@ export class DrawingsPrimitive extends BasePrimitive {
     ctx.setLineDash([])
   }
 
-  // 2중추세선: 기준선(파랑)·대칭선(주황) 굵게, 두 선 가운데 중심선(얇은 보라 실선).
+  // 2중추세선: 기준선(파랑)·대칭선(주황) 굵게, 두 선 가운데 중심선(얇은 분홍 실선).
   // 미리보기(complete=false): 첫 선만 있을 때는 첫 선을 얇은 점선으로, 두 번째 선 위치를 고르는 중에는
   // 기준선 가운데 → 대칭선 가운데(커서)를 얇은 점선으로 잇는다. 완성된 도형에는 연결 점선을 그리지 않는다.
   private paintChannel(ctx: Ctx, ch: ChannelCoords, n: number, complete: boolean) {
