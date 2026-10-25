@@ -34,17 +34,16 @@ interface Px {
   x: number
   y: number
 }
-/** 마우스 아래 편집 대상 — 수평선 / 첫 선 끝(C1·C2) / 첫 선 몸통(통째 이동) / 두 번째 선(회전·거리) */
+/** 마우스 아래 편집 대상 — 수평선 / 첫 선 끝(C1·C2, 첫 선만 회전) / 첫 선 몸통(첫 선만 평행 이동) / 두 번째 선(회전·거리) */
 type EditHit =
   | { kind: 'hline'; id: string }
   | { kind: 'handle'; id: string; key: Exclude<ChannelHandleKey, 'B'> }
   | { kind: 'move'; id: string }
   | { kind: 'rotate'; id: string }
-/** 끌기 중 상태 — 통째 이동은 시작 도형·커서, 회전은 시작 시점의 픽셀 기하(첫 선 가운데·두 번째 선 끝·커서 극좌표),
- *  첫 선 끝은 시작 도형 + 잡은 끝·두 번째 선 끝의 픽셀(가운데 축 회전용) */
+/** 끌기 중 상태 — 첫 선 이동·끝은 시작 도형(+커서), 회전은 시작 시점의 픽셀 기하(첫 선 가운데·두 번째 선 끝·커서 극좌표) */
 type EditDragState =
   | { kind: 'hline'; id: string }
-  | { kind: 'handle'; id: string; key: Exclude<ChannelHandleKey, 'B'>; orig: StoredChannel; m: Px; e0: Px; b1: Px; b2: Px }
+  | { kind: 'handle'; id: string; key: Exclude<ChannelHandleKey, 'B'>; orig: StoredChannel }
   | { kind: 'move'; id: string; cxi: number; cprice: number; orig: StoredChannel }
   | { kind: 'rotate'; id: string; m: Px; b1: Px; b2: Px; r0: number; a0: number }
 /** 캔들 정보(마우스오버) 박스 위치·대상 캔들 */
@@ -456,7 +455,7 @@ export default function ChartSnapshotModal({ open, onClose, onInsert }: ChartSna
     return x === null || y === null ? null : { x, y }
   }
 
-  // 편집 대상 히트테스트(도구 상태 무관): 핸들 > 수평선 > 두 번째 선(회전) > 첫 선(통째 이동)
+  // 편집 대상 히트테스트(도구 상태 무관): 핸들 > 수평선 > 두 번째 선(회전) > 첫 선(첫 선만 평행 이동)
   const hitTestEdit = (px: number, py: number): EditHit | null => {
     const candle = seriesRef.current?.candle
     if (!candle) return null
@@ -535,12 +534,7 @@ export default function ChartSnapshotModal({ open, onClose, onInsert }: ChartSna
           editDragRef.current = { kind: 'rotate', id: hit.id, m, b1, b2, r0, a0 }
         }
       } else if (hit.kind === 'handle') {
-        const a1 = ch && toPx(ch.x1, ch.y1, false), a2 = ch && toPx(ch.x2, ch.y2, false)
-        const b1 = ch && toPx(ch.bx1, ch.by1, false), b2 = ch && toPx(ch.bx2, ch.by2, false)
-        if (ch && a1 && a2 && b1 && b2) {
-          const m = { x: (a1.x + a2.x) / 2, y: (a1.y + a2.y) / 2 }
-          editDragRef.current = { kind: 'handle', id: hit.id, key: hit.key, orig: ch, m, e0: hit.key === 'C1' ? a1 : a2, b1, b2 }
-        }
+        if (ch) editDragRef.current = { kind: 'handle', id: hit.id, key: hit.key, orig: ch }
       } else {
         editDragRef.current = hit
       }
@@ -565,14 +559,13 @@ export default function ChartSnapshotModal({ open, onClose, onInsert }: ChartSna
       const ch = shapes.find((s) => s.id === d.id) as StoredChannel | undefined
       if (!ch) return
       if (d.kind === 'move') {
-        // 첫 선을 잡고 끌면 2중추세선 통째 이동(두 선 모양 유지). x 이동은 첫 선 두 끝이 차트 밖으로 나가지 않게 제한.
+        // 첫 선(기준선)을 잡고 끌면 첫 선만 평행 이동 — 두 번째 선은 제자리(연결 점선만 따라감).
+        // x 이동은 첫 선 두 끝이 차트 밖으로 나가지 않게 제한. 두 번째 선이 아직 없으면(첫 선과 같음) 함께 옮겨 없음 유지.
         const o = d.orig
         const dxi = Math.max(-Math.min(o.x1, o.x2), Math.min(n - 1 - Math.max(o.x1, o.x2), Math.round(p.xi - d.cxi)))
         const dprice = p.price - d.cprice
-        updateShape(d.id, {
-          x1: o.x1 + dxi, x2: o.x2 + dxi, y1: o.y1 + dprice, y2: o.y2 + dprice,
-          bx1: o.bx1 + dxi, bx2: o.bx2 + dxi, by1: o.by1 + dprice, by2: o.by2 + dprice,
-        })
+        const base = { x1: o.x1 + dxi, x2: o.x2 + dxi, y1: o.y1 + dprice, y2: o.y2 + dprice }
+        updateShape(d.id, hasSecond(o) ? base : { ...base, bx1: base.x1, by1: base.y1, bx2: base.x2, by2: base.y2 })
         return
       }
       if (d.kind === 'rotate') {
@@ -596,12 +589,11 @@ export default function ChartSnapshotModal({ open, onClose, onInsert }: ChartSna
         if (e1 && e2) updateShape(d.id, { bx1: e1.xi, by1: e1.price, bx2: e2.xi, by2: e2.price })
         return
       }
-      // 첫 선 끝 핸들: 첫 선 가운데를 축으로 — 잡은 끝은 커서로, 반대쪽 끝은 가운데 대칭점으로(길이·각도 함께 조절).
-      // 두 번째 선은 같은 축으로 같은 각도만큼 돌려 두 선의 간격·상대 각도를 유지한다(각도는 화면 픽셀 기준).
+      // 첫 선 끝 핸들: 첫 선만 가운데를 축으로 — 잡은 끝은 커서로, 반대쪽 끝은 가운데 대칭점으로(길이·각도 함께 조절).
+      // 두 번째 선은 제자리(연결 점선만 따라감). 두 번째 선이 아직 없으면(첫 선과 같음) 함께 옮겨 없음 유지.
       const api = apiRef.current
-      const candle = seriesRef.current?.candle
       const fxi = api && xToLogical(api.timeScale(), p.px)
-      if (!api || !candle || fxi == null) return
+      if (fxi == null) return
       const o = d.orig
       const mxi = (o.x1 + o.x2) / 2, mprice = (o.y1 + o.y2) / 2
       // 두 끝이 차트 안에 남고, 첫 선이 세로로 서지 않게(가운데에서 최소 0.25칸)
@@ -610,21 +602,7 @@ export default function ChartSnapshotModal({ open, onClose, onInsert }: ChartSna
       const end = { xi, price: p.price }, opp = { xi: 2 * mxi - xi, price: 2 * mprice - p.price }
       const [c1, c2] = d.key === 'C1' ? [end, opp] : [opp, end]
       const base = { x1: c1.xi, y1: c1.price, x2: c2.xi, y2: c2.price }
-      if (!hasSecond(o)) {
-        updateShape(d.id, { ...base, bx1: base.x1, by1: base.y1, bx2: base.x2, by2: base.y2 }) // 두 번째 선 없음 유지
-        return
-      }
-      const ep = toPx(end.xi, end.price, false)
-      if (!ep) return
-      const dTheta = Math.atan2(ep.y - d.m.y, ep.x - d.m.x) - Math.atan2(d.e0.y - d.m.y, d.e0.x - d.m.x)
-      const toDataPt = (b: Px) => {
-        const q = rotate({ x: b.x - d.m.x, y: b.y - d.m.y }, dTheta)
-        const bxi = xToLogical(api.timeScale(), d.m.x + q.x)
-        const price = candle.coordinateToPrice(d.m.y + q.y)
-        return bxi === null || price === null ? null : { xi: bxi, price }
-      }
-      const e1 = toDataPt(d.b1), e2 = toDataPt(d.b2)
-      if (e1 && e2) updateShape(d.id, { ...base, bx1: e1.xi, by1: e1.price, bx2: e2.xi, by2: e2.price })
+      updateShape(d.id, hasSecond(o) ? base : { ...base, bx1: base.x1, by1: base.y1, bx2: base.x2, by2: base.y2 })
       return
     }
     setEditHover(hitTestEdit(p.px, p.py)?.kind ?? null)
@@ -876,7 +854,7 @@ export default function ChartSnapshotModal({ open, onClose, onInsert }: ChartSna
             )}
             {shapes.some((s) => s.type === 'channel') && (
               <span className="text-xs text-slate-400">
-                편집: 두 번째 선(초록)을 잡고 끌면 첫 선 가운데를 축으로 회전·거리 조절 · 첫 선 끝 핸들로 끝점 · 첫 선을 잡으면 통째 이동
+                편집: 대칭선(초록)을 끌면 기준선 가운데를 축으로 회전·거리 조절 · 기준선(빨강) 끝 핸들은 기준선만 가운데 축 회전 · 기준선을 잡으면 기준선만 이동
               </span>
             )}
           </div>
