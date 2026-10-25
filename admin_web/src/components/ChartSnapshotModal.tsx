@@ -2,12 +2,12 @@ import { useEffect, useRef, useState } from 'react'
 import type { MouseEvent as ReactMouseEvent } from 'react'
 import {
   CrosshairMode, LineType, createChart,
-  type IChartApi, type ISeriesApi, type LineData, type Logical, type MouseEventParams, type Time, type WhitespaceData,
+  type IChartApi, type ISeriesApi, type LineData, type MouseEventParams, type Time, type WhitespaceData,
 } from 'lightweight-charts'
 import { getChartData, searchStocks } from '../api/stockClient'
 import { useChartDrawings } from '../hooks/useChartDrawings'
 import {
-  DrawingsPrimitive, HANDLE_RADIUS, VolumeProfilePrimitive, channelCenterAt, channelHandles, clampIdx,
+  DrawingsPrimitive, HANDLE_RADIUS, VolumeProfilePrimitive, channelCenterAt, channelHandles, clampIdx, logicalToX, xToLogical,
   type ChannelCoords, type ChannelHandleKey,
 } from '../lib/chartDrawings'
 import type { ChartData, MaOrder, Stock } from '../types/stock'
@@ -30,13 +30,21 @@ interface TextInputState {
   xi: number
   price: number
 }
-/** 편집 드래그 — 수평선 위아래 이동 / 2중추세선 핸들(끝점) / 2중추세선 중심선 잡고 통째 이동 */
-type EditDragState =
+interface Px {
+  x: number
+  y: number
+}
+/** 마우스 아래 편집 대상 — 수평선 / 첫 선 끝(C1·C2) / 첫 선 몸통(통째 이동) / 두 번째 선(회전·거리) */
+type EditHit =
   | { kind: 'hline'; id: string }
-  | { kind: 'handle'; id: string; key: ChannelHandleKey }
+  | { kind: 'handle'; id: string; key: Exclude<ChannelHandleKey, 'B'> }
+  | { kind: 'move'; id: string }
+  | { kind: 'rotate'; id: string }
+/** 끌기 중 상태 — 통째 이동은 시작 도형·커서, 회전은 시작 시점의 픽셀 기하(첫 선 가운데·두 번째 선 끝·커서 극좌표) */
+type EditDragState =
+  | Exclude<EditHit, { kind: 'move' } | { kind: 'rotate' }>
   | { kind: 'move'; id: string; cxi: number; cprice: number; orig: StoredChannel }
-/** 마우스 아래 편집 대상(커서 모양·드래그 시작 공용) */
-type EditHit = Exclude<EditDragState, { kind: 'move' }> | { kind: 'move'; id: string }
+  | { kind: 'rotate'; id: string; m: Px; b1: Px; b2: Px; r0: number; a0: number }
 /** 캔들 정보(마우스오버) 박스 위치·대상 캔들 */
 interface HoverState {
   x: number
@@ -126,16 +134,22 @@ const MA_ORDER_BADGE: Record<MaOrder, { label: string; cls: string }> = {
   MIXED: { label: '혼조', cls: 'bg-slate-100 text-slate-500' },
 }
 
-// 2중추세선: 1·2번 클릭 = 중심선 두 끝(캔들 인덱스로 맞춤), 3번 클릭 = 중심선에서 떨어진 거리.
-// 처음엔 양 끝 간격이 같아(o1=o2) 중심선과 평행한 대칭 두 선이 되고, 핸들로 한쪽 끝 간격을 바꾸면 각도가 대칭으로 바뀐다.
-// p3 가 없으면(2번째 클릭 전 미리보기) 간격 0 = 중심선만.
+// 2중추세선: 1·2번 클릭 = 첫 선 두 끝(캔들 인덱스로 맞춤), 3번 클릭 = 두 번째 선 위치.
+// 두 번째 선은 처음엔 첫 선을 위아래로 옮긴 평행 복사본 — 이후 잡고 끌면 첫 선 가운데를 축으로 회전·거리 조절.
+// p3 가 없으면(2번째 클릭 전 미리보기) 두 번째 선 = 첫 선(그리지 않음).
 function makeChannel(n: number, a: DataPoint, b: DataPoint, p3?: DataPoint): ChannelCoords {
   const [l, r] = a.xi <= b.xi ? [a, b] : [b, a]
-  const ch = { x1: clampIdx(l.xi, n), y1: l.price, x2: clampIdx(r.xi, n), y2: r.price, o1: 0, o2: 0 }
-  if (!p3) return ch
-  const o = p3.price - channelCenterAt(ch, p3.xi)
-  return { ...ch, o1: o, o2: o }
+  const x1 = clampIdx(l.xi, n), x2 = clampIdx(r.xi, n)
+  const first = { x1, y1: l.price, x2, y2: r.price }
+  const d = p3 ? p3.price - channelCenterAt({ ...first, bx1: 0, by1: 0, bx2: 0, by2: 0 }, p3.xi) : 0
+  return { ...first, bx1: x1, by1: l.price + d, bx2: x2, by2: r.price + d }
 }
+
+/** (x,y) 를 원점 기준 각도 t 만큼 회전 */
+const rotate = (p: Px, t: number): Px => ({
+  x: p.x * Math.cos(t) - p.y * Math.sin(t),
+  y: p.x * Math.sin(t) + p.y * Math.cos(t),
+})
 
 const sq = (v: number) => v * v
 /** 점 (px,py) 와 선분 (ax,ay)-(bx,by) 사이 픽셀 거리 */
@@ -429,28 +443,38 @@ export default function ChartSnapshotModal({ open, onClose, onInsert }: ChartSna
     return { xi: Number(xi), price, px, py }
   }
 
-  // 편집 대상 히트테스트(도구 상태 무관): 2중추세선 핸들 > 수평선 > 2중추세선 중심선(통째 이동)
-  const hitTestEdit = (px: number, py: number): EditHit | null => {
+  // 데이터 좌표 → 픽셀(snap=캔들 인덱스로 맞춤 — 첫 선 끝. 두 번째 선은 회전 결과라 소수 x 그대로)
+  const toPx = (xi: number, price: number, snap = true): Px | null => {
     const api = apiRef.current
     const candle = seriesRef.current?.candle
     const n = chart?.candles.length ?? 0
     if (!api || !candle || !n) return null
-    const toPx = (xi: number, price: number) => {
-      const x = api.timeScale().logicalToCoordinate(clampIdx(xi, n) as Logical)
-      const y = candle.priceToCoordinate(price)
-      return x === null || y === null ? null : { x, y }
-    }
+    const x = logicalToX(api.timeScale(), snap ? clampIdx(xi, n) : xi)
+    const y = candle.priceToCoordinate(price)
+    return x === null || y === null ? null : { x, y }
+  }
+
+  // 편집 대상 히트테스트(도구 상태 무관): 핸들 > 수평선 > 두 번째 선(회전) > 첫 선(통째 이동)
+  const hitTestEdit = (px: number, py: number): EditHit | null => {
+    const candle = seriesRef.current?.candle
+    if (!candle) return null
     const channels = shapes.filter((s): s is StoredChannel => s.type === 'channel')
     for (const ch of channels) {
       for (const pt of channelHandles(ch)) {
-        const q = toPx(pt.xi, pt.price)
-        if (q && Math.hypot(q.x - px, q.y - py) <= HANDLE_RADIUS + 5.5) return { kind: 'handle', id: ch.id, key: pt.key }
+        const q = toPx(pt.xi, pt.price, pt.key !== 'B')
+        if (q && Math.hypot(q.x - px, q.y - py) <= HANDLE_RADIUS + 5.5) {
+          return pt.key === 'B' ? { kind: 'rotate', id: ch.id } : { kind: 'handle', id: ch.id, key: pt.key }
+        }
       }
     }
     for (const s of shapes) {
       if (s.type !== 'hline') continue
       const y = candle.priceToCoordinate(s.price)
       if (y !== null && Math.abs(y - py) <= LINE_HIT_PX) return { kind: 'hline', id: s.id }
+    }
+    for (const ch of channels) {
+      const a = toPx(ch.bx1, ch.by1, false), b = toPx(ch.bx2, ch.by2, false)
+      if (a && b && distToSegment(px, py, a.x, a.y, b.x, b.y) <= LINE_HIT_PX) return { kind: 'rotate', id: ch.id }
     }
     for (const ch of channels) {
       const a = toPx(ch.x1, ch.y1), b = toPx(ch.x2, ch.y2)
@@ -475,12 +499,12 @@ export default function ChartSnapshotModal({ open, onClose, onInsert }: ChartSna
     if (tool === 'hline') addShape({ type: 'hline', price: p.price })
     else if (tool === 'text') setTextInput({ px: p.px, py: p.py, xi: p.xi, price: p.price })
     else if (tool === 'channel') {
-      // 1·2번 클릭: 중심선, 3번 클릭: 중심선에서 떨어진 거리(반대쪽은 대칭으로 자동). 스냅 없이 클릭 위치 그대로.
+      // 1·2번 클릭: 첫 선, 3번 클릭: 두 번째 선 위치(첫 선의 평행 복사본). 스냅 없이 클릭 위치 그대로.
       const pts = [...chPtsRef.current, { xi: p.xi, price: p.price }]
       chPtsRef.current = pts
       if (pts.length === 3) {
         const n = chart.candles.length
-        // 중심선 두 점이 같은 캔들이면(세로 클릭) 만들지 않는다
+        // 첫 선 두 점이 같은 캔들이면(세로 클릭) 만들지 않는다
         if (clampIdx(pts[0].xi, n) !== clampIdx(pts[1].xi, n)) {
           addShape({ type: 'channel', ...makeChannel(n, pts[0], pts[1], pts[2]) })
         }
@@ -496,9 +520,18 @@ export default function ChartSnapshotModal({ open, onClose, onInsert }: ChartSna
     if (!p) return
     const hit = hitTestEdit(p.px, p.py)
     if (hit) {
+      const ch = shapes.find((s) => s.id === hit.id) as StoredChannel | undefined // move·rotate 히트는 channel 도형에서만
       if (hit.kind === 'move') {
-        const orig = shapes.find((s) => s.id === hit.id) as StoredChannel | undefined // move 히트는 channel 도형에서만
-        if (orig) editDragRef.current = { kind: 'move', id: hit.id, cxi: p.xi, cprice: p.price, orig }
+        if (ch) editDragRef.current = { kind: 'move', id: hit.id, cxi: p.xi, cprice: p.price, orig: ch }
+      } else if (hit.kind === 'rotate') {
+        const a1 = ch && toPx(ch.x1, ch.y1), a2 = ch && toPx(ch.x2, ch.y2)
+        const b1 = ch && toPx(ch.bx1, ch.by1, false), b2 = ch && toPx(ch.bx2, ch.by2, false)
+        if (a1 && a2 && b1 && b2) {
+          const m = { x: (a1.x + a2.x) / 2, y: (a1.y + a2.y) / 2 }
+          const r0 = Math.hypot(p.px - m.x, p.py - m.y)
+          const a0 = Math.atan2(p.py - m.y, p.px - m.x)
+          editDragRef.current = { kind: 'rotate', id: hit.id, m, b1, b2, r0, a0 }
+        }
       } else {
         editDragRef.current = hit
       }
@@ -523,35 +556,41 @@ export default function ChartSnapshotModal({ open, onClose, onInsert }: ChartSna
       const ch = shapes.find((s) => s.id === d.id) as StoredChannel | undefined
       if (!ch) return
       if (d.kind === 'move') {
-        // 중심선을 잡고 끌면 2중추세선 통째 이동(간격·각도 유지). x 이동은 두 끝이 차트 밖으로 나가지 않게 제한.
+        // 첫 선을 잡고 끌면 2중추세선 통째 이동(두 선 모양 유지). x 이동은 첫 선 두 끝이 차트 밖으로 나가지 않게 제한.
         const o = d.orig
         const dxi = Math.max(-Math.min(o.x1, o.x2), Math.min(n - 1 - Math.max(o.x1, o.x2), Math.round(p.xi - d.cxi)))
         const dprice = p.price - d.cprice
-        updateShape(d.id, { x1: o.x1 + dxi, x2: o.x2 + dxi, y1: o.y1 + dprice, y2: o.y2 + dprice })
+        updateShape(d.id, {
+          x1: o.x1 + dxi, x2: o.x2 + dxi, y1: o.y1 + dprice, y2: o.y2 + dprice,
+          bx1: o.bx1 + dxi, bx2: o.bx2 + dxi, by1: o.by1 + dprice, by2: o.by2 + dprice,
+        })
         return
       }
-      // 핸들: 중심선 끝 = 그 끝을 옮김(간격 유지), 한쪽/대칭선 끝 = 그 끝의 간격만 바꿈 → 반대쪽 선은 대칭으로 따라감
-      const xi = clampIdx(p.xi, n)
-      switch (d.key) {
-        case 'C1':
-          if (xi !== ch.x2) updateShape(d.id, { x1: xi, y1: p.price })
-          break
-        case 'C2':
-          if (xi !== ch.x1) updateShape(d.id, { x2: xi, y2: p.price })
-          break
-        case 'S1':
-          updateShape(d.id, { o1: p.price - ch.y1 })
-          break
-        case 'S2':
-          updateShape(d.id, { o2: p.price - ch.y2 })
-          break
-        case 'M1':
-          updateShape(d.id, { o1: ch.y1 - p.price })
-          break
-        case 'M2':
-          updateShape(d.id, { o2: ch.y2 - p.price })
-          break
+      if (d.kind === 'rotate') {
+        // 두 번째 선: 첫 선 가운데(m)를 축으로 커서가 돈 각도만큼 회전 + 커서가 멀어진 만큼 바깥으로(화면 픽셀 기준).
+        const api = apiRef.current
+        const candle = seriesRef.current?.candle
+        if (!api || !candle) return
+        const dTheta = Math.atan2(p.py - d.m.y, p.px - d.m.x) - d.a0
+        const dr = Math.hypot(p.px - d.m.x, p.py - d.m.y) - d.r0
+        const q1 = rotate({ x: d.b1.x - d.m.x, y: d.b1.y - d.m.y }, dTheta)
+        const q2 = rotate({ x: d.b2.x - d.m.x, y: d.b2.y - d.m.y }, dTheta)
+        const mid = { x: (q1.x + q2.x) / 2, y: (q1.y + q2.y) / 2 }
+        const len = Math.hypot(mid.x, mid.y)
+        const dir = len > 1e-6 ? { x: mid.x / len, y: mid.y / len } : { x: 0, y: -1 }
+        const toData = (q: Px) => {
+          const xi = xToLogical(api.timeScale(), d.m.x + q.x + dir.x * dr)
+          const price = candle.coordinateToPrice(d.m.y + q.y + dir.y * dr)
+          return xi === null || price === null ? null : { xi, price }
+        }
+        const e1 = toData(q1), e2 = toData(q2)
+        if (e1 && e2) updateShape(d.id, { bx1: e1.xi, by1: e1.price, bx2: e2.xi, by2: e2.price })
+        return
       }
+      // 첫 선 끝 핸들: 그 끝만 옮김(두 번째 선은 그대로)
+      const xi = clampIdx(p.xi, n)
+      if (d.key === 'C1' && xi !== ch.x2) updateShape(d.id, { x1: xi, y1: p.price })
+      else if (d.key === 'C2' && xi !== ch.x1) updateShape(d.id, { x2: xi, y2: p.price })
       return
     }
     setEditHover(hitTestEdit(p.px, p.py)?.kind ?? null)
@@ -559,7 +598,7 @@ export default function ChartSnapshotModal({ open, onClose, onInsert }: ChartSna
     if (tool === 'rect' && drag) {
       setPreview({ type: 'rect', xi1: drag.xi, y1: drag.price, xi2: p.xi, y2: p.price })
     } else if (tool === 'channel' && chPtsRef.current.length) {
-      // 1점: 커서까지 중심선 미리보기 / 2점: 커서를 거리로 대칭 두 선 미리보기
+      // 1점: 커서까지 첫 선 미리보기 / 2점: 커서 위치에 두 번째 선 미리보기
       const pts = chPtsRef.current
       setChannelPreview(pts.length >= 2 ? makeChannel(n, pts[0], pts[1], p) : makeChannel(n, pts[0], p))
     }
@@ -796,14 +835,14 @@ export default function ChartSnapshotModal({ open, onClose, onInsert }: ChartSna
               <span className="text-xs text-slate-400">
                 {tool === 'hline' && '차트를 클릭해 수평선을 추가 · 그린 선은 잡고 위아래로 이동'}
                 {tool === 'channel' &&
-                  '3번 클릭: 중심선 2점 → 거리 1점 · 반대쪽 선은 중심선 기준 대칭으로 자동'}
+                  '3번 클릭: 첫 선 2점 → 두 번째 선 위치 1점 · 두 선 가운데 중심선, 끝은 점선으로 연결'}
                 {tool === 'rect' && '드래그해 사각형 영역을 지정'}
                 {tool === 'text' && '클릭한 위치에 텍스트를 입력'}
               </span>
             )}
             {shapes.some((s) => s.type === 'channel') && (
               <span className="text-xs text-slate-400">
-                편집: 바깥 선 핸들(●)로 거리·각도(반대쪽 대칭), 중심선 핸들로 끝점, 중심선을 잡으면 통째 이동
+                편집: 두 번째 선(초록)을 잡고 끌면 첫 선 가운데를 축으로 회전·거리 조절 · 첫 선 끝 핸들로 끝점 · 첫 선을 잡으면 통째 이동
               </span>
             )}
           </div>

@@ -1,5 +1,6 @@
 import type {
-  ISeriesPrimitive, ISeriesPrimitivePaneRenderer, ISeriesPrimitivePaneView, Logical, SeriesAttachedParameter, Time,
+  ISeriesPrimitive, ISeriesPrimitivePaneRenderer, ISeriesPrimitivePaneView, ITimeScaleApi, Logical,
+  SeriesAttachedParameter, Time,
 } from 'lightweight-charts'
 import type { ChannelShape, HLineShape, RectShape, Shape, TextShape } from '../hooks/useChartDrawings'
 import type { VolumeProfileBin } from '../types/stock'
@@ -15,6 +16,27 @@ type Ctx = CanvasRenderingContext2D
 export type ChannelCoords = Omit<ChannelShape, 'type'>
 
 export const clampIdx = (i: number, len: number) => Math.max(0, Math.min(len - 1, Math.round(i)))
+
+// lightweight-charts 4.2.3 의 logicalToCoordinate 는 소수 인덱스면 0, coordinateToLogical 은 정수로 반올림한다.
+// 회전한 두 번째 선처럼 캔들 사이에 걸치는 점을 위해 이웃 두 캔들 좌표로 선형 보간한다(막대 간격 일정).
+type TimeScaleLike = Pick<ITimeScaleApi<Time>, 'logicalToCoordinate' | 'coordinateToLogical'>
+
+export function logicalToX(ts: TimeScaleLike, xi: number): number | null {
+  const i0 = Math.floor(xi)
+  const x0 = ts.logicalToCoordinate(i0 as Logical)
+  if (x0 === null || xi === i0) return x0
+  const x1 = ts.logicalToCoordinate((i0 + 1) as Logical)
+  return x1 === null ? null : x0 + (xi - i0) * (x1 - x0)
+}
+
+export function xToLogical(ts: TimeScaleLike, x: number): number | null {
+  const l = ts.coordinateToLogical(x)
+  if (l === null) return null
+  const x0 = ts.logicalToCoordinate(l)
+  const x1 = ts.logicalToCoordinate((l + 1) as Logical)
+  if (x0 === null || x1 === null || x1 === x0) return Number(l)
+  return Number(l) + (x - x0) / (x1 - x0)
+}
 
 /** 부착 공통 — 차트·시리즈 참조와 다시 그리기 요청 */
 abstract class BasePrimitive implements ISeriesPrimitive<Time> {
@@ -47,7 +69,7 @@ abstract class BasePrimitive implements ISeriesPrimitive<Time> {
   }
 
   protected x(xi: number): number | null {
-    return this.param?.chart.timeScale().logicalToCoordinate(xi as Logical) ?? null
+    return this.param ? logicalToX(this.param.chart.timeScale(), xi) : null
   }
 
   protected y(price: number): number | null {
@@ -103,41 +125,26 @@ export interface DrawingsState {
 
 export const HANDLE_RADIUS = 6.5
 
-/** 2중추세선 핸들 키 — C=중심선 끝, S=한쪽 선 끝, M=대칭선 끝(1=왼쪽 x1, 2=오른쪽 x2) */
-export type ChannelHandleKey = 'C1' | 'C2' | 'S1' | 'S2' | 'M1' | 'M2'
+/** 2중추세선 핸들 키 — C1·C2 = 첫 선 끝, B = 두 번째 선 가운데(잡고 끌면 회전·거리) */
+export type ChannelHandleKey = 'C1' | 'C2' | 'B'
 
-/** 2중추세선 핸들 6개(위치·히트테스트 공용). 간격이 0 인 미리보기 단계는 중심선 끝만 */
+/** 두 번째 선이 아직 없음(첫 선만 그린 미리보기) — 두 선이 같은 위치 */
+const hasSecond = (ch: ChannelCoords) =>
+  ch.bx1 !== ch.x1 || ch.by1 !== ch.y1 || ch.bx2 !== ch.x2 || ch.by2 !== ch.y2
+
+/** 2중추세선 핸들(위치·히트테스트 공용). 첫 선 끝은 캔들에 맞춘 정수 x, 두 번째 선은 회전 결과라 소수 x */
 export function channelHandles(ch: ChannelCoords) {
   const pts: { key: ChannelHandleKey; xi: number; price: number }[] = [
     { key: 'C1', xi: ch.x1, price: ch.y1 },
     { key: 'C2', xi: ch.x2, price: ch.y2 },
   ]
-  if (ch.o1 === 0 && ch.o2 === 0) return pts
-  pts.push(
-    { key: 'S1', xi: ch.x1, price: ch.y1 + ch.o1 },
-    { key: 'S2', xi: ch.x2, price: ch.y2 + ch.o2 },
-    { key: 'M1', xi: ch.x1, price: ch.y1 - ch.o1 },
-    { key: 'M2', xi: ch.x2, price: ch.y2 - ch.o2 },
-  )
+  if (hasSecond(ch)) pts.push({ key: 'B', xi: (ch.bx1 + ch.bx2) / 2, price: (ch.by1 + ch.by2) / 2 })
   return pts
 }
 
-/** 중심선 위 x 에서의 가격 */
+/** 첫 선 위 x 에서의 가격 */
 export function channelCenterAt(ch: ChannelCoords, xi: number) {
   return Math.abs(ch.x2 - ch.x1) < 0.5 ? ch.y1 : ch.y1 + ((ch.y2 - ch.y1) / (ch.x2 - ch.x1)) * (xi - ch.x1)
-}
-
-// 2중추세선 → 중심선·위쪽 선·아래쪽 선 선분. 한쪽 선(중심+o)과 대칭선(중심−o) 중 가운데 간격이 + 인 쪽이 위.
-export function channelSegments(ch: ChannelCoords, n: number) {
-  const x1 = clampIdx(ch.x1, n), x2 = clampIdx(ch.x2, n)
-  if (x1 === x2) return null
-  type Seg = { i1: number; p1: number; i2: number; p2: number }
-  const center: Seg = { i1: x1, p1: ch.y1, i2: x2, p2: ch.y2 }
-  if (ch.o1 === 0 && ch.o2 === 0) return { center, upper: null, lower: null }
-  const side: Seg = { i1: x1, p1: ch.y1 + ch.o1, i2: x2, p2: ch.y2 + ch.o2 }
-  const mirror: Seg = { i1: x1, p1: ch.y1 - ch.o1, i2: x2, p2: ch.y2 - ch.o2 }
-  const sideUp = ch.o1 + ch.o2 >= 0
-  return { center, upper: sideUp ? side : mirror, lower: sideUp ? mirror : side }
 }
 
 // 수평선·사각형·텍스트·2중추세선(+미리보기·핸들). 모든 시리즈 위에 오도록 마지막에 추가한
@@ -199,12 +206,12 @@ export class DrawingsPrimitive extends BasePrimitive {
     ctx.fillText(this.state.formatPrice(h.price), width - 4, y - 2)
   }
 
-  private line(ctx: Ctx, i1: number, p1: number, i2: number, p2: number, color: string, width: number, dashed: boolean) {
+  private line(ctx: Ctx, i1: number, p1: number, i2: number, p2: number, color: string, width: number, dash: number[] = []) {
     const x1 = this.x(i1), y1 = this.y(p1), x2 = this.x(i2), y2 = this.y(p2)
     if (x1 === null || y1 === null || x2 === null || y2 === null) return
     ctx.strokeStyle = color
     ctx.lineWidth = width
-    ctx.setLineDash(dashed ? [5, 4] : [])
+    ctx.setLineDash(dash)
     ctx.beginPath()
     ctx.moveTo(x1, y1)
     ctx.lineTo(x2, y2)
@@ -212,13 +219,16 @@ export class DrawingsPrimitive extends BasePrimitive {
     ctx.setLineDash([])
   }
 
-  // 역할별 색·굵기(docs/custom_candle_chart_idea.md): 위쪽 저항선·아래쪽 지지선은 굵게, 중심선은 점선.
+  // 2중추세선: 첫 선(빨강)·두 번째 선(초록) 굵게, 같은 쪽 끝끼리 얇은 점선 연결, 두 선 가운데 중심선(노란 점선).
   private paintChannel(ctx: Ctx, ch: ChannelCoords, n: number) {
-    const s = channelSegments(ch, n)
-    if (!s) return
-    if (s.upper) this.line(ctx, s.upper.i1, s.upper.p1, s.upper.i2, s.upper.p2, '#f43f5e', 2, false)
-    if (s.lower) this.line(ctx, s.lower.i1, s.lower.p1, s.lower.i2, s.lower.p2, '#10b981', 2, false)
-    this.line(ctx, s.center.i1, s.center.p1, s.center.i2, s.center.p2, '#eab308', 1.5, true)
+    const x1 = clampIdx(ch.x1, n), x2 = clampIdx(ch.x2, n)
+    if (x1 === x2) return
+    this.line(ctx, x1, ch.y1, x2, ch.y2, '#f43f5e', 2)
+    if (!hasSecond(ch)) return
+    this.line(ctx, ch.bx1, ch.by1, ch.bx2, ch.by2, '#10b981', 2)
+    this.line(ctx, x1, ch.y1, ch.bx1, ch.by1, '#94a3b8', 1, [2, 3])
+    this.line(ctx, x2, ch.y2, ch.bx2, ch.by2, '#94a3b8', 1, [2, 3])
+    this.line(ctx, (x1 + ch.bx1) / 2, (ch.y1 + ch.by1) / 2, (x2 + ch.bx2) / 2, (ch.y2 + ch.by2) / 2, '#eab308', 1.5, [5, 4])
   }
 
   private paintText(ctx: Ctx, t: TextShape, n: number) {
@@ -247,7 +257,7 @@ export class DrawingsPrimitive extends BasePrimitive {
 
   private paintHandles(ctx: Ctx, ch: ChannelCoords, n: number) {
     for (const pt of channelHandles(ch)) {
-      const x = this.x(clampIdx(pt.xi, n)), y = this.y(pt.price)
+      const x = this.x(pt.key === 'B' ? pt.xi : clampIdx(pt.xi, n)), y = this.y(pt.price)
       if (x === null || y === null) continue
       ctx.fillStyle = '#ffffff'
       ctx.strokeStyle = '#111827'
