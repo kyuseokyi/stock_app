@@ -448,7 +448,11 @@ export function DailyChart({ ticker, lastPrice, coach, position, onSrLevels }: D
 
   // 지지·저항(설계 2026-10-27 §3) — 켜진 지표의 마지막 값 + 보이는 구간 POC 중 현재가 위·아래 2개씩.
   // 틱마다 다시 계산하되, 키·역할·호가 반올림 가격이 같으면 이전 배열을 유지(WebView·부모에 다시 보내지 않게)
-  const [poc, setPoc] = useState<number | null>(null);
+  // POC 는 어느 종목·단위 차트에서 온 값인지 함께 둔다 — 종목·단위를 바꾼 직후 이전 차트의 POC 를 쓰지 않게
+  const seriesKey = `${ticker}:${interval}`;
+  const [pocOf, setPocOf] = useState<{ key: string; price: number | null }>({ key: '', price: null });
+  const poc = pocOf.key === seriesKey ? pocOf.price : null;
+  const onPoc = useCallback((price: number | null) => setPocOf({ key: seriesKey, price }), [seriesKey]);
   const rawSr = useMemo<SrLevel[]>(() => {
     if (chartView === null || shown === null || !sameSeries(shown.series, ticker, interval)) return [];
     const bars = toBars(chartView.data);
@@ -472,6 +476,8 @@ export function DailyChart({ ticker, lastPrice, coach, position, onSrLevels }: D
   useEffect(() => {
     onSrLevels?.(srLevels);
   }, [srLevels, onSrLevels]);
+  // 차트가 사라지면 부모의 목록도 비운다(감지기가 옛 선을 계속 보지 않게)
+  useEffect(() => () => onSrLevels?.([]), [onSrLevels]);
   // 지지·저항 선 — 이름은 가격축에(짧게), 범례에는 넣지 않는다(아래 lines 범례는 그대로)
   const chartLines = useMemo<ChartLine[]>(
     () => [
@@ -523,7 +529,7 @@ export function DailyChart({ ticker, lastPrice, coach, position, onSrLevels }: D
             height={CHART_H}
             onReady={() => setChartReady(true)}
             onNeedOlder={interval === 'day' ? loadOlder : undefined}
-            onPoc={setPoc}
+            onPoc={onPoc}
           />
         </View>
         {stale && !failed ? (

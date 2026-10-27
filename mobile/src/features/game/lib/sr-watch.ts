@@ -38,7 +38,7 @@ function classify(lastSide: Side | null, zone: SrZone): SrEventType | null {
 }
 
 export class SrWatcher {
-  private state = new Map<SrKey, { zone: SrZone; lastSide: Side | null }>();
+  private state = new Map<SrKey, { zone: SrZone; lastSide: Side | null; level: number }>();
   private fired = new Map<string, number>(); // `${key}:${type}` → 마지막 발생 시각
 
   /** 틱마다 호출 — 이번 틱에 생긴 이벤트(대개 0~1개) */
@@ -49,9 +49,10 @@ export class SrWatcher {
       seen.add(lv.key);
       const zone = zoneOf(price, lv.price);
       const prev = this.state.get(lv.key);
-      if (prev === undefined) {
-        // 처음 보는 선 — 기준만(화면을 연 직후·칩을 켠 직후에 시트가 뜨지 않게)
-        this.state.set(lv.key, { zone, lastSide: zone === 'near' ? null : zone });
+      // 처음 보는 선, 또는 선 자체가 오차보다 크게 뛴 경우(스크롤로 POC 이동·새 봉 시작 등) — 기준만 다시.
+      // 가격은 그대로인데 선이 넘어와 생기는 가짜 돌파·이탈을 막는다. 틱마다의 작은 이평 변화는 오차 안이라 그대로 판정
+      if (prev === undefined || Math.abs(lv.price - prev.level) > srEps(lv.price)) {
+        this.state.set(lv.key, { zone, lastSide: zone === 'near' ? null : zone, level: lv.price });
         continue;
       }
       if (zone !== prev.zone) {
@@ -60,7 +61,7 @@ export class SrWatcher {
           out.push({ type, key: lv.key, levelPrice: lv.price, price });
         }
       }
-      this.state.set(lv.key, { zone, lastSide: zone === 'near' ? prev.lastSide : zone });
+      this.state.set(lv.key, { zone, lastSide: zone === 'near' ? prev.lastSide : zone, level: lv.price });
     }
     for (const k of [...this.state.keys()]) if (!seen.has(k)) this.state.delete(k);
     return out;

@@ -76,6 +76,19 @@ describe('SrWatcher', () => {
     w.reset();
     expect(w.update([L], 50_050, 1)).toEqual([]);
   });
+  test('선이 오차보다 크게 뛰면(스크롤로 POC 이동 등) 이벤트 없이 기준만 다시', () => {
+    const w = new SrWatcher();
+    const poc = (price: number): SrLevel => ({ key: 'poc', role: 'resistance', price, color: '#x' });
+    w.update([poc(50_000)], 51_000, 0); // 가격이 선 위
+    expect(w.update([poc(52_000)], 51_000, 1)).toEqual([]); // 가격은 그대로, 선이 위로 뜀 → 이탈 아님
+    expect(types(w.update([poc(52_000)], 51_950, 2))).toEqual(['RESISTANCE_TOUCH']); // 새 기준(아래)에서 판정
+  });
+  test('오차 안의 작은 선 움직임(틱마다 이평 변화)은 그대로 판정', () => {
+    const w = new SrWatcher();
+    w.update([L], 51_000, 0);
+    const moved: SrLevel = { ...L, price: 50_050 }; // 50원 이동 < 오차 100
+    expect(types(w.update([moved], 50_100, 1))).toEqual(['SUPPORT_TOUCH']);
+  });
 });
 
 describe('srEventCopy', () => {
