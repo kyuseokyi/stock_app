@@ -61,4 +61,27 @@ describe('horizontalLevels', () => {
     expect(horizontalLevels(barsOf(long), 8, { pivot: 3, lookback: 16 }).resistance).toEqual({ i: 23, price: 10 });
     expect(horizontalLevels(barsOf(long), 8).resistance).toEqual({ i: 23, price: 10 });
   });
+
+  describe('매물대 POC 후보', () => {
+    test('POC 가 스윙보다 현재가에 가까우면 저항으로 선택', () => {
+      const r = horizontalLevels(barsOf(highs), 8, { pivot: 3, poc: 9 });
+      expect(r.resistance).toEqual({ i: 0, price: 9 });
+      expect(r.support).toEqual({ i: 6, price: 0 });
+    });
+    test('POC 가 아래에서 더 가까우면 지지로 선택', () => {
+      expect(horizontalLevels(barsOf(highs), 8, { pivot: 3, poc: 5 }).support).toEqual({ i: 0, price: 5 });
+    });
+    test('poc 없음·null 이면 기존과 같음', () => {
+      const base = horizontalLevels(barsOf(highs), 8, { pivot: 3 });
+      expect(horizontalLevels(barsOf(highs), 8, { pivot: 3, poc: null })).toEqual(base);
+      expect(horizontalLevels(barsOf(highs), 8, { pivot: 3, poc: undefined })).toEqual(base);
+    });
+    test('POC 와 스윙이 같은 가격이면 스윙 우선', () => {
+      expect(horizontalLevels(barsOf(highs), 8, { pivot: 3, poc: 10 }).resistance).toEqual({ i: 3, price: 10 });
+    });
+    test('POC 의 i 는 lookback 시작', () => {
+      const long = [...Array(20).fill(1), ...highs]; // 길이 36
+      expect(horizontalLevels(barsOf(long), 8, { pivot: 3, lookback: 16, poc: 9 }).resistance).toEqual({ i: 20, price: 9 });
+    });
+  });
 });

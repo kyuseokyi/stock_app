@@ -451,16 +451,21 @@ export function DailyChart({ ticker, lastPrice, coach, position, onSrLevels }: D
     [shown],
   );
 
-  // 지지·저항(설계 2026-10-27 chart-game-sr-trendlines §7) — 현재가에 가장 가까운 스윙 고점·저점의 수평선 2개.
+  // 지지·저항(설계 2026-10-27 chart-game-sr-trendlines §7) — 현재가에 가장 가까운 스윙 고점·저점(매물대 켜짐이면 POC 포함)의 수평선 2개.
   // 불러온 캔들 기준으로 계산(스크롤해도 안 바뀜). 칩이 꺼지면 없음
+  // POC 는 어느 종목·단위 차트에서 온 값인지 함께 둔다 — 종목·단위를 바꾼 직후 이전 차트의 POC 를 쓰지 않게
+  const seriesKey = `${ticker}:${interval}`;
+  const [pocOf, setPocOf] = useState<{ key: string; price: number | null }>({ key: '', price: null });
+  const poc = showVp && pocOf.key === seriesKey ? pocOf.price : null;
+  const onPoc = useCallback((price: number | null) => setPocOf({ key: seriesKey, price }), [seriesKey]);
   const hLevels = useMemo(() => {
     const none = { levels: { resistance: null, support: null } as HPair, bars: [] as Bar[] };
     if (!showSr || chartView === null || shown === null || !sameSeries(shown.series, ticker, interval)) return none;
     const bars = toBars(chartView.data);
     if (bars.length === 0) return none;
     const price = lastPrice ?? bars[bars.length - 1].close;
-    return { levels: horizontalLevels(bars, price), bars };
-  }, [showSr, chartView, shown, ticker, interval, lastPrice]);
+    return { levels: horizontalLevels(bars, price, { poc }), bars };
+  }, [showSr, chartView, shown, ticker, interval, lastPrice, poc]);
   const rawSr = useMemo<SrLevel[]>(() => srLevelsFromHorizontal(hLevels.levels), [hLevels]);
   const [srLevels, setSrLevels] = useState<SrLevel[]>([]);
   // 렌더 중 파생 상태 갱신(React 권장 패턴) — 효과 안 setState 대신
@@ -527,6 +532,7 @@ export function DailyChart({ ticker, lastPrice, coach, position, onSrLevels }: D
             height={CHART_H}
             onReady={() => setChartReady(true)}
             onNeedOlder={interval === 'day' ? loadOlder : undefined}
+            onPoc={onPoc}
           />
         </View>
         {stale && !failed ? (

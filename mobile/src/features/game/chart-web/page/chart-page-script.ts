@@ -184,6 +184,14 @@ function volumeProfile(pts: Bar[]): VolumeBin[] {
 class VolumeProfile implements LWC.ISeriesPrimitive<Time> {
   points: Bar[] = [];
   visible = false;
+  /** 마지막으로 RN 에 알린 POC(undefined = 아직 안 알림) — 바뀔 때만 보낸다 */
+  sentPoc: number | null | undefined = undefined;
+  /** POC 를 RN 에 알림(바뀐 경우만) */
+  reportPoc(poc: number | null) {
+    if (poc === this.sentPoc) return;
+    this.sentPoc = poc;
+    post({ type: 'poc', price: poc });
+  }
   private param: LWC.SeriesAttachedParameter<Time> | null = null;
   private readonly view: LWC.ISeriesPrimitivePaneView;
 
@@ -212,7 +220,10 @@ class VolumeProfile implements LWC.ISeriesPrimitive<Time> {
     const to = Math.min(this.points.length - 1, Math.floor(r.to));
     if (to < from) return;
     const bins = volumeProfile(this.points.slice(from, to + 1));
-    if (bins.length === 0) return;
+    if (bins.length === 0) {
+      this.reportPoc(null);
+      return;
+    }
     const maxVol = Math.max(1, ...bins.map((b) => b.volume));
     const poc = pocOf(bins);
     const last = this.points[this.points.length - 1].close;
@@ -233,6 +244,7 @@ class VolumeProfile implements LWC.ISeriesPrimitive<Time> {
         c.fill();
       }
     });
+    this.reportPoc(poc);
   }
 }
 
@@ -320,6 +332,7 @@ function applyVis() {
   (['bbUpper', 'bbMiddle', 'bbLower'] as const).forEach((k) => lines[k].applyOptions({ visible: vis.bb }));
   band.setVisible(vis.bb);
   vpPrim.visible = vis.vp;
+  if (!vis.vp) vpPrim.reportPoc(null); // 끄면 RN 의 지지·저항 후보에서 POC 를 뺀다
   vpPrim.update();
 }
 

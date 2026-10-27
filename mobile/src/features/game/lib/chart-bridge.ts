@@ -84,10 +84,11 @@ export type ChartMessage =
   | { type: 'trend'; lines: TrendLineData[] }
   | { type: 'vis'; ma: boolean; bb: boolean; vp: boolean };
 
-/** 페이지 → RN 메시지 — 준비됨 / 일봉 왼쪽 끝(과거 요청) / 처리 중 오류 */
+/** 페이지 → RN 메시지 — 준비됨 / 일봉 왼쪽 끝(과거 요청) / 보이는 구간 매물대 POC 변경(끄면 null) / 처리 중 오류 */
 export type PageEvent =
   | { type: 'ready' }
   | { type: 'needOlder' }
+  | { type: 'poc'; price: number | null }
   | { type: 'error'; message: string };
 
 /** 이동평균 기간(최대 3칸, 앞에서부터 ma5·ma20·ma60 칸에 들어감). 기본은 게임과 같은 MA_PERIODS(5·20·60) */

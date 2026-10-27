@@ -90,6 +90,13 @@ describe('SrWatcher', () => {
     w.update([asRes], 49_000, 0); // 가격이 선 아래 → 저항
     expect(types(w.update([asSup], 50_200, 1))).toEqual(['RESISTANCE_BREAKOUT']); // 위로 뚫자 같은 선이 지지로 표시돼도 키가 같다
   });
+  test('POC 가 스크롤로 다른 가격이 되면(새 키) 이벤트 없이 기준만 잡는다', () => {
+    const w = new SrWatcher();
+    const poc = (price: number): SrLevel => ({ key: `lvl:${price}`, role: 'resistance', price, color: '#x' });
+    w.update([poc(50_000)], 51_000, 0);
+    expect(w.update([poc(52_000)], 51_000, 1)).toEqual([]); // 가격 그대로 선만 위로 바뀜 → 가짜 이탈 없음
+    expect(types(w.update([poc(52_000)], 51_950, 2))).toEqual(['RESISTANCE_TOUCH']);
+  });
   test('오차 안의 작은 선 움직임(틱마다 이평 변화)은 그대로 판정', () => {
     const w = new SrWatcher();
     w.update([L], 51_000, 0);
