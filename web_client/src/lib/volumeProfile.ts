@@ -61,8 +61,10 @@ export class VolumeProfilePrimitive implements ISeriesPrimitive<Time> {
   private reportPoc(poc: number | null) {
     if (poc === this.sentPoc) return
     this.sentPoc = poc
-    const cb = this.onPocChange
-    if (cb) requestAnimationFrame(() => cb(poc))
+    if (this.onPocChange) {
+      // 다음 프레임에 부를 때 차트가 이미 제거됐으면(detached → onPocChange=null) 옛 값을 올리지 않는다
+      requestAnimationFrame(() => this.onPocChange?.(poc))
+    }
   }
   private param: SeriesAttachedParameter<Time> | null = null
   private readonly view: ISeriesPrimitivePaneView
@@ -78,6 +80,7 @@ export class VolumeProfilePrimitive implements ISeriesPrimitive<Time> {
 
   detached() {
     this.param = null
+    this.onPocChange = null
   }
 
   paneViews() {

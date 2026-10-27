@@ -69,9 +69,8 @@ export default function GamePage() {
     // 다른 모달이 열려 있으면 버린다(재알림 간격은 이미 적용됨)
     if (events.length > 0 && activeModal === null && !loginOpen) setSrEvent((cur) => cur ?? events[0])
   }, [lastPrice, srLevels, hasPosition, loggedIn, activeModal, loginOpen])
-  useEffect(() => {
-    if (!hasPosition) setSrEvent(null)
-  }, [hasPosition])
+  // 포지션이 사라지면 모달 이벤트도 비운다 — 렌더 중 파생 상태 갱신(앱 game.tsx 와 같은 방식)
+  if (!hasPosition && srEvent !== null) setSrEvent(null)
   const [primeTime, setPrimeTime] = useState(() => isQuizPrimeTime(new Date()))
   const rulesState = useGameRules() // 공개 /rules — 페이지당 1회 요청(규칙 모달·수수료 안내·심리 바 주기)
   const ready = status === 'ready'
