@@ -68,3 +68,10 @@ TrendLine = { i1, p1, i2, p2 }  // 캔들 순번(bars 기준)과 가격, i1 < i2
 4. **감지 입력** — `srLevelsFromHorizontal(horizontalLevels(bars, price))`, price = lastPrice ?? 마지막 종가. 칩이 꺼지면 빈 목록.
 
 테스트: `horizontalLevels`(가까운 위·아래, 고점·저점 섞임, 같은 가격이면 최근, 후보 없으면 null, lookback 밖 무시, 확정 전 제외), `srLevelsFromHorizontal`(키·역할·색), `SrWatcher` 에 "같은 가격 키가 저항→지지로 바뀌어도 돌파 이벤트" 추가.
+
+### 7-1. 매물대 POC 후보
+
+- 매물대 칩이 **켜져 있을 때만** 보이는 구간 POC 가격(거래량 가장 큰 칸의 가운데 가격)을 수평선 후보에 더한다. 꺼지면 스윙 고점·저점만.
+- `horizontalLevels` 의 `opts.poc` 로 받아 스윙 후보와 같은 규칙(현재가 이상 중 최저 = 저항, 미만 중 최고 = 지지)으로 함께 고른다. POC 후보의 시작 순번 i 는 계산 범위 시작 `max(0, n - lookback)`. 가격이 스윙과 같으면 더 최근 i 인 스윙이 우선.
+- 값 전달: 앱은 페이지 `VolumeProfile` 이 POC 가 바뀔 때만 `{ type: 'poc', price }` 를 보내고(끄면·칸 없으면 null) `tv-chart` 의 `onPoc` → `candle-chart` 가 종목·단위 키와 함께 보관(전환 직후 옛 값 무시). 웹은 `VolumeProfilePrimitive.onPocChange`(바뀔 때만, requestAnimationFrame, detached 에서 해제) → `TradingChart` 의 `poc` 상태(차트 재생성 cleanup 에서 null).
+- 스크롤로 POC 가 바뀌면 새 가격 = 새 키(`lvl:가격`)라 감지기가 기준만 잡아 가짜 돌파·이탈이 없다(sr-watch 테스트로 확인).
