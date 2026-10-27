@@ -15,7 +15,7 @@ import { MA_PERIODS, bollinger, sma, type MaPeriod } from '../../lib/indicators'
 import { kstDateString } from '../../lib/format'
 import { THEME } from '../../lib/themeColors'
 import { VolumeProfilePrimitive } from '../../lib/volumeProfile'
-import { srLevelsFromHorizontal, srRoleName, srSignature, TREND_HIGH_COLOR, TREND_LOW_COLOR, type SrLevel } from '../../lib/srLevels'
+import { srWatchLevels, srRoleName, srSignature, TREND_HIGH_COLOR, TREND_LOW_COLOR, type SrLevel } from '../../lib/srLevels'
 import { horizontalLevels, type HLevel } from '../../lib/trendLines'
 import { useTradingGameStore } from '../../store/tradingGame'
 import { chipClass } from '../ui/Chip'
@@ -490,7 +490,7 @@ export default function TradingChart({ ticker, lastPrice, coach, position, onSrL
     const bars = barsRef.current
     const last = bars.length - 1
     const price = lastPrice ?? bars[last]?.close
-    const h = showSr && bars.length > 0 && price !== undefined ? horizontalLevels(bars, price, { poc: showVp ? poc : null }) : { resistance: null, support: null }
+    const h = showSr && bars.length > 0 && price !== undefined ? horizontalLevels(bars, price, { poc: showVp ? poc : null }) : { resistance: null, support: null, candidates: [] }
     const points = (lv: HLevel | null) =>
       lv === null ? [] : [{ time: bars[lv.i].time, value: lv.price }, { time: bars[last].time, value: lv.price }]
     const hi = points(h.resistance)
@@ -502,7 +502,8 @@ export default function TradingChart({ ticker, lastPrice, coach, position, onSrL
       t.support.setData(lo)
       setHasTrend({ resistance: hi.length > 0, support: lo.length > 0 })
     }
-    const levels = srLevelsFromHorizontal(h)
+    // 부모(감지기)에는 후보 레벨 전체 — 그리는 2개만 올리면 가까운 쪽이 바뀔 때 상태가 지워져 돌파·이탈을 놓친다
+    const levels = price === undefined ? [] : srWatchLevels(h.candidates, price)
     const levelSig = srSignature(levels)
     if (levelSig !== srSigRef.current) {
       srSigRef.current = levelSig

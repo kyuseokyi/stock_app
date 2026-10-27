@@ -40,13 +40,13 @@ export interface HLevel {
 /**
  * 수평 지지·저항 고르기 — 마지막 lookback 개 안의 스윙 고점(high)·스윙 저점(low) 전부가 후보.
  * 저항 = 현재가 이상 중 가장 낮은 가격, 지지 = 현재가 미만 중 가장 높은 가격(같은 가격이면 더 최근).
- * 고점·저점을 섞어 고르므로 뚫린 옛 고점은 지지, 깨진 옛 저점은 저항이 된다
+ * candidates = 감지용 전체 후보(같은 가격은 하나). 고점·저점을 섞어 고르므로 뚫린 옛 고점은 지지, 깨진 옛 저점은 저항이 된다
  */
 export function horizontalLevels(
   bars: TrendBar[],
   lastPrice: number,
   opts: TrendOptions = {},
-): { resistance: HLevel | null; support: HLevel | null } {
+): { resistance: HLevel | null; support: HLevel | null; candidates: HLevel[] } {
   const pivot = opts.pivot ?? TREND_PIVOT
   const lookback = opts.lookback ?? TREND_LOOKBACK
   const start = Math.max(0, bars.length - lookback)
@@ -58,14 +58,21 @@ export function horizontalLevels(
   ]
   // 같은 가격이면 더 최근(i 큰) 스윙이 POC(i = start)보다 우선
   if (bars.length > 0 && opts.poc != null && Number.isFinite(opts.poc) && opts.poc > 0) cands.push({ i: start, price: opts.poc })
+  // 같은 가격은 하나(i 큰 것) — 감지용 전체 후보(그리는 건 아래에서 고른 가장 가까운 위·아래 2개뿐)
+  const byPrice = new Map<number, HLevel>()
+  for (const c of cands) {
+    const prev = byPrice.get(c.price)
+    if (prev === undefined || c.i > prev.i) byPrice.set(c.price, c)
+  }
+  const candidates = [...byPrice.values()]
   let resistance: HLevel | null = null
   let support: HLevel | null = null
-  for (const c of cands) {
+  for (const c of candidates) {
     if (c.price >= lastPrice) {
       if (resistance === null || c.price < resistance.price || (c.price === resistance.price && c.i > resistance.i)) resistance = c
     } else if (support === null || c.price > support.price || (c.price === support.price && c.i > support.i)) {
       support = c
     }
   }
-  return { resistance, support }
+  return { resistance, support, candidates }
 }
