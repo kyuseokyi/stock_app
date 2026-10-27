@@ -75,3 +75,7 @@ TrendLine = { i1, p1, i2, p2 }  // 캔들 순번(bars 기준)과 가격, i1 < i2
 - `horizontalLevels` 의 `opts.poc` 로 받아 스윙 후보와 같은 규칙(현재가 이상 중 최저 = 저항, 미만 중 최고 = 지지)으로 함께 고른다. POC 후보의 시작 순번 i 는 계산 범위 시작 `max(0, n - lookback)`. 가격이 스윙과 같으면 더 최근 i 인 스윙이 우선.
 - 값 전달: 앱은 페이지 `VolumeProfile` 이 POC 가 바뀔 때만 `{ type: 'poc', price }` 를 보내고(끄면·칸 없으면 null) `tv-chart` 의 `onPoc` → `candle-chart` 가 종목·단위 키와 함께 보관(전환 직후 옛 값 무시). 웹은 `VolumeProfilePrimitive.onPocChange`(바뀔 때만, requestAnimationFrame, detached 에서 해제) → `TradingChart` 의 `poc` 상태(차트 재생성 cleanup 에서 null).
 - 스크롤로 POC 가 바뀌면 새 가격 = 새 키(`lvl:가격`)라 감지기가 기준만 잡아 가짜 돌파·이탈이 없다(sr-watch 테스트로 확인).
+
+### 7-2. 감지는 후보 레벨 전체, 그리기는 가장 가까운 2개
+
+`horizontalLevels` 는 가장 가까운 위·아래 2개(그리기)와 함께 `candidates`(lookback 안의 모든 스윙 고점·저점 + POC, 같은 가격은 하나)를 돌려주고, 감지기에는 `srWatchLevels(candidates, 현재가)` 전체를 넘긴다. 이유: `SrWatcher` 는 목록에서 빠진 키의 상태를 지우므로, 가까운 2개만 넘기면 레벨이 오차띠 안에 붙어 있거나 갭 틱으로 두 레벨을 한꺼번에 넘을 때 보던 레벨이 목록에서 빠지며 상태가 지워지고 새로 들어온 레벨은 기준만 잡아 돌파·이탈 이벤트를 놓친다.
