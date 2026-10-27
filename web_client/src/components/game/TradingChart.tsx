@@ -15,8 +15,8 @@ import { MA_PERIODS, bollinger, sma, type MaPeriod } from '../../lib/indicators'
 import { kstDateString } from '../../lib/format'
 import { THEME } from '../../lib/themeColors'
 import { VolumeProfilePrimitive } from '../../lib/volumeProfile'
-import { srLevelsFromTrends, srName, srSignature, TREND_HIGH_COLOR, TREND_LOW_COLOR, type SrLevel } from '../../lib/srLevels'
-import { trendLines, valueAt, type TrendLine } from '../../lib/trendLines'
+import { srLevelsFromHorizontal, srRoleName, srSignature, TREND_HIGH_COLOR, TREND_LOW_COLOR, type SrLevel } from '../../lib/srLevels'
+import { horizontalLevels, type HLevel } from '../../lib/trendLines'
 import { useTradingGameStore } from '../../store/tradingGame'
 import { chipClass } from '../ui/Chip'
 import {
@@ -479,25 +479,19 @@ export default function TradingChart({ ticker, lastPrice, coach, position, onSrL
     linesRef.current = lines
   }, [support, resistance, entry, side, stopLoss, takeProfit, loaded, interval])
 
-  // 3-1) 지지·저항 추세선(설계 2026-10-27 chart-game-sr-trendlines) — 불러온 캔들의 스윙 고점 2개·저점 2개를 잇는 사선.
-  // 점(i1, i2, 마지막 캔들)이 같으면 setData 생략, 지지·저항 목록은 서명이 바뀔 때만 부모에 올린다. 칩이 꺼지면 비움
+  // 3-1) 지지·저항 수평선(설계 2026-10-27 chart-game-sr-trendlines §7) — 현재가에 가장 가까운 스윙 고점·저점.
+  // 점(그 레벨 캔들, 마지막 캔들)이 같으면 setData 생략, 지지·저항 목록은 서명이 바뀔 때만 부모에 올린다. 칩이 꺼지면 비움
   useEffect(() => {
     const t = trendRef.current
     if (!t || !loaded) return
     const bars = barsRef.current
-    const lines = showSr && bars.length > 0 ? trendLines(bars) : { resistance: null, support: null }
     const last = bars.length - 1
-    const points = (line: TrendLine | null) => {
-      if (line === null) return []
-      const pts = [
-        { time: bars[line.i1].time, value: line.p1 },
-        { time: bars[line.i2].time, value: line.p2 },
-      ]
-      if (last > line.i2) pts.push({ time: bars[last].time, value: valueAt(line, last) })
-      return pts
-    }
-    const hi = points(lines.resistance)
-    const lo = points(lines.support)
+    const price = lastPrice ?? bars[last]?.close
+    const h = showSr && bars.length > 0 && price !== undefined ? horizontalLevels(bars, price) : { resistance: null, support: null }
+    const points = (lv: HLevel | null) =>
+      lv === null ? [] : [{ time: bars[lv.i].time, value: lv.price }, { time: bars[last].time, value: lv.price }]
+    const hi = points(h.resistance)
+    const lo = points(h.support)
     const sig = JSON.stringify([hi, lo])
     if (sig !== trendSigRef.current) {
       trendSigRef.current = sig
@@ -505,8 +499,7 @@ export default function TradingChart({ ticker, lastPrice, coach, position, onSrL
       t.support.setData(lo)
       setHasTrend({ resistance: hi.length > 0, support: lo.length > 0 })
     }
-    const price = lastPrice ?? bars[last]?.close
-    const levels = price === undefined ? [] : srLevelsFromTrends(lines, last, price)
+    const levels = srLevelsFromHorizontal(h)
     const levelSig = srSignature(levels)
     if (levelSig !== srSigRef.current) {
       srSigRef.current = levelSig
@@ -526,11 +519,11 @@ export default function TradingChart({ ticker, lastPrice, coach, position, onSrL
     takeProfit !== null && { label: '익절', color: TAKE_PROFIT, dashed: true },
   ].filter((x): x is { label: string; color: string; dashed: boolean } => Boolean(x))
 
-  // 추세선 범례 — 켜져 있고 선이 있을 때(색은 선 종류로 고정)
+  // 지지·저항 범례 — 켜져 있고 선이 있을 때(색은 역할로 고정)
   const trendLegend = showSr
     ? [
-        hasTrend.resistance && { key: 'trendHigh' as const, color: TREND_HIGH_COLOR },
-        hasTrend.support && { key: 'trendLow' as const, color: TREND_LOW_COLOR },
+        hasTrend.resistance && { role: 'resistance' as const, color: TREND_HIGH_COLOR },
+        hasTrend.support && { role: 'support' as const, color: TREND_LOW_COLOR },
       ].filter((x) => x !== false)
     : []
 
@@ -622,9 +615,9 @@ export default function TradingChart({ ticker, lastPrice, coach, position, onSrL
               </span>
             )}
             {trendLegend.map((l) => (
-              <span key={l.key} className="inline-flex items-center gap-1 rounded-field bg-surface/80 px-1.5">
+              <span key={l.role} className="inline-flex items-center gap-1 rounded-field bg-surface/80 px-1.5">
                 <span aria-hidden className="w-3 border-t-2" style={{ borderColor: l.color }} />
-                {srName(l.key, true)}
+                {srRoleName(l.role, true)}
               </span>
             ))}
             {lineLegend.map((l) => (
