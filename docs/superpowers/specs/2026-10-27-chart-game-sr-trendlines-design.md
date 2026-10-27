@@ -57,3 +57,14 @@ TrendLine = { i1, p1, i2, p2 }  // 캔들 순번(bars 기준)과 가격, i1 < i2
 - `chart-prefs`: `sr` 기본 true·옛 저장값 호환.
 - `SrWatcher` 기존 테스트는 키만 바꿔 그대로 통과.
 - 웹은 앱과 같은 코드(세미콜론만 다름)로 옮기고 타입 검사·빌드·헤드리스 화면 확인.
+
+## 7. 수평선으로 변경(2026-10-27)
+
+사선 추세선이 실제 차트에서 어색해 보여 **수평선**으로 바꾼다. 켜기/끄기 칩·범례·대응 시트/모달·감지기 로직·색·두께 2·자동 범위 제외·축 라벨 없음은 그대로다.
+
+1. **수평 레벨 고르기** — `horizontalLevels(bars, lastPrice, opts?) → { resistance, support }` (`HLevel = { i, price }`). 후보는 마지막 lookback(120)개 안의 스윙 고점(그 캔들 high)·스윙 저점(그 캔들 low) 전부(기존 `swings` 그대로). 저항 = 후보 중 `price ≥ 현재가` 가운데 가장 낮은 가격, 지지 = `price < 현재가` 가운데 가장 높은 가격, 같은 가격이면 더 최근. 없으면 null. 고점·저점을 섞어 고르므로 뚫린 옛 고점은 지지, 깨진 옛 저점은 저항이 된다(역할 반전). 사선용 `trendLines`·`valueAt`·`TrendLine` 은 제거.
+2. **지지·저항 목록** — `srLevelsFromHorizontal` 이 저항 먼저 목록을 만든다. **SrKey 는 레벨 가격 기반 `lvl:${price}`**. 키가 '저항/지지' 역할이면 저항을 돌파해 같은 선이 지지가 될 때 키의 가격이 크게 바뀌어 감지기가 기준만 다시 잡고 돌파 이벤트를 놓친다. 가격 키면 같은 레벨이 계속 같은 키라 RESISTANCE_BREAKOUT·SUPPORT_BREAKDOWN 이 정상 발생한다. 이름은 키가 아니라 역할·이벤트 종류에서: `srRoleName(role, short)`(저항선/지지선, 좁게 저항/지지), 시트·모달은 `srEventName(type)`(RESISTANCE_* = 저항선, SUPPORT_* = 지지선). `srName` 은 제거, `srSignature` 는 유지.
+3. **그리기** — 선 시리즈 2개 그대로. 점 = `[{ time: bars[h.i].time, value: h.price }, { time: bars[last].time, value: h.price }]`. 없으면 빈 배열. 점 배열이 같으면 다시 보내지 않는 안정화 유지. 범례 문구 `저항선`·`지지선`.
+4. **감지 입력** — `srLevelsFromHorizontal(horizontalLevels(bars, price))`, price = lastPrice ?? 마지막 종가. 칩이 꺼지면 빈 목록.
+
+테스트: `horizontalLevels`(가까운 위·아래, 고점·저점 섞임, 같은 가격이면 최근, 후보 없으면 null, lookback 밖 무시, 확정 전 제외), `srLevelsFromHorizontal`(키·역할·색), `SrWatcher` 에 "같은 가격 키가 저항→지지로 바뀌어도 돌파 이벤트" 추가.
