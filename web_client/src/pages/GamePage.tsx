@@ -15,7 +15,6 @@ import GameRulesModal from '../components/game/GameRulesModal'
 import LeaderboardModal from '../components/game/LeaderboardModal'
 import NudgeToaster from '../components/game/NudgeToaster'
 import SrActionModal from '../components/game/SrActionModal'
-import { MA_PERIODS } from '../lib/indicators'
 import { srName, type SrLevel } from '../lib/srLevels'
 import { SrWatcher, type SrEvent } from '../lib/srWatch'
 import OrderPanel from '../components/game/OrderPanel'
@@ -216,7 +215,7 @@ export default function GamePage() {
       {srEvent !== null && position !== null && (
         <SrActionModal
           event={srEvent}
-          name={srName(srEvent.key, MA_PERIODS, false)}
+          name={srName(srEvent.key, false)}
           position={position}
           closing={closing}
           onClosePosition={() => {
