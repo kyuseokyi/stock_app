@@ -61,6 +61,15 @@ const BB_FILL = 'rgba(99, 102, 241, 0.07)';
 // 매물대 — 폰 폭(약 360px)에서는 웹 값(최대 28%·0.22)이면 막대가 가늘고 흐려 잘 안 보여 넓고 진하게
 const VP_MAX_WIDTH = 0.5;
 const VP_COLOR = 'rgba(100, 116, 139, 0.3)';
+const POC_RESIST = '#f59e0b'; // POC 가 현재가 위(저항)
+const POC_SUPPORT = '#8b5cf6'; // POC 가 현재가 아래(지지)
+
+/** 거래량 가장 큰 칸의 가운데 가격(같으면 아래 칸). 칸이 없으면 null */
+function pocOf(bins: { low: number; high: number; volume: number }[]): number | null {
+  let best: { low: number; high: number; volume: number } | null = null;
+  for (const b of bins) if (b.volume > 0 && (best === null || b.volume > best.volume)) best = b;
+  return best === null ? null : (best.low + best.high) / 2;
+}
 
 function post(m: PageEvent) {
   if (window.ReactNativeWebView) window.ReactNativeWebView.postMessage(JSON.stringify(m));
@@ -172,6 +181,14 @@ function volumeProfile(pts: Bar[]): VolumeBin[] {
 class VolumeProfile implements LWC.ISeriesPrimitive<Time> {
   points: Bar[] = [];
   visible = false;
+  /** 마지막으로 RN 에 알린 POC(undefined = 아직 안 알림) — 바뀔 때만 보낸다 */
+  sentPoc: number | null | undefined = undefined;
+  /** POC 를 RN 에 알림(바뀐 경우만) */
+  reportPoc(poc: number | null) {
+    if (poc === this.sentPoc) return;
+    this.sentPoc = poc;
+    post({ type: 'poc', price: poc });
+  }
   private param: LWC.SeriesAttachedParameter<Time> | null = null;
   private readonly view: LWC.ISeriesPrimitivePaneView;
 
@@ -200,8 +217,13 @@ class VolumeProfile implements LWC.ISeriesPrimitive<Time> {
     const to = Math.min(this.points.length - 1, Math.floor(r.to));
     if (to < from) return;
     const bins = volumeProfile(this.points.slice(from, to + 1));
-    if (bins.length === 0) return;
+    if (bins.length === 0) {
+      this.reportPoc(null);
+      return;
+    }
     const maxVol = Math.max(1, ...bins.map((b) => b.volume));
+    const poc = pocOf(bins);
+    const last = this.points[this.points.length - 1].close;
     target.useMediaCoordinateSpace(({ context: c, mediaSize }) => {
       c.fillStyle = VP_COLOR;
       bins.forEach((b) => {
@@ -210,7 +232,16 @@ class VolumeProfile implements LWC.ISeriesPrimitive<Time> {
         if (yh === null || yl === null || b.volume === 0) return;
         c.fillRect(0, Math.min(yh, yl), (b.volume / maxVol) * mediaSize.width * VP_MAX_WIDTH, Math.max(1, Math.abs(yl - yh) - 1));
       });
+      // POC 칸 막대 오른쪽 끝(= 최대 폭)에 점 — 현재가 위면 주황(저항), 아래면 보라(지지)
+      const y = poc === null ? null : p.series.priceToCoordinate(poc);
+      if (poc !== null && y !== null) {
+        c.fillStyle = poc >= last ? POC_RESIST : POC_SUPPORT;
+        c.beginPath();
+        c.arc(mediaSize.width * VP_MAX_WIDTH, y, 3, 0, Math.PI * 2);
+        c.fill();
+      }
     });
+    this.reportPoc(poc);
   }
 }
 
@@ -282,6 +313,7 @@ function applyVis() {
   (['bbUpper', 'bbMiddle', 'bbLower'] as const).forEach((k) => lines[k].applyOptions({ visible: vis.bb }));
   band.setVisible(vis.bb);
   vpPrim.visible = vis.vp;
+  if (!vis.vp) vpPrim.reportPoc(null); // 끄면 RN 의 지지·저항 후보에서 POC 를 뺀다
   vpPrim.update();
 }
 
@@ -310,7 +342,7 @@ function applyLines() {
   priceLines = lineSpecs.map((spec) =>
     s.createPriceLine({
       price: spec.price, color: spec.color, lineWidth: spec.width,
-      lineStyle: spec.dashed ? LW.LineStyle.Dashed : LW.LineStyle.Solid, axisLabelVisible: true, title: '', // 이름은 RN 범례에 — 차트 안 이름은 가까운 선끼리 겹친다(축 라벨은 라이브러리가 떼어 놓음)
+      lineStyle: spec.dashed ? LW.LineStyle.Dashed : LW.LineStyle.Solid, axisLabelVisible: true, title: spec.axisTitle ?? '', // 지지·저항 선만 축 이름 — 다른 선 이름은 RN 범례(가까운 선끼리 겹침)
     }),
   );
 }
