@@ -8,7 +8,7 @@ import { useAuthStore } from '@/features/auth/store';
 import { AcademySheet } from '@/features/game/components/academy-sheet';
 import { DailyChart } from '@/features/game/components/candle-chart';
 import { SrActionSheet } from '@/features/game/components/sr-action-sheet';
-import { srName, type SrLevel } from '@/features/game/lib/sr-levels';
+import { srEventName, type SrLevel } from '@/features/game/lib/sr-levels';
 import { SrWatcher, type SrEvent } from '@/features/game/lib/sr-watch';
 import { CoachBanner } from '@/features/game/components/coach-banner';
 import { MarketStatusBanner } from '@/features/game/components/market-status-banner';
@@ -312,7 +312,7 @@ export default function GameScreen() {
       {srEvent !== null && position !== null ? (
         <SrActionSheet
           event={srEvent}
-          name={srName(srEvent.key, false)}
+          name={srEventName(srEvent.type)}
           position={position}
           closing={closing}
           onClosePosition={() => {

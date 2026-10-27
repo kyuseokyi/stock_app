@@ -2,7 +2,7 @@ import type { SrLevel } from './sr-levels';
 import { SR_COOLDOWN_MS, srEps, srEventCopy, SrWatcher, zoneOf } from './sr-watch';
 
 // 50,000원 선: 호가 100 > 0.15%(75) → 오차 100. 띠 = 49,900~50,100
-const L: SrLevel = { key: 'trendHigh', role: 'resistance', price: 50_000, color: '#x' };
+const L: SrLevel = { key: 'lvl:50000', role: 'resistance', price: 50_000, color: '#x' };
 const types = (evs: { type: string }[]) => evs.map((e) => e.type);
 
 describe('srEps·zoneOf', () => {
@@ -27,7 +27,7 @@ describe('SrWatcher', () => {
   test('위 → 띠 안 = 지지 터치, 이어서 아래 = 지지 이탈', () => {
     const w = new SrWatcher();
     w.update([L], 51_000, 0);
-    expect(w.update([L], 50_050, 1)).toEqual([{ type: 'SUPPORT_TOUCH', key: 'trendHigh', levelPrice: 50_000, price: 50_050 }]);
+    expect(w.update([L], 50_050, 1)).toEqual([{ type: 'SUPPORT_TOUCH', key: 'lvl:50000', levelPrice: 50_000, price: 50_050 }]);
     expect(types(w.update([L], 49_800, 2))).toEqual(['SUPPORT_BREAKDOWN']);
   });
   test('아래 → 띠 안 = 저항 터치, 이어서 위 = 저항 돌파', () => {
@@ -78,10 +78,17 @@ describe('SrWatcher', () => {
   });
   test('선이 오차보다 크게 뛰면(스크롤로 POC 이동 등) 이벤트 없이 기준만 다시', () => {
     const w = new SrWatcher();
-    const line = (price: number): SrLevel => ({ key: 'trendLow', role: 'resistance', price, color: '#x' });
+    const line = (price: number): SrLevel => ({ key: 'lvl:50000', role: 'resistance', price, color: '#x' });
     w.update([line(50_000)], 51_000, 0); // 가격이 선 위
     expect(w.update([line(52_000)], 51_000, 1)).toEqual([]); // 가격은 그대로, 선이 위로 뜀 → 이탈 아님
     expect(types(w.update([line(52_000)], 51_950, 2))).toEqual(['RESISTANCE_TOUCH']); // 새 기준(아래)에서 판정
+  });
+  test('같은 가격 키의 레벨이 저항에서 지지로 역할이 바뀌어도(가격 위로 돌파) 돌파 이벤트가 난다', () => {
+    const w = new SrWatcher();
+    const asRes: SrLevel = { key: 'lvl:50000', role: 'resistance', price: 50_000, color: '#x' };
+    const asSup: SrLevel = { key: 'lvl:50000', role: 'support', price: 50_000, color: '#x' };
+    w.update([asRes], 49_000, 0); // 가격이 선 아래 → 저항
+    expect(types(w.update([asSup], 50_200, 1))).toEqual(['RESISTANCE_BREAKOUT']); // 위로 뚫자 같은 선이 지지로 표시돼도 키가 같다
   });
   test('오차 안의 작은 선 움직임(틱마다 이평 변화)은 그대로 판정', () => {
     const w = new SrWatcher();
