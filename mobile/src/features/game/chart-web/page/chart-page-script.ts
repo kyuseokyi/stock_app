@@ -288,7 +288,11 @@ function create(newMode: ChartMode) {
   };
   ind = lines;
   // 지지·저항 추세선 2개(저항·지지 순) — 'trend' 메시지로 setData. 미리 만들어 두고 없으면 빈 데이터
-  const trendBase = { lineWidth: 2 as const, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false };
+  // 자동 가격 범위에서 뺀다 — 멀리 연장된 추세선 때문에 캔들이 납작해지지 않게(범위 밖이면 선이 잘려 보임)
+  const trendBase = {
+    lineWidth: 2 as const, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false,
+    autoscaleInfoProvider: () => null,
+  };
   trend = [c.addLineSeries({ ...trendBase, color: '#f59e0b' }), c.addLineSeries({ ...trendBase, color: '#8b5cf6' })];
   trendSpecs = null; // 단위가 바뀌면 time 형식이 달라 옛 추세선은 버린다 — RN 이 새 데이터 기준으로 다시 보낸다
   band = new BandFill(BB_FILL);
