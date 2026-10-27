@@ -97,6 +97,20 @@ describe('SrWatcher', () => {
     expect(w.update([poc(52_000)], 51_000, 1)).toEqual([]); // 가격 그대로 선만 위로 바뀜 → 가짜 이탈 없음
     expect(types(w.update([poc(52_000)], 51_950, 2))).toEqual(['RESISTANCE_TOUCH']);
   });
+  test('근접 레벨 둘을 모두 목록에 두면 가까운 쪽이 바뀌어도 이탈이 난다', () => {
+    const w = new SrWatcher();
+    const mk = (price: number, p: number): SrLevel => ({ key: `lvl:${price}`, role: price >= p ? 'resistance' : 'support', price, color: '#x' });
+    const both = (p: number) => [mk(50_050, p), mk(50_000, p)];
+    w.update(both(50_300), 50_300, 0);
+    w.update(both(50_000), 50_000, 1);
+    expect(types(w.update(both(49_700), 49_700, 2))).toContain('SUPPORT_BREAKDOWN');
+  });
+  test('갭으로 두 레벨을 한 번에 넘으면 돌파 이벤트', () => {
+    const w = new SrWatcher();
+    const mk = (price: number, p: number): SrLevel => ({ key: `lvl:${price}`, role: price >= p ? 'resistance' : 'support', price, color: '#x' });
+    w.update([mk(50_000, 49_000), mk(51_000, 49_000)], 49_000, 0);
+    expect(types(w.update([mk(50_000, 51_500), mk(51_000, 51_500)], 51_500, 1))).toContain('RESISTANCE_BREAKOUT');
+  });
   test('오차 안의 작은 선 움직임(틱마다 이평 변화)은 그대로 판정', () => {
     const w = new SrWatcher();
     w.update([L], 51_000, 0);

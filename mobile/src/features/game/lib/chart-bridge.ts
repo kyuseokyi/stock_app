@@ -80,7 +80,7 @@ export type ChartMessage =
   | { type: 'older'; more: boolean }
   | { type: 'tick'; bar: Bar; ind: Partial<Record<IndicatorKey, number>> }
   | { type: 'lines'; lines: ChartLine[] }
-  /** 지지·저항 추세선(최대 2개, 순서 = 저항·지지). 없는 선은 points 가 빈 배열 */
+  /** 지지·저항 수평선(최대 2개, 순서 = 저항·지지). 없는 선은 points 가 빈 배열 */
   | { type: 'trend'; lines: TrendLineData[] }
   | { type: 'vis'; ma: boolean; bb: boolean; vp: boolean };
 

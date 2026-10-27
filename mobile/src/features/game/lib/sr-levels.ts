@@ -27,6 +27,14 @@ export function srLevelsFromHorizontal(h: { resistance: HLevel | null; support: 
   return out;
 }
 
+/** 감지용 — 후보 레벨 전체(그리는 2개와 별개). 키 lvl:가격, 가격 ≥ 현재가면 저항 */
+export function srWatchLevels(candidates: HLevel[], lastPrice: number): SrLevel[] {
+  return candidates.map((c) => {
+    const resistance = c.price >= lastPrice;
+    return { key: `lvl:${c.price}` as SrKey, price: c.price, color: resistance ? TREND_HIGH_COLOR : TREND_LOW_COLOR, role: resistance ? 'resistance' : 'support' };
+  });
+}
+
 /** 역할 이름 — 넓게: 저항선·지지선 / 좁게: 저항·지지 */
 export function srRoleName(role: SrRole, short: boolean): string {
   if (role === 'resistance') return short ? '저항' : '저항선';

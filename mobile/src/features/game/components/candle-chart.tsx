@@ -9,7 +9,7 @@ import { applyTick, withSessionBar } from '../lib/candles';
 import { CHART_PREFS_KEY, DEFAULT_CHART_PREFS, parseChartPrefs, serializeChartPrefs } from '../lib/chart-prefs';
 import { layoutCandles, niceTicks, priceToY, type Ohlc } from '../lib/chart-layout';
 import { mergeOlder, priceLines, toBars, type ChartColors, type TrendLineData, type Bar } from '../lib/chart-bridge';
-import { srLevelsFromHorizontal, srRoleName, srSignature, TREND_HIGH_COLOR, TREND_LOW_COLOR, type SrLevel, type SrRole } from '../lib/sr-levels';
+import { srWatchLevels, srRoleName, srSignature, TREND_HIGH_COLOR, TREND_LOW_COLOR, type SrLevel, type SrRole } from '../lib/sr-levels';
 import { horizontalLevels, type HLevel } from '../lib/trend-lines';
 import { formatPrice, kstDateString } from '../lib/format';
 import { lineSegments, MA_PERIODS } from '../lib/indicators';
@@ -19,7 +19,7 @@ import { useTradingGameStore } from '../store';
 import { useGameRules } from '../use-game-rules';
 import { TvChart, type TvChartData } from './tv-chart';
 
-type HPair = { resistance: HLevel | null; support: HLevel | null };
+type HPair = { resistance: HLevel | null; support: HLevel | null; candidates: HLevel[] };
 
 // CandleChart: 순수 View 캔들 차트(퀴즈 차트용). 좌표는 lib/chart-layout 의 순수 함수가 계산한다.
 // DailyChart(게임 차트): 웹과 같은 lightweight-charts 를 WebView 로(tv-chart). 이 파일은 데이터·캐시·틱만 맡는다.
@@ -459,14 +459,19 @@ export function DailyChart({ ticker, lastPrice, coach, position, onSrLevels }: D
   const poc = showVp && pocOf.key === seriesKey ? pocOf.price : null;
   const onPoc = useCallback((price: number | null) => setPocOf({ key: seriesKey, price }), [seriesKey]);
   const hLevels = useMemo(() => {
-    const none = { levels: { resistance: null, support: null } as HPair, bars: [] as Bar[] };
+    const none = { levels: { resistance: null, support: null, candidates: [] } as HPair, bars: [] as Bar[] };
     if (!showSr || chartView === null || shown === null || !sameSeries(shown.series, ticker, interval)) return none;
     const bars = toBars(chartView.data);
     if (bars.length === 0) return none;
     const price = lastPrice ?? bars[bars.length - 1].close;
     return { levels: horizontalLevels(bars, price, { poc }), bars };
   }, [showSr, chartView, shown, ticker, interval, lastPrice, poc]);
-  const rawSr = useMemo<SrLevel[]>(() => srLevelsFromHorizontal(hLevels.levels), [hLevels]);
+  // 부모(감지기)에는 후보 레벨 전체를 올린다 — 그리는 2개만 올리면 가까운 쪽이 바뀔 때 상태가 지워져 돌파·이탈을 놓친다
+  const rawSr = useMemo<SrLevel[]>(() => {
+    const { bars, levels } = hLevels;
+    if (bars.length === 0) return [];
+    return srWatchLevels(levels.candidates, lastPrice ?? bars[bars.length - 1].close);
+  }, [hLevels, lastPrice]);
   const [srLevels, setSrLevels] = useState<SrLevel[]>([]);
   // 렌더 중 파생 상태 갱신(React 권장 패턴) — 효과 안 setState 대신
   if (srSignature(srLevels) !== srSignature(rawSr)) setSrLevels(rawSr);

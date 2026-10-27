@@ -1,4 +1,4 @@
-import { srEventName, srLevelsFromHorizontal, srRoleName, srSignature, TREND_HIGH_COLOR, TREND_LOW_COLOR, type SrLevel } from './sr-levels';
+import { srWatchLevels, srEventName, srLevelsFromHorizontal, srRoleName, srSignature, TREND_HIGH_COLOR, TREND_LOW_COLOR, type SrLevel } from './sr-levels';
 
 describe('srLevelsFromHorizontal', () => {
   test('저항 먼저, 키는 lvl:가격, 역할·색', () => {
@@ -11,6 +11,17 @@ describe('srLevelsFromHorizontal', () => {
   test('없는 쪽은 뺌', () => {
     expect(srLevelsFromHorizontal({ resistance: null, support: null })).toEqual([]);
     expect(srLevelsFromHorizontal({ resistance: null, support: { i: 1, price: 7 } })).toHaveLength(1);
+  });
+});
+
+describe('srWatchLevels', () => {
+  test('후보 전부를 키 lvl:가격, 현재가 기준 역할·색으로', () => {
+    const got = srWatchLevels([{ i: 1, price: 120 }, { i: 2, price: 100 }, { i: 3, price: 110 }], 110);
+    expect(got).toEqual([
+      { key: 'lvl:120', price: 120, color: TREND_HIGH_COLOR, role: 'resistance' },
+      { key: 'lvl:100', price: 100, color: TREND_LOW_COLOR, role: 'support' },
+      { key: 'lvl:110', price: 110, color: TREND_HIGH_COLOR, role: 'resistance' },
+    ]);
   });
 });
 

@@ -45,7 +45,7 @@ describe('horizontalLevels', () => {
   test('위나 아래에 후보가 없으면 null', () => {
     expect(horizontalLevels(barsOf(highs), 100, { pivot: 3 }).resistance).toBeNull();
     expect(horizontalLevels(barsOf(highs), -5, { pivot: 3 }).support).toBeNull();
-    expect(horizontalLevels([], 10, { pivot: 3 })).toEqual({ resistance: null, support: null });
+    expect(horizontalLevels([], 10, { pivot: 3 })).toEqual({ resistance: null, support: null, candidates: [] });
   });
 
   test('오른쪽 pivot 개가 없는 최근 캔들은 제외', () => {
@@ -82,6 +82,25 @@ describe('horizontalLevels', () => {
     test('POC 의 i 는 lookback 시작', () => {
       const long = [...Array(20).fill(1), ...highs]; // 길이 36
       expect(horizontalLevels(barsOf(long), 8, { pivot: 3, lookback: 16, poc: 9 }).resistance).toEqual({ i: 20, price: 9 });
+    });
+  });
+
+  describe('candidates(감지용 전체 후보)', () => {
+    test('스윙 고점·저점·POC 가 모두 있고 같은 가격은 하나(i 큰 것)', () => {
+      const h = [1, 2, 3, 10, 3, 2, 1, 2, 3, 10, 3, 2, 1, 1, 1, 1];
+      const { candidates } = horizontalLevels(barsOf(h), 8, { pivot: 3, poc: 5 });
+      expect(candidates).toContainEqual({ i: 9, price: 10 });
+      expect(candidates).not.toContainEqual({ i: 3, price: 10 });
+      expect(candidates).toContainEqual({ i: 6, price: 0 });
+      expect(candidates).toContainEqual({ i: 0, price: 5 });
+      expect(new Set(candidates.map((c) => c.price)).size).toBe(candidates.length);
+    });
+    test('POC 가 스윙과 같은 가격이면 스윙 하나만', () => {
+      const { candidates } = horizontalLevels(barsOf(highs), 8, { pivot: 3, poc: 10 });
+      expect(candidates.filter((c) => c.price === 10)).toEqual([{ i: 3, price: 10 }]);
+    });
+    test('후보가 없으면 빈 배열', () => {
+      expect(horizontalLevels([], 8).candidates).toEqual([]);
     });
   });
 });
