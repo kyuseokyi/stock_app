@@ -8,7 +8,8 @@ import { getDailyCandles, getDailyCandlesBefore, getGameCandles, getSessionBar }
 import { applyTick, withSessionBar } from '../lib/candles';
 import { CHART_PREFS_KEY, DEFAULT_CHART_PREFS, parseChartPrefs, serializeChartPrefs } from '../lib/chart-prefs';
 import { layoutCandles, niceTicks, priceToY, type Ohlc } from '../lib/chart-layout';
-import { mergeOlder, priceLines, type ChartColors } from '../lib/chart-bridge';
+import { lastIndicatorValues, mergeOlder, priceLines, toBars, type ChartColors, type ChartLine } from '../lib/chart-bridge';
+import { pickSrLevels, srAxisTitle, srCandidates, srName, srSignature, type SrLevel } from '../lib/sr-levels';
 import { formatPrice, kstDateString } from '../lib/format';
 import { lineSegments, MA_PERIODS } from '../lib/indicators';
 import { applyTickIntraday, axisLabelIndexes, bucketStartSec, CHART_INTERVALS, dayLabel, kstHm } from '../lib/intraday';
@@ -261,6 +262,8 @@ type DailyChartProps = {
   lastPrice: number | null;
   coach: Coach | null;
   position: Position | null;
+  /** 차트에 그린 지지·저항 목록(바뀔 때만) — 게임 화면이 터치·돌파 감지에 쓴다 */
+  onSrLevels?: (levels: SrLevel[]) => void;
 };
 
 /**
@@ -268,7 +271,7 @@ type DailyChartProps = {
  * 일봉: stock_api GraphQL + 오늘 캔들 실시간 병합. 분봉: GET /api/game/candles + 현재 버킷 실시간 병합.
  * 초기 단위 = 저장값 > 규칙 chart_interval_default > 일봉.
  */
-export function DailyChart({ ticker, lastPrice, coach, position }: DailyChartProps) {
+export function DailyChart({ ticker, lastPrice, coach, position, onSrLevels }: DailyChartProps) {
   const { theme } = useUnistyles();
   const { rules } = useGameRules();
   const [picked, setPicked] = useState<ChartInterval | null>(null);
@@ -443,6 +446,48 @@ export function DailyChart({ ticker, lastPrice, coach, position }: DailyChartPro
     [shown],
   );
 
+  // 지지·저항(설계 2026-10-27 §3) — 켜진 지표의 마지막 값 + 보이는 구간 POC 중 현재가 위·아래 2개씩.
+  // 틱마다 다시 계산하되, 키·역할·호가 반올림 가격이 같으면 이전 배열을 유지(WebView·부모에 다시 보내지 않게)
+  const [poc, setPoc] = useState<number | null>(null);
+  const rawSr = useMemo<SrLevel[]>(() => {
+    if (chartView === null || shown === null || !sameSeries(shown.series, ticker, interval)) return [];
+    const bars = toBars(chartView.data);
+    const price = lastPrice ?? bars[bars.length - 1]?.close;
+    if (price === undefined) return [];
+    const cands = srCandidates(
+      {
+        values: lastIndicatorValues(bars),
+        ma: showMa,
+        bb: showBb,
+        poc: showVp ? poc : null,
+        maColors: MA_PERIODS.map((p) => MA_COLORS[p]),
+      },
+      price,
+    );
+    return pickSrLevels(cands, price);
+  }, [chartView, shown, ticker, interval, lastPrice, showMa, showBb, showVp, poc]);
+  const [srLevels, setSrLevels] = useState<SrLevel[]>([]);
+  // 렌더 중 파생 상태 갱신(React 권장 패턴) — 효과 안 setState 대신
+  if (srSignature(srLevels) !== srSignature(rawSr)) setSrLevels(rawSr);
+  useEffect(() => {
+    onSrLevels?.(srLevels);
+  }, [srLevels, onSrLevels]);
+  // 지지·저항 선 — 이름은 가격축에(짧게), 범례에는 넣지 않는다(아래 lines 범례는 그대로)
+  const chartLines = useMemo<ChartLine[]>(
+    () => [
+      ...lines,
+      ...srLevels.map((l) => ({
+        price: l.price,
+        color: l.color,
+        width: 1 as const,
+        dashed: true,
+        title: srName(l.key, MA_PERIODS, false),
+        axisTitle: srAxisTitle(l, MA_PERIODS, true),
+      })),
+    ],
+    [lines, srLevels],
+  );
+
   // 다른 단위 데이터를 보여 주는 중(새 데이터 대기) — 흐리게 + 작은 로딩 표시
   const stale = shown !== null && !sameSeries(shown.series, ticker, interval);
   const empty = shown !== null && !stale && shown.series.rows.length === 0;
@@ -470,7 +515,7 @@ export function DailyChart({ ticker, lastPrice, coach, position }: DailyChartPro
         <View style={stale ? styles.staleChart : null}>
           <TvChart
             view={chartView}
-            lines={lines}
+            lines={chartLines}
             ma={showMa}
             bb={showBb}
             vp={showVp}
@@ -478,6 +523,7 @@ export function DailyChart({ ticker, lastPrice, coach, position }: DailyChartPro
             height={CHART_H}
             onReady={() => setChartReady(true)}
             onNeedOlder={interval === 'day' ? loadOlder : undefined}
+            onPoc={setPoc}
           />
         </View>
         {stale && !failed ? (
