@@ -191,6 +191,7 @@ export default function TradingChart({ ticker, lastPrice, coach, position, onSrL
   const [showMa, setShowMa] = useState(initialPrefs.ma)
   const [showBb, setShowBb] = useState(initialPrefs.bb)
   const [showVp, setShowVp] = useState(initialPrefs.vp)
+  const [poc, setPoc] = useState<number | null>(null) // 매물대(보이는 구간) POC — 지지·저항 후보
   const [showSr, setShowSr] = useState(initialPrefs.sr)
   const [indOpen, setIndOpen] = useState(false) // 모바일 폭 지표 팝오버
   const [loaded, setLoaded] = useState(false)
@@ -239,6 +240,7 @@ export default function TradingChart({ ticker, lastPrice, coach, position, onSrL
     const vp = new VolumeProfilePrimitive()
     series.attachPrimitive(vp)
     vpRef.current = vp
+    vp.onPocChange = setPoc
     // 지지·저항 추세선 — 자동 가격 범위에서 제외(멀리 연장돼도 캔들이 납작해지지 않게)
     const trendBase = {
       lineWidth: 2 as const, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false,
@@ -357,6 +359,7 @@ export default function TradingChart({ ticker, lastPrice, coach, position, onSrL
       seriesRef.current = null
       indRef.current = null
       vpRef.current = null
+      setPoc(null) // 옛 차트의 POC 를 새 차트가 쓰지 않게
       barsRef.current = []
       linesRef.current = []
       trendRef.current = null
@@ -479,7 +482,7 @@ export default function TradingChart({ ticker, lastPrice, coach, position, onSrL
     linesRef.current = lines
   }, [support, resistance, entry, side, stopLoss, takeProfit, loaded, interval])
 
-  // 3-1) 지지·저항 수평선(설계 2026-10-27 chart-game-sr-trendlines §7) — 현재가에 가장 가까운 스윙 고점·저점.
+  // 3-1) 지지·저항 수평선(설계 2026-10-27 chart-game-sr-trendlines §7) — 현재가에 가장 가까운 스윙 고점·저점(매물대 켜짐이면 POC 포함).
   // 점(그 레벨 캔들, 마지막 캔들)이 같으면 setData 생략, 지지·저항 목록은 서명이 바뀔 때만 부모에 올린다. 칩이 꺼지면 비움
   useEffect(() => {
     const t = trendRef.current
@@ -487,7 +490,7 @@ export default function TradingChart({ ticker, lastPrice, coach, position, onSrL
     const bars = barsRef.current
     const last = bars.length - 1
     const price = lastPrice ?? bars[last]?.close
-    const h = showSr && bars.length > 0 && price !== undefined ? horizontalLevels(bars, price) : { resistance: null, support: null }
+    const h = showSr && bars.length > 0 && price !== undefined ? horizontalLevels(bars, price, { poc: showVp ? poc : null }) : { resistance: null, support: null }
     const points = (lv: HLevel | null) =>
       lv === null ? [] : [{ time: bars[lv.i].time, value: lv.price }, { time: bars[last].time, value: lv.price }]
     const hi = points(h.resistance)
@@ -505,7 +508,7 @@ export default function TradingChart({ ticker, lastPrice, coach, position, onSrL
       srSigRef.current = levelSig
       onSrLevels?.(levels)
     }
-  }, [lastPrice, loaded, showSr, dataVer, interval, ticker, onSrLevels])
+  }, [lastPrice, loaded, showSr, showVp, poc, dataVer, interval, ticker, onSrLevels])
 
   // 차트가 사라지면(게임 화면 이탈 등) 부모의 지지·저항 목록을 비운다
   useEffect(() => () => onSrLevels?.([]), [onSrLevels])

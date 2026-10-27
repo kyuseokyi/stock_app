@@ -11,6 +11,8 @@ export interface TrendBar {
 export interface TrendOptions {
   pivot?: number
   lookback?: number
+  /** 매물대 칩이 켜졌을 때 보이는 구간 POC 가격 — 스윙과 같은 규칙의 후보(시작 순번 = lookback 시작) */
+  poc?: number | null
 }
 
 /** 마지막 lookback 개 안에서, 앞뒤 pivot 개 이상(같으면 나중 것)인 극점 순번들 */
@@ -54,6 +56,8 @@ export function horizontalLevels(
     ...swings(bars, start, pivot, hi, true).map((i) => ({ i, price: hi(bars[i]) })),
     ...swings(bars, start, pivot, lo, false).map((i) => ({ i, price: lo(bars[i]) })),
   ]
+  // 같은 가격이면 더 최근(i 큰) 스윙이 POC(i = start)보다 우선
+  if (bars.length > 0 && opts.poc != null && Number.isFinite(opts.poc) && opts.poc > 0) cands.push({ i: start, price: opts.poc })
   let resistance: HLevel | null = null
   let support: HLevel | null = null
   for (const c of cands) {
