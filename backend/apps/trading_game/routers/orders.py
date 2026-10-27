@@ -234,8 +234,10 @@ async def close_order(
         raise HTTPException(status.HTTP_409_CONFLICT, MSG_CLOSE_NOT_TRADING_TIME)
     await _require_market_open(deps.get_redis(), season.ticker)
     exit_price = await _require_fresh_price(deps.get_redis(), season.ticker)
+    # 수동 청산 사유는 체결 가격 방향으로 서버가 정한다(요청 형식 그대로 — 옛 앱 호환·화면이 조작 불가)
+    reason = pricing.manual_close_reason(pos.side, pos.entry_price, exit_price)
     trade = await order_engine.close_position(
-        db, position_id=pos.id, exit_price=exit_price, reason="MANUAL"
+        db, position_id=pos.id, exit_price=exit_price, reason=reason
     )
     if trade is None:
         raise HTTPException(status.HTTP_409_CONFLICT, "이미 청산된 포지션입니다.")
@@ -246,7 +248,7 @@ async def close_order(
         log.warning("랭킹 동기화 실패(청산은 정상 완료) account=%s", account.id, exc_info=True)
     refreshed = await db.get(GamePosition, pos.id)
     dto = _position_dto(refreshed, trade.roi_pct, trade.pnl_amount)
-    return OrderResultResponse(**dto.model_dump(), nudges=_close_nudges("MANUAL", trade.roi_pct))
+    return OrderResultResponse(**dto.model_dump(), nudges=_close_nudges(reason, trade.roi_pct))
 
 
 @router.get("/positions/active", response_model=list[PositionResponse])

@@ -1,15 +1,16 @@
 """트레이딩 게임 Phase 5a — 데일리 코치 + 스마트 넛지 테스트."""
 from __future__ import annotations
 
+import uuid
 from datetime import date, datetime, timezone
 from decimal import Decimal
 
 import pytest
-from sqlalchemy import event
+from sqlalchemy import event, select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from shared.models import Base, User, UserRole
-from shared.game_models import GameCoachMessage, GameSeason, UserAcademy
+from shared.game_models import GameCoachMessage, GameSeason, GameTrade, UserAcademy
 
 
 @pytest.fixture
@@ -104,6 +105,8 @@ def test_open_warning_and_advice_together_in_order():
     ("STOP_LOSS", Decimal("-0.99"), []),
     ("STOP_LOSS", Decimal("-1"), ["PRINCIPLED_STOP"]),
     ("MANUAL", Decimal("-2.5"), ["PRINCIPLED_STOP"]),
+    ("MANUAL_SL", Decimal("-2"), ["PRINCIPLED_STOP"]),
+    ("MANUAL_TP", Decimal("-2"), ["PRINCIPLED_STOP"]),
     ("STOP_LOSS", Decimal("-3"), ["PRINCIPLED_STOP"]),
     ("STOP_LOSS", Decimal("-3.01"), []),
     ("TAKE_PROFIT", Decimal("-2"), []),
@@ -598,6 +601,30 @@ async def test_manual_close_praise_nudge(api, maker, order_env):
     r = await client.post(f"/api/game/positions/{pos_id}/close")
     assert r.status_code == 200, r.text
     assert [n["code"] for n in r.json()["nudges"]] == ["PRINCIPLED_STOP"]
+
+
+@pytest.mark.parametrize("exit_price, expected", [
+    (Decimal("98.5"), "MANUAL_SL"),
+    (Decimal("101.5"), "MANUAL_TP"),
+])
+async def test_manual_close_reason_by_price_direction(api, maker, order_env, exit_price, expected):
+    client, set_user = api
+    async with maker() as db:
+        season = await _seed_season(db)
+        set_user(await _seed_player(db))
+    r = await client.post("/api/game/orders", json={
+        "season_id": season.id, "side": "LONG", "ratio": 0.25, "leverage": 1,
+    })
+    assert r.status_code == 201, r.text
+    pos_id = r.json()["id"]
+    order_env["v"] = exit_price
+    r = await client.post(f"/api/game/positions/{pos_id}/close")
+    assert r.status_code == 200, r.text
+    async with maker() as db:
+        trade = (await db.execute(
+            select(GameTrade).where(GameTrade.position_id == uuid.UUID(pos_id))
+        )).scalar_one()
+    assert trade.closed_reason == expected
 
 
 async def test_active_positions_response_has_no_nudges_field(api, maker, order_env):

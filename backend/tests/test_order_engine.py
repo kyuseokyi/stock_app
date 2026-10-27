@@ -81,6 +81,23 @@ def test_liquidation_none_when_untriggered():
     assert reason is None
 
 
+@pytest.mark.parametrize("side, entry, exit_, expected", [
+    ("LONG", "100", "101", "MANUAL_TP"),
+    ("LONG", "100", "99", "MANUAL_SL"),
+    ("LONG", "100", "100", "MANUAL_SL"),   # 본전은 손절로 본다
+    ("SHORT", "100", "99", "MANUAL_TP"),
+    ("SHORT", "100", "101", "MANUAL_SL"),
+    ("SHORT", "100", "100", "MANUAL_SL"),
+])
+def test_manual_close_reason(side, entry, exit_, expected):
+    assert pricing.manual_close_reason(side, Decimal(entry), Decimal(exit_)) == expected
+
+
+def test_manual_close_reason_rejects_bad_side():
+    with pytest.raises(ValueError):
+        pricing.manual_close_reason("UP", Decimal("100"), Decimal("101"))
+
+
 def test_roi_loss_side_with_fee():
     # LONG -10% 하락, 1x → -10% - 0.03% = -10.03%
     roi = pricing.compute_roi_pct("LONG", Decimal("100"), Decimal("90"), 1)
