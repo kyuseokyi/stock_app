@@ -20,8 +20,10 @@ export interface VolumeBin {
 }
 
 export const VP_BINS = 20
-const VP_COLOR = 'rgba(100, 116, 139, 0.22)'
-const VP_MAX_WIDTH = 0.28
+// 막대 최대 폭(차트 폭 대비)·색 — 좁은 차트(폰 폭)는 28%·0.22 면 가늘고 흐려 앱(chart-page-script)과 같은 50%·0.3
+const VP_NARROW_PX = 640
+const VP_WIDE = { maxWidth: 0.28, color: 'rgba(100, 116, 139, 0.22)' }
+const VP_NARROW = { maxWidth: 0.5, color: 'rgba(100, 116, 139, 0.3)' }
 
 /** 가격대별 누적 거래량. 거래량 정보가 없는 캔들(0)만 있으면 [] */
 export function volumeProfile(points: VolumePoint[], bins: number = VP_BINS): VolumeBin[] {
@@ -90,12 +92,13 @@ export class VolumeProfilePrimitive implements ISeriesPrimitive<Time> {
     if (bins.length === 0) return
     const maxVol = Math.max(1, ...bins.map((b) => b.volume))
     target.useMediaCoordinateSpace(({ context, mediaSize }) => {
-      context.fillStyle = VP_COLOR
+      const style = mediaSize.width < VP_NARROW_PX ? VP_NARROW : VP_WIDE
+      context.fillStyle = style.color
       for (const b of bins) {
         const yHigh = p.series.priceToCoordinate(b.high)
         const yLow = p.series.priceToCoordinate(b.low)
         if (yHigh === null || yLow === null || b.volume === 0) continue
-        const w = (b.volume / maxVol) * mediaSize.width * VP_MAX_WIDTH
+        const w = (b.volume / maxVol) * mediaSize.width * style.maxWidth
         context.fillRect(0, Math.min(yHigh, yLow), w, Math.max(1, Math.abs(yLow - yHigh) - 1))
       }
     })
