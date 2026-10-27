@@ -9,6 +9,7 @@
 #     → dev 는 발행 동안만 개발 env(.env.development.local > .env.development)를 .env.production.local 로 옮기고 끝나면 지운다
 #       (build-dev-apk.sh 와 같은 방식·안전장치).
 #
+# eas-cli 24+ 는 비대화형 실행에 --environment 가 필수 — 채널과 같은 이름의 EAS 환경을 넘긴다(그 환경에 등록된 변수가 없으면 번들 env 는 위 .env 파일 그대로).
 # 채널: dev → development(APP_ENV=development) · preview → preview(APP_ENV=production, EXPO_UPDATES_CHANNEL=preview,
 #       eas.json preview 프로필 env 와 같음) · prod → production(APP_ENV=production)
 #
@@ -33,9 +34,9 @@ if [ -z "${MESSAGE//[[:space:]]/}" ]; then
 fi
 
 case "$TARGET" in
-  dev) APP_ENV_VALUE=development; CHANNEL=development; UPDATES_CHANNEL="" ;;
-  preview) APP_ENV_VALUE=production; CHANNEL=preview; UPDATES_CHANNEL=preview ;;
-  prod) APP_ENV_VALUE=production; CHANNEL=production; UPDATES_CHANNEL="" ;;
+  dev) APP_ENV_VALUE=development; CHANNEL=development; UPDATES_CHANNEL=""; EAS_ENV=development ;;
+  preview) APP_ENV_VALUE=production; CHANNEL=preview; UPDATES_CHANNEL=preview; EAS_ENV=preview ;;
+  prod) APP_ENV_VALUE=production; CHANNEL=production; UPDATES_CHANNEL=""; EAS_ENV=production ;;
   *) echo "[ota] ✗ 알 수 없는 대상: $TARGET" >&2; usage ;;
 esac
 
@@ -113,7 +114,7 @@ ENV_ARGS=(APP_ENV="$APP_ENV_VALUE")
 
 if [ "$DRY_RUN" = 1 ]; then
   [ "$TARGET" = dev ] && echo "[ota] (DRY_RUN) $TMP 생성·적용 후 삭제 — 실제로는 만들지 않음"
-  echo "[ota] (DRY_RUN) env ${ENV_ARGS[*]} eas update --channel $CHANNEL --message \"$MESSAGE\""
+  echo "[ota] (DRY_RUN) env ${ENV_ARGS[*]} eas update --channel $CHANNEL --environment $EAS_ENV --message \"$MESSAGE\""
   exit 0
 fi
 
@@ -128,9 +129,9 @@ if [ "$TARGET" = dev ]; then
   CREATED_TMP=1
   # build-dev-apk.sh 처럼 합친 env 를 프로세스 env 로도 넘긴다 — app.config.js 평가(EAS_PROJECT_ID·GOOGLE_SERVICES_JSON 등)가
   #   빌드 때와 같아야 fingerprint 가 같다.
-  (set -a; . "./$TMP"; set +a; env "${ENV_ARGS[@]}" "${EAS[@]}" update --channel "$CHANNEL" --message "$MESSAGE")
+  (set -a; . "./$TMP"; set +a; env "${ENV_ARGS[@]}" "${EAS[@]}" update --channel "$CHANNEL" --environment "$EAS_ENV" --message "$MESSAGE")
 else
-  env "${ENV_ARGS[@]}" "${EAS[@]}" update --channel "$CHANNEL" --message "$MESSAGE"
+  env "${ENV_ARGS[@]}" "${EAS[@]}" update --channel "$CHANNEL" --environment "$EAS_ENV" --message "$MESSAGE"
 fi
 
 echo "[ota] ✓ $CHANNEL 채널 발행 완료"
