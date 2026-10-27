@@ -13,6 +13,7 @@ import type {
   IndicatorKey,
   LinePoint,
   PageEvent,
+  TrendLineData,
 } from '../../lib/chart-bridge';
 
 declare global {
@@ -41,6 +42,8 @@ let mode: ChartMode | null = null;
 let colors: ChartColors = { up: '#c93a6c', down: '#4f73d9', text: '#8e8aa6', grid: '#f7f5ff', border: '#ebe7f7' };
 let vis = { ma: true, bb: true, vp: false };
 let lineSpecs: ChartLine[] = [];
+let trend: LWC.ISeriesApi<'Line'>[] = [];
+let trendSpecs: TrendLineData[] | null = null;
 let priceLines: LWC.IPriceLine[] = [];
 const MA: Record<'ma5' | 'ma20' | 'ma60', string> = { ma5: '#14b8a6', ma20: '#f97316', ma60: '#a16207' };
 // 일봉 과거 이어 받기 — on: RN 이 켬(load.history), armed: 사용자가 차트를 만진 뒤, busy: 요청 중, done: 더 없음
@@ -61,8 +64,8 @@ const BB_FILL = 'rgba(99, 102, 241, 0.07)';
 // 매물대 — 폰 폭(약 360px)에서는 웹 값(최대 28%·0.22)이면 막대가 가늘고 흐려 잘 안 보여 넓고 진하게
 const VP_MAX_WIDTH = 0.5;
 const VP_COLOR = 'rgba(100, 116, 139, 0.3)';
-const POC_RESIST = '#f59e0b'; // POC 가 현재가 위(저항)
-const POC_SUPPORT = '#8b5cf6'; // POC 가 현재가 아래(지지)
+const POC_RESIST = '#f59e0b'; // POC 가 현재가 위
+const POC_SUPPORT = '#8b5cf6'; // POC 가 현재가 아래
 
 /** 거래량 가장 큰 칸의 가운데 가격(같으면 아래 칸). 칸이 없으면 null */
 function pocOf(bins: { low: number; high: number; volume: number }[]): number | null {
@@ -181,14 +184,6 @@ function volumeProfile(pts: Bar[]): VolumeBin[] {
 class VolumeProfile implements LWC.ISeriesPrimitive<Time> {
   points: Bar[] = [];
   visible = false;
-  /** 마지막으로 RN 에 알린 POC(undefined = 아직 안 알림) — 바뀔 때만 보낸다 */
-  sentPoc: number | null | undefined = undefined;
-  /** POC 를 RN 에 알림(바뀐 경우만) */
-  reportPoc(poc: number | null) {
-    if (poc === this.sentPoc) return;
-    this.sentPoc = poc;
-    post({ type: 'poc', price: poc });
-  }
   private param: LWC.SeriesAttachedParameter<Time> | null = null;
   private readonly view: LWC.ISeriesPrimitivePaneView;
 
@@ -217,10 +212,7 @@ class VolumeProfile implements LWC.ISeriesPrimitive<Time> {
     const to = Math.min(this.points.length - 1, Math.floor(r.to));
     if (to < from) return;
     const bins = volumeProfile(this.points.slice(from, to + 1));
-    if (bins.length === 0) {
-      this.reportPoc(null);
-      return;
-    }
+    if (bins.length === 0) return;
     const maxVol = Math.max(1, ...bins.map((b) => b.volume));
     const poc = pocOf(bins);
     const last = this.points[this.points.length - 1].close;
@@ -241,7 +233,6 @@ class VolumeProfile implements LWC.ISeriesPrimitive<Time> {
         c.fill();
       }
     });
-    this.reportPoc(poc);
   }
 }
 
@@ -296,6 +287,10 @@ function create(newMode: ChartMode) {
     bbLower: c.addLineSeries({ ...base, color: BB }),
   };
   ind = lines;
+  // 지지·저항 추세선 2개(저항·지지 순) — 'trend' 메시지로 setData. 미리 만들어 두고 없으면 빈 데이터
+  const trendBase = { lineWidth: 2 as const, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false };
+  trend = [c.addLineSeries({ ...trendBase, color: '#f59e0b' }), c.addLineSeries({ ...trendBase, color: '#8b5cf6' })];
+  trendSpecs = null; // 단위가 바뀌면 time 형식이 달라 옛 추세선은 버린다 — RN 이 새 데이터 기준으로 다시 보낸다
   band = new BandFill(BB_FILL);
   lines.bbUpper.attachPrimitive(band);
   vpPrim = new VolumeProfile();
@@ -306,6 +301,14 @@ function create(newMode: ChartMode) {
   applyLines();
 }
 
+function applyTrend() {
+  trend.forEach((ser, i) => {
+    const spec = trendSpecs ? trendSpecs[i] : undefined;
+    if (spec) ser.applyOptions({ color: spec.color });
+    ser.setData(asLine(spec ? spec.points : []));
+  });
+}
+
 function applyVis() {
   if (!ind || !band || !vpPrim) return;
   const lines = ind;
@@ -313,7 +316,6 @@ function applyVis() {
   (['bbUpper', 'bbMiddle', 'bbLower'] as const).forEach((k) => lines[k].applyOptions({ visible: vis.bb }));
   band.setVisible(vis.bb);
   vpPrim.visible = vis.vp;
-  if (!vis.vp) vpPrim.reportPoc(null); // 끄면 RN 의 지지·저항 후보에서 POC 를 뺀다
   vpPrim.update();
 }
 
@@ -342,7 +344,7 @@ function applyLines() {
   priceLines = lineSpecs.map((spec) =>
     s.createPriceLine({
       price: spec.price, color: spec.color, lineWidth: spec.width,
-      lineStyle: spec.dashed ? LW.LineStyle.Dashed : LW.LineStyle.Solid, axisLabelVisible: true, title: spec.axisTitle ?? '', // 지지·저항 선만 축 이름 — 다른 선 이름은 RN 범례(가까운 선끼리 겹침)
+      lineStyle: spec.dashed ? LW.LineStyle.Dashed : LW.LineStyle.Solid, axisLabelVisible: true, title: '',
     }),
   );
 }
@@ -431,6 +433,10 @@ const handlers: { [K in ChartMessage['type']]: (m: MessageOf<K>) => void } = {
   lines: (m) => {
     lineSpecs = m.lines;
     applyLines();
+  },
+  trend: (m) => {
+    trendSpecs = m.lines;
+    applyTrend();
   },
   vis: (m) => {
     vis = { ma: m.ma, bb: m.bb, vp: !!m.vp };
