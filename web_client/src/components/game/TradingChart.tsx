@@ -15,6 +15,7 @@ import { MA_PERIODS, bollinger, sma, type MaPeriod } from '../../lib/indicators'
 import { kstDateString } from '../../lib/format'
 import { THEME } from '../../lib/themeColors'
 import { VolumeProfilePrimitive } from '../../lib/volumeProfile'
+import { lastSrValues, pickSrLevels, srAxisTitle, srCandidates, srSignature, type SrLevel } from '../../lib/srLevels'
 import { useTradingGameStore } from '../../store/tradingGame'
 import { chipClass } from '../ui/Chip'
 import {
@@ -33,6 +34,7 @@ const TAKE_PROFIT = '#16a34a' // 익절 — 초록
 const MA_COLORS: Record<MaPeriod, string> = { 5: '#14b8a6', 20: '#f97316', 60: '#a16207' }
 const BB_COLOR = 'rgba(99, 102, 241, 0.7)'
 const BB_FILL = 'rgba(99, 102, 241, 0.07)'
+const SR_NARROW_PX = 640 // 차트 폭이 이보다 좁으면 지지·저항 라벨을 짧게(매물대 좁은 화면 기준과 같은 값)
 
 /** 지표 선 시리즈 묶음 — 차트와 같이 생성·제거 */
 interface IndicatorSeries {
@@ -100,6 +102,8 @@ interface TradingChartProps {
   lastPrice: number | null
   coach: Coach | null
   position: Position | null
+  /** 차트에 그린 지지·저항 목록(바뀔 때만) — 게임 화면이 터치·돌파 감지에 쓴다 */
+  onSrLevels?: (levels: SrLevel[]) => void
 }
 
 const toBar = (c: DailyCandle) => ({ time: c.date, open: c.open, high: c.high, low: c.low, close: c.close })
@@ -160,7 +164,7 @@ async function fetchRows(ticker: string, interval: ChartInterval): Promise<Candl
   return res.ticker && res.ticker !== ticker ? [] : sortUnique(res.candles)
 }
 
-export default function TradingChart({ ticker, lastPrice, coach, position }: TradingChartProps) {
+export default function TradingChart({ ticker, lastPrice, coach, position, onSrLevels }: TradingChartProps) {
   const boxRef = useRef<HTMLDivElement>(null)
   const seriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null)
   const lastCandleRef = useRef<DailyCandle | null>(null)
@@ -170,6 +174,9 @@ export default function TradingChart({ ticker, lastPrice, coach, position }: Tra
   const fitPricesRef = useRef<number[]>([])
   const indRef = useRef<IndicatorSeries | null>(null)
   const vpRef = useRef<VolumeProfilePrimitive | null>(null) // 매물대(보이는 구간)
+  const srLinesRef = useRef<IPriceLine[]>([]) // 지지·저항 라벨선
+  const srSigRef = useRef('') // 마지막으로 그린 지지·저항 서명(같으면 다시 그리지 않음)
+  const [poc, setPoc] = useState<number | null>(null) // 보이는 구간 매물대 POC(매물대 켜짐일 때)
   const reloadRef = useRef<(() => void) | null>(null) // 현재 차트의 캔들 재로드(스트림 재개 시)
   const barsRef = useRef<{ time: Time; close: number }[]>([]) // 지표 계산용 시각·종가
   // 마지막 설정(단위·지표)은 이 브라우저에 저장 — 다시 열면 그대로(lib/chartPrefs)
@@ -224,6 +231,7 @@ export default function TradingChart({ ticker, lastPrice, coach, position }: Tra
     const vp = new VolumeProfilePrimitive()
     series.attachPrimitive(vp)
     vpRef.current = vp
+    vp.onPocChange = setPoc
     setLoaded(false)
     setFailed(false)
     setEmpty(false)
@@ -333,6 +341,9 @@ export default function TradingChart({ ticker, lastPrice, coach, position }: Tra
       vpRef.current = null
       barsRef.current = []
       linesRef.current = []
+      srLinesRef.current = []
+      srSigRef.current = ''
+      setPoc(null)
       lastCandleRef.current = null
       lastIntradayRef.current = null
       chart.remove()
@@ -449,6 +460,37 @@ export default function TradingChart({ ticker, lastPrice, coach, position }: Tra
     }
     linesRef.current = lines
   }, [support, resistance, entry, side, stopLoss, takeProfit, loaded, interval])
+
+  // 3-1) 지지·저항(설계 2026-10-27 §3·§4) — 켜진 지표의 마지막 값 + 보이는 구간 POC 중 현재가 위·아래 2개씩.
+  // 키·역할·호가 반올림 가격(+좁은 화면 여부)이 같으면 다시 그리지 않는다(틱마다 가격선을 지웠다 만들지 않게)
+  useEffect(() => {
+    const series = seriesRef.current
+    if (!series || !loaded) return
+    const closes = barsRef.current.map((b) => b.close)
+    const price = lastPrice ?? closes[closes.length - 1]
+    const levels = price === undefined
+      ? []
+      : pickSrLevels(srCandidates({
+          values: lastSrValues(closes),
+          ma: showMa,
+          bb: showBb,
+          poc: showVp ? poc : null,
+          maColors: MA_PERIODS.map((p) => MA_COLORS[p]),
+        }, price), price)
+    const narrow = (boxRef.current?.clientWidth ?? 0) < SR_NARROW_PX
+    const sig = `${srSignature(levels)}#${narrow}`
+    if (sig === srSigRef.current) return
+    srSigRef.current = sig
+    for (const l of srLinesRef.current) series.removePriceLine(l)
+    srLinesRef.current = levels.map((l) => series.createPriceLine({
+      price: l.price, color: l.color, lineWidth: 1, lineStyle: LineStyle.Dashed, axisLabelVisible: true,
+      title: srAxisTitle(l, MA_PERIODS, narrow),
+    }))
+    onSrLevels?.(levels)
+  }, [lastPrice, loaded, showMa, showBb, showVp, poc, interval, ticker, onSrLevels])
+
+  // 차트가 사라지면(게임 화면 이탈 등) 부모의 지지·저항 목록을 비운다
+  useEffect(() => () => onSrLevels?.([]), [onSrLevels])
 
   // 가격선 이름은 범례에 — 차트 안 이름(title)은 진입·손절처럼 가까운 선끼리 겹친다(축 라벨은 라이브러리가 떼어 놓음)
   const lineLegend = [

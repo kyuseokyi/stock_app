@@ -7,6 +7,10 @@ import { StyleSheet } from 'react-native-unistyles';
 import { useAuthStore } from '@/features/auth/store';
 import { AcademySheet } from '@/features/game/components/academy-sheet';
 import { DailyChart } from '@/features/game/components/candle-chart';
+import { SrActionSheet } from '@/features/game/components/sr-action-sheet';
+import { MA_PERIODS } from '@/features/game/lib/indicators';
+import { srName, type SrLevel } from '@/features/game/lib/sr-levels';
+import { SrWatcher, type SrEvent } from '@/features/game/lib/sr-watch';
 import { CoachBanner } from '@/features/game/components/coach-banner';
 import { MarketStatusBanner } from '@/features/game/components/market-status-banner';
 import { useForegroundInterval } from '@/features/game/lib/foreground-interval';
@@ -74,6 +78,26 @@ export default function GameScreen() {
   const [loginPrompt, setLoginPrompt] = useState(false);
   const ready = status === 'ready';
   const focused = useIsFocused();
+  const pushToast = useTradingGameStore((s) => s.pushToast);
+
+  // 지지·저항 대응(설계 2026-10-27 §7) — 포지션 보유 + 이 화면을 보는 중일 때만 틱마다 감지.
+  // 조건이 빠지면 reset(돌아왔을 때 그사이 움직임으로 시트가 바로 뜨지 않게 기준부터)
+  const [srLevels, setSrLevels] = useState<SrLevel[]>([]);
+  const [srEvent, setSrEvent] = useState<SrEvent | null>(null);
+  const watcherRef = useRef(new SrWatcher());
+  const hasPosition = position !== null;
+  useEffect(() => {
+    const w = watcherRef.current;
+    if (!loggedIn || !hasPosition || !focused || lastPrice === null) {
+      w.reset();
+      return;
+    }
+    const events = w.update(srLevels, lastPrice, Date.now());
+    // 다른 시트가 열려 있으면 버린다(재알림 간격은 이미 적용됨)
+    if (events.length > 0 && activeModal === null && !loginPrompt) setSrEvent((cur) => cur ?? events[0]);
+  }, [lastPrice, srLevels, hasPosition, focused, loggedIn, activeModal, loginPrompt]);
+  // 포지션이 없어지면 남은 이벤트 버림(렌더 중 파생 상태 갱신)
+  if (!hasPosition && srEvent !== null) setSrEvent(null);
 
   // 장운영 상태 배너 초기값 — 화면을 열 때·WS 재연결/앱 복귀(streamEpoch) 때. 이후 변화는 WS market_status
   const seasonTicker = season?.ticker;
@@ -250,7 +274,7 @@ export default function GameScreen() {
         />
         {/* 차트를 위로 — 아래 고정 주문 바와 한 화면에 들어오게. 코치·심리·안내는 차트 아래 */}
         <MarketStatusBanner status={marketStatus} />
-        <DailyChart ticker={season.ticker} lastPrice={lastPrice} coach={coach} position={position} />
+        <DailyChart ticker={season.ticker} lastPrice={lastPrice} coach={coach} position={position} onSrLevels={setSrLevels} />
         {position ? (
           <PositionCard position={position} lastPrice={lastPrice} closing={closing} onClose={() => void closePosition()} />
         ) : null}
@@ -286,6 +310,23 @@ export default function GameScreen() {
       {activeModal === 'academy' ? <AcademySheet onClose={closeModal} /> : null}
       {activeModal === 'quiz' ? <QuizSheet onClose={closeModal} /> : null}
       {activeModal === 'streak' ? <StreakRewardSheet onClose={closeModal} /> : null}
+      {srEvent !== null && position !== null ? (
+        <SrActionSheet
+          event={srEvent}
+          name={srName(srEvent.key, MA_PERIODS, false)}
+          position={position}
+          closing={closing}
+          onClosePosition={() => {
+            setSrEvent(null);
+            void closePosition();
+          }}
+          onHold={() => {
+            setSrEvent(null);
+            pushToast({ kind: 'info', icon: '✊', message: '홀딩을 선택했어요. 다음 지지·저항에서 다시 알려 드릴게요.' });
+          }}
+          onDismiss={() => setSrEvent(null)}
+        />
+      ) : null}
       {loginPrompt ? (
         <BottomSheet title="로그인이 필요해요" onClose={() => setLoginPrompt(false)}>
           <Text style={styles.sheetText}>내정보 탭에서 간편 로그인으로 시작하고{'\n'}시즌에 참여해 보세요.</Text>

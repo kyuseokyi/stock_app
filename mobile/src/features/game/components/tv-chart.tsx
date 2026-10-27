@@ -42,6 +42,8 @@ type TvChartProps = {
    * 더 없으면 false. 실패는 throw → 다음에 다시 끌면 재시도
    */
   onNeedOlder?: () => Promise<boolean>;
+  /** 매물대가 켜져 있을 때 보이는 구간 POC 가 바뀌면(끄면 null) — 지지·저항 후보용 */
+  onPoc?: (price: number | null) => void;
 };
 
 const SOURCE = { html: CHART_HTML }; // 모듈 상수 — 렌더마다 새 객체면 WebView 가 다시 로드된다
@@ -62,6 +64,7 @@ export function TvChart({
   maPeriods = MA_PERIODS,
   visibleDays = DAILY_VISIBLE_DAYS,
   onNeedOlder,
+  onPoc,
 }: TvChartProps) {
   const ref = useRef<WebView>(null);
   const [ready, setReady] = useState(false);
@@ -123,6 +126,8 @@ export function TvChart({
           if (!more) send({ type: 'older', more: false });
         })
         .catch(() => send({ type: 'older', more: true }));
+    } else if (msg.type === 'poc') {
+      onPoc?.(msg.price);
     } else if (msg.type === 'error' && __DEV__) {
       console.warn('[TvChart]', msg.message);
     }
