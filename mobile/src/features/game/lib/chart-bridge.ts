@@ -45,8 +45,11 @@ export interface ChartLine {
    * 없음=넣지 않음(손절·익절은 멀 수 있음). lightweight-charts 4 의 가격선은 자동 범위에 들어가지 않는다.
    */
   fit?: 'always' | 'day';
-  /** 가격축 라벨 옆 이름(지지·저항 선만, 예: '저항 20'). 없으면 이름 없음 — 다른 선 이름은 RN 범례(title) */
-  axisTitle?: string;
+}
+
+export interface TrendLineData {
+  color: string;
+  points: { time: BarTime; value: number }[];
 }
 
 /** 자동 범위에 넣을 가격 — 페이지(chart-page.ts autoscaleInfoProvider)의 같은 규칙 */
@@ -77,13 +80,14 @@ export type ChartMessage =
   | { type: 'older'; more: boolean }
   | { type: 'tick'; bar: Bar; ind: Partial<Record<IndicatorKey, number>> }
   | { type: 'lines'; lines: ChartLine[] }
+  /** 지지·저항 추세선(최대 2개, 순서 = 저항·지지). 없는 선은 points 가 빈 배열 */
+  | { type: 'trend'; lines: TrendLineData[] }
   | { type: 'vis'; ma: boolean; bb: boolean; vp: boolean };
 
-/** 페이지 → RN 메시지 — 준비됨 / 일봉 왼쪽 끝(과거 요청) / 보이는 구간 매물대 POC 변경(끄면 null) / 처리 중 오류 */
+/** 페이지 → RN 메시지 — 준비됨 / 일봉 왼쪽 끝(과거 요청) / 처리 중 오류 */
 export type PageEvent =
   | { type: 'ready' }
   | { type: 'needOlder' }
-  | { type: 'poc'; price: number | null }
   | { type: 'error'; message: string };
 
 /** 이동평균 기간(최대 3칸, 앞에서부터 ma5·ma20·ma60 칸에 들어감). 기본은 게임과 같은 MA_PERIODS(5·20·60) */

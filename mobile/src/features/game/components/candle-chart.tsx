@@ -8,8 +8,9 @@ import { getDailyCandles, getDailyCandlesBefore, getGameCandles, getSessionBar }
 import { applyTick, withSessionBar } from '../lib/candles';
 import { CHART_PREFS_KEY, DEFAULT_CHART_PREFS, parseChartPrefs, serializeChartPrefs } from '../lib/chart-prefs';
 import { layoutCandles, niceTicks, priceToY, type Ohlc } from '../lib/chart-layout';
-import { lastIndicatorValues, mergeOlder, priceLines, toBars, type ChartColors, type ChartLine } from '../lib/chart-bridge';
-import { pickSrLevels, srAxisTitle, srCandidates, srName, srSignature, type SrLevel } from '../lib/sr-levels';
+import { mergeOlder, priceLines, toBars, type ChartColors, type TrendLineData, type Bar } from '../lib/chart-bridge';
+import { srLevelsFromTrends, srName, srSignature, TREND_HIGH_COLOR, TREND_LOW_COLOR, type SrLevel } from '../lib/sr-levels';
+import { trendLines, valueAt, type TrendLine } from '../lib/trend-lines';
 import { formatPrice, kstDateString } from '../lib/format';
 import { lineSegments, MA_PERIODS } from '../lib/indicators';
 import { applyTickIntraday, axisLabelIndexes, bucketStartSec, CHART_INTERVALS, dayLabel, kstHm } from '../lib/intraday';
@@ -17,6 +18,8 @@ import type { ChartInterval, Coach, DailyCandle, IntradayCandle, Position } from
 import { useTradingGameStore } from '../store';
 import { useGameRules } from '../use-game-rules';
 import { TvChart, type TvChartData } from './tv-chart';
+
+type TrendPair = { resistance: TrendLine | null; support: TrendLine | null };
 
 // CandleChart: 순수 View 캔들 차트(퀴즈 차트용). 좌표는 lib/chart-layout 의 순수 함수가 계산한다.
 // DailyChart(게임 차트): 웹과 같은 lightweight-charts 를 WebView 로(tv-chart). 이 파일은 데이터·캐시·틱만 맡는다.
@@ -279,6 +282,7 @@ export function DailyChart({ ticker, lastPrice, coach, position, onSrLevels }: D
   const [showMa, setShowMa] = useState(DEFAULT_CHART_PREFS.ma);
   const [showBb, setShowBb] = useState(DEFAULT_CHART_PREFS.bb);
   const [showVp, setShowVp] = useState(DEFAULT_CHART_PREFS.vp);
+  const [showSr, setShowSr] = useState(DEFAULT_CHART_PREFS.sr);
 
   // 0) 마지막 설정(단위·지표)을 기기에서 복원 — 읽기 전에는 캔들을 로드하지 않아 기본값→저장값 이중 로드를 막는다.
   // SecureStore 미지원(web)·실패면 기본값(저장값 > 관리자 기본 단위 > 일봉)
@@ -294,6 +298,7 @@ export function DailyChart({ ticker, lastPrice, coach, position, onSrLevels }: D
         setShowMa(p.ma);
         setShowBb(p.bb);
         setShowVp(p.vp);
+        setShowSr(p.sr);
         setPrefsReady(true);
       });
     return () => {
@@ -302,10 +307,10 @@ export function DailyChart({ ticker, lastPrice, coach, position, onSrLevels }: D
   }, []);
   useEffect(() => {
     if (!prefsReady) return;
-    SecureStore.setItemAsync(CHART_PREFS_KEY, serializeChartPrefs({ interval: picked, ma: showMa, bb: showBb, vp: showVp })).catch(
+    SecureStore.setItemAsync(CHART_PREFS_KEY, serializeChartPrefs({ interval: picked, ma: showMa, bb: showBb, vp: showVp, sr: showSr })).catch(
       () => undefined,
     );
-  }, [prefsReady, picked, showMa, showBb, showVp]);
+  }, [prefsReady, picked, showMa, showBb, showVp, showSr]);
   // 화면에 그리는 캔들 묶음(어느 종목·단위의 데이터인지 함께) — 단위를 바꾸면 새 데이터가 올 때까지 이전 것을 흐리게 유지
   const [shown, setShown] = useState<ShownSeries | null>(null);
   const shownRef = useRef<ShownSeries | null>(null); // 틱 병합이 최신 값을 읽도록(상태 갱신 함수 안 부수효과 방지)
@@ -446,30 +451,20 @@ export function DailyChart({ ticker, lastPrice, coach, position, onSrLevels }: D
     [shown],
   );
 
-  // 지지·저항(설계 2026-10-27 §3) — 켜진 지표의 마지막 값 + 보이는 구간 POC 중 현재가 위·아래 2개씩.
-  // 틱마다 다시 계산하되, 키·역할·호가 반올림 가격이 같으면 이전 배열을 유지(WebView·부모에 다시 보내지 않게)
-  // POC 는 어느 종목·단위 차트에서 온 값인지 함께 둔다 — 종목·단위를 바꾼 직후 이전 차트의 POC 를 쓰지 않게
-  const seriesKey = `${ticker}:${interval}`;
-  const [pocOf, setPocOf] = useState<{ key: string; price: number | null }>({ key: '', price: null });
-  const poc = pocOf.key === seriesKey ? pocOf.price : null;
-  const onPoc = useCallback((price: number | null) => setPocOf({ key: seriesKey, price }), [seriesKey]);
-  const rawSr = useMemo<SrLevel[]>(() => {
-    if (chartView === null || shown === null || !sameSeries(shown.series, ticker, interval)) return [];
+  // 지지·저항(설계 2026-10-27 chart-game-sr-trendlines) — 스윙 고점 2개·저점 2개를 잇는 추세선 2개.
+  // 불러온 캔들 기준으로 계산(스크롤해도 안 바뀜). 목록 = 두 선의 마지막 캔들 위치 값. 칩이 꺼지면 없음
+  const trends = useMemo(() => {
+    const none = { lines: { resistance: null, support: null } as TrendPair, bars: [] as Bar[] };
+    if (!showSr || chartView === null || shown === null || !sameSeries(shown.series, ticker, interval)) return none;
     const bars = toBars(chartView.data);
-    const price = lastPrice ?? bars[bars.length - 1]?.close;
-    if (price === undefined) return [];
-    const cands = srCandidates(
-      {
-        values: lastIndicatorValues(bars),
-        ma: showMa,
-        bb: showBb,
-        poc: showVp ? poc : null,
-        maColors: MA_PERIODS.map((p) => MA_COLORS[p]),
-      },
-      price,
-    );
-    return pickSrLevels(cands, price);
-  }, [chartView, shown, ticker, interval, lastPrice, showMa, showBb, showVp, poc]);
+    return { lines: trendLines(bars), bars };
+  }, [showSr, chartView, shown, ticker, interval]);
+  const rawSr = useMemo<SrLevel[]>(() => {
+    const { bars } = trends;
+    if (bars.length === 0) return [];
+    const price = lastPrice ?? bars[bars.length - 1].close;
+    return srLevelsFromTrends(trends.lines, bars.length - 1, price);
+  }, [trends, lastPrice]);
   const [srLevels, setSrLevels] = useState<SrLevel[]>([]);
   // 렌더 중 파생 상태 갱신(React 권장 패턴) — 효과 안 setState 대신
   if (srSignature(srLevels) !== srSignature(rawSr)) setSrLevels(rawSr);
@@ -478,22 +473,34 @@ export function DailyChart({ ticker, lastPrice, coach, position, onSrLevels }: D
   }, [srLevels, onSrLevels]);
   // 차트가 사라지면 부모의 목록도 비운다(감지기가 옛 선을 계속 보지 않게)
   useEffect(() => () => onSrLevels?.([]), [onSrLevels]);
-  // 지지·저항 선 — 이름은 가격축에(짧게), 범례에는 넣지 않는다(아래 lines 범례는 그대로)
-  const chartLines = useMemo<ChartLine[]>(
-    () => [
-      ...lines,
-      ...srLevels.map((l) => ({
-        price: l.price,
-        color: l.color,
-        width: 1 as const,
-        dashed: true,
-        title: srName(l.key, MA_PERIODS, false),
-        axisTitle: srAxisTitle(l, MA_PERIODS, true),
-      })),
-    ],
-    [lines, srLevels],
+  // 차트에 보낼 추세선 점 — i1, i2, 마지막 캔들(마지막이 i2 면 2점). 값이 같으면 이전 배열을 유지(틱마다 다시 보내지 않게)
+  const rawTrend = useMemo<TrendLineData[]>(() => {
+    const { bars, lines: tl } = trends;
+    const build = (line: TrendLine | null, color: string): TrendLineData => {
+      if (line === null) return { color, points: [] };
+      const last = bars.length - 1;
+      const points = [
+        { time: bars[line.i1].time, value: line.p1 },
+        { time: bars[line.i2].time, value: line.p2 },
+      ];
+      if (last > line.i2) points.push({ time: bars[last].time, value: valueAt(line, last) });
+      return { color, points };
+    };
+    const data = bars.length === 0 ? [] : [build(tl.resistance, TREND_HIGH_COLOR), build(tl.support, TREND_LOW_COLOR)];
+    return data;
+  }, [trends]);
+  const [trend, setTrend] = useState<TrendLineData[]>([]);
+  if (JSON.stringify(trend) !== JSON.stringify(rawTrend)) setTrend(rawTrend);
+  const chartLines = lines; // 지지·저항은 수평 가격선이 아니라 추세선 시리즈로 그린다
+  // 범례 — 켜져 있고 선이 있을 때(색은 선 종류로 고정)
+  const trendLegend = useMemo(
+    () =>
+      [
+        trends.lines.resistance ? { key: 'trendHigh' as const, color: TREND_HIGH_COLOR } : null,
+        trends.lines.support ? { key: 'trendLow' as const, color: TREND_LOW_COLOR } : null,
+      ].filter((x) => x !== null),
+    [trends],
   );
-
   // 다른 단위 데이터를 보여 주는 중(새 데이터 대기) — 흐리게 + 작은 로딩 표시
   const stale = shown !== null && !sameSeries(shown.series, ticker, interval);
   const empty = shown !== null && !stale && shown.series.rows.length === 0;
@@ -509,7 +516,7 @@ export function DailyChart({ ticker, lastPrice, coach, position, onSrLevels }: D
           ))}
           <View style={styles.indicatorBtn}>
             <MiniChip
-              label={`지표${showMa || showBb || showVp ? ` ${Number(showMa) + Number(showBb) + Number(showVp)}` : ''} ${indOpen ? '▴' : '▾'}`}
+              label={`지표${showMa || showBb || showVp || showSr ? ` ${Number(showMa) + Number(showBb) + Number(showVp) + Number(showSr)}` : ''} ${indOpen ? '▴' : '▾'}`}
               selected={indOpen}
               onPress={() => setIndOpen((v) => !v)}
             />
@@ -522,6 +529,7 @@ export function DailyChart({ ticker, lastPrice, coach, position, onSrLevels }: D
           <TvChart
             view={chartView}
             lines={chartLines}
+            trend={trend}
             ma={showMa}
             bb={showBb}
             vp={showVp}
@@ -529,7 +537,6 @@ export function DailyChart({ ticker, lastPrice, coach, position, onSrLevels }: D
             height={CHART_H}
             onReady={() => setChartReady(true)}
             onNeedOlder={interval === 'day' ? loadOlder : undefined}
-            onPoc={onPoc}
           />
         </View>
         {stale && !failed ? (
@@ -537,7 +544,7 @@ export function DailyChart({ ticker, lastPrice, coach, position, onSrLevels }: D
             <ActivityIndicator size="small" />
           </View>
         ) : null}
-        {hasBars && chartReady && (showMa || lines.length > 0) ? (
+        {hasBars && chartReady && (showMa || lines.length > 0 || trendLegend.length > 0) ? (
           // 가격선 이름(지지·저항·진입·손절·익절)도 여기 — 차트 안 이름은 가까운 선끼리 겹쳐서 뺐다
           <View style={styles.legend} pointerEvents="none">
             {showMa
@@ -547,6 +554,11 @@ export function DailyChart({ ticker, lastPrice, coach, position, onSrLevels }: D
                   </Text>
                 ))
               : null}
+            {trendLegend.map((l) => (
+              <Text key={l.key} style={[styles.legendText, styles.legendLine]} allowFontScaling={false}>
+                <Text style={{ color: l.color }}>━</Text> {srName(l.key, true)}
+              </Text>
+            ))}
             {lines.map((l) => (
               <Text key={l.title} style={[styles.legendText, styles.legendLine]} allowFontScaling={false}>
                 <Text style={{ color: l.color }}>{l.dashed ? '┄' : '━'}</Text> {l.title}
@@ -576,6 +588,7 @@ export function DailyChart({ ticker, lastPrice, coach, position, onSrLevels }: D
           <MiniChip label="이동평균 5·20·60" selected={showMa} onPress={() => setShowMa((v) => !v)} />
           <MiniChip label="볼린저 20·2σ" selected={showBb} onPress={() => setShowBb((v) => !v)} />
           <MiniChip label="매물대" selected={showVp} onPress={() => setShowVp((v) => !v)} />
+          <MiniChip label="지지·저항" selected={showSr} onPress={() => setShowSr((v) => !v)} />
         </View>
       ) : null}
     </View>

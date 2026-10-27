@@ -15,7 +15,8 @@ import { MA_PERIODS, bollinger, sma, type MaPeriod } from '../../lib/indicators'
 import { kstDateString } from '../../lib/format'
 import { THEME } from '../../lib/themeColors'
 import { VolumeProfilePrimitive } from '../../lib/volumeProfile'
-import { lastSrValues, pickSrLevels, srAxisTitle, srCandidates, srSignature, type SrLevel } from '../../lib/srLevels'
+import { srLevelsFromTrends, srName, srSignature, TREND_HIGH_COLOR, TREND_LOW_COLOR, type SrLevel } from '../../lib/srLevels'
+import { trendLines, valueAt, type TrendLine } from '../../lib/trendLines'
 import { useTradingGameStore } from '../../store/tradingGame'
 import { chipClass } from '../ui/Chip'
 import {
@@ -34,7 +35,8 @@ const TAKE_PROFIT = '#16a34a' // 익절 — 초록
 const MA_COLORS: Record<MaPeriod, string> = { 5: '#14b8a6', 20: '#f97316', 60: '#a16207' }
 const BB_COLOR = 'rgba(99, 102, 241, 0.7)'
 const BB_FILL = 'rgba(99, 102, 241, 0.07)'
-const SR_NARROW_PX = 640 // 차트 폭이 이보다 좁으면 지지·저항 라벨을 짧게(매물대 좁은 화면 기준과 같은 값)
+// 부모에 올린 지지·저항 서명의 초기·리셋 값 — 빈 목록 서명('')과 달라야 새 차트의 첫 목록(빈 목록 포함)이 반드시 올라간다
+const SR_SIG_UNSET = '(초기)'
 
 /** 지표 선 시리즈 묶음 — 차트와 같이 생성·제거 */
 interface IndicatorSeries {
@@ -91,11 +93,14 @@ const updateIndicatorLast = (s: IndicatorSeries, bars: { time: Time; close: numb
   s.band.setPoints(bands.flatMap((x, i) => (x === null ? [] : [{ time: bars[i].time, upper: x.upper, lower: x.lower }])))
 }
 
+/** 지표·추세선 계산용 캔들(시각·고가·저가·종가) */
+interface CalcBar { time: Time; high: number; low: number; close: number }
+
 /** 마지막 캔들 반영(같은 시각이면 교체, 새 시각이면 추가) — 원본 불변 */
-const upsertLast = (bars: { time: Time; close: number }[], time: Time, close: number) =>
-  bars.length > 0 && bars[bars.length - 1].time === time
-    ? [...bars.slice(0, -1), { time, close }]
-    : [...bars, { time, close }]
+const upsertLast = (bars: CalcBar[], bar: CalcBar) =>
+  bars.length > 0 && bars[bars.length - 1].time === bar.time
+    ? [...bars.slice(0, -1), bar]
+    : [...bars, bar]
 
 interface TradingChartProps {
   ticker: string
@@ -174,16 +179,19 @@ export default function TradingChart({ ticker, lastPrice, coach, position, onSrL
   const fitPricesRef = useRef<number[]>([])
   const indRef = useRef<IndicatorSeries | null>(null)
   const vpRef = useRef<VolumeProfilePrimitive | null>(null) // 매물대(보이는 구간)
-  const srLinesRef = useRef<IPriceLine[]>([]) // 지지·저항 라벨선
-  const srSigRef = useRef('') // 마지막으로 그린 지지·저항 서명(같으면 다시 그리지 않음)
-  const [poc, setPoc] = useState<number | null>(null) // 보이는 구간 매물대 POC(매물대 켜짐일 때)
+  const trendRef = useRef<{ resistance: ISeriesApi<'Line'>; support: ISeriesApi<'Line'> } | null>(null) // 지지·저항 추세선
+  const trendSigRef = useRef('') // 마지막으로 그린 추세선 점(같으면 setData 생략)
+  const srSigRef = useRef(SR_SIG_UNSET) // 마지막으로 부모에 올린 지지·저항 서명(같으면 다시 올리지 않음)
+  const [dataVer, setDataVer] = useState(0) // 캔들을 새로 그릴 때마다 +1 — 추세선 다시 계산
+  const [hasTrend, setHasTrend] = useState({ resistance: false, support: false }) // 범례용
   const reloadRef = useRef<(() => void) | null>(null) // 현재 차트의 캔들 재로드(스트림 재개 시)
-  const barsRef = useRef<{ time: Time; close: number }[]>([]) // 지표 계산용 시각·종가
+  const barsRef = useRef<CalcBar[]>([]) // 지표·추세선 계산용 시각·고저종
   // 마지막 설정(단위·지표)은 이 브라우저에 저장 — 다시 열면 그대로(lib/chartPrefs)
   const [initialPrefs] = useState(loadChartPrefs)
   const [showMa, setShowMa] = useState(initialPrefs.ma)
   const [showBb, setShowBb] = useState(initialPrefs.bb)
   const [showVp, setShowVp] = useState(initialPrefs.vp)
+  const [showSr, setShowSr] = useState(initialPrefs.sr)
   const [indOpen, setIndOpen] = useState(false) // 모바일 폭 지표 팝오버
   const [loaded, setLoaded] = useState(false)
   const [failed, setFailed] = useState(false)
@@ -199,8 +207,8 @@ export default function TradingChart({ ticker, lastPrice, coach, position, onSrL
   const interval: ChartInterval = usable ?? rules?.chart_interval_default ?? 'day'
 
   useEffect(() => {
-    saveChartPrefs({ interval: picked, ma: showMa, bb: showBb, vp: showVp })
-  }, [picked, showMa, showBb, showVp])
+    saveChartPrefs({ interval: picked, ma: showMa, bb: showBb, vp: showVp, sr: showSr })
+  }, [picked, showMa, showBb, showVp, showSr])
 
   // 1) 차트 생성 + 캔들 로드(종목·단위 바뀌면 재생성 — 일봉/분봉 time 형식이 달라 시리즈를 새로 만든다)
   useEffect(() => {
@@ -231,7 +239,16 @@ export default function TradingChart({ ticker, lastPrice, coach, position, onSrL
     const vp = new VolumeProfilePrimitive()
     series.attachPrimitive(vp)
     vpRef.current = vp
-    vp.onPocChange = setPoc
+    // 지지·저항 추세선 — 자동 가격 범위에서 제외(멀리 연장돼도 캔들이 납작해지지 않게)
+    const trendBase = {
+      lineWidth: 2 as const, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false,
+      autoscaleInfoProvider: () => null,
+    }
+    trendRef.current = {
+      resistance: chart.addLineSeries({ ...trendBase, color: TREND_HIGH_COLOR }),
+      support: chart.addLineSeries({ ...trendBase, color: TREND_LOW_COLOR }),
+    }
+    trendSigRef.current = ''
     setLoaded(false)
     setFailed(false)
     setEmpty(false)
@@ -244,7 +261,7 @@ export default function TradingChart({ ticker, lastPrice, coach, position, onSrL
     const drawDaily = (candles: DailyCandle[]) => {
       dayRows = candles
       series.setData(candles.map(toBar))
-      barsRef.current = candles.map((c) => ({ time: c.date, close: c.close }))
+      barsRef.current = candles.map((c) => ({ time: c.date, high: c.high, low: c.low, close: c.close }))
       setIndicatorData(ind, barsRef.current)
       vp.setPoints(candles.map((c) => ({ high: c.high, low: c.low, close: c.close, volume: c.volume ?? 0 })))
     }
@@ -270,7 +287,7 @@ export default function TradingChart({ ticker, lastPrice, coach, position, onSrL
       } else {
         const bars = rows as IntradayCandle[]
         series.setData(bars.map(toIntradayBar))
-        barsRef.current = bars.map((c) => ({ time: c.t as UTCTimestamp, close: c.close }))
+        barsRef.current = bars.map((c) => ({ time: c.t as UTCTimestamp, high: c.high, low: c.low, close: c.close }))
         setIndicatorData(ind, barsRef.current)
         vp.setPoints(bars.map((c) => ({ high: c.high, low: c.low, close: c.close, volume: c.volume })))
         lastIntradayRef.current = bars[bars.length - 1] ?? null
@@ -282,6 +299,7 @@ export default function TradingChart({ ticker, lastPrice, coach, position, onSrL
         }
         setEmpty(bars.length === 0)
       }
+      setDataVer((v) => v + 1)
       setLoaded(true)
     }
 
@@ -341,9 +359,9 @@ export default function TradingChart({ ticker, lastPrice, coach, position, onSrL
       vpRef.current = null
       barsRef.current = []
       linesRef.current = []
-      srLinesRef.current = []
-      srSigRef.current = ''
-      setPoc(null)
+      trendRef.current = null
+      trendSigRef.current = ''
+      srSigRef.current = SR_SIG_UNSET
       lastCandleRef.current = null
       lastIntradayRef.current = null
       chart.remove()
@@ -390,14 +408,14 @@ export default function TradingChart({ ticker, lastPrice, coach, position, onSrL
         const isNew = barsRef.current[barsRef.current.length - 1]?.time !== next.date
         lastCandleRef.current = next
         series.update(toBar(next))
-        barsRef.current = upsertLast(barsRef.current, next.date, next.close)
+        barsRef.current = upsertLast(barsRef.current, { time: next.date, high: next.high, low: next.low, close: next.close })
         vpRef.current?.upsertLast({ high: next.high, low: next.low, close: next.close, volume: next.volume ?? 0 }, isNew)
       } else {
         const next = mergeTickIntraday(lastIntradayRef.current, bucketStartSec(Date.now(), interval), lastPrice)
         const isNew = barsRef.current[barsRef.current.length - 1]?.time !== next.t
         lastIntradayRef.current = next
         series.update(toIntradayBar(next))
-        barsRef.current = upsertLast(barsRef.current, next.t as UTCTimestamp, next.close)
+        barsRef.current = upsertLast(barsRef.current, { time: next.t as UTCTimestamp, high: next.high, low: next.low, close: next.close })
         vpRef.current?.upsertLast({ high: next.high, low: next.low, close: next.close, volume: next.volume }, isNew)
         setEmpty(false)
       }
@@ -461,33 +479,40 @@ export default function TradingChart({ ticker, lastPrice, coach, position, onSrL
     linesRef.current = lines
   }, [support, resistance, entry, side, stopLoss, takeProfit, loaded, interval])
 
-  // 3-1) 지지·저항(설계 2026-10-27 §3·§4) — 켜진 지표의 마지막 값 + 보이는 구간 POC 중 현재가 위·아래 2개씩.
-  // 키·역할·호가 반올림 가격(+좁은 화면 여부)이 같으면 다시 그리지 않는다(틱마다 가격선을 지웠다 만들지 않게)
+  // 3-1) 지지·저항 추세선(설계 2026-10-27 chart-game-sr-trendlines) — 불러온 캔들의 스윙 고점 2개·저점 2개를 잇는 사선.
+  // 점(i1, i2, 마지막 캔들)이 같으면 setData 생략, 지지·저항 목록은 서명이 바뀔 때만 부모에 올린다. 칩이 꺼지면 비움
   useEffect(() => {
-    const series = seriesRef.current
-    if (!series || !loaded) return
-    const closes = barsRef.current.map((b) => b.close)
-    const price = lastPrice ?? closes[closes.length - 1]
-    const levels = price === undefined
-      ? []
-      : pickSrLevels(srCandidates({
-          values: lastSrValues(closes),
-          ma: showMa,
-          bb: showBb,
-          poc: showVp ? poc : null,
-          maColors: MA_PERIODS.map((p) => MA_COLORS[p]),
-        }, price), price)
-    const narrow = (boxRef.current?.clientWidth ?? 0) < SR_NARROW_PX
-    const sig = `${srSignature(levels)}#${narrow}`
-    if (sig === srSigRef.current) return
-    srSigRef.current = sig
-    for (const l of srLinesRef.current) series.removePriceLine(l)
-    srLinesRef.current = levels.map((l) => series.createPriceLine({
-      price: l.price, color: l.color, lineWidth: 1, lineStyle: LineStyle.Dashed, axisLabelVisible: true,
-      title: srAxisTitle(l, MA_PERIODS, narrow),
-    }))
-    onSrLevels?.(levels)
-  }, [lastPrice, loaded, showMa, showBb, showVp, poc, interval, ticker, onSrLevels])
+    const t = trendRef.current
+    if (!t || !loaded) return
+    const bars = barsRef.current
+    const lines = showSr && bars.length > 0 ? trendLines(bars) : { resistance: null, support: null }
+    const last = bars.length - 1
+    const points = (line: TrendLine | null) => {
+      if (line === null) return []
+      const pts = [
+        { time: bars[line.i1].time, value: line.p1 },
+        { time: bars[line.i2].time, value: line.p2 },
+      ]
+      if (last > line.i2) pts.push({ time: bars[last].time, value: valueAt(line, last) })
+      return pts
+    }
+    const hi = points(lines.resistance)
+    const lo = points(lines.support)
+    const sig = JSON.stringify([hi, lo])
+    if (sig !== trendSigRef.current) {
+      trendSigRef.current = sig
+      t.resistance.setData(hi)
+      t.support.setData(lo)
+      setHasTrend({ resistance: hi.length > 0, support: lo.length > 0 })
+    }
+    const price = lastPrice ?? bars[last]?.close
+    const levels = price === undefined ? [] : srLevelsFromTrends(lines, last, price)
+    const levelSig = srSignature(levels)
+    if (levelSig !== srSigRef.current) {
+      srSigRef.current = levelSig
+      onSrLevels?.(levels)
+    }
+  }, [lastPrice, loaded, showSr, dataVer, interval, ticker, onSrLevels])
 
   // 차트가 사라지면(게임 화면 이탈 등) 부모의 지지·저항 목록을 비운다
   useEffect(() => () => onSrLevels?.([]), [onSrLevels])
@@ -500,6 +525,14 @@ export default function TradingChart({ ticker, lastPrice, coach, position, onSrL
     stopLoss !== null && { label: '손절', color: STOP_LOSS, dashed: true },
     takeProfit !== null && { label: '익절', color: TAKE_PROFIT, dashed: true },
   ].filter((x): x is { label: string; color: string; dashed: boolean } => Boolean(x))
+
+  // 추세선 범례 — 켜져 있고 선이 있을 때(색은 선 종류로 고정)
+  const trendLegend = showSr
+    ? [
+        hasTrend.resistance && { key: 'trendHigh' as const, color: TREND_HIGH_COLOR },
+        hasTrend.support && { key: 'trendLow' as const, color: TREND_LOW_COLOR },
+      ].filter((x) => x !== false)
+    : []
 
   return (
     <div>
@@ -530,6 +563,9 @@ export default function TradingChart({ ticker, lastPrice, coach, position, onSrL
           <button type="button" aria-pressed={showVp} onClick={() => setShowVp((v) => !v)} className={chipClass(showVp)}>
             매물대
           </button>
+          <button type="button" aria-pressed={showSr} onClick={() => setShowSr((v) => !v)} className={chipClass(showSr)}>
+            지지·저항
+          </button>
         </div>
         {/* 모바일 폭: '지표 N ▾' 하나 → 차트 위 팝오버(앱과 같은 방식) */}
         <button
@@ -539,7 +575,7 @@ export default function TradingChart({ ticker, lastPrice, coach, position, onSrL
           onClick={() => setIndOpen((v) => !v)}
           className={`ml-auto shrink-0 sm:hidden ${chipClass(indOpen)} ${CHIP_COMPACT}`}
         >
-          지표{(showMa || showBb || showVp) && ` ${Number(showMa) + Number(showBb) + Number(showVp)}`} {indOpen ? '▴' : '▾'}
+          지표{(showMa || showBb || showVp || showSr) && ` ${Number(showMa) + Number(showBb) + Number(showVp) + Number(showSr)}`} {indOpen ? '▴' : '▾'}
         </button>
       </div>
       <div className="relative h-[260px] overflow-hidden rounded-card border border-line bg-surface sm:h-[320px]">
@@ -566,9 +602,12 @@ export default function TradingChart({ ticker, lastPrice, coach, position, onSrL
             <button type="button" aria-pressed={showVp} onClick={() => setShowVp((v) => !v)} className={`${chipClass(showVp)} ${CHIP_COMPACT}`}>
               매물대
             </button>
+            <button type="button" aria-pressed={showSr} onClick={() => setShowSr((v) => !v)} className={`${chipClass(showSr)} ${CHIP_COMPACT}`}>
+              지지·저항
+            </button>
           </div>
         )}
-        {(showMa || lineLegend.length > 0) && loaded && !failed && !empty && (
+        {(showMa || lineLegend.length > 0 || trendLegend.length > 0) && loaded && !failed && !empty && (
           // 오른쪽 가격 축(약 56px)은 비워 둔다
           <div className="pointer-events-none absolute left-2 right-16 top-1.5 z-10 flex flex-wrap gap-x-2 gap-y-0.5 text-xs font-bold text-ink">
             {/* 선 색은 견본으로만, 글자는 본문색 — 밝은 청록·주황 글자는 흰 바탕 대비가 3:1 미만 */}
@@ -582,6 +621,12 @@ export default function TradingChart({ ticker, lastPrice, coach, position, onSrL
                 ))}
               </span>
             )}
+            {trendLegend.map((l) => (
+              <span key={l.key} className="inline-flex items-center gap-1 rounded-field bg-surface/80 px-1.5">
+                <span aria-hidden className="w-3 border-t-2" style={{ borderColor: l.color }} />
+                {srName(l.key, true)}
+              </span>
+            ))}
             {lineLegend.map((l) => (
               <span key={l.label} className="inline-flex items-center gap-1 rounded-field bg-surface/80 px-1.5">
                 <span aria-hidden className={`w-3 border-t-2 ${l.dashed ? 'border-dashed' : ''}`} style={{ borderColor: l.color }} />
