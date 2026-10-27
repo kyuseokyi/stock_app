@@ -12,9 +12,11 @@ export interface ChartPrefs {
   bb: boolean
   /** 매물대(보이는 구간 가격대별 거래량) */
   vp: boolean
+  /** 지지·저항 추세선 */
+  sr: boolean
 }
 
-export const DEFAULT_CHART_PREFS: ChartPrefs = { interval: null, ma: true, bb: false, vp: false }
+export const DEFAULT_CHART_PREFS: ChartPrefs = { interval: null, ma: true, bb: false, vp: false, sr: true }
 
 const isInterval = (v: unknown): v is ChartInterval => CHART_INTERVALS.includes(v as ChartInterval)
 
@@ -28,6 +30,7 @@ export function parseChartPrefs(raw: string | null): ChartPrefs {
       ma: typeof v.ma === 'boolean' ? v.ma : DEFAULT_CHART_PREFS.ma,
       bb: typeof v.bb === 'boolean' ? v.bb : DEFAULT_CHART_PREFS.bb,
       vp: typeof v.vp === 'boolean' ? v.vp : DEFAULT_CHART_PREFS.vp,
+      sr: typeof v.sr === 'boolean' ? v.sr : DEFAULT_CHART_PREFS.sr,
     }
   } catch {
     return DEFAULT_CHART_PREFS
