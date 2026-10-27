@@ -54,6 +54,18 @@ type DrawTarget = Parameters<ISeriesPrimitivePaneRenderer['draw']>[0]
 export class VolumeProfilePrimitive implements ISeriesPrimitive<Time> {
   private points: VolumePoint[] = [] // 캔들 시리즈와 같은 순서(인덱스 = logical)
   private visible = true
+  /** 보이는 구간 POC 가 바뀌면(끄면 null) — 그리기 중 React 상태를 바꾸지 않게 다음 프레임에 부른다 */
+  onPocChange: ((price: number | null) => void) | null = null
+  private sentPoc: number | null | undefined = undefined
+
+  private reportPoc(poc: number | null) {
+    if (poc === this.sentPoc) return
+    this.sentPoc = poc
+    if (this.onPocChange) {
+      // 다음 프레임에 부를 때 차트가 이미 제거됐으면(detached → onPocChange=null) 옛 값을 올리지 않는다
+      requestAnimationFrame(() => this.onPocChange?.(poc))
+    }
+  }
   private param: SeriesAttachedParameter<Time> | null = null
   private readonly view: ISeriesPrimitivePaneView
 
@@ -68,6 +80,7 @@ export class VolumeProfilePrimitive implements ISeriesPrimitive<Time> {
 
   detached() {
     this.param = null
+    this.onPocChange = null
   }
 
   paneViews() {
@@ -87,6 +100,7 @@ export class VolumeProfilePrimitive implements ISeriesPrimitive<Time> {
 
   setVisible(visible: boolean) {
     this.visible = visible
+    if (!visible) this.reportPoc(null)
     this.param?.requestUpdate()
   }
 
@@ -99,7 +113,10 @@ export class VolumeProfilePrimitive implements ISeriesPrimitive<Time> {
     const to = Math.min(this.points.length - 1, Math.floor(range.to))
     if (to < from) return
     const bins = volumeProfile(this.points.slice(from, to + 1))
-    if (bins.length === 0) return
+    if (bins.length === 0) {
+      this.reportPoc(null)
+      return
+    }
     const maxVol = Math.max(1, ...bins.map((b) => b.volume))
     const poc = pocPrice(bins)
     const last = this.points[this.points.length - 1].close
@@ -122,5 +139,6 @@ export class VolumeProfilePrimitive implements ISeriesPrimitive<Time> {
         context.fill()
       }
     })
+    this.reportPoc(poc)
   }
 }

@@ -1,9 +1,11 @@
-// 차트 게임 지지·저항 목록 — 추세선 2개의 마지막 캔들 위치 값(설계 2026-10-27 chart-game-sr-trendlines §3).
+// 차트 게임 지지·저항 목록 — 수평선 2개(설계 2026-10-27 chart-game-sr-trendlines §7).
 // 앱 features/game/lib/sr-levels.ts 와 같은 규칙.
 import { roundToTick } from './krxTick'
-import { valueAt, type TrendLine } from './trendLines'
+import type { SrEventType } from './srWatch'
+import type { HLevel } from './trendLines'
 
-export type SrKey = 'trendHigh' | 'trendLow'
+/** 레벨 가격 기반 키 — 저항을 돌파해 같은 선이 지지로 바뀌어도 키가 같아 감지기가 돌파를 놓치지 않는다 */
+export type SrKey = `lvl:${number}`
 export type SrRole = 'support' | 'resistance'
 
 export interface SrLevel {
@@ -13,32 +15,35 @@ export interface SrLevel {
   role: SrRole
 }
 
-/** 선 색은 어떤 선인지로 고정(저항 추세선=주황, 지지 추세선=보라) — 돌파로 역할이 바뀌어도 그대로 */
+/** 선 색은 역할로 고정(저항=주황, 지지=보라) */
 export const TREND_HIGH_COLOR = '#f59e0b'
 export const TREND_LOW_COLOR = '#8b5cf6'
 
-/** 추세선 → 지지·저항 목록(저항 추세선 먼저). 값이 현재가 이상이면 저항, 미만이면 지지 */
-export function srLevelsFromTrends(
-  lines: { resistance: TrendLine | null; support: TrendLine | null },
-  lastIndex: number,
-  lastPrice: number,
-): SrLevel[] {
+/** 수평 레벨 → 지지·저항 목록(저항 먼저) */
+export function srLevelsFromHorizontal(h: { resistance: HLevel | null; support: HLevel | null }): SrLevel[] {
   const out: SrLevel[] = []
-  const add = (key: SrKey, line: TrendLine | null, color: string) => {
-    if (line === null) return
-    const price = valueAt(line, lastIndex)
-    if (!Number.isFinite(price) || price <= 0) return
-    out.push({ key, price, color, role: price >= lastPrice ? 'resistance' : 'support' })
-  }
-  add('trendHigh', lines.resistance, TREND_HIGH_COLOR)
-  add('trendLow', lines.support, TREND_LOW_COLOR)
+  if (h.resistance !== null) out.push({ key: `lvl:${h.resistance.price}`, price: h.resistance.price, color: TREND_HIGH_COLOR, role: 'resistance' })
+  if (h.support !== null) out.push({ key: `lvl:${h.support.price}`, price: h.support.price, color: TREND_LOW_COLOR, role: 'support' })
   return out
 }
 
-/** 선 이름 — 넓게: 저항 추세선·지지 추세선 / 좁게: 저항 추세·지지 추세 */
-export function srName(key: SrKey, short: boolean): string {
-  if (key === 'trendHigh') return short ? '저항 추세' : '저항 추세선'
-  return short ? '지지 추세' : '지지 추세선'
+/** 감지용 — 후보 레벨 전체(그리는 2개와 별개). 키 lvl:가격, 가격 ≥ 현재가면 저항 */
+export function srWatchLevels(candidates: HLevel[], lastPrice: number): SrLevel[] {
+  return candidates.map((c) => {
+    const resistance = c.price >= lastPrice
+    return { key: `lvl:${c.price}` as SrKey, price: c.price, color: resistance ? TREND_HIGH_COLOR : TREND_LOW_COLOR, role: resistance ? 'resistance' : 'support' }
+  })
+}
+
+/** 역할 이름 — 넓게: 저항선·지지선 / 좁게: 저항·지지 */
+export function srRoleName(role: SrRole, short: boolean): string {
+  if (role === 'resistance') return short ? '저항' : '저항선'
+  return short ? '지지' : '지지선'
+}
+
+/** 이벤트 종류로 본 선 이름(RESISTANCE_* = 저항선, SUPPORT_* = 지지선) */
+export function srEventName(type: SrEventType): string {
+  return srRoleName(type.startsWith('RESISTANCE') ? 'resistance' : 'support', false)
 }
 
 /** 다시 그릴지 판단용 — 키·역할·호가 반올림 가격이 같으면 같은 서명 */

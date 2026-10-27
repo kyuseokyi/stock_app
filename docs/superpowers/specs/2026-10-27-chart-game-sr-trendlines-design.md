@@ -57,3 +57,25 @@ TrendLine = { i1, p1, i2, p2 }  // 캔들 순번(bars 기준)과 가격, i1 < i2
 - `chart-prefs`: `sr` 기본 true·옛 저장값 호환.
 - `SrWatcher` 기존 테스트는 키만 바꿔 그대로 통과.
 - 웹은 앱과 같은 코드(세미콜론만 다름)로 옮기고 타입 검사·빌드·헤드리스 화면 확인.
+
+## 7. 수평선으로 변경(2026-10-27)
+
+사선 추세선이 실제 차트에서 어색해 보여 **수평선**으로 바꾼다. 켜기/끄기 칩·범례·대응 시트/모달·감지기 로직·색·두께 2·자동 범위 제외·축 라벨 없음은 그대로다.
+
+1. **수평 레벨 고르기** — `horizontalLevels(bars, lastPrice, opts?) → { resistance, support }` (`HLevel = { i, price }`). 후보는 마지막 lookback(120)개 안의 스윙 고점(그 캔들 high)·스윙 저점(그 캔들 low) 전부(기존 `swings` 그대로). 저항 = 후보 중 `price ≥ 현재가` 가운데 가장 낮은 가격, 지지 = `price < 현재가` 가운데 가장 높은 가격, 같은 가격이면 더 최근. 없으면 null. 고점·저점을 섞어 고르므로 뚫린 옛 고점은 지지, 깨진 옛 저점은 저항이 된다(역할 반전). 사선용 `trendLines`·`valueAt`·`TrendLine` 은 제거.
+2. **지지·저항 목록** — `srLevelsFromHorizontal` 이 저항 먼저 목록을 만든다. **SrKey 는 레벨 가격 기반 `lvl:${price}`**. 키가 '저항/지지' 역할이면 저항을 돌파해 같은 선이 지지가 될 때 키의 가격이 크게 바뀌어 감지기가 기준만 다시 잡고 돌파 이벤트를 놓친다. 가격 키면 같은 레벨이 계속 같은 키라 RESISTANCE_BREAKOUT·SUPPORT_BREAKDOWN 이 정상 발생한다. 이름은 키가 아니라 역할·이벤트 종류에서: `srRoleName(role, short)`(저항선/지지선, 좁게 저항/지지), 시트·모달은 `srEventName(type)`(RESISTANCE_* = 저항선, SUPPORT_* = 지지선). `srName` 은 제거, `srSignature` 는 유지.
+3. **그리기** — 선 시리즈 2개 그대로. 점 = `[{ time: bars[h.i].time, value: h.price }, { time: bars[last].time, value: h.price }]`. 없으면 빈 배열. 점 배열이 같으면 다시 보내지 않는 안정화 유지. 범례 문구 `저항선`·`지지선`.
+4. **감지 입력** — `srLevelsFromHorizontal(horizontalLevels(bars, price))`, price = lastPrice ?? 마지막 종가. 칩이 꺼지면 빈 목록.
+
+테스트: `horizontalLevels`(가까운 위·아래, 고점·저점 섞임, 같은 가격이면 최근, 후보 없으면 null, lookback 밖 무시, 확정 전 제외), `srLevelsFromHorizontal`(키·역할·색), `SrWatcher` 에 "같은 가격 키가 저항→지지로 바뀌어도 돌파 이벤트" 추가.
+
+### 7-1. 매물대 POC 후보
+
+- 매물대 칩이 **켜져 있을 때만** 보이는 구간 POC 가격(거래량 가장 큰 칸의 가운데 가격)을 수평선 후보에 더한다. 꺼지면 스윙 고점·저점만.
+- `horizontalLevels` 의 `opts.poc` 로 받아 스윙 후보와 같은 규칙(현재가 이상 중 최저 = 저항, 미만 중 최고 = 지지)으로 함께 고른다. POC 후보의 시작 순번 i 는 계산 범위 시작 `max(0, n - lookback)`. 가격이 스윙과 같으면 더 최근 i 인 스윙이 우선.
+- 값 전달: 앱은 페이지 `VolumeProfile` 이 POC 가 바뀔 때만 `{ type: 'poc', price }` 를 보내고(끄면·칸 없으면 null) `tv-chart` 의 `onPoc` → `candle-chart` 가 종목·단위 키와 함께 보관(전환 직후 옛 값 무시). 웹은 `VolumeProfilePrimitive.onPocChange`(바뀔 때만, requestAnimationFrame, detached 에서 해제) → `TradingChart` 의 `poc` 상태(차트 재생성 cleanup 에서 null).
+- 스크롤로 POC 가 바뀌면 새 가격 = 새 키(`lvl:가격`)라 감지기가 기준만 잡아 가짜 돌파·이탈이 없다(sr-watch 테스트로 확인).
+
+### 7-2. 감지는 후보 레벨 전체, 그리기는 가장 가까운 2개
+
+`horizontalLevels` 는 가장 가까운 위·아래 2개(그리기)와 함께 `candidates`(lookback 안의 모든 스윙 고점·저점 + POC, 같은 가격은 하나)를 돌려주고, 감지기에는 `srWatchLevels(candidates, 현재가)` 전체를 넘긴다. 이유: `SrWatcher` 는 목록에서 빠진 키의 상태를 지우므로, 가까운 2개만 넘기면 레벨이 오차띠 안에 붙어 있거나 갭 틱으로 두 레벨을 한꺼번에 넘을 때 보던 레벨이 목록에서 빠지며 상태가 지워지고 새로 들어온 레벨은 기준만 잡아 돌파·이탈 이벤트를 놓친다.

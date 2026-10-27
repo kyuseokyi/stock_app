@@ -43,7 +43,9 @@ type TvChartProps = {
    * 더 없으면 false. 실패는 throw → 다음에 다시 끌면 재시도
    */
   onNeedOlder?: () => Promise<boolean>;
-  /** 지지·저항 추세선(저항·지지 순, 없는 선은 points 빈 배열) — 바뀔 때만 보낸다. 렌더마다 새 배열을 넘기지 말 것(useMemo) */
+  /** 매물대가 켜져 있을 때 보이는 구간 POC 가 바뀌면(끄면 null) — 지지·저항 후보용 */
+  onPoc?: (price: number | null) => void;
+  /** 지지·저항 수평선(저항·지지 순, 없는 선은 points 빈 배열) — 바뀔 때만 보낸다. 렌더마다 새 배열을 넘기지 말 것(useMemo) */
   trend?: TrendLineData[];
 };
 
@@ -66,6 +68,7 @@ export function TvChart({
   maPeriods = MA_PERIODS,
   visibleDays = DAILY_VISIBLE_DAYS,
   onNeedOlder,
+  onPoc,
   trend = NO_TREND,
 }: TvChartProps) {
   const ref = useRef<WebView>(null);
@@ -131,6 +134,8 @@ export function TvChart({
           if (!more) send({ type: 'older', more: false });
         })
         .catch(() => send({ type: 'older', more: true }));
+    } else if (msg.type === 'poc') {
+      onPoc?.(msg.price);
     } else if (msg.type === 'error' && __DEV__) {
       console.warn('[TvChart]', msg.message);
     }

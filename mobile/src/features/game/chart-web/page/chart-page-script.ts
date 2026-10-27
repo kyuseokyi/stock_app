@@ -184,6 +184,14 @@ function volumeProfile(pts: Bar[]): VolumeBin[] {
 class VolumeProfile implements LWC.ISeriesPrimitive<Time> {
   points: Bar[] = [];
   visible = false;
+  /** 마지막으로 RN 에 알린 POC(undefined = 아직 안 알림) — 바뀔 때만 보낸다 */
+  sentPoc: number | null | undefined = undefined;
+  /** POC 를 RN 에 알림(바뀐 경우만) */
+  reportPoc(poc: number | null) {
+    if (poc === this.sentPoc) return;
+    this.sentPoc = poc;
+    post({ type: 'poc', price: poc });
+  }
   private param: LWC.SeriesAttachedParameter<Time> | null = null;
   private readonly view: LWC.ISeriesPrimitivePaneView;
 
@@ -212,7 +220,10 @@ class VolumeProfile implements LWC.ISeriesPrimitive<Time> {
     const to = Math.min(this.points.length - 1, Math.floor(r.to));
     if (to < from) return;
     const bins = volumeProfile(this.points.slice(from, to + 1));
-    if (bins.length === 0) return;
+    if (bins.length === 0) {
+      this.reportPoc(null);
+      return;
+    }
     const maxVol = Math.max(1, ...bins.map((b) => b.volume));
     const poc = pocOf(bins);
     const last = this.points[this.points.length - 1].close;
@@ -233,6 +244,7 @@ class VolumeProfile implements LWC.ISeriesPrimitive<Time> {
         c.fill();
       }
     });
+    this.reportPoc(poc);
   }
 }
 
@@ -287,14 +299,14 @@ function create(newMode: ChartMode) {
     bbLower: c.addLineSeries({ ...base, color: BB }),
   };
   ind = lines;
-  // 지지·저항 추세선 2개(저항·지지 순) — 'trend' 메시지로 setData. 미리 만들어 두고 없으면 빈 데이터
-  // 자동 가격 범위에서 뺀다 — 멀리 연장된 추세선 때문에 캔들이 납작해지지 않게(범위 밖이면 선이 잘려 보임)
+  // 지지·저항 수평선 2개(저항·지지 순) — 'trend' 메시지로 setData. 미리 만들어 두고 없으면 빈 데이터
+  // 자동 가격 범위에서 뺀다 — 멀리 있는 수평선 때문에 캔들이 납작해지지 않게(범위 밖이면 선이 잘려 보임)
   const trendBase = {
     lineWidth: 2 as const, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false,
     autoscaleInfoProvider: () => null,
   };
   trend = [c.addLineSeries({ ...trendBase, color: '#f59e0b' }), c.addLineSeries({ ...trendBase, color: '#8b5cf6' })];
-  trendSpecs = null; // 단위가 바뀌면 time 형식이 달라 옛 추세선은 버린다 — RN 이 새 데이터 기준으로 다시 보낸다
+  trendSpecs = null; // 단위가 바뀌면 time 형식이 달라 옛 선은 버린다 — RN 이 새 데이터 기준으로 다시 보낸다
   band = new BandFill(BB_FILL);
   lines.bbUpper.attachPrimitive(band);
   vpPrim = new VolumeProfile();
@@ -320,6 +332,7 @@ function applyVis() {
   (['bbUpper', 'bbMiddle', 'bbLower'] as const).forEach((k) => lines[k].applyOptions({ visible: vis.bb }));
   band.setVisible(vis.bb);
   vpPrim.visible = vis.vp;
+  if (!vis.vp) vpPrim.reportPoc(null); // 끄면 RN 의 지지·저항 후보에서 POC 를 뺀다
   vpPrim.update();
 }
 
@@ -377,6 +390,7 @@ const handlers: { [K in ChartMessage['type']]: (m: MessageOf<K>) => void } = {
     hist.on = !!m.history;
     if (fresh || !m.keepView) {
       // 새 차트·새 종목 — 과거 이어 받기 상태 초기화(왼쪽 끝 고정도 풀기)
+      vp.sentPoc = undefined; // 종목 전환 뒤 같은 POC 값이어도 다시 알린다(RN 은 종목·단위 키로 옛 값을 무시)
       hist.armed = false;
       hist.busy = false;
       hist.done = false;

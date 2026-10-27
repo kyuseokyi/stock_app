@@ -9,8 +9,8 @@ import { applyTick, withSessionBar } from '../lib/candles';
 import { CHART_PREFS_KEY, DEFAULT_CHART_PREFS, parseChartPrefs, serializeChartPrefs } from '../lib/chart-prefs';
 import { layoutCandles, niceTicks, priceToY, type Ohlc } from '../lib/chart-layout';
 import { mergeOlder, priceLines, toBars, type ChartColors, type TrendLineData, type Bar } from '../lib/chart-bridge';
-import { srLevelsFromTrends, srName, srSignature, TREND_HIGH_COLOR, TREND_LOW_COLOR, type SrLevel } from '../lib/sr-levels';
-import { trendLines, valueAt, type TrendLine } from '../lib/trend-lines';
+import { srWatchLevels, srRoleName, srSignature, TREND_HIGH_COLOR, TREND_LOW_COLOR, type SrLevel, type SrRole } from '../lib/sr-levels';
+import { horizontalLevels, type HLevel } from '../lib/trend-lines';
 import { formatPrice, kstDateString } from '../lib/format';
 import { lineSegments, MA_PERIODS } from '../lib/indicators';
 import { applyTickIntraday, axisLabelIndexes, bucketStartSec, CHART_INTERVALS, dayLabel, kstHm } from '../lib/intraday';
@@ -19,7 +19,7 @@ import { useTradingGameStore } from '../store';
 import { useGameRules } from '../use-game-rules';
 import { TvChart, type TvChartData } from './tv-chart';
 
-type TrendPair = { resistance: TrendLine | null; support: TrendLine | null };
+type HPair = { resistance: HLevel | null; support: HLevel | null; candidates: HLevel[] };
 
 // CandleChart: 순수 View 캔들 차트(퀴즈 차트용). 좌표는 lib/chart-layout 의 순수 함수가 계산한다.
 // DailyChart(게임 차트): 웹과 같은 lightweight-charts 를 WebView 로(tv-chart). 이 파일은 데이터·캐시·틱만 맡는다.
@@ -451,20 +451,27 @@ export function DailyChart({ ticker, lastPrice, coach, position, onSrLevels }: D
     [shown],
   );
 
-  // 지지·저항(설계 2026-10-27 chart-game-sr-trendlines) — 스윙 고점 2개·저점 2개를 잇는 추세선 2개.
-  // 불러온 캔들 기준으로 계산(스크롤해도 안 바뀜). 목록 = 두 선의 마지막 캔들 위치 값. 칩이 꺼지면 없음
-  const trends = useMemo(() => {
-    const none = { lines: { resistance: null, support: null } as TrendPair, bars: [] as Bar[] };
+  // 지지·저항(설계 2026-10-27 chart-game-sr-trendlines §7) — 현재가에 가장 가까운 스윙 고점·저점(매물대 켜짐이면 POC 포함)의 수평선 2개.
+  // 불러온 캔들 기준으로 계산(스크롤해도 안 바뀜). 칩이 꺼지면 없음
+  // POC 는 어느 종목·단위 차트에서 온 값인지 함께 둔다 — 종목·단위를 바꾼 직후 이전 차트의 POC 를 쓰지 않게
+  const seriesKey = `${ticker}:${interval}`;
+  const [pocOf, setPocOf] = useState<{ key: string; price: number | null }>({ key: '', price: null });
+  const poc = showVp && pocOf.key === seriesKey ? pocOf.price : null;
+  const onPoc = useCallback((price: number | null) => setPocOf({ key: seriesKey, price }), [seriesKey]);
+  const hLevels = useMemo(() => {
+    const none = { levels: { resistance: null, support: null, candidates: [] } as HPair, bars: [] as Bar[] };
     if (!showSr || chartView === null || shown === null || !sameSeries(shown.series, ticker, interval)) return none;
     const bars = toBars(chartView.data);
-    return { lines: trendLines(bars), bars };
-  }, [showSr, chartView, shown, ticker, interval]);
-  const rawSr = useMemo<SrLevel[]>(() => {
-    const { bars } = trends;
-    if (bars.length === 0) return [];
+    if (bars.length === 0) return none;
     const price = lastPrice ?? bars[bars.length - 1].close;
-    return srLevelsFromTrends(trends.lines, bars.length - 1, price);
-  }, [trends, lastPrice]);
+    return { levels: horizontalLevels(bars, price, { poc }), bars };
+  }, [showSr, chartView, shown, ticker, interval, lastPrice, poc]);
+  // 부모(감지기)에는 후보 레벨 전체를 올린다 — 그리는 2개만 올리면 가까운 쪽이 바뀔 때 상태가 지워져 돌파·이탈을 놓친다
+  const rawSr = useMemo<SrLevel[]>(() => {
+    const { bars, levels } = hLevels;
+    if (bars.length === 0) return [];
+    return srWatchLevels(levels.candidates, lastPrice ?? bars[bars.length - 1].close);
+  }, [hLevels, lastPrice]);
   const [srLevels, setSrLevels] = useState<SrLevel[]>([]);
   // 렌더 중 파생 상태 갱신(React 권장 패턴) — 효과 안 setState 대신
   if (srSignature(srLevels) !== srSignature(rawSr)) setSrLevels(rawSr);
@@ -473,33 +480,26 @@ export function DailyChart({ ticker, lastPrice, coach, position, onSrLevels }: D
   }, [srLevels, onSrLevels]);
   // 차트가 사라지면 부모의 목록도 비운다(감지기가 옛 선을 계속 보지 않게)
   useEffect(() => () => onSrLevels?.([]), [onSrLevels]);
-  // 차트에 보낼 추세선 점 — i1, i2, 마지막 캔들(마지막이 i2 면 2점). 값이 같으면 이전 배열을 유지(틱마다 다시 보내지 않게)
+  // 차트에 보낼 수평선 점 — 그 레벨 캔들부터 마지막 캔들까지 2점. 값이 같으면 이전 배열을 유지(틱마다 다시 보내지 않게)
   const rawTrend = useMemo<TrendLineData[]>(() => {
-    const { bars, lines: tl } = trends;
-    const build = (line: TrendLine | null, color: string): TrendLineData => {
-      if (line === null) return { color, points: [] };
-      const last = bars.length - 1;
-      const points = [
-        { time: bars[line.i1].time, value: line.p1 },
-        { time: bars[line.i2].time, value: line.p2 },
-      ];
-      if (last > line.i2) points.push({ time: bars[last].time, value: valueAt(line, last) });
-      return { color, points };
-    };
-    const data = bars.length === 0 ? [] : [build(tl.resistance, TREND_HIGH_COLOR), build(tl.support, TREND_LOW_COLOR)];
-    return data;
-  }, [trends]);
+    const { bars, levels } = hLevels;
+    const build = (h: HLevel | null, color: string): TrendLineData =>
+      h === null
+        ? { color, points: [] }
+        : { color, points: [{ time: bars[h.i].time, value: h.price }, { time: bars[bars.length - 1].time, value: h.price }] };
+    return bars.length === 0 ? [] : [build(levels.resistance, TREND_HIGH_COLOR), build(levels.support, TREND_LOW_COLOR)];
+  }, [hLevels]);
   const [trend, setTrend] = useState<TrendLineData[]>([]);
   if (JSON.stringify(trend) !== JSON.stringify(rawTrend)) setTrend(rawTrend);
-  const chartLines = lines; // 지지·저항은 수평 가격선이 아니라 추세선 시리즈로 그린다
-  // 범례 — 켜져 있고 선이 있을 때(색은 선 종류로 고정)
+  const chartLines = lines; // 지지·저항은 수평 가격선이 아니라 선 시리즈로 그린다
+  // 범례 — 켜져 있고 선이 있을 때(색은 역할로 고정)
   const trendLegend = useMemo(
     () =>
       [
-        trends.lines.resistance ? { key: 'trendHigh' as const, color: TREND_HIGH_COLOR } : null,
-        trends.lines.support ? { key: 'trendLow' as const, color: TREND_LOW_COLOR } : null,
+        hLevels.levels.resistance ? { role: 'resistance' as SrRole, color: TREND_HIGH_COLOR } : null,
+        hLevels.levels.support ? { role: 'support' as SrRole, color: TREND_LOW_COLOR } : null,
       ].filter((x) => x !== null),
-    [trends],
+    [hLevels],
   );
   // 다른 단위 데이터를 보여 주는 중(새 데이터 대기) — 흐리게 + 작은 로딩 표시
   const stale = shown !== null && !sameSeries(shown.series, ticker, interval);
@@ -537,6 +537,7 @@ export function DailyChart({ ticker, lastPrice, coach, position, onSrLevels }: D
             height={CHART_H}
             onReady={() => setChartReady(true)}
             onNeedOlder={interval === 'day' ? loadOlder : undefined}
+            onPoc={onPoc}
           />
         </View>
         {stale && !failed ? (
@@ -555,8 +556,8 @@ export function DailyChart({ ticker, lastPrice, coach, position, onSrLevels }: D
                 ))
               : null}
             {trendLegend.map((l) => (
-              <Text key={l.key} style={[styles.legendText, styles.legendLine]} allowFontScaling={false}>
-                <Text style={{ color: l.color }}>━</Text> {srName(l.key, true)}
+              <Text key={l.role} style={[styles.legendText, styles.legendLine]} allowFontScaling={false}>
+                <Text style={{ color: l.color }}>━</Text> {srRoleName(l.role, true)}
               </Text>
             ))}
             {lines.map((l) => (
