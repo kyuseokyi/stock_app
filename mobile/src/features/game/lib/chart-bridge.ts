@@ -84,7 +84,7 @@ export type ChartMessage =
   | { type: 'trend'; lines: TrendLineData[] }
   | { type: 'vis'; ma: boolean; bb: boolean; vp: boolean };
 
-/** 페이지 → RN 메시지 — 준비됨 / 일봉 왼쪽 끝(과거 요청) / / 처리 중 오류 */
+/** 페이지 → RN 메시지 — 준비됨 / 일봉 왼쪽 끝(과거 요청) / 처리 중 오류 */
 export type PageEvent =
   | { type: 'ready' }
   | { type: 'needOlder' }

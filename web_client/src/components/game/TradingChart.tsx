@@ -35,6 +35,8 @@ const TAKE_PROFIT = '#16a34a' // 익절 — 초록
 const MA_COLORS: Record<MaPeriod, string> = { 5: '#14b8a6', 20: '#f97316', 60: '#a16207' }
 const BB_COLOR = 'rgba(99, 102, 241, 0.7)'
 const BB_FILL = 'rgba(99, 102, 241, 0.07)'
+// 부모에 올린 지지·저항 서명의 초기·리셋 값 — 빈 목록 서명('')과 달라야 새 차트의 첫 목록(빈 목록 포함)이 반드시 올라간다
+const SR_SIG_UNSET = '(초기)'
 
 /** 지표 선 시리즈 묶음 — 차트와 같이 생성·제거 */
 interface IndicatorSeries {
@@ -179,7 +181,7 @@ export default function TradingChart({ ticker, lastPrice, coach, position, onSrL
   const vpRef = useRef<VolumeProfilePrimitive | null>(null) // 매물대(보이는 구간)
   const trendRef = useRef<{ resistance: ISeriesApi<'Line'>; support: ISeriesApi<'Line'> } | null>(null) // 지지·저항 추세선
   const trendSigRef = useRef('') // 마지막으로 그린 추세선 점(같으면 setData 생략)
-  const srSigRef = useRef('') // 마지막으로 부모에 올린 지지·저항 서명(같으면 다시 올리지 않음)
+  const srSigRef = useRef(SR_SIG_UNSET) // 마지막으로 부모에 올린 지지·저항 서명(같으면 다시 올리지 않음)
   const [dataVer, setDataVer] = useState(0) // 캔들을 새로 그릴 때마다 +1 — 추세선 다시 계산
   const [hasTrend, setHasTrend] = useState({ resistance: false, support: false }) // 범례용
   const reloadRef = useRef<(() => void) | null>(null) // 현재 차트의 캔들 재로드(스트림 재개 시)
@@ -359,7 +361,7 @@ export default function TradingChart({ ticker, lastPrice, coach, position, onSrL
       linesRef.current = []
       trendRef.current = null
       trendSigRef.current = ''
-      srSigRef.current = ''
+      srSigRef.current = SR_SIG_UNSET
       lastCandleRef.current = null
       lastIntradayRef.current = null
       chart.remove()
