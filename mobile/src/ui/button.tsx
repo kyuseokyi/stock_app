@@ -10,6 +10,8 @@ type Props = {
   fullWidth?: boolean;
   /** 스크린리더 라벨 — 없으면 label 을 읽는다 */
   accessibilityLabel?: string;
+  /** 글자 색 덮어쓰기(예: 손익 버튼의 상승·하락 색). 없으면 variant 기본색 */
+  labelColor?: string;
 };
 
 /** 토스 스타일 버튼. primary=블루 풀폭 CTA, secondary=회색. 높이 56, radius 14. */
@@ -21,6 +23,7 @@ export function Button({
   disabled = false,
   fullWidth = true,
   accessibilityLabel,
+  labelColor,
 }: Props) {
   const isDisabled = disabled || loading;
   return (
@@ -40,7 +43,7 @@ export function Button({
       {loading ? (
         <ActivityIndicator color={variant === 'primary' ? '#ffffff' : undefined} />
       ) : (
-        <Text style={[styles.label, styles[`${variant}Label`]]}>{label}</Text>
+        <Text style={[styles.label, styles[`${variant}Label`], labelColor ? { color: labelColor } : null]}>{label}</Text>
       )}
     </Pressable>
   );

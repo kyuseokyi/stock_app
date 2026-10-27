@@ -1,8 +1,9 @@
 import { Text, View } from 'react-native';
-import { StyleSheet } from 'react-native-unistyles';
+import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
 import { AmountText, Button, Card } from '@/ui';
 
+import { closeActionOf } from '../lib/close-action';
 import { formatPrice } from '../lib/format';
 import { slTpLine } from '../lib/order-options';
 import { sideLabel } from '../lib/side';
@@ -15,8 +16,12 @@ type Props = {
   onClose: () => void;
 };
 
-/** 보유 포지션 — 평가손익(₩, %)은 WS position_pnl 로 틱마다 갱신. 원클릭 전액 청산 */
+/** 보유 포지션 — 평가손익(₩, %)은 WS position_pnl 로 틱마다 갱신. 손익에 따라 익절/손절 원클릭 전액 청산 */
 export function PositionCard({ position, lastPrice, closing, onClose }: Props) {
+  const { theme } = useUnistyles();
+  // 손익에 따라 익절/손절 — 색은 손익 글자와 같은 상승·하락 색(사유는 서버가 체결 가격으로 정함)
+  const action = closeActionOf(position.pnl_amount);
+  const actionColor = action.kind === 'tp' ? theme.colors.up : action.kind === 'sl' ? theme.colors.down : undefined;
   const long = position.side === 'LONG';
   const slTp = slTpLine(position.stop_loss_price, position.take_profit_price);
   return (
@@ -42,7 +47,7 @@ export function PositionCard({ position, lastPrice, closing, onClose }: Props) {
       </Text>
       {slTp !== null ? <Text style={styles.muted}>{slTp}</Text> : null}
       <View style={styles.action}>
-        <Button label="즉시 전액 청산하기" variant="secondary" loading={closing} onPress={onClose} />
+        <Button label={action.label} labelColor={actionColor} variant="secondary" loading={closing} onPress={onClose} />
       </View>
     </Card>
   );
