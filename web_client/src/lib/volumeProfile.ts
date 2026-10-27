@@ -39,11 +39,31 @@ export function volumeProfile(points: VolumePoint[], bins: number = VP_BINS): Vo
   return buckets.map((volume, i) => ({ low: min + i * width, high: min + (i + 1) * width, volume }))
 }
 
+/** 거래량 가장 큰 칸의 가운데 가격(같으면 아래 칸). 칸이 없으면 null — 지지·저항 후보(POC) */
+export function pocPrice(bins: VolumeBin[]): number | null {
+  let best: VolumeBin | null = null
+  for (const b of bins) if (b.volume > 0 && (best === null || b.volume > best.volume)) best = b
+  return best === null ? null : (best.low + best.high) / 2
+}
+
+const POC_RESIST = '#f59e0b' // POC 가 현재가 위(저항)
+const POC_SUPPORT = '#8b5cf6' // POC 가 현재가 아래(지지)
+
 type DrawTarget = Parameters<ISeriesPrimitivePaneRenderer['draw']>[0]
 
 export class VolumeProfilePrimitive implements ISeriesPrimitive<Time> {
   private points: VolumePoint[] = [] // 캔들 시리즈와 같은 순서(인덱스 = logical)
   private visible = true
+  /** 보이는 구간 POC 가 바뀌면(끄면 null) — 그리기 중 React 상태를 바꾸지 않게 다음 프레임에 부른다 */
+  onPocChange: ((price: number | null) => void) | null = null
+  private sentPoc: number | null | undefined = undefined
+
+  private reportPoc(poc: number | null) {
+    if (poc === this.sentPoc) return
+    this.sentPoc = poc
+    const cb = this.onPocChange
+    if (cb) requestAnimationFrame(() => cb(poc))
+  }
   private param: SeriesAttachedParameter<Time> | null = null
   private readonly view: ISeriesPrimitivePaneView
 
@@ -77,6 +97,7 @@ export class VolumeProfilePrimitive implements ISeriesPrimitive<Time> {
 
   setVisible(visible: boolean) {
     this.visible = visible
+    if (!visible) this.reportPoc(null)
     this.param?.requestUpdate()
   }
 
@@ -89,8 +110,13 @@ export class VolumeProfilePrimitive implements ISeriesPrimitive<Time> {
     const to = Math.min(this.points.length - 1, Math.floor(range.to))
     if (to < from) return
     const bins = volumeProfile(this.points.slice(from, to + 1))
-    if (bins.length === 0) return
+    if (bins.length === 0) {
+      this.reportPoc(null)
+      return
+    }
     const maxVol = Math.max(1, ...bins.map((b) => b.volume))
+    const poc = pocPrice(bins)
+    const last = this.points[this.points.length - 1].close
     target.useMediaCoordinateSpace(({ context, mediaSize }) => {
       const style = mediaSize.width < VP_NARROW_PX ? VP_NARROW : VP_WIDE
       context.fillStyle = style.color
@@ -101,6 +127,15 @@ export class VolumeProfilePrimitive implements ISeriesPrimitive<Time> {
         const w = (b.volume / maxVol) * mediaSize.width * style.maxWidth
         context.fillRect(0, Math.min(yHigh, yLow), w, Math.max(1, Math.abs(yLow - yHigh) - 1))
       }
+      // POC 칸 막대 오른쪽 끝(= 최대 폭)에 점 — 현재가 위면 주황(저항), 아래면 보라(지지)
+      const y = poc === null ? null : p.series.priceToCoordinate(poc)
+      if (poc !== null && y !== null) {
+        context.fillStyle = poc >= last ? POC_RESIST : POC_SUPPORT
+        context.beginPath()
+        context.arc(mediaSize.width * style.maxWidth, y, 3, 0, Math.PI * 2)
+        context.fill()
+      }
     })
+    this.reportPoc(poc)
   }
 }
