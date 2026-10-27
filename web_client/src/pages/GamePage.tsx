@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import LoginModal from '../components/LoginModal'
 import Button from '../components/ui/Button'
 import Card from '../components/ui/Card'
@@ -14,6 +14,10 @@ import GameHeader from '../components/game/GameHeader'
 import GameRulesModal from '../components/game/GameRulesModal'
 import LeaderboardModal from '../components/game/LeaderboardModal'
 import NudgeToaster from '../components/game/NudgeToaster'
+import SrActionModal from '../components/game/SrActionModal'
+import { MA_PERIODS } from '../lib/indicators'
+import { srName, type SrLevel } from '../lib/srLevels'
+import { SrWatcher, type SrEvent } from '../lib/srWatch'
 import OrderPanel from '../components/game/OrderPanel'
 import QuestModal from '../components/game/QuestModal'
 import QuizBanner from '../components/game/QuizBanner'
@@ -47,6 +51,27 @@ export default function GamePage() {
   } = useTradingGameStore()
   const [loginOpen, setLoginOpen] = useState(false)
   const [activeModal, setActiveModal] = useState<ActiveModal>(null)
+  const pushToast = useTradingGameStore((s) => s.pushToast)
+
+  // 지지·저항 대응(설계 2026-10-27 §7) — 포지션 보유 + 페이지가 보이는 중일 때만 틱마다 감지.
+  // 조건이 빠지면 reset(돌아왔을 때 그사이 움직임으로 모달이 바로 뜨지 않게 기준부터)
+  const [srLevels, setSrLevels] = useState<SrLevel[]>([])
+  const [srEvent, setSrEvent] = useState<SrEvent | null>(null)
+  const watcherRef = useRef(new SrWatcher())
+  const hasPosition = position !== null
+  useEffect(() => {
+    const w = watcherRef.current
+    if (!loggedIn || !hasPosition || lastPrice === null || document.visibilityState !== 'visible') {
+      w.reset()
+      return
+    }
+    const events = w.update(srLevels, lastPrice, Date.now())
+    // 다른 모달이 열려 있으면 버린다(재알림 간격은 이미 적용됨)
+    if (events.length > 0 && activeModal === null && !loginOpen) setSrEvent((cur) => cur ?? events[0])
+  }, [lastPrice, srLevels, hasPosition, loggedIn, activeModal, loginOpen])
+  useEffect(() => {
+    if (!hasPosition) setSrEvent(null)
+  }, [hasPosition])
   const [primeTime, setPrimeTime] = useState(() => isQuizPrimeTime(new Date()))
   const rulesState = useGameRules() // 공개 /rules — 페이지당 1회 요청(규칙 모달·수수료 안내·심리 바 주기)
   const ready = status === 'ready'
@@ -151,7 +176,7 @@ export default function GamePage() {
         <div className="space-y-3 sm:space-y-4">
           {/* 차트를 위로 — 모바일에서 차트와 하단 주문 바가 한 화면에 들어오게. 코치·심리·안내는 차트 아래 */}
           <MarketStatusBanner status={marketStatus} />
-          <TradingChart ticker={season.ticker} lastPrice={lastPrice} coach={coach} position={position} />
+          <TradingChart ticker={season.ticker} lastPrice={lastPrice} coach={coach} position={position} onSrLevels={setSrLevels} />
           {position && (
             <ActivePositionCard position={position} lastPrice={lastPrice} closing={closing} onClose={() => closePosition()} />
           )}
@@ -189,6 +214,23 @@ export default function GamePage() {
       {activeModal === 'academy' && <AcademyModal onClose={closeModal} />}
       {activeModal === 'quiz' && <ChartQuizModal onClose={closeModal} />}
       {activeModal === 'streak' && <StreakRewardModal onClose={closeModal} />}
+      {srEvent !== null && position !== null && (
+        <SrActionModal
+          event={srEvent}
+          name={srName(srEvent.key, MA_PERIODS, false)}
+          position={position}
+          closing={closing}
+          onClosePosition={() => {
+            setSrEvent(null)
+            void closePosition()
+          }}
+          onHold={() => {
+            setSrEvent(null)
+            pushToast({ kind: 'info', icon: '✊', message: '홀딩을 선택했어요. 다음 지지·저항에서 다시 알려 드릴게요.' })
+          }}
+          onDismiss={() => setSrEvent(null)}
+        />
+      )}
       <NudgeToaster />
       <LoginModal open={loginOpen} onClose={() => setLoginOpen(false)} />
     </div>

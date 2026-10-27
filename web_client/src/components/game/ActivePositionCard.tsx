@@ -1,5 +1,6 @@
 import Button from '../ui/Button'
 import Card from '../ui/Card'
+import { closeActionClass, closeActionOf } from '../../lib/closeAction'
 import { formatPct, formatPrice, formatSignedKrw, pnlClass } from '../../lib/format'
 import { slTpLine } from '../../lib/orderOptions'
 import { sideClass, sideLabel } from '../../lib/side'
@@ -12,9 +13,11 @@ interface ActivePositionCardProps {
   onClose: () => void
 }
 
-// 보유 포지션 — 평가손익(₩, %)은 WS position_pnl 로 틱마다 갱신. 원클릭 전액 청산.
+// 보유 포지션 — 평가손익(₩, %)은 WS position_pnl 로 틱마다 갱신. 손익에 따라 익절/손절 원클릭 전액 청산.
 export default function ActivePositionCard({ position, lastPrice, closing, onClose }: ActivePositionCardProps) {
   const slTp = slTpLine(position.stop_loss_price, position.take_profit_price)
+  // 손익에 따라 익절/손절 — 색은 손익 글자와 같은 상승·하락 색(사유는 서버가 체결 가격으로 정함)
+  const action = closeActionOf(position.pnl_amount)
   return (
     <Card>
       <div className="flex items-center justify-between gap-2">
@@ -41,7 +44,7 @@ export default function ActivePositionCard({ position, lastPrice, closing, onClo
         loading={closing}
         loadingText="청산 중…"
       >
-        즉시 전액 청산하기
+        <span className={closeActionClass(action.kind)}>{action.label}</span>
       </Button>
     </Card>
   )
