@@ -58,6 +58,9 @@ function onRange(r: Range | null) {
 }
 const BB = 'rgba(99, 102, 241, 0.7)';
 const BB_FILL = 'rgba(99, 102, 241, 0.07)';
+// 매물대 — 폰 폭(약 360px)에서는 웹 값(최대 28%·0.22)이면 막대가 가늘고 흐려 잘 안 보여 넓고 진하게
+const VP_MAX_WIDTH = 0.5;
+const VP_COLOR = 'rgba(100, 116, 139, 0.3)';
 
 function post(m: PageEvent) {
   if (window.ReactNativeWebView) window.ReactNativeWebView.postMessage(JSON.stringify(m));
@@ -200,12 +203,12 @@ class VolumeProfile implements LWC.ISeriesPrimitive<Time> {
     if (bins.length === 0) return;
     const maxVol = Math.max(1, ...bins.map((b) => b.volume));
     target.useMediaCoordinateSpace(({ context: c, mediaSize }) => {
-      c.fillStyle = 'rgba(100, 116, 139, 0.22)';
+      c.fillStyle = VP_COLOR;
       bins.forEach((b) => {
         const yh = p.series.priceToCoordinate(b.high);
         const yl = p.series.priceToCoordinate(b.low);
         if (yh === null || yl === null || b.volume === 0) return;
-        c.fillRect(0, Math.min(yh, yl), (b.volume / maxVol) * mediaSize.width * 0.28, Math.max(1, Math.abs(yl - yh) - 1));
+        c.fillRect(0, Math.min(yh, yl), (b.volume / maxVol) * mediaSize.width * VP_MAX_WIDTH, Math.max(1, Math.abs(yl - yh) - 1));
       });
     });
   }
