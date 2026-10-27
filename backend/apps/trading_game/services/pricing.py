@@ -77,3 +77,16 @@ def liquidation_reason(
         if tp_price is not None and cur <= tp_price:
             return "TAKE_PROFIT"
     return None
+
+
+
+def manual_close_reason(side: str, entry: Decimal, exit_price: Decimal) -> str:
+    """수동 청산 사유 — 가격이 유리한 쪽으로 움직였으면 MANUAL_TP, 아니면(본전 포함) MANUAL_SL.
+
+    수수료 때문에 아주 작은 이익이 손실 ROI 가 될 수 있지만, 사용자가 본 '가격 방향'과 맞춘다.
+    """
+    if side == "LONG":
+        return "MANUAL_TP" if exit_price > entry else "MANUAL_SL"
+    if side == "SHORT":
+        return "MANUAL_TP" if exit_price < entry else "MANUAL_SL"
+    raise ValueError(f"side must be LONG or SHORT, got {side!r}")

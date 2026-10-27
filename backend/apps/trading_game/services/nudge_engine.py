@@ -14,7 +14,7 @@ NudgeType = Literal["WARNING", "PRAISE", "ADVICE"]
 RSI_OVERBOUGHT = 80.0
 PRAISE_ROI_MIN = Decimal("-3")
 PRAISE_ROI_MAX = Decimal("-1")
-_PRAISE_REASONS = frozenset({"STOP_LOSS", "MANUAL"})
+_PRAISE_REASONS = frozenset({"STOP_LOSS", "MANUAL", "MANUAL_SL", "MANUAL_TP"})  # MANUAL = 2026-10 이전 기록
 
 
 @dataclass(frozen=True)
