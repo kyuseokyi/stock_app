@@ -112,6 +112,7 @@
 - [x] 조건검색 칩(프리셋·필터 바텀시트·무한 스크롤, 행 → 종목 상세) — 2026-10-21. 실기기 확인 대기
 - [x] **웹 화면 반영(모바일)** — 시장 칩 묶음(국내 증시·밤사이 미국 증시·돈의 흐름·미국 경제지표), 스크리너 칩 두 묶음(시장 / 종목 찾기), 차트 선 이름 범례, 게임 비로그인 카드, 문구 정리(2026-10-24). 실기기 확인 대기
 - [ ] 차트 드로잉(앱)
+- [x] **APK 파일 이름** — `stockapp-<dev|prod>-<브랜치>-<YYYYMMDD-HHmm(KST)>.apk`(debug 는 `-debug`), config plugin `plugins/with-apk-name.js` 가 prebuild 때 `build.gradle` `outputFileName` 설정. 개발 독립형 APK `npm run build:android:devapk` (2026-10-28)
 - [x] 실제 푸시 — Expo Push(→FCM/APNs) 발송기, 펀드 리포트 알림·새 글 알림 적용(2026-10-21). 새 글은 push_devices.post_notice·내정보 스위치
 - [x] 앱 리프레시 토큰 — 앱 접근 토큰 60분·리프레시 30일(해시 저장·회전·재사용 감지·30초 유예), 서버 로그아웃, 401 사유 코드(TOKEN_EXPIRED·SESSION_ENDED 등), 게임 WS 만료 시 갱신 후 재연결, 세션 종료 시 열린 WS 닫기. 웹·관리자는 12시간 그대로. 설계 `docs/superpowers/specs/2026-10-22-mobile-refresh-token-design.md` (2026-10-22). 실기기 확인 대기
 - [x] 앱 업데이트 관리 — 관리자 '앱 버전 & 업데이트'(스토어 강제·권장, OTA 무음·선택·필수, 점검 모드), 공개 `GET /api/v1/app/version-check`(blog), 앱 expo-updates(fingerprint runtimeVersion·채널 헤더·수동 확인)·모달 5종, OTA 발행 `npm run ota:dev|preview|prod`. 명세 `docs/app_update_management_spec.md` (2026-10-22). APK 재빌드·실기기 확인 대기, iOS 스토어 링크는 출시 후 교체
