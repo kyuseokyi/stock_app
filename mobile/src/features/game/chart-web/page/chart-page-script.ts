@@ -361,7 +361,8 @@ function applyLines() {
   priceLines = lineSpecs.map((spec) =>
     s.createPriceLine({
       price: spec.price, color: spec.color, lineWidth: spec.width,
-      lineStyle: spec.dashed ? LW.LineStyle.Dashed : LW.LineStyle.Solid, axisLabelVisible: true, title: '',
+      lineStyle: spec.dotted ? LW.LineStyle.Dotted : spec.dashed ? LW.LineStyle.Dashed : LW.LineStyle.Solid,
+      axisLabelVisible: true, title: '',
     }),
   );
 }

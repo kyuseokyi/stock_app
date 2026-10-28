@@ -39,6 +39,8 @@ export interface ChartLine {
   color: string;
   width: 1 | 2;
   dashed: boolean;
+  /** 점선(Dotted) — 마지막 캔들이 닿은 지표 가로선. dashed 보다 우선 */
+  dotted?: boolean;
   title: string;
   /**
    * 자동 범위(가격축)에 넣을지 — 'always'=항상(진입가), 'day'=일봉에서만(지지·저항: 분봉은 변동폭이 작아 캔들이 납작해짐),
