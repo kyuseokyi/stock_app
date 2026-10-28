@@ -76,3 +76,33 @@ export function horizontalLevels(
   }
   return { resistance, support, candidates }
 }
+
+/**
+ * 전고점·전저점 — 마지막 lookback 개 안의 스윙 고점(high)·스윙 저점(low) 중 현재가에 가장 가까운 것(설계 §8-1).
+ * 고점·저점 각각 위(≥ 현재가 중 최저)·아래(< 현재가 중 최고) 하나씩. 같은 가격이면 더 최근. 없으면 null.
+ * 위·아래를 모두 주는 이유: 뚫은 직후의 레벨도 감시해야 돌파·이탈 알림을 놓치지 않는다
+ */
+export function nearestSwings(
+  bars: TrendBar[],
+  lastPrice: number,
+  opts: { pivot?: number; lookback?: number } = {},
+): { highAbove: HLevel | null; highBelow: HLevel | null; lowAbove: HLevel | null; lowBelow: HLevel | null } {
+  const pivot = opts.pivot ?? TREND_PIVOT
+  const start = Math.max(0, bars.length - (opts.lookback ?? TREND_LOOKBACK))
+  const pickNear = (idx: number[], price: (i: number) => number) => {
+    let above: HLevel | null = null
+    let below: HLevel | null = null
+    for (const i of idx) {
+      const p = price(i)
+      if (p >= lastPrice) {
+        if (above === null || p < above.price || (p === above.price && i > above.i)) above = { i, price: p }
+      } else if (below === null || p > below.price || (p === below.price && i > below.i)) {
+        below = { i, price: p }
+      }
+    }
+    return { above, below }
+  }
+  const hi = pickNear(swings(bars, start, pivot, (b) => b.high, true), (i) => bars[i].high)
+  const lo = pickNear(swings(bars, start, pivot, (b) => b.low, false), (i) => bars[i].low)
+  return { highAbove: hi.above, highBelow: hi.below, lowAbove: lo.above, lowBelow: lo.below }
+}

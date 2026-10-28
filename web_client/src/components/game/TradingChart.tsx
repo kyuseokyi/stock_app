@@ -16,7 +16,7 @@ import { kstDateString } from '../../lib/format'
 import { THEME } from '../../lib/themeColors'
 import { VolumeProfilePrimitive } from '../../lib/volumeProfile'
 import { srFromIndicators, srRoleName, srSignature, type SrLevel, type SrRole } from '../../lib/srLevels'
-import { srIndicatorLevels, touchedLevels, type IndicatorLevel } from '../../lib/touchLevels'
+import { srIndicatorLevels, srSwingLevels, touchedLevels, type IndicatorLevel } from '../../lib/touchLevels'
 import { roundToTick } from '../../lib/krxTick'
 import { useTradingGameStore } from '../../store/tradingGame'
 import { chipClass } from '../ui/Chip'
@@ -477,7 +477,7 @@ export default function TradingChart({ ticker, lastPrice, coach, position, onSrL
     linesRef.current = lines
   }, [support, resistance, entry, side, stopLoss, takeProfit, loaded, interval])
 
-  // 3-1) 지지·저항 = 지표 5개(매물대 POC·5일선·20일선(=BB 중심)·BB 상단·BB 하단)(설계 2026-10-27 chart-game-sr-trendlines §8).
+  // 3-1) 지지·저항 = 지표 5개(매물대 POC·5일선·20일선(=BB 중심)·BB 상단·BB 하단) + 전고점·전저점(현재가 바로 위·아래)(설계 2026-10-27 chart-game-sr-trendlines §8·§8-1).
   // 감지기(부모)에는 5개 전부(현재가 이상 저항·미만 지지), 차트에는 마지막 캔들 몸통(꼬리 제외)이 닿은 것만 전체 폭 가로선.
   // 지표 칩(이동평균·볼린저)과 무관하게 계산 — POC 만 매물대가 켜져 있을 때. 지지·저항 칩이 꺼지면 둘 다 없음
   useEffect(() => {
@@ -486,7 +486,9 @@ export default function TradingChart({ ticker, lastPrice, coach, position, onSrL
     const bars = barsRef.current
     const last = bars.length - 1
     const price = lastPrice ?? bars[last]?.close
-    const ind = showSr && price !== undefined ? srIndicatorLevels(bars.map((b) => b.close), showVp ? poc : null) : []
+    const ind = showSr && price !== undefined
+      ? [...srIndicatorLevels(bars.map((b) => b.close), showVp ? poc : null), ...srSwingLevels(bars, price)]
+      : []
     const levels = price === undefined ? [] : srFromIndicators(ind, price)
     const levelSig = srSignature(levels)
     if (levelSig !== srSigRef.current) {

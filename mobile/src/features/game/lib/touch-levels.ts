@@ -4,12 +4,15 @@
 import { bollinger, sma } from './indicators';
 import { roundToTick } from './krx-tick';
 import { srEps } from './sr-watch';
+import { nearestSwings, type TrendBar } from './trend-lines';
 
 export interface IndicatorLevel {
   id: string; // 'poc' | 'ma5' | 'ma20' | 'bbUpper' | 'bbLower'
   name: string; // 범례·알림 이름
   price: number;
   color: string;
+  /** 고정 가격 레벨(전고점·전저점) — 감지 키를 가격(lvl:가격)으로. 지표처럼 값이 움직이는 레벨은 없음(ind:id) */
+  byPrice?: boolean;
 }
 
 export const SR_MA5_COLOR = '#14b8a6';
@@ -17,6 +20,8 @@ export const SR_MA20_COLOR = '#f97316';
 export const SR_BB_COLOR = 'rgba(99, 102, 241, 0.7)';
 export const SR_POC_RESIST = '#f59e0b'; // POC 가 현재가 이상(매물대 점과 같은 색)
 export const SR_POC_SUPPORT = '#8b5cf6';
+export const SR_PREV_HIGH_COLOR = '#d97706'; // 전고점
+export const SR_PREV_LOW_COLOR = '#7c3aed'; // 전저점
 
 /**
  * 게임 지지·저항 지표의 마지막 캔들 값 — 순서 POC → 5일선 → 20일선 → BB 상단 → BB 하단(같은 호가 가격이면 앞의 것이 남음).
@@ -37,6 +42,19 @@ export function srIndicatorLevels(closes: number[], poc: number | null): Indicat
   if (b !== null) {
     out.push({ id: 'bbUpper', name: 'BB 상단', price: b.upper, color: SR_BB_COLOR });
     out.push({ id: 'bbLower', name: 'BB 하단', price: b.lower, color: SR_BB_COLOR });
+  }
+  return out;
+}
+
+/** 전고점·전저점 레벨(설계 §8-1) — 현재가 바로 위·아래 각 하나씩(고점·저점마다), 위 → 아래 순. 확정 전(오른쪽 pivot 개 없음) 캔들은 제외 */
+export function srSwingLevels(bars: TrendBar[], lastPrice: number): IndicatorLevel[] {
+  const s = nearestSwings(bars, lastPrice);
+  const out: IndicatorLevel[] = [];
+  for (const h of [s.highAbove, s.highBelow]) {
+    if (h !== null) out.push({ id: `prevHigh:${h.price}`, name: '전고점', price: h.price, color: SR_PREV_HIGH_COLOR, byPrice: true });
+  }
+  for (const l of [s.lowBelow, s.lowAbove]) {
+    if (l !== null) out.push({ id: `prevLow:${l.price}`, name: '전저점', price: l.price, color: SR_PREV_LOW_COLOR, byPrice: true });
   }
   return out;
 }

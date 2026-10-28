@@ -1,4 +1,4 @@
-import { horizontalLevels, TREND_LOOKBACK, TREND_PIVOT } from './trend-lines';
+import { horizontalLevels, nearestSwings, TREND_LOOKBACK, TREND_PIVOT } from './trend-lines';
 
 // high 배열로 봉 만들기(low 는 high - 1)
 const barsOf = (highs: number[], lows?: number[]) =>
@@ -102,5 +102,27 @@ describe('horizontalLevels', () => {
     test('후보가 없으면 빈 배열', () => {
       expect(horizontalLevels([], 8).candidates).toEqual([]);
     });
+  });
+});
+
+describe('nearestSwings', () => {
+  // 고가·저가가 같은 캔들 — 인덱스 3 고점 110, 7 고점 130, 5 저점 90, 9 저점 95 (pivot 3, 앞뒤 3개)
+  const v = [100, 101, 102, 110, 100, 90, 100, 130, 100, 95, 100, 101, 102, 103];
+  const bars = v.map((x) => ({ high: x, low: x }));
+
+  test('고점·저점 각각 현재가 바로 위·아래', () => {
+    expect(nearestSwings(bars, 120)).toEqual({
+      highAbove: { i: 7, price: 130 }, highBelow: { i: 3, price: 110 },
+      lowAbove: null, lowBelow: { i: 9, price: 95 },
+    });
+  });
+  test('현재가와 같은 가격은 위(≥)', () => {
+    expect(nearestSwings(bars, 110).highAbove).toEqual({ i: 3, price: 110 });
+    expect(nearestSwings(bars, 92).lowAbove).toEqual({ i: 9, price: 95 });
+    expect(nearestSwings(bars, 92).lowBelow).toEqual({ i: 5, price: 90 });
+  });
+  test('확정 전(오른쪽 3개 없음) 캔들은 후보 아님', () => {
+    const late = [...bars.slice(0, 11), { high: 200, low: 200 }, { high: 100, low: 100 }];
+    expect(nearestSwings(late, 150).highAbove).toBeNull();
   });
 });

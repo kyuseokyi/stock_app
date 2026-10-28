@@ -62,3 +62,9 @@ describe('srFromIndicators', () => {
     ]);
   });
 });
+
+describe('srFromIndicators 고정 가격 레벨', () => {
+  test('byPrice 면 키 lvl:가격', () => {
+    expect(srFromIndicators([{ id: 'prevHigh:130', name: '전고점', price: 130, color: '#a', byPrice: true }], 120)[0].key).toBe('lvl:130');
+  });
+});

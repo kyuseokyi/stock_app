@@ -41,11 +41,12 @@ export function srWatchLevels(candidates: HLevel[], lastPrice: number): SrLevel[
   })
 }
 
-/** 지표 레벨 → 지지·저항 목록(입력 순서). 키 ind:id, 가격 ≥ 현재가면 저항 */
+/** 지표 레벨 → 지지·저항 목록(입력 순서). 키 ind:id(고정 가격 레벨은 lvl:가격), 가격 ≥ 현재가면 저항 */
 export function srFromIndicators(levels: IndicatorLevel[], lastPrice: number): SrLevel[] {
   return levels.map((l) => {
     const resistance = l.price >= lastPrice
-    return { key: `ind:${l.id}` as SrKey, price: l.price, color: resistance ? TREND_HIGH_COLOR : TREND_LOW_COLOR, role: resistance ? 'resistance' : 'support', name: l.name }
+    const key: SrKey = l.byPrice === true ? `lvl:${l.price}` : `ind:${l.id}`
+    return { key, price: l.price, color: resistance ? TREND_HIGH_COLOR : TREND_LOW_COLOR, role: resistance ? 'resistance' : 'support', name: l.name }
   })
 }
 

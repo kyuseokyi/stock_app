@@ -12,7 +12,7 @@ import { mergeOlder, priceLines, toBars, type ChartColors, type Bar } from '../l
 import { srFromIndicators, srRoleName, srSignature, type SrLevel, type SrRole } from '../lib/sr-levels';
 import { formatPrice, kstDateString } from '../lib/format';
 import { lineSegments, MA_PERIODS } from '../lib/indicators';
-import { srIndicatorLevels, touchedLevels, type IndicatorLevel } from '../lib/touch-levels';
+import { srIndicatorLevels, srSwingLevels, touchedLevels, type IndicatorLevel } from '../lib/touch-levels';
 import { roundToTick } from '../lib/krx-tick';
 import { applyTickIntraday, axisLabelIndexes, bucketStartSec, CHART_INTERVALS, dayLabel, kstHm } from '../lib/intraday';
 import type { ChartInterval, Coach, DailyCandle, IntradayCandle, Position } from '../types';
@@ -460,13 +460,14 @@ export function DailyChart({ ticker, lastPrice, coach, position, onSrLevels }: D
   const [pocOf, setPocOf] = useState<{ key: string; price: number | null }>({ key: '', price: null });
   const poc = showVp && pocOf.key === seriesKey ? pocOf.price : null;
   const onPoc = useCallback((price: number | null) => setPocOf({ key: seriesKey, price }), [seriesKey]);
-  // 지지·저항 = 지표 5개(매물대 POC·5일선·20일선(=BB 중심)·BB 상단·BB 하단)(설계 §8) — 지표 칩과 무관, POC 만 매물대가 켜져 있을 때
+  // 지지·저항 = 지표 5개(매물대 POC·5일선·20일선(=BB 중심)·BB 상단·BB 하단)(설계 §8) + 전고점·전저점(현재가 바로 위·아래, §8-1) — 지표 칩과 무관, POC 만 매물대가 켜져 있을 때
   const sr = useMemo(() => {
     const none = { bars: [] as Bar[], ind: [] as IndicatorLevel[], price: 0 };
     if (!showSr || chartView === null || shown === null || !sameSeries(shown.series, ticker, interval)) return none;
     const bars = toBars(chartView.data);
     if (bars.length === 0) return none;
-    return { bars, ind: srIndicatorLevels(bars.map((b) => b.close), poc), price: lastPrice ?? bars[bars.length - 1].close };
+    const price = lastPrice ?? bars[bars.length - 1].close;
+    return { bars, ind: [...srIndicatorLevels(bars.map((b) => b.close), poc), ...srSwingLevels(bars, price)], price };
   }, [showSr, chartView, shown, ticker, interval, lastPrice, poc]);
   // 부모(감지기)에는 5개 전부(현재가 이상 저항·미만 지지)
   const rawSr = useMemo<SrLevel[]>(() => (sr.bars.length === 0 ? [] : srFromIndicators(sr.ind, sr.price)), [sr]);

@@ -1,4 +1,4 @@
-import { SR_BB_COLOR, SR_MA20_COLOR, SR_MA5_COLOR, SR_POC_RESIST, SR_POC_SUPPORT, srIndicatorLevels, touchedLevels, type IndicatorLevel } from './touch-levels';
+import { SR_BB_COLOR, SR_MA20_COLOR, SR_MA5_COLOR, SR_POC_RESIST, SR_POC_SUPPORT, SR_PREV_HIGH_COLOR, SR_PREV_LOW_COLOR, srIndicatorLevels, srSwingLevels, touchedLevels, type IndicatorLevel } from './touch-levels';
 
 const lv = (id: string, price: number): IndicatorLevel => ({ id, name: id, price, color: '#x' });
 
@@ -47,5 +47,17 @@ describe('srIndicatorLevels', () => {
   test('기간이 모자라면 그 지표는 뺌', () => {
     expect(srIndicatorLevels([1, 2, 3, 4, 5], null).map((l) => l.id)).toEqual(['ma5']);
     expect(srIndicatorLevels([], 10)).toEqual([]);
+  });
+});
+
+describe('srSwingLevels', () => {
+  const v = [100, 101, 102, 110, 100, 90, 100, 130, 100, 95, 100, 101, 102, 103];
+  const bars = v.map((x) => ({ high: x, low: x }));
+  test('전고점 위·아래, 전저점 아래·위 — 이름·고정 가격 표시', () => {
+    expect(srSwingLevels(bars, 120)).toEqual([
+      { id: 'prevHigh:130', name: '전고점', price: 130, color: SR_PREV_HIGH_COLOR, byPrice: true },
+      { id: 'prevHigh:110', name: '전고점', price: 110, color: SR_PREV_HIGH_COLOR, byPrice: true },
+      { id: 'prevLow:95', name: '전저점', price: 95, color: SR_PREV_LOW_COLOR, byPrice: true },
+    ]);
   });
 });
