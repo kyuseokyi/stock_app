@@ -13,6 +13,9 @@
 # 채널: dev → development(APP_ENV=development) · preview → preview(APP_ENV=production, EXPO_UPDATES_CHANNEL=preview,
 #       eas.json preview 프로필 env 와 같음) · prod → production(APP_ENV=production)
 #
+# 플랫폼: eas update 기본(--platform all)은 web 까지 export 하는데, web 정적 렌더링(서버에서 화면 그리기)은 Unistyles 테마 설정 전에
+#   StyleSheet.create 가 돌아 실패한다(OTA 대상도 아님) → 앱 플랫폼만 하나씩 발행. OTA_PLATFORMS="android" 처럼 줄일 수 있다.
+#
 # 사용: npm run ota:dev -- "변경 요약"   (ota:preview / ota:prod 도 같음)
 #       DRY_RUN=1 → 확인만 하고 eas 명령은 출력만(파일을 만들지 않음)  ·  YES=1 → 확인 질문 생략
 # 값은 출력하지 않는다(키 이름만).
@@ -41,6 +44,13 @@ case "$TARGET" in
 esac
 
 DRY_RUN="${DRY_RUN:-0}"
+OTA_PLATFORMS="${OTA_PLATFORMS:-android ios}"
+for p in $OTA_PLATFORMS; do
+  case "$p" in
+    android | ios) ;;
+    *) echo "[ota] ✗ OTA_PLATFORMS 에는 android·ios 만: $p" >&2; exit 1 ;;
+  esac
+done
 TMP=.env.production.local
 LOCALHOST_URL='^EXPO_PUBLIC_[A-Z_]*_URL=https?://(localhost|127\.0\.0\.1|10\.0\.2\.2)([:/]|$)'
 
@@ -97,6 +107,7 @@ echo "[ota] APP_ENV=$APP_ENV_VALUE${UPDATES_CHANNEL:+ EXPO_UPDATES_CHANNEL=$UPDA
 echo "[ota] 번들 env: $ENV_DESC"
 echo "[ota] API 주소 키: $(grep -oE '^EXPO_PUBLIC_[A-Z_]*_URL' "$MERGED" | tr '\n' ' ')"
 echo "[ota] 전체 키: $(cut -d= -f1 "$MERGED" | tr '\n' ' ')"
+echo "[ota] 플랫폼: $OTA_PLATFORMS"
 echo "[ota] 메시지: $MESSAGE"
 
 if [ "$DRY_RUN" != 1 ] && [ "${YES:-0}" != 1 ]; then
@@ -114,7 +125,9 @@ ENV_ARGS=(APP_ENV="$APP_ENV_VALUE")
 
 if [ "$DRY_RUN" = 1 ]; then
   [ "$TARGET" = dev ] && echo "[ota] (DRY_RUN) $TMP 생성·적용 후 삭제 — 실제로는 만들지 않음"
-  echo "[ota] (DRY_RUN) env ${ENV_ARGS[*]} eas update --channel $CHANNEL --environment $EAS_ENV --message \"$MESSAGE\""
+  for p in $OTA_PLATFORMS; do
+    echo "[ota] (DRY_RUN) env ${ENV_ARGS[*]} eas update --channel $CHANNEL --environment $EAS_ENV --platform $p --message \"$MESSAGE\""
+  done
   exit 0
 fi
 
@@ -129,9 +142,13 @@ if [ "$TARGET" = dev ]; then
   CREATED_TMP=1
   # build-dev-apk.sh 처럼 합친 env 를 프로세스 env 로도 넘긴다 — app.config.js 평가(EAS_PROJECT_ID·GOOGLE_SERVICES_JSON 등)가
   #   빌드 때와 같아야 fingerprint 가 같다.
-  (set -a; . "./$TMP"; set +a; env "${ENV_ARGS[@]}" "${EAS[@]}" update --channel "$CHANNEL" --environment "$EAS_ENV" --message "$MESSAGE")
+  for p in $OTA_PLATFORMS; do
+    (set -a; . "./$TMP"; set +a; env "${ENV_ARGS[@]}" "${EAS[@]}" update --channel "$CHANNEL" --environment "$EAS_ENV" --platform "$p" --message "$MESSAGE")
+  done
 else
-  env "${ENV_ARGS[@]}" "${EAS[@]}" update --channel "$CHANNEL" --environment "$EAS_ENV" --message "$MESSAGE"
+  for p in $OTA_PLATFORMS; do
+    env "${ENV_ARGS[@]}" "${EAS[@]}" update --channel "$CHANNEL" --environment "$EAS_ENV" --platform "$p" --message "$MESSAGE"
+  done
 fi
 
 echo "[ota] ✓ $CHANNEL 채널 발행 완료"
