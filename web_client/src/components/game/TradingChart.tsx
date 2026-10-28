@@ -15,9 +15,8 @@ import { MA_PERIODS, bollinger, sma, type MaPeriod } from '../../lib/indicators'
 import { kstDateString } from '../../lib/format'
 import { THEME } from '../../lib/themeColors'
 import { VolumeProfilePrimitive } from '../../lib/volumeProfile'
-import { srWatchLevels, srRoleName, srSignature, TREND_HIGH_COLOR, TREND_LOW_COLOR, type SrLevel } from '../../lib/srLevels'
-import { horizontalLevels } from '../../lib/trendLines'
-import { touchedLevels, type IndicatorLevel } from '../../lib/touchLevels'
+import { srFromIndicators, srRoleName, srSignature, type SrLevel, type SrRole } from '../../lib/srLevels'
+import { srIndicatorLevels, touchedLevels, type IndicatorLevel } from '../../lib/touchLevels'
 import { roundToTick } from '../../lib/krxTick'
 import { useTradingGameStore } from '../../store/tradingGame'
 import { chipClass } from '../ui/Chip'
@@ -95,34 +94,11 @@ const updateIndicatorLast = (s: IndicatorSeries, bars: { time: Time; close: numb
   s.band.setPoints(bands.flatMap((x, i) => (x === null ? [] : [{ time: bars[i].time, upper: x.upper, lower: x.lower }])))
 }
 
-/** 지표·추세선 계산용 캔들(시각·고가·저가·종가) */
-interface CalcBar { time: Time; high: number; low: number; close: number }
+/** 지표·지지저항 계산용 캔들(시각·시가·고가·저가·종가) — 몸통 닿음 판정에 시가가 필요 */
+interface CalcBar { time: Time; open: number; high: number; low: number; close: number }
 
-/** 켜진 지표의 마지막 캔들 값(가로선 후보) — POC 색은 점과 같게 현재가(마지막 종가) 위 주황·아래 보라 */
-const indicatorLevelsAt = (bars: CalcBar[], on: { ma: boolean; bb: boolean; poc: number | null }): IndicatorLevel[] => {
-  const n = bars.length
-  if (n === 0) return []
-  const closes = bars.map((b) => b.close)
-  const out: IndicatorLevel[] = []
-  if (on.poc !== null) {
-    out.push({ id: 'poc', name: '매물대 POC', price: on.poc, color: on.poc >= closes[n - 1] ? RESIST : SUPPORT })
-  }
-  if (on.ma) {
-    for (const p of MA_PERIODS) {
-      const v = sma(closes, p)[n - 1]
-      if (v !== null) out.push({ id: `ma${p}`, name: `${p}일선`, price: v, color: MA_COLORS[p] })
-    }
-  }
-  if (on.bb) {
-    const b = bollinger(closes)[n - 1]
-    if (b !== null) {
-      out.push({ id: 'bbUpper', name: 'BB 상단', price: b.upper, color: BB_COLOR })
-      out.push({ id: 'bbMiddle', name: 'BB 중심', price: b.middle, color: BB_COLOR })
-      out.push({ id: 'bbLower', name: 'BB 하단', price: b.lower, color: BB_COLOR })
-    }
-  }
-  return out
-}
+/** 몸통이 닿은 지지·저항 지표 + 역할(범례용) */
+type TouchedLevel = IndicatorLevel & { role: SrRole }
 
 /** 마지막 캔들 반영(같은 시각이면 교체, 새 시각이면 추가) — 원본 불변 */
 const upsertLast = (bars: CalcBar[], bar: CalcBar) =>
@@ -207,14 +183,11 @@ export default function TradingChart({ ticker, lastPrice, coach, position, onSrL
   const fitPricesRef = useRef<number[]>([])
   const indRef = useRef<IndicatorSeries | null>(null)
   const vpRef = useRef<VolumeProfilePrimitive | null>(null) // 매물대(보이는 구간)
-  const trendLinesRef = useRef<IPriceLine[]>([]) // 지지·저항 가로선(차트 전체 폭 가격선)
-  const trendSigRef = useRef('') // 마지막으로 그린 지지·저항 가격(같으면 다시 그리지 않음)
   const srSigRef = useRef(SR_SIG_UNSET) // 마지막으로 부모에 올린 지지·저항 서명(같으면 다시 올리지 않음)
   const [dataVer, setDataVer] = useState(0) // 캔들을 새로 그릴 때마다 +1 — 추세선 다시 계산
-  const [hasTrend, setHasTrend] = useState({ resistance: false, support: false }) // 범례용
-  const touchLinesRef = useRef<IPriceLine[]>([]) // 마지막 캔들이 닿은 지표 가로선
+  const touchLinesRef = useRef<IPriceLine[]>([]) // 몸통이 닿은 지지·저항 지표 가로선(차트 전체 폭)
   const touchSigRef = useRef('') // 마지막으로 그린 닿은 지표(같으면 다시 그리지 않음)
-  const [touched, setTouched] = useState<IndicatorLevel[]>([]) // 범례용
+  const [touched, setTouched] = useState<TouchedLevel[]>([]) // 범례용
   const reloadRef = useRef<(() => void) | null>(null) // 현재 차트의 캔들 재로드(스트림 재개 시)
   const barsRef = useRef<CalcBar[]>([]) // 지표·추세선 계산용 시각·고저종
   // 마지막 설정(단위·지표)은 이 브라우저에 저장 — 다시 열면 그대로(lib/chartPrefs)
@@ -272,8 +245,6 @@ export default function TradingChart({ ticker, lastPrice, coach, position, onSrL
     series.attachPrimitive(vp)
     vpRef.current = vp
     vp.onPocChange = setPoc
-    trendLinesRef.current = [] // 옛 차트의 지지·저항 가격선은 차트와 함께 사라짐
-    trendSigRef.current = ''
     touchLinesRef.current = [] // 옛 차트의 가격선은 차트와 함께 사라짐
     touchSigRef.current = ''
     setTouched([])
@@ -289,7 +260,7 @@ export default function TradingChart({ ticker, lastPrice, coach, position, onSrL
     const drawDaily = (candles: DailyCandle[]) => {
       dayRows = candles
       series.setData(candles.map(toBar))
-      barsRef.current = candles.map((c) => ({ time: c.date, high: c.high, low: c.low, close: c.close }))
+      barsRef.current = candles.map((c) => ({ time: c.date, open: c.open, high: c.high, low: c.low, close: c.close }))
       setIndicatorData(ind, barsRef.current)
       vp.setPoints(candles.map((c) => ({ high: c.high, low: c.low, close: c.close, volume: c.volume ?? 0 })))
     }
@@ -315,7 +286,7 @@ export default function TradingChart({ ticker, lastPrice, coach, position, onSrL
       } else {
         const bars = rows as IntradayCandle[]
         series.setData(bars.map(toIntradayBar))
-        barsRef.current = bars.map((c) => ({ time: c.t as UTCTimestamp, high: c.high, low: c.low, close: c.close }))
+        barsRef.current = bars.map((c) => ({ time: c.t as UTCTimestamp, open: c.open, high: c.high, low: c.low, close: c.close }))
         setIndicatorData(ind, barsRef.current)
         vp.setPoints(bars.map((c) => ({ high: c.high, low: c.low, close: c.close, volume: c.volume })))
         lastIntradayRef.current = bars[bars.length - 1] ?? null
@@ -388,8 +359,6 @@ export default function TradingChart({ ticker, lastPrice, coach, position, onSrL
       setPoc(null) // 옛 차트의 POC 를 새 차트가 쓰지 않게
       barsRef.current = []
       linesRef.current = []
-      trendLinesRef.current = []
-      trendSigRef.current = ''
       srSigRef.current = SR_SIG_UNSET
       lastCandleRef.current = null
       lastIntradayRef.current = null
@@ -437,14 +406,14 @@ export default function TradingChart({ ticker, lastPrice, coach, position, onSrL
         const isNew = barsRef.current[barsRef.current.length - 1]?.time !== next.date
         lastCandleRef.current = next
         series.update(toBar(next))
-        barsRef.current = upsertLast(barsRef.current, { time: next.date, high: next.high, low: next.low, close: next.close })
+        barsRef.current = upsertLast(barsRef.current, { time: next.date, open: next.open, high: next.high, low: next.low, close: next.close })
         vpRef.current?.upsertLast({ high: next.high, low: next.low, close: next.close, volume: next.volume ?? 0 }, isNew)
       } else {
         const next = mergeTickIntraday(lastIntradayRef.current, bucketStartSec(Date.now(), interval), lastPrice)
         const isNew = barsRef.current[barsRef.current.length - 1]?.time !== next.t
         lastIntradayRef.current = next
         series.update(toIntradayBar(next))
-        barsRef.current = upsertLast(barsRef.current, { time: next.t as UTCTimestamp, high: next.high, low: next.low, close: next.close })
+        barsRef.current = upsertLast(barsRef.current, { time: next.t as UTCTimestamp, open: next.open, high: next.high, low: next.low, close: next.close })
         vpRef.current?.upsertLast({ high: next.high, low: next.low, close: next.close, volume: next.volume }, isNew)
         setEmpty(false)
       }
@@ -508,49 +477,37 @@ export default function TradingChart({ ticker, lastPrice, coach, position, onSrL
     linesRef.current = lines
   }, [support, resistance, entry, side, stopLoss, takeProfit, loaded, interval])
 
-  // 3-1) 지지·저항 수평선(설계 2026-10-27 chart-game-sr-trendlines §7·§7-4) — 현재가에 가장 가까운 스윙 고점·저점(매물대 켜짐이면 POC 포함).
-  // 차트 전체 폭 가격선(실선 2). 가격이 같으면 다시 그리지 않고, 지지·저항 목록은 서명이 바뀔 때만 부모에 올린다. 칩이 꺼지면 비움.
-  // 가격선은 자동 가격 범위에 들어가지 않는다(멀어도 캔들이 납작해지지 않음)
+  // 3-1) 지지·저항 = 지표 5개(매물대 POC·5일선·20일선(=BB 중심)·BB 상단·BB 하단)(설계 2026-10-27 chart-game-sr-trendlines §8).
+  // 감지기(부모)에는 5개 전부(현재가 이상 저항·미만 지지), 차트에는 마지막 캔들 몸통(꼬리 제외)이 닿은 것만 전체 폭 가로선.
+  // 지표 칩(이동평균·볼린저)과 무관하게 계산 — POC 만 매물대가 켜져 있을 때. 지지·저항 칩이 꺼지면 둘 다 없음
   useEffect(() => {
     const series = seriesRef.current
     if (!series || !loaded) return
     const bars = barsRef.current
     const last = bars.length - 1
     const price = lastPrice ?? bars[last]?.close
-    const h = showSr && bars.length > 0 && price !== undefined ? horizontalLevels(bars, price, { poc: showVp ? poc : null }) : { resistance: null, support: null, candidates: [] }
-    const sig = JSON.stringify([h.resistance?.price ?? null, h.support?.price ?? null])
-    if (sig !== trendSigRef.current) {
-      trendSigRef.current = sig
-      for (const l of trendLinesRef.current) series.removePriceLine(l)
-      const make = (price: number, color: string) =>
-        series.createPriceLine({ price, color, lineWidth: 2, lineStyle: LineStyle.Solid, axisLabelVisible: true, title: '' })
-      trendLinesRef.current = [
-        ...(h.resistance ? [make(h.resistance.price, TREND_HIGH_COLOR)] : []),
-        ...(h.support ? [make(h.support.price, TREND_LOW_COLOR)] : []),
-      ]
-      setHasTrend({ resistance: h.resistance !== null, support: h.support !== null })
-    }
-    // 부모(감지기)에는 후보 레벨 전체 — 그리는 2개만 올리면 가까운 쪽이 바뀔 때 상태가 지워져 돌파·이탈을 놓친다
-    const levels = price === undefined ? [] : srWatchLevels(h.candidates, price)
+    const ind = showSr && price !== undefined ? srIndicatorLevels(bars.map((b) => b.close), showVp ? poc : null) : []
+    const levels = price === undefined ? [] : srFromIndicators(ind, price)
     const levelSig = srSignature(levels)
     if (levelSig !== srSigRef.current) {
       srSigRef.current = levelSig
       onSrLevels?.(levels)
     }
 
-    // 마지막 캔들이 닿은(터치·관통) 지표 — 그 가격에 점선 가로선(§7-3). 켜진 지표만, 지지·저항 칩이 꺼지면 없음
-    const touches = showSr && last >= 0 ? touchedLevels(bars[last], indicatorLevelsAt(bars, { ma: showMa, bb: showBb, poc: showVp ? poc : null })) : []
-    // 색 포함 — POC 는 종가가 넘나들면 같은 가격에서 주황↔보라가 바뀐다
-    const touchSig = touches.map((l) => `${l.id}:${roundToTick(l.price)}:${l.color}`).join('|')
+    const touches: TouchedLevel[] = last >= 0 && price !== undefined
+      ? touchedLevels(bars[last], ind).map((l) => ({ ...l, role: l.price >= price ? 'resistance' : 'support' }))
+      : []
+    // 색·역할 포함 — POC 는 종가가 넘나들면 같은 가격에서 주황↔보라, 범례의 저항↔지지가 바뀐다
+    const touchSig = touches.map((l) => `${l.id}:${roundToTick(l.price)}:${l.color}:${l.role}`).join('|')
     if (touchSig !== touchSigRef.current) {
       touchSigRef.current = touchSig
       for (const l of touchLinesRef.current) series.removePriceLine(l)
       touchLinesRef.current = touches.map((l) =>
-        series.createPriceLine({ price: l.price, color: l.color, lineWidth: 2, lineStyle: LineStyle.Dotted, axisLabelVisible: true, title: '' }),
+        series.createPriceLine({ price: l.price, color: l.color, lineWidth: 2, lineStyle: LineStyle.Solid, axisLabelVisible: true, title: '' }),
       )
       setTouched(touches)
     }
-  }, [lastPrice, loaded, showSr, showVp, showMa, showBb, poc, dataVer, interval, ticker, onSrLevels])
+  }, [lastPrice, loaded, showSr, showVp, poc, dataVer, interval, ticker, onSrLevels])
 
   // 차트가 사라지면(게임 화면 이탈 등) 부모의 지지·저항 목록을 비운다
   useEffect(() => () => onSrLevels?.([]), [onSrLevels])
@@ -563,14 +520,6 @@ export default function TradingChart({ ticker, lastPrice, coach, position, onSrL
     stopLoss !== null && { label: '손절', color: STOP_LOSS, dashed: true },
     takeProfit !== null && { label: '익절', color: TAKE_PROFIT, dashed: true },
   ].filter((x): x is { label: string; color: string; dashed: boolean } => Boolean(x))
-
-  // 지지·저항 범례 — 켜져 있고 선이 있을 때(색은 역할로 고정)
-  const trendLegend = showSr
-    ? [
-        hasTrend.resistance && { role: 'resistance' as const, color: TREND_HIGH_COLOR },
-        hasTrend.support && { role: 'support' as const, color: TREND_LOW_COLOR },
-      ].filter((x) => x !== false)
-    : []
 
   return (
     <div>
@@ -645,7 +594,7 @@ export default function TradingChart({ ticker, lastPrice, coach, position, onSrL
             </button>
           </div>
         )}
-        {(showMa || lineLegend.length > 0 || trendLegend.length > 0 || touched.length > 0) && loaded && !failed && !empty && (
+        {(showMa || lineLegend.length > 0 || touched.length > 0) && loaded && !failed && !empty && (
           // 오른쪽 가격 축(약 56px)은 비워 둔다
           <div className="pointer-events-none absolute left-2 right-16 top-1.5 z-10 flex flex-wrap gap-x-2 gap-y-0.5 text-xs font-bold text-ink">
             {/* 선 색은 견본으로만, 글자는 본문색 — 밝은 청록·주황 글자는 흰 바탕 대비가 3:1 미만 */}
@@ -659,16 +608,10 @@ export default function TradingChart({ ticker, lastPrice, coach, position, onSrL
                 ))}
               </span>
             )}
-            {trendLegend.map((l) => (
-              <span key={l.role} className="inline-flex items-center gap-1 rounded-field bg-surface/80 px-1.5">
-                <span aria-hidden className="w-3 border-t-2" style={{ borderColor: l.color }} />
-                {srRoleName(l.role, true)}
-              </span>
-            ))}
             {touched.map((l) => (
               <span key={l.id} className="inline-flex items-center gap-1 rounded-field bg-surface/80 px-1.5">
-                <span aria-hidden className="w-3 border-t-2 border-dotted" style={{ borderColor: l.color }} />
-                {l.name} 닿음
+                <span aria-hidden className="w-3 border-t-2" style={{ borderColor: l.color }} />
+                {l.name} {srRoleName(l.role, true)}
               </span>
             ))}
             {lineLegend.map((l) => (

@@ -1,11 +1,15 @@
-// 차트 게임 지지·저항 목록 — 수평선 2개(설계 2026-10-27 chart-game-sr-trendlines §7).
+// 차트 게임 지지·저항 목록 — 지표 5개(설계 2026-10-27 chart-game-sr-trendlines §8, 이전 §7 의 스윙 수평선 함수도 남겨 둠).
 // 앱 features/game/lib/sr-levels.ts 와 같은 규칙.
 import { roundToTick } from './krxTick'
 import type { SrEventType } from './srWatch'
+import type { IndicatorLevel } from './touchLevels'
 import type { HLevel } from './trendLines'
 
-/** 레벨 가격 기반 키 — 저항을 돌파해 같은 선이 지지로 바뀌어도 키가 같아 감지기가 돌파를 놓치지 않는다 */
-export type SrKey = `lvl:${number}`
+/**
+ * lvl:가격 = 스윙 수평선(§7), ind:지표 = 지표 레벨(§8). 어느 쪽이든 역할(저항↔지지)이 바뀌어도 키가 같아 감지기가 돌파를 놓치지 않는다.
+ * 지표 값은 틱마다 조금 움직이지만 오차 안이면 같은 선으로 판정(sr-watch)
+ */
+export type SrKey = `lvl:${number}` | `ind:${string}`
 export type SrRole = 'support' | 'resistance'
 
 export interface SrLevel {
@@ -13,6 +17,8 @@ export interface SrLevel {
   price: number
   color: string
   role: SrRole
+  /** 알림 문구 이름(지표 레벨만 — 예: 20일선). 없으면 역할 이름 */
+  name?: string
 }
 
 /** 선 색은 역할로 고정(저항=주황, 지지=보라) */
@@ -32,6 +38,14 @@ export function srWatchLevels(candidates: HLevel[], lastPrice: number): SrLevel[
   return candidates.map((c) => {
     const resistance = c.price >= lastPrice
     return { key: `lvl:${c.price}` as SrKey, price: c.price, color: resistance ? TREND_HIGH_COLOR : TREND_LOW_COLOR, role: resistance ? 'resistance' : 'support' }
+  })
+}
+
+/** 지표 레벨 → 지지·저항 목록(입력 순서). 키 ind:id, 가격 ≥ 현재가면 저항 */
+export function srFromIndicators(levels: IndicatorLevel[], lastPrice: number): SrLevel[] {
+  return levels.map((l) => {
+    const resistance = l.price >= lastPrice
+    return { key: `ind:${l.id}` as SrKey, price: l.price, color: resistance ? TREND_HIGH_COLOR : TREND_LOW_COLOR, role: resistance ? 'resistance' : 'support', name: l.name }
   })
 }
 

@@ -15,6 +15,8 @@ export interface SrEvent {
   key: SrKey
   levelPrice: number
   price: number
+  /** 선 이름(지표 레벨이면 20일선 등) — 없으면 화면이 역할 이름을 쓴다 */
+  name?: string
 }
 
 export type SrZone = 'above' | 'below' | 'near'
@@ -58,7 +60,7 @@ export class SrWatcher {
       if (zone !== prev.zone) {
         const type = classify(prev.lastSide, zone)
         if (type !== null && this.take(`${lv.key}:${type}`, nowMs)) {
-          out.push({ type, key: lv.key, levelPrice: lv.price, price })
+          out.push({ type, key: lv.key, levelPrice: lv.price, price, ...(lv.name !== undefined ? { name: lv.name } : {}) })
         }
       }
       this.state.set(lv.key, { zone, lastSide: zone === 'near' ? prev.lastSide : zone, level: lv.price })
