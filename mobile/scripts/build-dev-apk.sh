@@ -13,7 +13,8 @@
 #   OTA 를 받는다 — 발행은 `npm run ota:dev -- "메시지"`(scripts/publish-ota.sh, 개발 env·APP_ENV 를 맞춰 준다). 채널을 바꾸려면 prebuild 를 다시 해야 한다(아래 APP_ENV 는 빌드 중 설정 생성용).
 #
 # 사용: npm run build:android:devapk
-# 결과: android/app/build/outputs/apk/release/app-release.apk (debug 키 서명 — 내부 테스트용, 스토어 업로드 불가)
+# 결과: android/app/build/outputs/apk/release/stockapp-dev-<브랜치>-<YYYYMMDD-HHmm>.apk
+#       (이름은 plugins/with-apk-name.js — prebuild 필요. debug 키 서명 — 내부 테스트용, 스토어 업로드 불가)
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -65,10 +66,12 @@ JVMARGS="${DEVAPK_JVMARGS:--Xmx4096m -XX:MaxMetaspaceSize=1536m}"
   -PreactNativeArchitectures="$ABIS" "-Dorg.gradle.jvmargs=$JVMARGS")
 
 # 푸시 설정이 실제로 들어갔는지 확인(값은 출력하지 않음)
-APK=android/app/build/outputs/apk/release/app-release.apk
+# 파일 이름은 plugins/with-apk-name.js 가 정한다(stockapp-dev-<브랜치>-<일시>.apk) — 방금 만든 것 하나
+APK=$(ls -t android/app/build/outputs/apk/release/*.apk 2>/dev/null | head -1 || true)
+[ -n "$APK" ] || { echo "[devapk] ✗ release APK 를 찾지 못함" >&2; exit 1; }
 if grep -q '^EAS_PROJECT_ID=' "$TMP" && ! unzip -p "$APK" assets/app.config 2>/dev/null | grep -q '"projectId"'; then
   echo "[devapk] ✗ EAS_PROJECT_ID 가 있는데 APK 설정에 projectId 가 없음 — 푸시가 꺼진 앱이 된다." >&2
   exit 1
 fi
 
-echo "[devapk] ✓ android/app/build/outputs/apk/release/app-release.apk"
+echo "[devapk] ✓ $APK"

@@ -84,6 +84,7 @@ export default {
       'expo-secure-store',
       ['expo-notifications', { enableBackgroundRemoteNotifications: true }], // 무음 push 로 앱 깨우기(iOS remote-notification)
       'expo-background-task', // 정기 백그라운드 기록(Android WorkManager · iOS BGTaskScheduler)
+      ['./plugins/with-apk-name', { env: APP_ENV }], // APK 이름 stockapp-<dev|prod>-<브랜치>-<일시>.apk(build.gradle outputFileName)
       // iOS 출시(애플 로그인과 함께) 전에 실제 값으로
       [
         '@react-native-google-signin/google-signin',
