@@ -501,3 +501,194 @@ async def test_close_updates_account_aggregates(session):
     assert acc.total_asset == acc.cash_balance          # 청산 후 총자산=현금
     assert acc.current_roi == Decimal("9.9700")         # +9.97%
     assert acc.max_roi == Decimal("9.9700")
+
+
+# ---------------------------------------------------------------- 부분 익절 · 원금 회수(2026-10-28 설계)
+from apps.trading_game.services import ranking_service, reward_service  # noqa: E402
+
+
+async def _open_full(session, acc, *, side="LONG", leverage=1):
+    """현금 1,000만 원 전액 진입(진입가 100)."""
+    return await order_engine.open_position(
+        session, account=acc, side=side, ratio=Decimal("1.0"),
+        leverage=leverage, entry_price=Decimal("100"), sl_pct=Decimal("0.05"), tp_pct=Decimal("0.2"),
+    )
+
+
+async def test_partial_half_closes_half_and_keeps_position(session):
+    acc = await _seed_account(session)
+    pos = await _open_full(session, acc)
+    trade, left = await order_engine.partial_close_position(
+        session, position_id=pos.id, exit_price=Decimal("110"), portion="half"
+    )
+    assert trade.closed_reason == "PARTIAL_TP"
+    assert trade.size_amount == Decimal("5000000.00")
+    assert trade.roi_pct == Decimal("9.97")
+    assert trade.pnl_amount == Decimal("498500.00")
+    assert left.status == "OPEN" and left.size_amount == Decimal("5000000.00")
+    # 진입가·레버리지·손절·익절은 그대로
+    assert (left.entry_price, left.leverage) == (Decimal("100.00"), 1)
+    assert left.stop_loss_price == Decimal("95.00") and left.take_profit_price == Decimal("120.00")
+    acc = await session.get(GameAccount, acc.id, populate_existing=True)
+    assert acc.cash_balance == Decimal("5498500.00")  # 0 + 500만 + 49.85만
+    # 총자산 = 현금 + 남은 원금 + 남은 평가손익 → 부분 청산 전과 같은 평가
+    assert acc.total_asset == Decimal("5498500.00") + Decimal("5000000") + Decimal("498500.00")
+    assert acc.current_roi == Decimal("9.9700")
+    assert acc.current_roi == ranking_service.compute_live_roi(
+        acc.cash_balance, left, Decimal("110"), reward_service.principal(acc)
+    )
+    assert acc.max_roi == Decimal("9.9700")
+    assert (acc.total_trades, acc.win_trades) == (0, 0)  # 거래 수는 최종 청산 때만
+
+
+async def test_partial_principal_returns_principal_and_keeps_profit(session):
+    acc = await _seed_account(session)
+    pos = await _open_full(session, acc)
+    size = pos.size_amount
+    trade, left = await order_engine.partial_close_position(
+        session, position_id=pos.id, exit_price=Decimal("110"), portion="principal"
+    )
+    assert trade.closed_reason == "PRINCIPAL_OUT"
+    returned = trade.size_amount + trade.pnl_amount
+    assert abs(returned - size) <= Decimal("0.02")  # 돌려받는 돈 = 지금 원금(반올림 오차 이내)
+    assert trade.size_amount + left.size_amount == size  # 남는 원금은 따로 반올림하지 않음
+    acc = await session.get(GameAccount, acc.id, populate_existing=True)
+    assert acc.cash_balance == returned
+    # 남은 포지션 평가금(원금+평가손익) ≈ 최초 수익금
+    left_value = left.size_amount + pricing.compute_pnl(left.size_amount, Decimal("9.97"))
+    full_profit = pricing.compute_pnl(size, Decimal("9.97"))
+    assert abs(left_value - full_profit) <= Decimal("0.02")
+
+
+async def test_partial_remaining_below_min_order_is_allowed(session):
+    """남는 원금에는 최소 주문 10만 원 하한을 적용하지 않는다(진입 규칙일 뿐)."""
+    acc = await _seed_account(session)
+    pos = _position(acc, size_amount=Decimal("150000"))
+    session.add(pos)
+    await session.commit()
+    _, left = await order_engine.partial_close_position(
+        session, position_id=pos.id, exit_price=Decimal("110"), portion="half"
+    )
+    assert left.status == "OPEN" and left.size_amount == Decimal("75000.00") < order_engine.MIN_ORDER_AMOUNT
+
+
+async def test_partial_principal_twice_uses_remaining_size(session):
+    acc = await _seed_account(session)
+    pos = await _open_full(session, acc)
+    _, left = await order_engine.partial_close_position(
+        session, position_id=pos.id, exit_price=Decimal("110"), portion="principal"
+    )
+    first_left = left.size_amount
+    trade2, left2 = await order_engine.partial_close_position(
+        session, position_id=pos.id, exit_price=Decimal("110"), portion="principal"
+    )
+    assert abs(trade2.size_amount + trade2.pnl_amount - first_left) <= Decimal("0.02")
+    assert left2.size_amount == first_left - trade2.size_amount
+
+
+@pytest.mark.parametrize("exit_price", [Decimal("90"), Decimal("100"), Decimal("100.02")])
+async def test_partial_rejected_when_not_in_profit(session, exit_price):
+    # 100.02 = 가격은 올랐지만 수수료 뺀 ROI 는 0 이하
+    acc = await _seed_account(session)
+    pos = await _open_full(session, acc)
+    for portion in ("half", "principal"):
+        with pytest.raises(order_engine.OrderError) as e:
+            await order_engine.partial_close_position(
+                session, position_id=pos.id, exit_price=exit_price, portion=portion
+            )
+        assert e.value.code == "NOT_IN_PROFIT"
+    left = await session.get(GamePosition, pos.id, populate_existing=True)
+    assert left.size_amount == Decimal("10000000.00")
+    assert (await session.execute(select(GameTrade))).scalars().all() == []
+
+
+async def test_partial_rejected_when_nothing_left(session):
+    acc = await _seed_account(session)
+    pos = _position(acc, size_amount=Decimal("0.01"))
+    session.add(pos)
+    await session.commit()
+    with pytest.raises(order_engine.OrderError) as e:
+        await order_engine.partial_close_position(
+            session, position_id=pos.id, exit_price=Decimal("110"), portion="half"
+        )
+    assert e.value.code == "NOTHING_LEFT"
+
+
+async def test_partial_on_closed_position_returns_none(session):
+    acc = await _seed_account(session)
+    pos = await _open_full(session, acc)
+    await order_engine.close_position(session, position_id=pos.id, exit_price=Decimal("110"), reason="MANUAL_TP")
+    assert await order_engine.partial_close_position(
+        session, position_id=pos.id, exit_price=Decimal("110"), portion="half"
+    ) is None
+
+
+async def test_full_close_with_stale_size_changes_nothing(session, monkeypatch):
+    """읽은 뒤 부분 청산으로 크기가 바뀌면(경쟁) 옛 크기로 전량 청산하지 않는다 — 0행 → None."""
+    from sqlalchemy import update
+
+    acc = await _seed_account(session)
+    pos = await _open_full(session, acc)
+    real = order_engine._realized_pnl_of
+
+    async def concurrent_partial(db, position_id):
+        # close_position 이 크기를 읽은 '뒤', UPDATE '전'에 다른 요청이 크기를 바꾼 상황
+        await db.execute(
+            update(GamePosition).where(GamePosition.id == position_id)
+            .values(size_amount=Decimal("5000000")).execution_options(synchronize_session=False)
+        )
+        return await real(db, position_id)
+
+    monkeypatch.setattr(order_engine, "_realized_pnl_of", concurrent_partial)
+    trade = await order_engine.close_position(
+        session, position_id=pos.id, exit_price=Decimal("110"), reason="TAKE_PROFIT"
+    )
+    assert trade is None
+    left = await session.get(GamePosition, pos.id, populate_existing=True)
+    assert left.status == "OPEN" and left.size_amount == Decimal("5000000.00")
+    acc = await session.get(GameAccount, acc.id, populate_existing=True)
+    assert acc.cash_balance == Decimal("0.00") and acc.total_trades == 0
+    assert (await session.execute(select(GameTrade))).scalars().all() == []
+
+
+async def test_full_close_after_partial_uses_remaining_size(session):
+    acc = await _seed_account(session)
+    pos = await _open_full(session, acc)
+    await order_engine.partial_close_position(
+        session, position_id=pos.id, exit_price=Decimal("110"), portion="half"
+    )
+    trade = await order_engine.close_position(
+        session, position_id=pos.id, exit_price=Decimal("110"), reason="MANUAL_TP"
+    )
+    assert trade.size_amount == Decimal("5000000.00")
+    acc = await session.get(GameAccount, acc.id, populate_existing=True)
+    assert acc.cash_balance == Decimal("10997000.00")  # 전량 한 번에 청산한 것과 같다
+    assert acc.total_asset == acc.cash_balance
+    assert (acc.total_trades, acc.win_trades) == (1, 1)  # 부분 1 + 최종 1 이어도 거래 수는 1
+
+
+async def test_final_loss_but_net_profit_counts_as_win(session):
+    acc = await _seed_account(session)
+    pos = await _open_full(session, acc)
+    half, _ = await order_engine.partial_close_position(
+        session, position_id=pos.id, exit_price=Decimal("110"), portion="half"
+    )  # +498,500
+    final = await order_engine.close_position(
+        session, position_id=pos.id, exit_price=Decimal("95"), reason="STOP_LOSS"
+    )  # 500만 × -5.03% = -251,500
+    assert final.pnl_amount < 0 < half.pnl_amount + final.pnl_amount
+    acc = await session.get(GameAccount, acc.id, populate_existing=True)
+    assert (acc.total_trades, acc.win_trades) == (1, 1)
+
+
+async def test_final_net_loss_after_partial_counts_as_loss(session):
+    acc = await _seed_account(session)
+    pos = await _open_full(session, acc)
+    await order_engine.partial_close_position(
+        session, position_id=pos.id, exit_price=Decimal("101"), portion="half"
+    )  # 500만 × 0.97% = +48,500
+    await order_engine.close_position(
+        session, position_id=pos.id, exit_price=Decimal("95"), reason="STOP_LOSS"
+    )  # -251,500
+    acc = await session.get(GameAccount, acc.id, populate_existing=True)
+    assert (acc.total_trades, acc.win_trades) == (1, 0)

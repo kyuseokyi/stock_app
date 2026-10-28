@@ -41,6 +41,7 @@ async def test_rules_public_and_values_equal_constants(anon, monkeypatch):
         "initial_cash": int(game_models.INITIAL_CASH),
         "min_order_amount": int(order_engine.MIN_ORDER_AMOUNT),
         "max_open_positions": order_engine.MAX_OPEN_POSITIONS,
+        "partial_close": True,
         "trading_windows": [["09:00", "15:30"], ["16:00", "20:00"]],
         "leverages": [1, 2, 5],
         "leverage_unlock": {"5": "academy"},

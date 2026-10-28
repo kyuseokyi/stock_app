@@ -281,3 +281,19 @@ async def test_settlement_mbti_from_real_trades(db):
     hof = (await db.execute(select(HallOfFame).where(HallOfFame.season_id == season.id))).scalars().all()
     assert len(hof) == 1
     assert hof[0].trading_mbti == "냉철한 원칙주의자"
+
+
+
+def _with_reason(t, reason):
+    t.closed_reason = reason
+    return t
+
+
+def test_mbti_excludes_partial_close_records():
+    """부분 청산(PARTIAL_TP·PRINCIPAL_OUT)은 '거래 1건'이 아니다 — 분류 입력에서 뺀다."""
+    finals = [_with_reason(_trade(had_sl=False), "MANUAL_TP") for _ in range(3)]
+    partials = [_with_reason(_trade(had_sl=True), r) for r in ("PARTIAL_TP", "PRINCIPAL_OUT") * 5]
+    # 부분 기록까지 세면 13건 중 10건 손절 설정(77%) → 원칙주의자. 빼면 최종 3건(손절 없음·롱 전승)
+    assert mbti_analyzer.classify_mbti(finals + partials) == "황소 저격수"
+    # 최종 2건 + 부분 여러 건 → 최소 거래 수(3) 미만이라 기본 라벨
+    assert mbti_analyzer.classify_mbti(finals[:2] + partials) == mbti_analyzer.DEFAULT_LABEL

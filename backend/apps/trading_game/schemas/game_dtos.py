@@ -41,9 +41,23 @@ class NudgeDTO(BaseModel):
     message: str
 
 
+class ClosePositionRequest(BaseModel):
+    """수동 청산 본문(선택). 본문이 없으면 all(옛 앱 호환).
+
+    all=전량, half=원금 절반, principal=지금 원금만큼 회수(남은 평가금 = 수익금). 부분은 수익 상태에서만.
+    """
+    portion: Literal["all", "half", "principal"] = "all"
+
+
 class OrderResultResponse(PositionResponse):
-    """진입/수동청산 응답 — PositionResponse + 교육 넛지(Phase 5a). /positions/active 는 미사용."""
+    """진입/수동청산 응답 — PositionResponse + 교육 넛지(Phase 5a). /positions/active 는 미사용.
+
+    청산 응답이면 realized_pnl(이번 청산 실현손익)·returned_amount(현금으로 돌아온 금액)를 채운다(진입은 None).
+    부분 청산이면 status=OPEN, size_amount=남은 원금, roi_pct/pnl_amount=남은 포지션 평가.
+    """
     nudges: list[NudgeDTO] = Field(default_factory=list)
+    realized_pnl: Decimal | None = None
+    returned_amount: Decimal | None = None
 
 
 class AccountResponse(BaseModel):

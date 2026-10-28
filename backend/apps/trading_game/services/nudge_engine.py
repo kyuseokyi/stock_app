@@ -9,6 +9,8 @@ from dataclasses import dataclass
 from decimal import Decimal
 from typing import Literal
 
+from apps.trading_game.services.pricing import PRINCIPAL_OUT, PARTIAL_TP
+
 NudgeType = Literal["WARNING", "PRAISE", "ADVICE"]
 
 RSI_OVERBOUGHT = 80.0
@@ -38,6 +40,14 @@ PRINCIPLED_STOP = Nudge(
     "PRAISE", "PRINCIPLED_STOP", "💡 원칙대로 손실을 잘 끊어냈습니다! 훌륭한 자금 관리 습관입니다."
 )
 
+PARTIAL_TAKE_PROFIT = Nudge(
+    "PRAISE", "PARTIAL_TAKE_PROFIT", "💡 수익 절반을 확정했어요! 남은 절반은 계획대로 지켜보세요."
+)
+PRINCIPAL_SECURED = Nudge(
+    "PRAISE", "PRINCIPAL_SECURED", "💡 원금을 회수했어요! 이제 수익금으로만 홀딩합니다."
+)
+_PARTIAL_NUDGES = {PARTIAL_TP: PARTIAL_TAKE_PROFIT, PRINCIPAL_OUT: PRINCIPAL_SECURED}
+
 
 def nudges_for_open(*, side: str, ratio: float, leverage: int, rsi: float | None) -> list[Nudge]:
     """진입 넛지. 순서: WARNING → ADVICE (둘 다 해당 가능)."""
@@ -50,7 +60,12 @@ def nudges_for_open(*, side: str, ratio: float, leverage: int, rsi: float | None
 
 
 def nudges_for_close(*, closed_reason: str, roi_pct: Decimal | None) -> list[Nudge]:
-    """청산 넛지. 손절(STOP_LOSS) 또는 수동청산(MANUAL) 이 ROI -3% ~ -1% 일 때만 칭찬."""
+    """청산 넛지. 손절(STOP_LOSS) 또는 수동청산(MANUAL) 이 ROI -3% ~ -1% 일 때만 칭찬.
+
+    부분 청산(PARTIAL_TP·PRINCIPAL_OUT)은 사유별 짧은 칭찬 한 줄.
+    """
+    if closed_reason in _PARTIAL_NUDGES:
+        return [_PARTIAL_NUDGES[closed_reason]]
     if roi_pct is None or closed_reason not in _PRAISE_REASONS:
         return []
     roi = Decimal(str(roi_pct))

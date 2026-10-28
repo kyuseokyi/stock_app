@@ -1,12 +1,15 @@
 """Trading MBTI 분류(순수 함수). 입력: 유저의 청산 내역(GameTrade 유사 객체).
 
 속성 사용: side, pnl_amount(Decimal), entry_ratio(Decimal), had_stop_loss(bool),
-opened_at/closed_at(datetime). 거래 <3건이면 기본 라벨.
+opened_at/closed_at(datetime), closed_reason(없으면 최종 청산으로 간주). 거래 <3건이면 기본 라벨.
+부분 청산 기록(PARTIAL_TP·PRINCIPAL_OUT)은 '거래 1건'이 아니므로 분류에서 뺀다.
 우선순위(첫 매치): 불나방 > 냉철한 원칙주의자 > 빅쇼트의 후예 > 황소 저격수 > 기본.
 """
 from __future__ import annotations
 
 from decimal import Decimal
+
+from apps.trading_game.services.pricing import PARTIAL_CLOSE_REASONS
 
 DEFAULT_LABEL = "균형 탐색가"
 MIN_TRADES = 3
@@ -19,6 +22,7 @@ LONG_WINRATE_THRESHOLD = 0.6
 
 
 def classify_mbti(trades: list) -> str:
+    trades = [t for t in trades if getattr(t, "closed_reason", None) not in PARTIAL_CLOSE_REASONS]
     n = len(trades)
     if n < MIN_TRADES:
         return DEFAULT_LABEL

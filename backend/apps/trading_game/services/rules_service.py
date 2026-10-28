@@ -32,6 +32,8 @@ async def build_rules(db: AsyncSession) -> dict:
         "initial_cash": _num(game_models.INITIAL_CASH),
         "min_order_amount": _num(order_engine.MIN_ORDER_AMOUNT),
         "max_open_positions": order_engine.MAX_OPEN_POSITIONS,
+        # 부분 청산(절반 익절·원금 회수) 지원 — 클라이언트는 true 일 때만 버튼을 보인다
+        "partial_close": True,
         "trading_windows": [
             [s.strftime("%H:%M"), e.strftime("%H:%M")] for s, e in market_clock.load_windows()
         ],

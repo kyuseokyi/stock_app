@@ -12,6 +12,12 @@ MARGIN_CALL_ROI_PCT = Decimal("-80")     # 수수료 포함·4자리 반올림�
 _PCT_Q = Decimal("0.0001")               # roi_pct Numeric(8,4)
 _MONEY_Q = Decimal("0.01")               # 금액 Numeric(15,2)
 
+# 부분 청산 사유(game_trades.closed_reason). 포지션은 OPEN 으로 남아 있는 '거래 일부' 기록 —
+# 거래 수·승률·MBTI 처럼 "거래 1건"으로 세는 집계에서는 빼고, 손익 합계에는 포함한다.
+PARTIAL_TP = "PARTIAL_TP"          # 절반 익절
+PRINCIPAL_OUT = "PRINCIPAL_OUT"    # 원금 회수
+PARTIAL_CLOSE_REASONS = frozenset({PARTIAL_TP, PRINCIPAL_OUT})
+
 
 def compute_roi_pct(side: str, entry: Decimal, cur: Decimal, leverage: int) -> Decimal:
     """방향·레버리지 반영 ROI(%) — 수수료 차감 후, 소수 4자리 반올림."""
