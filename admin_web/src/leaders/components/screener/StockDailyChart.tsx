@@ -1,6 +1,6 @@
-// web_client/src/components/screener/StockDailyChart.tsx 복사본 — 원본과 같이 고칠 것
+// web_client/src/components/screener/StockDailyChart.tsx 복사본 — 원본과 같이 고칠 것 (관리자 추가: shapes = 패턴 모양 선)
 import { useEffect, useRef, useState } from 'react'
-import { CrosshairMode, LineStyle, createChart, type IPriceLine, type ISeriesApi } from 'lightweight-charts'
+import { CrosshairMode, LineStyle, createChart, type IChartApi, type IPriceLine, type ISeriesApi } from 'lightweight-charts'
 import { getDailyCandles, getDailyCandlesBefore } from '../../api/stock'
 import { mergeOlder, prependKeepingView, watchLeftEdge } from '../../lib/historyScroll'
 import type { DailyCandle } from '../../types/game'
@@ -19,6 +19,8 @@ export interface ChartMarker {
   color: string
   text?: string
 }
+/** 패턴 모양 선 — 베이스 꼭짓점(림·저점·우측 림·핸들·피벗)을 날짜 순서로 잇는다 */
+export interface ChartShape { key: string; color: string; width: 1 | 2; points: { date: string; price: number }[] }
 
 // 범례 선 견본 — 차트의 실선/점선을 그대로 흉내 낸다
 function Swatch({ color, dashed }: { color: string; dashed?: boolean }) {
@@ -28,12 +30,16 @@ function Swatch({ color, dashed }: { color: string; dashed?: boolean }) {
 // 스크리너 상세용 일봉 차트 —캔들 + 50일선 + 52주 최고가 점선. 게임 TradingChart(코치·포지션·분봉)와 분리.
 // priceLines·markers 는 선택 — 패턴 상세가 피벗·매수/손절 선과 베이스 꼭짓점을 얹을 때 쓴다(없으면 기존과 동일).
 export default function StockDailyChart({
-  ticker, high52w, priceLines, markers, lookbackDays, onMarkersDropped, heightClass = 'h-64',
+  ticker, high52w, priceLines, markers, shapes, shapeLegend, lookbackDays, onMarkersDropped, heightClass = 'h-64',
 }: {
   ticker: string
   high52w: number | null
   priceLines?: ChartPriceLine[]
   markers?: ChartMarker[]
+  /** 패턴 모양 선(현재 베이스 진하게·지난 베이스 옅게) */
+  shapes?: ChartShape[]
+  /** 모양 선 범례(색·이름) — 없으면 범례에 넣지 않음 */
+  shapeLegend?: { color: string; label: string }[]
   /** 일봉 조회 기간(달력일) — 생략하면 기본(약 280일) */
   lookbackDays?: number
   /** 받은 일봉 기간 밖이라 그리지 못한 마커 수 알림 */
@@ -45,10 +51,12 @@ export default function StockDailyChart({
   const seriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null)
   const timesRef = useRef<Set<string>>(new Set())
   const linesRef = useRef<IPriceLine[]>([])
-  const extraRef = useRef({ priceLines, markers, onMarkersDropped })
-  extraRef.current = { priceLines, markers, onMarkersDropped }
+  const chartRef = useRef<IChartApi | null>(null)
+  const shapeSeriesRef = useRef<ISeriesApi<'Line'>[]>([])
+  const extraRef = useRef({ priceLines, markers, shapes, onMarkersDropped })
+  extraRef.current = { priceLines, markers, shapes, onMarkersDropped }
   // 배열은 렌더마다 새로 만들어지므로 내용으로 비교
-  const extraKey = JSON.stringify([priceLines ?? null, markers ?? null])
+  const extraKey = JSON.stringify([priceLines ?? null, markers ?? null, shapes ?? null])
   const [state, setState] = useState<'loading' | 'ready' | 'failed'>('loading')
   const [olderBusy, setOlderBusy] = useState(false) // 왼쪽 끝 — 과거 캔들 받는 중
   const [dataVersion, setDataVersion] = useState(0) // 과거를 붙일 때마다 +1 → 마커 다시 얹기
@@ -111,6 +119,7 @@ export default function StockDailyChart({
           })
         }
         seriesRef.current = candles
+        chartRef.current = chart
         chart.timeScale().fitContent()
         unwatch = watchLeftEdge(chart, loadOlder, (busy) => !cancelled && setOlderBusy(busy))
         setState('ready')
@@ -121,7 +130,9 @@ export default function StockDailyChart({
       unwatch()
       setOlderBusy(false)
       seriesRef.current = null
+      chartRef.current = null
       linesRef.current = []
+      shapeSeriesRef.current = []
       chart.remove()
     }
   }, [ticker, high52w, lookbackDays])
@@ -147,6 +158,26 @@ export default function StockDailyChart({
         .map((m) => ({ time: m.date, position: m.position, shape: m.shape, color: m.color, text: m.text })),
     )
     extra.onMarkersDropped?.(all.length - shown.length)
+
+    // 패턴 모양 선 — 받은 일봉 안의 꼭짓점만, 날짜 순서·같은 날짜는 하나. 가격축 자동 범위에는 넣지 않는다
+    const chart = chartRef.current
+    if (!chart) return
+    for (const ls of shapeSeriesRef.current) chart.removeSeries(ls)
+    shapeSeriesRef.current = []
+    for (const sh of extra.shapes ?? []) {
+      const seen = new Set<string>()
+      const pts = sh.points
+        .filter((p) => timesRef.current.has(p.date))
+        .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0))
+        .filter((p) => (seen.has(p.date) ? false : (seen.add(p.date), true)))
+      if (pts.length < 2) continue
+      const ls = chart.addLineSeries({
+        color: sh.color, lineWidth: sh.width, priceLineVisible: false, lastValueVisible: false,
+        crosshairMarkerVisible: false, autoscaleInfoProvider: () => null,
+      })
+      ls.setData(pts.map((p) => ({ time: p.date, value: p.price })))
+      shapeSeriesRef.current.push(ls)
+    }
   }, [extraKey, state, dataVersion])
 
   return (
@@ -167,6 +198,9 @@ export default function StockDailyChart({
         <span className="rounded-field bg-surface/80 px-1"><Swatch color={MA50_COLOR} />50일선</span>
         <span className="rounded-field bg-surface/80 px-1"><span aria-hidden className="mr-1 inline-block h-2 w-3 align-middle" style={{ background: VP_LEGEND }} />매물대</span>
         {high52w !== null && <span className="rounded-field bg-surface/80 px-1"><Swatch color={THEME.inkMuted} dashed />52주 고점</span>}
+        {(shapeLegend ?? []).map((l) => (
+          <span key={l.label} className="rounded-field bg-surface/80 px-1"><Swatch color={l.color} />{l.label}</span>
+        ))}
         {(priceLines ?? []).filter((l) => l.title).map((l) => (
           <span key={l.title} className="rounded-field bg-surface/80 px-1"><Swatch color={l.color} dashed={l.dashed} />{l.title}</span>
         ))}
