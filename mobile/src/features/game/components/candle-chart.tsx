@@ -8,7 +8,7 @@ import { getDailyCandles, getDailyCandlesBefore, getGameCandles, getSessionBar }
 import { applyTick, withSessionBar } from '../lib/candles';
 import { CHART_PREFS_KEY, DEFAULT_CHART_PREFS, parseChartPrefs, serializeChartPrefs } from '../lib/chart-prefs';
 import { layoutCandles, niceTicks, priceToY, type Ohlc } from '../lib/chart-layout';
-import { mergeOlder, priceLines, toBars, type ChartColors, type TrendLineData, type Bar } from '../lib/chart-bridge';
+import { mergeOlder, priceLines, toBars, type ChartColors, type ChartLine, type Bar } from '../lib/chart-bridge';
 import { srWatchLevels, srRoleName, srSignature, TREND_HIGH_COLOR, TREND_LOW_COLOR, type SrLevel, type SrRole } from '../lib/sr-levels';
 import { horizontalLevels, type HLevel } from '../lib/trend-lines';
 import { formatPrice, kstDateString } from '../lib/format';
@@ -509,17 +509,16 @@ export function DailyChart({ ticker, lastPrice, coach, position, onSrLevels }: D
   }, [srLevels, onSrLevels]);
   // 차트가 사라지면 부모의 목록도 비운다(감지기가 옛 선을 계속 보지 않게)
   useEffect(() => () => onSrLevels?.([]), [onSrLevels]);
-  // 차트에 보낼 수평선 점 — 그 레벨 캔들부터 마지막 캔들까지 2점. 값이 같으면 이전 배열을 유지(틱마다 다시 보내지 않게)
-  const rawTrend = useMemo<TrendLineData[]>(() => {
-    const { bars, levels } = hLevels;
-    const build = (h: HLevel | null, color: string): TrendLineData =>
-      h === null
-        ? { color, points: [] }
-        : { color, points: [{ time: bars[h.i].time, value: h.price }, { time: bars[bars.length - 1].time, value: h.price }] };
-    return bars.length === 0 ? [] : [build(levels.resistance, TREND_HIGH_COLOR), build(levels.support, TREND_LOW_COLOR)];
-  }, [hLevels]);
-  const [trend, setTrend] = useState<TrendLineData[]>([]);
-  if (JSON.stringify(trend) !== JSON.stringify(rawTrend)) setTrend(rawTrend);
+  // 지지·저항 가로선(설계 §7-4) — 차트 전체 폭 가격선(실선 2, 자동 범위 제외). 가격이 같으면 이전 배열 유지(틱마다 다시 보내지 않게)
+  const resistancePrice = hLevels.levels.resistance?.price ?? null;
+  const supportPrice = hLevels.levels.support?.price ?? null;
+  const srLines = useMemo<ChartLine[]>(
+    () => [
+      ...(resistancePrice !== null ? [{ price: resistancePrice, color: TREND_HIGH_COLOR, width: 2 as const, dashed: false, title: '저항선' }] : []),
+      ...(supportPrice !== null ? [{ price: supportPrice, color: TREND_LOW_COLOR, width: 2 as const, dashed: false, title: '지지선' }] : []),
+    ],
+    [resistancePrice, supportPrice],
+  );
   // 마지막 캔들이 닿은(터치·관통) 켜진 지표 — 그 가격에 점선 가로 가격선(설계 §7-3). 지지·저항 칩이 꺼지면 없음(hLevels.bars 가 빔)
   const rawTouched = useMemo<IndicatorLevel[]>(() => {
     const { bars } = hLevels;
@@ -530,10 +529,10 @@ export function DailyChart({ ticker, lastPrice, coach, position, onSrLevels }: D
   // 서명(id·호가 가격·색)이 같으면 이전 배열 유지 — 틱마다 WebView 에 가격선을 다시 보내지 않게
   const touchSig = (ls: IndicatorLevel[]) => ls.map((l) => `${l.id}:${roundToTick(l.price)}:${l.color}`).join('|');
   if (touchSig(touched) !== touchSig(rawTouched)) setTouched(rawTouched);
-  // 지지·저항은 수평 가격선이 아니라 선 시리즈로 그린다. 닿은 지표는 가격선(점선)
+  // 코치·포지션 선 + 지지·저항(실선) + 닿은 지표(점선) — 모두 가격선
   const chartLines = useMemo(
-    () => (touched.length === 0 ? lines : [...lines, ...touched.map((l) => ({ price: l.price, color: l.color, width: 2 as const, dashed: false, dotted: true, title: l.name }))]),
-    [lines, touched],
+    () => [...lines, ...srLines, ...touched.map((l) => ({ price: l.price, color: l.color, width: 2 as const, dashed: false, dotted: true, title: l.name }))],
+    [lines, srLines, touched],
   );
   // 범례 — 켜져 있고 선이 있을 때(색은 역할로 고정)
   const trendLegend = useMemo(
@@ -572,7 +571,6 @@ export function DailyChart({ ticker, lastPrice, coach, position, onSrLevels }: D
           <TvChart
             view={chartView}
             lines={chartLines}
-            trend={trend}
             ma={showMa}
             bb={showBb}
             vp={showVp}
