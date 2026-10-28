@@ -42,6 +42,8 @@ export function normalizeGameRules(raw: unknown): GameRules | null {
       const list = Array.isArray(r.chart_intervals) ? r.chart_intervals.filter(isInterval) : []
       return list.length > 0 ? list : CHART_INTERVALS
     })(),
+    // 부분 익절·원금 회수 — true 일 때만(옛 서버는 portion 을 무시하고 전량 청산하므로 버튼 숨김)
+    ...(r.partial_close === true ? { partial_close: true } : {}),
   }
 }
 

@@ -81,11 +81,18 @@ export interface Nudge {
 
 export interface RawOrderResult extends RawPosition {
   nudges: Nudge[];
+  /** 이번 청산 실현 손익(주문·옛 서버면 없음/null) */
+  realized_pnl?: Dec | null;
+  /** 이번 청산으로 현금에 돌아온 금액(주문·옛 서버면 없음/null) */
+  returned_amount?: Dec | null;
 }
 
+/** 부분 청산이면 position.status === 'OPEN'(size_amount = 남은 원금) */
 export interface OrderResult {
   position: Position;
   nudges: Nudge[];
+  realized_pnl: number | null;
+  returned_amount: number | null;
 }
 
 export interface OrderRequest {
@@ -498,4 +505,6 @@ export interface GameRules {
   /** 관리자 차트 기본 단위(구 서버면 없음 → 일봉) */
   chart_interval_default?: ChartInterval;
   chart_intervals?: ChartInterval[];
+  /** 부분 익절·원금 회수 지원(구 서버면 없음 → 버튼 숨김. 옛 서버는 portion 을 무시하고 전량 청산) */
+  partial_close?: boolean;
 }

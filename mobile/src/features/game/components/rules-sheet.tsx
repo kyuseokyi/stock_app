@@ -111,7 +111,15 @@ function RulesBody({ rules, season }: { rules: GameRules; season: Pick<Season, '
           왕복 수수료 {fee}가 진입하자마자 반영돼요. 그래서 진입가와 현재가가 같아도 −{fee}에서 시작해요.
         </P>
         <Text style={styles.sub}>청산되는 경우</Text>
-        <Bullet>직접 청산 — 원할 때 즉시 전액 청산</Bullet>
+        {rules.partial_close ? (
+          <>
+            <Bullet>직접 청산 — 원할 때 즉시 전량 청산</Bullet>
+            <Bullet>½ 절반 익절 — 수익 중일 때 원금의 절반만 정리</Bullet>
+            <Bullet>원금 회수 — 수익 중일 때 원금만큼 돌려받고 수익금은 계속 보유</Bullet>
+          </>
+        ) : (
+          <Bullet>직접 청산 — 원할 때 즉시 전액 청산</Bullet>
+        )}
         <Bullet>손절·익절 — 정해 둔 가격에 닿으면 자동으로</Bullet>
         <Bullet>자동 청산 — 수익률이 {marginRoi}에 닿으면</Bullet>
         <Bullet>시즌 종료 — 남은 포지션을 종가로 한꺼번에</Bullet>

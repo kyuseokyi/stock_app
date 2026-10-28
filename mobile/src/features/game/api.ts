@@ -8,6 +8,7 @@ import { ENV } from '@/lib/env';
 import { toNum, toNumOrNull } from './lib/decimal';
 import { kstDateString } from './lib/format';
 import { normalizeIntradayCandles } from './lib/intraday';
+import type { ClosePortion } from './lib/partial-close';
 import { normalizeRewardConfig } from './lib/ranking-period';
 import { normalizeGameRules } from './lib/rules';
 import { toMarketStatus } from './lib/ws';
@@ -102,7 +103,12 @@ const toCoach = (m: RawCoachMessage): Coach => ({
   resistance_price: toNumOrNull(m.resistance_price),
 });
 
-const toOrderResult = (r: RawOrderResult): OrderResult => ({ position: toPosition(r), nudges: r.nudges });
+const toOrderResult = (r: RawOrderResult): OrderResult => ({
+  position: toPosition(r),
+  nudges: r.nudges,
+  realized_pnl: toNumOrNull(r.realized_pnl),
+  returned_amount: toNumOrNull(r.returned_amount),
+});
 
 const toQuest = (r: RawQuest): Quest => ({ ...r, reward_cash: toNumOrNull(r.reward_cash) });
 
@@ -175,8 +181,14 @@ export async function placeOrder(body: OrderRequest): Promise<OrderResult> {
   return toOrderResult(await client().post<RawOrderResult>('/api/game/orders', payload));
 }
 
-export async function closePosition(positionId: string): Promise<OrderResult> {
-  return toOrderResult(await client().post<RawOrderResult>(`/api/game/positions/${encodeURIComponent(positionId)}/close`));
+/** portion 이 half/principal 일 때만 본문 {portion} — 전량(all·생략)은 지금처럼 본문 없이 */
+export async function closePosition(positionId: string, portion?: ClosePortion): Promise<OrderResult> {
+  const path = `/api/game/positions/${encodeURIComponent(positionId)}/close`;
+  const raw =
+    portion && portion !== 'all'
+      ? await client().post<RawOrderResult>(path, { portion })
+      : await client().post<RawOrderResult>(path);
+  return toOrderResult(raw);
 }
 
 // ---------------------------------------------------------------- 6b: 모달

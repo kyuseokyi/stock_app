@@ -99,7 +99,15 @@ function RulesBody({ rules, season }: { rules: GameRules; season: GameRulesModal
         </p>
         <p className="pt-1 font-semibold">포지션이 정리되는 경우</p>
         <ul className="list-disc space-y-1 pl-5">
-          <li>직접 청산 — 원할 때 바로 정리해요.</li>
+          {rules.partial_close ? (
+            <>
+              <li>직접 청산 — 원할 때 바로 전량 정리해요.</li>
+              <li>½ 절반 익절 — 수익 중일 때 원금의 절반만 정리해요.</li>
+              <li>원금 회수 — 수익 중일 때 원금만큼 돌려받고, 수익금은 계속 보유해요.</li>
+            </>
+          ) : (
+            <li>직접 청산 — 원할 때 바로 정리해요.</li>
+          )}
           <li>손절·익절 — 정해 둔 가격에 닿으면 자동으로 정리돼요.</li>
           <li>
             자동 청산 — 수익률이 {marginCallText(rules.margin_call_roi_pct)}에 닿으면 정리돼요. 넣은 금액보다 더 잃지 않도록

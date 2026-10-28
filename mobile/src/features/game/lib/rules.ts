@@ -36,6 +36,7 @@ export function normalizeGameRules(raw: unknown): GameRules {
   return {
     ...(chartDefault ? { chart_interval_default: chartDefault } : {}),
     ...(intervals ? { chart_intervals: intervals } : {}),
+    ...(raw.partial_close === true ? { partial_close: true } : {}),
     initial_cash: req('initial_cash'),
     min_order_amount: req('min_order_amount'),
     max_open_positions: req('max_open_positions'),
