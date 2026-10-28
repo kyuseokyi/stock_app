@@ -19,5 +19,7 @@ export default defineConfig(({ command, mode }) => {
   return {
     plugins: [react()],
     server: { port: 3000, host: true },
+    // 단위 테스트(Vitest) — src 의 순수 함수 *.test.ts. DOM 없이 node 에서(화면 테스트가 생기면 jsdom 추가)
+    test: { environment: 'node', include: ['src/**/*.test.ts'] },
   }
 })
