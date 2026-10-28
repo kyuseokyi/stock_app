@@ -161,7 +161,8 @@ npm run dev        # http://localhost:5173
 cd web_client
 npm install
 npm run dev                            # http://localhost:3000
-npm run build -- --mode development    # 빌드 검증(테스트 러너 없음 — 빌드 성공 + 육안)
+npm run build -- --mode development    # 빌드 검증(빌드 성공 + 육안)
+npm test                               # 단위 테스트(Vitest, src/**/*.test.ts — 순수 함수, node 환경). 감시 모드는 npm run test:watch
 ```
 > blog 서비스(8000)만 있으면 조회가 동작합니다. (`VITE_API_BASE_URL` 로 API 주소 오버라이드)
 > `npm run build`(prod 모드)는 `VITE_API_BASE_URL`·`VITE_AUTH_BASE_URL` 누락 시 실패하므로, 로컬 검증은 `.env.development`를 로드하는 `-- --mode development`로 돌립니다.
