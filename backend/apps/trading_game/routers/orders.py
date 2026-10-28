@@ -17,7 +17,7 @@ from shared.models import User
 from shared.game_models import INITIAL_CASH, GameAccount, GamePosition, GameSeason
 from apps.trading_game import deps
 from apps.trading_game.schemas.game_dtos import (
-    AccountResponse, NudgeDTO, OrderRequest, OrderResultResponse, PositionResponse,
+    AccountResponse, ClosePositionRequest, NudgeDTO, OrderRequest, OrderResultResponse, PositionResponse,
 )
 from apps.trading_game.services import (
     account_service, academy_service, market_clock, market_status, nudge_engine, order_engine, position_cache, pricing,
@@ -63,6 +63,8 @@ MSG_NOT_TRADING_TIME = "지금은 거래 시간이 아니에요. 거래 시간�
 MSG_CLOSE_NOT_TRADING_TIME = "지금은 거래 시간이 아니라 청산할 수 없어요. 거래 시간에 다시 시도해 주세요."
 MSG_PRICE_STALE = "실시간 가격이 잠시 들어오지 않아 주문할 수 없어요. 잠시 후 다시 시도해 주세요."
 MSG_PRICE_UNAVAILABLE = "가격 정보를 불러오지 못했어요. 잠시 후 다시 시도해 주세요."
+MSG_ALREADY_CLOSED = "이미 청산된 포지션입니다."
+MSG_POSITION_CHANGED = "포지션이 방금 바뀌었어요. 화면을 새로 고친 뒤 다시 시도해 주세요."
 
 
 def _in_trading_time() -> bool:
@@ -217,6 +219,7 @@ async def open_order(
 @router.post("/positions/{position_id}/close", response_model=OrderResultResponse)
 async def close_order(
     position_id: uuid.UUID,
+    body: ClosePositionRequest | None = None,  # 본문 없음 = 전량(옛 앱 호환)
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -234,21 +237,60 @@ async def close_order(
         raise HTTPException(status.HTTP_409_CONFLICT, MSG_CLOSE_NOT_TRADING_TIME)
     await _require_market_open(deps.get_redis(), season.ticker)
     exit_price = await _require_fresh_price(deps.get_redis(), season.ticker)
+    portion = body.portion if body is not None else "all"
+    if portion != "all":
+        return await _partial_close(db, pos.id, account.id, exit_price, portion)
     # 수동 청산 사유는 체결 가격 방향으로 서버가 정한다(요청 형식 그대로 — 옛 앱 호환·화면이 조작 불가)
     reason = pricing.manual_close_reason(pos.side, pos.entry_price, exit_price)
     trade = await order_engine.close_position(
         db, position_id=pos.id, exit_price=exit_price, reason=reason
     )
     if trade is None:
-        raise HTTPException(status.HTTP_409_CONFLICT, "이미 청산된 포지션입니다.")
-    position_cache.mark_dirty()
-    try:
-        await ranking_service.sync_account_rank(deps.get_redis(), db, account.id)
-    except Exception:
-        log.warning("랭킹 동기화 실패(청산은 정상 완료) account=%s", account.id, exc_info=True)
+        # 이미 닫혔거나(자동 청산 등) 부분 청산으로 크기가 바뀌어 옛 크기로는 청산하지 않음
+        refreshed = await db.get(GamePosition, pos.id, populate_existing=True)
+        msg = MSG_POSITION_CHANGED if refreshed is not None and refreshed.status == "OPEN" else MSG_ALREADY_CLOSED
+        raise HTTPException(status.HTTP_409_CONFLICT, msg)
+    await _after_close(db, account.id)
     refreshed = await db.get(GamePosition, pos.id)
     dto = _position_dto(refreshed, trade.roi_pct, trade.pnl_amount)
-    return OrderResultResponse(**dto.model_dump(), nudges=_close_nudges(reason, trade.roi_pct))
+    return OrderResultResponse(
+        **dto.model_dump(), nudges=_close_nudges(reason, trade.roi_pct),
+        realized_pnl=trade.pnl_amount, returned_amount=trade.size_amount + trade.pnl_amount,
+    )
+
+
+async def _after_close(db: AsyncSession, account_id) -> None:
+    """청산(전량·부분) 공통 후처리 — 실시간 캐시 재적재 + 랭킹 동기화(best-effort)."""
+    position_cache.mark_dirty()
+    try:
+        await ranking_service.sync_account_rank(deps.get_redis(), db, account_id)
+    except Exception:
+        log.warning("랭킹 동기화 실패(청산은 정상 완료) account=%s", account_id, exc_info=True)
+
+
+async def _partial_close(
+    db: AsyncSession, position_id: uuid.UUID, account_id, exit_price: Decimal, portion: str
+) -> OrderResultResponse:
+    """절반 익절·원금 회수 — 남은 포지션(OPEN) dto 를 돌려준다."""
+    try:
+        res = await order_engine.partial_close_position(
+            db, position_id=position_id, exit_price=exit_price, portion=portion
+        )
+    except order_engine.OrderError as e:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(e))
+    if res is None:
+        refreshed = await db.get(GamePosition, position_id, populate_existing=True)
+        msg = MSG_POSITION_CHANGED if refreshed is not None and refreshed.status == "OPEN" else MSG_ALREADY_CLOSED
+        raise HTTPException(status.HTTP_409_CONFLICT, msg)
+    trade, _ = res
+    await _after_close(db, account_id)
+    remaining = await db.get(GamePosition, position_id)
+    roi = trade.roi_pct  # 같은 체결가 → 남은 포지션 ROI 도 같다
+    dto = _position_dto(remaining, roi, pricing.compute_pnl(remaining.size_amount, roi))
+    return OrderResultResponse(
+        **dto.model_dump(), nudges=_close_nudges(trade.closed_reason, roi),
+        realized_pnl=trade.pnl_amount, returned_amount=trade.size_amount + trade.pnl_amount,
+    )
 
 
 @router.get("/positions/active", response_model=list[PositionResponse])

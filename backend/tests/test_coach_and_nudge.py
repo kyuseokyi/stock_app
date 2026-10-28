@@ -771,3 +771,12 @@ async def test_order_open_and_close_mark_position_cache_dirty(api, maker, order_
     assert r.status_code == 201 and len(marks) == 1
     r = await client.post(f"/api/game/positions/{r.json()['id']}/close")
     assert r.status_code == 200 and len(marks) == 2
+
+
+@pytest.mark.parametrize("reason, code", [
+    ("PARTIAL_TP", "PARTIAL_TAKE_PROFIT"),
+    ("PRINCIPAL_OUT", "PRINCIPAL_SECURED"),
+])
+def test_close_nudge_for_partial_close(reason, code):
+    nudges = nudge_engine.nudges_for_close(closed_reason=reason, roi_pct=Decimal("9.97"))
+    assert _codes(nudges) == [code] and nudges[0].type == "PRAISE"

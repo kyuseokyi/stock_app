@@ -181,7 +181,7 @@ REST POST /orders ─► read_latest(stock:latest) ─► assert_tradable(창+�
 ## 7. 연기(추후 Phase로 기록)
 - 랭킹 ZSET·시즌 정산·MBTI(Phase 4), 코치·퀘스트(Phase 5), 프론트 화면(Phase 6), 지인 리그(Phase 4).
 - `H0STCNT0` 애프터마켓/통합 틱 실수신 여부 장중 실검증(Phase 2 꼬리작업).
-- 다종목 동시 거래(현재 시즌당 1종목), 추가진입/부분청산(현재 1포지션 전량).
+- 다종목 동시 거래(현재 시즌당 1종목), 추가진입/부분청산(현재 1포지션 전량). → 부분 청산은 2026-10-28-game-partial-take-profit-design.md 에서 추가(추가진입은 여전히 범위 밖)
 
 ---
 
