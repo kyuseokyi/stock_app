@@ -1,7 +1,7 @@
 import Button from '../ui/Button'
 import Modal from '../ui/Modal'
 import { closeActionClass, closeActionOf } from '../../lib/closeAction'
-import { formatPct, formatPrice, formatSignedKrw, pnlClass } from '../../lib/format'
+import { formatPct, formatSignedKrw, formatWon, pnlClass } from '../../lib/format'
 import { partialClosePreview, type ClosePortion } from '../../lib/partialClose'
 import { srEventCopy, type SrEvent } from '../../lib/srWatch'
 import type { Position } from '../../types/game'
@@ -68,7 +68,7 @@ export default function SrActionModal({
           </div>
           {preview.principal && (
             <p className="mt-1.5 text-xs tabular-nums text-ink-muted">
-              원금 회수: 원금 {formatPrice(preview.principal.returned)}원 회수 · 수익 {formatPrice(preview.principal.remainValue)}원은 계속 보유
+              원금 회수: 원금 {formatWon(preview.principal.returned)} 회수 · 수익 {formatWon(preview.principal.remainValue)}은 계속 보유
             </p>
           )}
         </>
