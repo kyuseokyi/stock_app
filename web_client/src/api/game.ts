@@ -2,6 +2,7 @@ import type { AxiosInstance } from 'axios'
 import { gameClient } from './gameClient'
 import { toNum, toNumOrNull } from '../lib/decimal'
 import { toMarketStatus } from '../lib/gameWs'
+import type { ClosePortion } from '../lib/partialClose'
 import type {
   AcademyQuiz, AcademySubmitResult, Account, ClaimResult, Coach, HallOfFameRow, LeaderboardRow, MyRank,
   OrderRequest, OrderResult, Position, Quest, QuestList, QuizCandle, QuizChoice, QuizOption, QuizQuestion, QuizResult, QuizType,
@@ -51,7 +52,12 @@ const toCoach = (m: RawCoachMessage): Coach => ({
   resistance_price: toNumOrNull(m.resistance_price),
 })
 
-const toOrderResult = (r: RawOrderResult): OrderResult => ({ position: toPosition(r), nudges: r.nudges })
+const toOrderResult = (r: RawOrderResult): OrderResult => ({
+  position: toPosition(r),
+  nudges: r.nudges,
+  realized_pnl: toNumOrNull(r.realized_pnl),
+  returned_amount: toNumOrNull(r.returned_amount),
+})
 
 const toQuest = (r: RawQuest): Quest => ({ ...r, reward_cash: toNumOrNull(r.reward_cash) })
 
@@ -128,8 +134,13 @@ export async function placeOrder(body: OrderRequest): Promise<OrderResult> {
   return toOrderResult(data)
 }
 
-export async function closePosition(positionId: string): Promise<OrderResult> {
-  const { data } = await client().post<RawOrderResult>(`/api/game/positions/${positionId}/close`)
+/** portion 이 half/principal 일 때만 본문 {portion} — 전량(all·생략)은 지금처럼 본문 없이 */
+export async function closePosition(positionId: string, portion?: ClosePortion): Promise<OrderResult> {
+  const path = `/api/game/positions/${positionId}/close`
+  const { data } =
+    portion && portion !== 'all'
+      ? await client().post<RawOrderResult>(path, { portion })
+      : await client().post<RawOrderResult>(path)
   return toOrderResult(data)
 }
 

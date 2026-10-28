@@ -2,6 +2,7 @@ import { create } from 'zustand';
 
 import * as gameApi from './api';
 import { orderErrorMessage } from './lib/errors';
+import type { ClosePortion } from './lib/partial-close';
 import { rewardToastMessage } from './lib/weekly';
 import type {
   Account,
@@ -62,7 +63,8 @@ interface TradingGameState extends PrivateState {
   checkWeeklyRewards: () => Promise<void>;
   resetPrivate: () => void;
   placeOrder: (side: Side, ratio: Ratio, leverage: Leverage, opts?: OrderOptions) => Promise<void>;
-  closePosition: () => Promise<void>;
+  /** portion: all(기본·본문 없음) | half | principal — 부분 청산이면 응답의 남은 포지션으로 갱신 */
+  closePosition: (portion?: ClosePortion) => Promise<void>;
   applyMessage: (msg: GameWsMessage) => void;
   /** gen = 요청 시작 시점의 currentPrivateGen() — 그 사이 로그아웃했으면 무시 */
   setAcademyUnlocked: (unlocked: boolean, gen: number) => void;
@@ -273,15 +275,16 @@ export const useTradingGameStore = create<TradingGameState>()((set, get) => {
       }
     },
 
-    closePosition: async () => {
+    closePosition: async (portion: ClosePortion = 'all') => {
       const { position, closing } = get();
       if (!position || closing) return;
       const gen = privateGen;
       set({ closing: true });
       try {
-        const result = await gameApi.closePosition(position.id);
+        const result = await gameApi.closePosition(position.id, portion);
         if (gen === privateGen) {
-          set({ position: null });
+          // 부분 청산(OPEN) — 남은 포지션 유지(평가손익은 다음 틱·refreshTrading 이 다시 맞춤). 전량이면 지금처럼 비움
+          set({ position: result.position.status === 'OPEN' ? result.position : null });
           pushNudges(result.nudges);
           await refreshTrading();
         }

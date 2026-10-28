@@ -25,6 +25,7 @@ import StreakRewardModal from '../components/game/StreakRewardModal'
 import TradingChart from '../components/game/TradingChart'
 import { useGameRules } from '../hooks/useGameRules'
 import { useGameWebSocket } from '../hooks/useGameWebSocket'
+import { canPartialClose } from '../lib/partialClose'
 import { isQuizPrimeTime } from '../lib/quiz'
 import { useAuthStore } from '../store/auth'
 import { useTradingGameStore } from '../store/tradingGame'
@@ -176,7 +177,14 @@ export default function GamePage() {
           <MarketStatusBanner status={marketStatus} />
           <TradingChart ticker={season.ticker} lastPrice={lastPrice} coach={coach} position={position} onSrLevels={setSrLevels} />
           {position && (
-            <ActivePositionCard position={position} lastPrice={lastPrice} closing={closing} onClose={() => closePosition()} />
+            <ActivePositionCard
+              position={position}
+              lastPrice={lastPrice}
+              closing={closing}
+              onClose={() => closePosition()}
+              partialClose={canPartialClose(rulesState.rules, position.pnl_amount)}
+              onPartialClose={(portion) => void closePosition(portion)}
+            />
           )}
           {!loggedIn && (
             // 비로그인 — 주문 버튼은 눌러도 로그인 창만 뜨므로, 무엇을 하는 곳인지와 참여 방법을 먼저 알린다
@@ -221,6 +229,11 @@ export default function GamePage() {
           onClosePosition={() => {
             setSrEvent(null)
             void closePosition()
+          }}
+          partialClose={canPartialClose(rulesState.rules, position.pnl_amount)}
+          onPartialClose={(portion) => {
+            setSrEvent(null)
+            void closePosition(portion)
           }}
           onHold={() => {
             setSrEvent(null)

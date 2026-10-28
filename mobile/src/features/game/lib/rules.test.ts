@@ -37,6 +37,11 @@ describe('normalizeGameRules', () => {
     expect(normalizeGameRules({ ...RAW, chart_interval_default: '30m' }).chart_interval_default).toBeUndefined();
     expect(normalizeGameRules(RAW).chart_interval_default).toBeUndefined();
   });
+  test('부분 청산 지원 — true 일 때만 통과, 없거나 다른 값이면 undefined(버튼 숨김)', () => {
+    expect(normalizeGameRules({ ...RAW, partial_close: true }).partial_close).toBe(true);
+    expect(normalizeGameRules(RAW).partial_close).toBeUndefined();
+    expect(normalizeGameRules({ ...RAW, partial_close: 'true' }).partial_close).toBeUndefined();
+  });
   test('정상 응답 그대로', () => {
     const r = normalizeGameRules(RAW);
     expect(r.initial_cash).toBe(10_000_000);

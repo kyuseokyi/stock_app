@@ -25,9 +25,11 @@ import { QuizSheet } from '@/features/game/components/quiz-sheet';
 import { RulesSheet } from '@/features/game/components/rules-sheet';
 import { SentimentBar } from '@/features/game/components/sentiment-bar';
 import { StreakRewardSheet } from '@/features/game/components/streak-reward-sheet';
+import { canPartialClose } from '@/features/game/lib/partial-close';
 import { isQuizPrimeTime } from '@/features/game/lib/quiz';
 import { useTradingGameStore } from '@/features/game/store';
 import type { Leverage, OrderOptions, Ratio, Side } from '@/features/game/types';
+import { useGameRules } from '@/features/game/use-game-rules';
 import { useGameSocket } from '@/features/game/use-game-socket';
 import { reasonFromCode } from '@/lib/api/session-end';
 import { BottomSheet, Button, Card, ListState } from '@/ui';
@@ -70,6 +72,8 @@ export default function GameScreen() {
   const marketStatus = useTradingGameStore((s) => s.marketStatus);
   const loadMarketStatus = useTradingGameStore((s) => s.loadMarketStatus);
   const streamEpoch = useTradingGameStore((s) => s.streamEpoch);
+  // 규칙은 세션 캐시 — partial_close 가 true 일 때만 부분 익절·원금 회수 버튼(옛 서버는 portion 을 무시하고 전량 청산)
+  const { rules } = useGameRules();
 
   const [activeModal, setActiveModal] = useState<ActiveModal>(null);
   const [primeTime, setPrimeTime] = useState(() => isQuizPrimeTime(new Date()));
@@ -275,7 +279,14 @@ export default function GameScreen() {
         <MarketStatusBanner status={marketStatus} />
         <DailyChart ticker={season.ticker} lastPrice={lastPrice} coach={coach} position={position} onSrLevels={setSrLevels} />
         {position ? (
-          <PositionCard position={position} lastPrice={lastPrice} closing={closing} onClose={() => void closePosition()} />
+          <PositionCard
+            position={position}
+            lastPrice={lastPrice}
+            closing={closing}
+            onClose={() => void closePosition()}
+            partialClose={canPartialClose(rules, position.pnl_amount)}
+            onPartialClose={(portion) => void closePosition(portion)}
+          />
         ) : null}
         {loggedIn ? null : (
           // 비로그인 — 주문 버튼은 눌러도 로그인 안내만 뜨므로, 무엇을 하는 곳인지와 참여 방법을 먼저 알린다(웹과 같은 문구)
@@ -318,6 +329,11 @@ export default function GameScreen() {
           onClosePosition={() => {
             setSrEvent(null);
             void closePosition();
+          }}
+          partialClose={canPartialClose(rules, position.pnl_amount)}
+          onPartialClose={(portion) => {
+            setSrEvent(null);
+            void closePosition(portion);
           }}
           onHold={() => {
             setSrEvent(null);
