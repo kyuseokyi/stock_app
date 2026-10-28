@@ -83,7 +83,8 @@ describe('priceLines', () => {
       ['저항', 200, '#f59e0b', 1, true],
       ['진입', 150, 'D', 2, false],
       ['손절', 160, 'M', 1, true],
-    ]);
+    ]);    // 지지·저항은 이름이 범례에 있어 가격축 라벨을 숨긴다(진입·손절·익절은 라벨 유지)
+    expect(lines.map((l) => Boolean(l.noLabel))).toEqual([true, true, false, false]);
   });
   it('없으면 빈 배열', () => {
     expect(priceLines(null, null, colors)).toEqual([]);
