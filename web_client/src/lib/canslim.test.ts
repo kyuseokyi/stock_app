@@ -68,10 +68,10 @@ describe('필터', () => {
     expect(activeCanslimFilters({ ...DEFAULT_FILTERS, liquidOnly: false })).toBe(1)
     expect(activeCanslimFilters({ ...DEFAULT_FILTERS, required: ['c', 'a', 'l'] })).toBe(3)
   })
-  it('적용 중인 필터 수 — 웹은 정렬도 기본과 다르면 1로 센다(앱 activeFilterCount 는 정렬 제외)', () => {
-    expect(activeCanslimFilters({ ...DEFAULT_FILTERS, sort: 'rs' })).toBe(1)
+  it('적용 중인 필터 수 — 정렬은 필터가 아니라 세지 않는다(앱 activeFilterCount 와 같음)', () => {
+    expect(activeCanslimFilters({ ...DEFAULT_FILTERS, sort: 'rs' })).toBe(0)
     expect(
       activeCanslimFilters({ market: 'KOSPI', minPass: 3, required: ['n'], sort: 'passCount', liquidOnly: false }),
-    ).toBe(5)
+    ).toBe(4)
   })
 })

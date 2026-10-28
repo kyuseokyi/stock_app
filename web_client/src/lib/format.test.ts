@@ -12,14 +12,17 @@ import {
 
 // 앱 format 테스트 3개(game/lib/format · ui/format · market/format)를 웹 format.ts 하나로 합침.
 // 웹 format.ts 에 있는 함수만 넣었다(앱 ui formatWon/formatSignedWon → 웹 formatKrw/formatSignedKrw,
-// 앱 game pnlTone → 웹 pnlClass). 앱과 결과가 다른 경우는 test.todo 로 남겼다(웹 lib 는 고치지 않음).
+// 앱 game pnlTone → 웹 pnlClass). 앱과 달랐던 반올림 4건(가격·음수 퍼센트·1만억·-0원)은 앱에 맞춰 고쳤다(2026-10-28).
 
 describe('formatPrice', () => {
   test('천단위 콤마', () => {
     expect(formatPrice(71200)).toBe('71,200')
     expect(formatPrice(1234568)).toBe('1,234,568')
   })
-  test.todo('버그 후보: 앱은 원 단위 반올림(1234567.6 → 1,234,568), 웹은 소수를 그대로 둔다(1,234,567.6)')
+  test('원 단위 반올림(앱과 같음), -0 없음', () => {
+    expect(formatPrice(1234567.6)).toBe('1,234,568')
+    expect(formatPrice(-0.4)).toBe('0')
+  })
 })
 
 describe('kstDateString', () => {
@@ -90,7 +93,11 @@ describe('formatPct', () => {
   test('0', () => {
     expect(formatPct(0)).toBe('0.0%')
   })
-  test.todo('버그 후보: 음수 .x5 반올림이 0 쪽으로 — 앱 -3.25 → -3.3% · -0.05 → -0.1%, 웹 -3.2% · 0.0%(Math.round 비대칭)')
+  test('음수 .x5 는 0 에서 멀어지게(앱과 같음)', () => {
+    expect(formatPct(-3.25)).toBe('-3.3%')
+    expect(formatPct(-0.05)).toBe('-0.1%')
+    expect(formatPct(-0.04)).toBe('0.0%')
+  })
 })
 
 describe('formatAmount (앱 market formatAmount)', () => {
@@ -99,6 +106,11 @@ describe('formatAmount (앱 market formatAmount)', () => {
     expect(formatAmount(345_600_000_000)).toBe('3,456억')
     expect(formatAmount(98_765)).toBe('98,765원')
   })
-  test.todo('버그 후보: 억으로 반올림해 1만억이 되면 조로 — 앱 999_960_000_000 → 1.0조, 웹 10,000억')
-  test.todo('버그 후보: 반올림해 0 이 되는 음수 — 앱 -0.4 → 0원, 웹 -0원')
+  test('억으로 반올림해 1만억이 되면 조로(앱과 같음)', () => {
+    expect(formatAmount(999_960_000_000)).toBe('1.0조')
+    expect(formatAmount(999_940_000_000)).toBe('9,999억')
+  })
+  test('반올림해 0 이 되는 음수는 0원(앱과 같음)', () => {
+    expect(formatAmount(-0.4)).toBe('0원')
+  })
 })

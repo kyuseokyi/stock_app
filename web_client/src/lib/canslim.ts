@@ -21,10 +21,10 @@ export const DEFAULT_FILTERS: ScreenFilters = {
   liquidOnly: true,
 }
 
-/** 기본값과 다른 필터 수(모바일 '필터 · n개 적용' 표시) — 꼭 통과 항목은 하나씩 센다 */
+/** 기본값과 다른 필터 수(모바일 '필터 · n개 적용' 표시) — 꼭 통과 항목은 하나씩 센다. 정렬은 필터가 아니라 세지 않음(앱 activeFilterCount 와 같음) */
 export function activeCanslimFilters(f: ScreenFilters): number {
   const d = DEFAULT_FILTERS
-  return (f.market !== d.market ? 1 : 0) + (f.sort !== d.sort ? 1 : 0) + (f.minPass !== d.minPass ? 1 : 0)
+  return (f.market !== d.market ? 1 : 0) + (f.minPass !== d.minPass ? 1 : 0)
     + f.required.length + (f.liquidOnly !== d.liquidOnly ? 1 : 0)
 }
 
