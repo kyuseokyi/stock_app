@@ -5,7 +5,7 @@ import StockDailyChart from './StockDailyChart'
 import { LetterList, ScoreHistory } from './CanslimParts'
 import { getCanslimScore } from '../../api/screener'
 import { getPatternBases } from '../../api/patterns'
-import { SHAPE_COLORS, allBaseDates, lookbackFor, overlayCaption, patternOverlay, patternShapes } from '../../lib/patternOverlay'
+import { ENGINE_LOOKBACK_DAYS, SHAPE_COLORS, allBaseDates, baseDates, lookbackFor, overlayCaption, patternOverlay, patternShapes } from '../../lib/patternOverlay'
 import { patternLabel } from '../../lib/patterns'
 import { high52w } from '../../lib/canslim'
 import { formatPrice } from '../../lib/format'
@@ -78,11 +78,12 @@ export default function CanslimDetail({ ticker }: { ticker: string }) {
         priceLines={overlay?.priceLines}
         markers={overlay?.markers}
         shapes={shapes}
+        focusFrom={current ? baseDates(current).sort()[0] : undefined}
         shapeLegend={[
           ...(current ? [{ color: SHAPE_COLORS.current, label: '현재 패턴' }] : []),
           ...(hasPast ? [{ color: SHAPE_COLORS.past, label: '지난 베이스' }] : []),
         ]}
-        lookbackDays={bases && bases.bases.length > 0 ? lookbackFor(allBaseDates(bases.bases)) : undefined}
+        lookbackDays={bases && bases.bases.length > 0 ? lookbackFor(allBaseDates(bases.bases), undefined, ENGINE_LOOKBACK_DAYS) : undefined}
         onMarkersDropped={setDropped}
       />
       {current ? (

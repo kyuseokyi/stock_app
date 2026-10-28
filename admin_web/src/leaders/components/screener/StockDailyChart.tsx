@@ -1,12 +1,13 @@
-// web_client/src/components/screener/StockDailyChart.tsx 복사본 — 원본과 같이 고칠 것 (관리자 추가: shapes = 패턴 모양 선)
+// web_client/src/components/screener/StockDailyChart.tsx 복사본 — 원본과 같이 고칠 것 (관리자 추가: shapes = 패턴 모양 — lib/patternShapes 프리미티브, focusFrom = 첫 화면 시작일)
 import { useEffect, useRef, useState } from 'react'
-import { CrosshairMode, LineStyle, createChart, type IChartApi, type IPriceLine, type ISeriesApi } from 'lightweight-charts'
+import { CrosshairMode, LineStyle, createChart, type IPriceLine, type ISeriesApi } from 'lightweight-charts'
 import { getDailyCandles, getDailyCandlesBefore } from '../../api/stock'
 import { mergeOlder, prependKeepingView, watchLeftEdge } from '../../lib/historyScroll'
 import type { DailyCandle } from '../../types/game'
 import { sma } from '../../lib/indicators'
 import { VolumeProfilePrimitive } from '../../lib/volumeProfile'
 import { THEME } from '../../lib/themeColors'
+import { PatternShapesPrimitive, type PatternShape } from '../../lib/patternShapes'
 
 const MA50_COLOR = '#f97316'
 const VP_LEGEND = 'rgba(100, 116, 139, 0.45)' // 매물대 범례 견본(차트 막대보다 조금 진하게)
@@ -19,8 +20,6 @@ export interface ChartMarker {
   color: string
   text?: string
 }
-/** 패턴 모양 선 — 베이스 꼭짓점(림·저점·우측 림·핸들·피벗)을 날짜 순서로 잇는다 */
-export interface ChartShape { key: string; color: string; width: 1 | 2; points: { date: string; price: number }[] }
 
 // 범례 선 견본 — 차트의 실선/점선을 그대로 흉내 낸다
 function Swatch({ color, dashed }: { color: string; dashed?: boolean }) {
@@ -30,14 +29,16 @@ function Swatch({ color, dashed }: { color: string; dashed?: boolean }) {
 // 스크리너 상세용 일봉 차트 —캔들 + 50일선 + 52주 최고가 점선. 게임 TradingChart(코치·포지션·분봉)와 분리.
 // priceLines·markers 는 선택 — 패턴 상세가 피벗·매수/손절 선과 베이스 꼭짓점을 얹을 때 쓴다(없으면 기존과 동일).
 export default function StockDailyChart({
-  ticker, high52w, priceLines, markers, shapes, shapeLegend, lookbackDays, onMarkersDropped, heightClass = 'h-64',
+  ticker, high52w, priceLines, markers, shapes, shapeLegend, focusFrom, lookbackDays, onMarkersDropped, heightClass = 'h-64',
 }: {
   ticker: string
   high52w: number | null
   priceLines?: ChartPriceLine[]
   markers?: ChartMarker[]
-  /** 패턴 모양 선(현재 베이스 진하게·지난 베이스 옅게) */
-  shapes?: ChartShape[]
+  /** 패턴 모양(컵 = U자·베이스 = 사각형 등, 현재 베이스 진하게·지난 베이스 옅게) */
+  shapes?: PatternShape[]
+  /** 첫 화면을 이 날짜(앞 여유 10봉)부터 — 현재 베이스가 크게 보이게. 없으면 전체 */
+  focusFrom?: string
   /** 모양 선 범례(색·이름) — 없으면 범례에 넣지 않음 */
   shapeLegend?: { color: string; label: string }[]
   /** 일봉 조회 기간(달력일) — 생략하면 기본(약 280일) */
@@ -51,8 +52,7 @@ export default function StockDailyChart({
   const seriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null)
   const timesRef = useRef<Set<string>>(new Set())
   const linesRef = useRef<IPriceLine[]>([])
-  const chartRef = useRef<IChartApi | null>(null)
-  const shapeSeriesRef = useRef<ISeriesApi<'Line'>[]>([])
+  const shapePrimRef = useRef<PatternShapesPrimitive | null>(null)
   const extraRef = useRef({ priceLines, markers, shapes, onMarkersDropped })
   extraRef.current = { priceLines, markers, shapes, onMarkersDropped }
   // 배열은 렌더마다 새로 만들어지므로 내용으로 비교
@@ -82,6 +82,8 @@ export default function StockDailyChart({
     const ma50 = chart.addLineSeries({ color: MA50_COLOR, lineWidth: 1, priceLineVisible: false, lastValueVisible: false })
     const vp = new VolumeProfilePrimitive() // 매물대 — 보이는 구간 기준
     candles.attachPrimitive(vp)
+    const shapePrim = new PatternShapesPrimitive() // 패턴 모양 — 캔들 위
+    candles.attachPrimitive(shapePrim)
     let cancelled = false
     let rows: DailyCandle[] = []
     let unwatch = () => {}
@@ -119,8 +121,10 @@ export default function StockDailyChart({
           })
         }
         seriesRef.current = candles
-        chartRef.current = chart
-        chart.timeScale().fitContent()
+        shapePrimRef.current = shapePrim
+        const fi = focusFrom ? rows.findIndex((c) => c.date >= focusFrom) : -1
+        if (fi > 0) chart.timeScale().setVisibleLogicalRange({ from: Math.max(0, fi - 10), to: rows.length + 2 })
+        else chart.timeScale().fitContent()
         unwatch = watchLeftEdge(chart, loadOlder, (busy) => !cancelled && setOlderBusy(busy))
         setState('ready')
       })
@@ -130,12 +134,11 @@ export default function StockDailyChart({
       unwatch()
       setOlderBusy(false)
       seriesRef.current = null
-      chartRef.current = null
+      shapePrimRef.current = null
       linesRef.current = []
-      shapeSeriesRef.current = []
       chart.remove()
     }
-  }, [ticker, high52w, lookbackDays])
+  }, [ticker, high52w, lookbackDays, focusFrom])
 
   // 피벗·매수/손절 선과 마커 — 일봉이 도착했을 때(state=ready)와 값이 바뀔 때마다 이전 선을 지우고 다시 얹는다
   useEffect(() => {
@@ -159,25 +162,8 @@ export default function StockDailyChart({
     )
     extra.onMarkersDropped?.(all.length - shown.length)
 
-    // 패턴 모양 선 — 받은 일봉 안의 꼭짓점만, 날짜 순서·같은 날짜는 하나. 가격축 자동 범위에는 넣지 않는다
-    const chart = chartRef.current
-    if (!chart) return
-    for (const ls of shapeSeriesRef.current) chart.removeSeries(ls)
-    shapeSeriesRef.current = []
-    for (const sh of extra.shapes ?? []) {
-      const seen = new Set<string>()
-      const pts = sh.points
-        .filter((p) => timesRef.current.has(p.date))
-        .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0))
-        .filter((p) => (seen.has(p.date) ? false : (seen.add(p.date), true)))
-      if (pts.length < 2) continue
-      const ls = chart.addLineSeries({
-        color: sh.color, lineWidth: sh.width, priceLineVisible: false, lastValueVisible: false,
-        crosshairMarkerVisible: false, autoscaleInfoProvider: () => null,
-      })
-      ls.setData(pts.map((p) => ({ time: p.date, value: p.price })))
-      shapeSeriesRef.current.push(ls)
-    }
+    // 패턴 모양 — 꼭짓점이 받은 일봉 밖이면 프리미티브가 그 패턴을 건너뛴다(과거를 붙이면 다시 그림)
+    shapePrimRef.current?.setShapes(extra.shapes ?? [])
   }, [extraKey, state, dataVersion])
 
   return (

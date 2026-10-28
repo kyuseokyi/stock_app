@@ -1,5 +1,6 @@
-// web_client/src/lib/patternOverlay.ts 복사본 — 원본과 같이 고칠 것 (관리자 추가: patternShapes·SHAPE_COLORS)
-import type { ChartMarker, ChartPriceLine, ChartShape } from '../components/screener/StockDailyChart'
+// web_client/src/lib/patternOverlay.ts 복사본 — 원본과 같이 고칠 것 (관리자 추가: patternShapes·SHAPE_COLORS·allBaseDates, lookbackFor 상한 인자)
+import type { ChartMarker, ChartPriceLine } from '../components/screener/StockDailyChart'
+import type { PatternShape } from './patternShapes'
 import { pointMarker } from './patterns'
 import { THEME } from './themeColors'
 import type { PatternBase, PatternBases } from '../types/patterns'
@@ -17,14 +18,14 @@ export function zonePct(price: number, pivot: number): string {
 }
 
 /** 가장 오래된 꼭짓점까지 덮는 일봉 조회 기간(달력일) — 기본~상한 사이 */
-export function lookbackFor(dates: string[], now: Date = new Date()): number {
+export function lookbackFor(dates: string[], now: Date = new Date(), max: number = MAX_LOOKBACK_DAYS): number {
   const oldest = dates.reduce<number | null>((acc, d) => {
     const t = Date.parse(d)
     return Number.isNaN(t) ? acc : acc === null ? t : Math.min(acc, t)
   }, null)
   if (oldest === null) return MIN_LOOKBACK_DAYS
   const days = Math.ceil((now.getTime() - oldest) / DAY_MS) + 30 // 꼭짓점 앞 여유 30일
-  return Math.min(MAX_LOOKBACK_DAYS, Math.max(MIN_LOOKBACK_DAYS, days))
+  return Math.min(max, Math.max(MIN_LOOKBACK_DAYS, days))
 }
 
 /** 현재 베이스의 꼭짓점 날짜 */
@@ -66,16 +67,19 @@ export function overlayCaption(zones: PatternBases['zones'], pivot: number): str
 /** 패턴 모양 선 색 — 현재 베이스는 상승색, 지난 베이스는 옅은 회색 */
 export const SHAPE_COLORS = { current: THEME.up, past: 'rgba(106, 102, 129, 0.45)' }
 
-/** 베이스마다 꼭짓점(가격 있는 것)을 이은 모양 선 — 현재 베이스는 2px·상승색, 지난 베이스는 1px·회색. 지난 것을 먼저(현재가 위에 그려지게) */
-export function patternShapes(bases: PatternBase[]): ChartShape[] {
-  const toShape = (b: PatternBase, i: number): ChartShape => ({
-    key: `${b.patternType}:${b.rimDate ?? i}`,
+/** 베이스마다 패턴 모양(컵 = U자, 베이스 = 사각형 …) — 현재 베이스는 2px·상승색, 지난 베이스는 1px·회색. 지난 것을 먼저(현재가 위에 그려지게) */
+export function patternShapes(bases: PatternBase[]): PatternShape[] {
+  const toShape = (b: PatternBase): PatternShape => ({
+    patternType: b.patternType,
     color: b.isCurrent ? SHAPE_COLORS.current : SHAPE_COLORS.past,
     width: b.isCurrent ? 2 : 1,
-    points: b.points.flatMap((p) => (p.date && p.price !== null ? [{ date: p.date, price: p.price }] : [])),
+    points: b.points.flatMap((p) => (p.date && p.price !== null ? [{ role: p.role, date: p.date, price: p.price }] : [])),
   })
   return [...bases.filter((b) => !b.isCurrent), ...bases.filter((b) => b.isCurrent)].map(toShape)
 }
+
+/** 패턴 엔진 조회 범위(770봉 ≈ 1,100 달력일) — 관리자 차트는 베이스 모양이 잘리지 않게 여기까지 받는다 */
+export const ENGINE_LOOKBACK_DAYS = 1100
 
 /** 모든 베이스의 꼭짓점 날짜 — 일봉 조회 기간을 지난 베이스까지 덮게 */
 export function allBaseDates(bases: PatternBase[]): string[] {
