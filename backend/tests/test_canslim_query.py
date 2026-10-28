@@ -55,6 +55,17 @@ def test_screen_all_market_default_sort(monkeypatch, pg):
     assert "market =" not in sql and "ORDER BY score DESC" in sql and out["items"] == []
 
 
+def test_screen_near_ath_filter(monkeypatch, pg):
+    ch = _FakeCH([[(D,)], [(0,)], [], [(D,)], [(0,)], []])
+    monkeypatch.setattr(cq, "_ch", lambda: ch)
+    cq.screen(near_ath=True)
+    sql, params = ch.queries[2]
+    assert "daily_prices WHERE date <= %(d)s GROUP BY ticker" in sql and "%(ath_ratio)s * max(high)" in sql
+    assert params["ath_ratio"] == 0.85
+    cq.screen()
+    assert len(ch.queries) == 6 and "daily_prices" not in ch.queries[-1][0]  # 기본은 조건 없음
+
+
 def test_screen_no_data_yet(monkeypatch, pg):
     monkeypatch.setattr(cq, "_ch", lambda: _FakeCH([[(date(1970, 1, 1),)]]))
     assert cq.screen() == {"date": None, "total": 0, "items": []}
@@ -159,7 +170,7 @@ def test_web_queries_match_schema(monkeypatch):
     assert res.errors is None, res.errors
     assert res.data["canslimScreen"]["items"][0]["sectorName"] == "전기·전자"
     assert seen == {"market": "ALL", "min_pass": 0, "required": [], "sort": "score", "liquid_only": True,
-                    "limit": 50, "offset": 0}
+                    "limit": 50, "offset": 0, "near_ath": False}
 
     monkeypatch.setattr(cq, "score", lambda ticker: {
         "date": "2026-10-16", "ticker": ticker, "name": "에이", "market": "KOSPI", "sector_name": None, "close": 1.0,

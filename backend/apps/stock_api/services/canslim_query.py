@@ -18,6 +18,7 @@ LETTERS = ("c", "a", "n", "s", "l", "i", "m")
 _EPOCH = date(1970, 1, 1)
 MAX_LIMIT = 200
 HISTORY_DAYS = 60
+ATH_MIN_RATIO = 0.85  # 역대 신고가 근처 — 종가 / 보유 일봉 전체 최고가(N 의 52주 85% 기준과 같은 비율)
 SCORE_COLUMNS = ROW_COLUMNS
 _SCREEN_COLUMNS = ["ticker", "market", "sector_m", "close", "score", "pass_count", "liquid", *LETTERS,
                    "l_rs", "n_pct_from_high"]
@@ -82,7 +83,7 @@ def markets() -> list[dict]:
 
 
 def screen(market: str = "ALL", min_pass: int = 0, required: list[str] | None = None, sort: str = "score",
-           liquid_only: bool = True, limit: int = 50, offset: int = 0) -> dict:
+           liquid_only: bool = True, limit: int = 50, offset: int = 0, near_ath: bool = False) -> dict:
     d = latest_date()
     if d is None:
         return {"date": None, "total": 0, "items": []}
@@ -94,6 +95,11 @@ def screen(market: str = "ALL", min_pass: int = 0, required: list[str] | None = 
         params["market"] = market
     if liquid_only:
         where.append("liquid = 1")
+    if near_ath:
+        # 역대 신고가 근처 — 기준일 이하 일봉 전체(보유 기간, 약 3년)의 최고가 대비 종가. 겹친 행이 있어도 max·argMax 는 같아 FINAL 없이 읽는다
+        where.append(f"ticker IN (SELECT ticker FROM {CLICKHOUSE_DB}.daily_prices WHERE date <= %(d)s GROUP BY ticker "
+                     "HAVING max(high) > 0 AND argMax(close, date) >= %(ath_ratio)s * max(high))")
+        params["ath_ratio"] = ATH_MIN_RATIO
     for key in sorted({(k or "").strip().lower() for k in (required or [])} & set(LETTERS)):
         where.append(f"{key} = 1")  # 허용된 항목 이름만(LETTERS) — 사용자 값은 SQL 에 들어가지 않는다
     cond = " AND ".join(where)

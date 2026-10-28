@@ -1,4 +1,4 @@
-// web_client/src/lib/canslim.ts 복사본 — 원본과 같이 고칠 것
+// web_client/src/lib/canslim.ts 복사본 — 원본과 같이 고칠 것 (관리자 추가: 역대 신고가 필터 nearAth)
 // CANSLIM 화면 표시용 순수 함수 — 항목 순서·배지 색·시장 상태 색·기본 필터.
 import type { LetterKey, LetterStatus, ScreenFilters } from '../types/screener'
 
@@ -20,6 +20,7 @@ export const DEFAULT_FILTERS: ScreenFilters = {
   required: [],
   sort: 'score',
   liquidOnly: true,
+  nearAth: false,
 }
 
 /** 기본값과 다른 필터 수(모바일 '필터 · n개 적용' 표시) — 꼭 통과 항목은 하나씩 센다. 정렬은 필터가 아니라 세지 않음(앱 activeFilterCount 와 같음) */
@@ -27,6 +28,7 @@ export function activeCanslimFilters(f: ScreenFilters): number {
   const d = DEFAULT_FILTERS
   return (f.market !== d.market ? 1 : 0) + (f.minPass !== d.minPass ? 1 : 0)
     + f.required.length + (f.liquidOnly !== d.liquidOnly ? 1 : 0)
+    + (f.nearAth !== d.nearAth ? 1 : 0)
 }
 
 /** 배지 색: 통과=브랜드 블루, 미달=회색, 부족·준비 중=점선 테두리 */

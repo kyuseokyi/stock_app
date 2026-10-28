@@ -1,4 +1,4 @@
-// web_client/src/api/screener.ts 복사본 — 원본과 같이 고칠 것 (변경: config 경로 → 관리자 src/config)
+// web_client/src/api/screener.ts 복사본 — 원본과 같이 고칠 것 (변경: config 경로 → 관리자 src/config, 역대 신고가 nearAth)
 import axios from 'axios'
 import { STOCK_API_URL } from '../../config'
 import type { CanslimItem, CanslimMarket, CanslimScore, CanslimScreen, ScreenFilters } from '../types/screener'
@@ -9,10 +9,10 @@ const ITEM_FIELDS = `ticker name market sectorName close score passCount liquid 
   letters { c a n s l i m }`
 
 const SCREEN_QUERY = `query CanslimScreen($market: String!, $minPass: Int!, $required: [String!], $sort: String!,
-  $liquidOnly: Boolean!, $limit: Int!, $offset: Int!) {
+  $liquidOnly: Boolean!, $limit: Int!, $offset: Int!, $nearAth: Boolean = false) {
   canslimMarket { market date status close ma50 ma200 distributionDays }
   canslimScreen(market: $market, minPass: $minPass, required: $required, sort: $sort, liquidOnly: $liquidOnly,
-    limit: $limit, offset: $offset) { date total items { ${ITEM_FIELDS} } }
+    limit: $limit, offset: $offset, nearAth: $nearAth) { date total items { ${ITEM_FIELDS} } }
 }`
 
 const SCORE_QUERY = `query CanslimScore($ticker: String!) {
@@ -49,6 +49,7 @@ export async function getCanslimScreen(
     required: f.required,
     sort: f.sort,
     liquidOnly: f.liquidOnly,
+    nearAth: f.nearAth,
     limit: PAGE_SIZE,
     offset,
   })

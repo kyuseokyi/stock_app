@@ -203,9 +203,10 @@ class Query:
         liquid_only: bool = True,
         limit: int = 50,
         offset: int = 0,
+        near_ath: bool = False,
     ) -> CanslimScreen:
         out = canslim_query.screen(market=market, min_pass=min_pass, required=required, sort=sort,
-                                   liquid_only=liquid_only, limit=limit, offset=offset)
+                                   liquid_only=liquid_only, limit=limit, offset=offset, near_ath=near_ath)
         items = [CanslimItem(**{**it, "letters": CanslimLetters(**it["letters"])}) for it in out["items"]]
         return CanslimScreen(date=out["date"], total=out["total"], items=items)
 
