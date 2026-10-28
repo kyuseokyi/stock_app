@@ -548,7 +548,8 @@ export default function TradingChart({ ticker, lastPrice, coach, position, onSrL
     const series = seriesRef.current
     if (!series) return
     const touches = showSr && last >= 0 ? touchedLevels(bars[last], indicatorLevelsAt(bars, { ma: showMa, bb: showBb, poc: showVp ? poc : null })) : []
-    const touchSig = touches.map((l) => `${l.id}:${roundToTick(l.price)}`).join('|')
+    // 색 포함 — POC 는 종가가 넘나들면 같은 가격에서 주황↔보라가 바뀐다
+    const touchSig = touches.map((l) => `${l.id}:${roundToTick(l.price)}:${l.color}`).join('|')
     if (touchSig !== touchSigRef.current) {
       touchSigRef.current = touchSig
       for (const l of touchLinesRef.current) series.removePriceLine(l)
