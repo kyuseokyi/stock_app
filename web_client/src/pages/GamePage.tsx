@@ -215,7 +215,7 @@ export default function GamePage() {
       {srEvent !== null && position !== null && (
         <SrActionModal
           event={srEvent}
-          name={srEventName(srEvent.type)}
+          name={srEvent.name ?? srEventName(srEvent.type)}
           position={position}
           closing={closing}
           onClosePosition={() => {

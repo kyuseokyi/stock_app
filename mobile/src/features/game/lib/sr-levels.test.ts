@@ -1,4 +1,4 @@
-import { srWatchLevels, srEventName, srLevelsFromHorizontal, srRoleName, srSignature, TREND_HIGH_COLOR, TREND_LOW_COLOR, type SrLevel } from './sr-levels';
+import { srFromIndicators, srWatchLevels, srEventName, srLevelsFromHorizontal, srRoleName, srSignature, TREND_HIGH_COLOR, TREND_LOW_COLOR, type SrLevel } from './sr-levels';
 
 describe('srLevelsFromHorizontal', () => {
   test('저항 먼저, 키는 lvl:가격, 역할·색', () => {
@@ -50,5 +50,21 @@ describe('srSignature', () => {
     const a: SrLevel[] = [{ key: 'lvl:100', role: 'resistance', price: 100, color: '#x' }];
     const b: SrLevel[] = [{ key: 'lvl:100', role: 'support', price: 100, color: '#x' }];
     expect(srSignature(a)).not.toBe(srSignature(b));
+  });
+});
+
+describe('srFromIndicators', () => {
+  test('키 ind:id, 현재가 이상 저항·미만 지지, 이름 포함', () => {
+    const got = srFromIndicators([{ id: 'ma20', name: '20일선', price: 110, color: '#o' }, { id: 'bbLower', name: 'BB 하단', price: 90, color: '#b' }], 100);
+    expect(got).toEqual([
+      { key: 'ind:ma20', price: 110, color: TREND_HIGH_COLOR, role: 'resistance', name: '20일선' },
+      { key: 'ind:bbLower', price: 90, color: TREND_LOW_COLOR, role: 'support', name: 'BB 하단' },
+    ]);
+  });
+});
+
+describe('srFromIndicators 고정 가격 레벨', () => {
+  test('byPrice 면 키 lvl:가격', () => {
+    expect(srFromIndicators([{ id: 'prevHigh:130', name: '전고점', price: 130, color: '#a', byPrice: true }], 120)[0].key).toBe('lvl:130');
   });
 });

@@ -8,12 +8,11 @@ import { getDailyCandles, getDailyCandlesBefore, getGameCandles, getSessionBar }
 import { applyTick, withSessionBar } from '../lib/candles';
 import { CHART_PREFS_KEY, DEFAULT_CHART_PREFS, parseChartPrefs, serializeChartPrefs } from '../lib/chart-prefs';
 import { layoutCandles, niceTicks, priceToY, type Ohlc } from '../lib/chart-layout';
-import { mergeOlder, priceLines, toBars, type ChartColors, type ChartLine, type Bar } from '../lib/chart-bridge';
-import { srWatchLevels, srRoleName, srSignature, TREND_HIGH_COLOR, TREND_LOW_COLOR, type SrLevel, type SrRole } from '../lib/sr-levels';
-import { horizontalLevels, type HLevel } from '../lib/trend-lines';
+import { mergeOlder, priceLines, toBars, type ChartColors, type Bar } from '../lib/chart-bridge';
+import { srFromIndicators, srRoleName, srSignature, type SrLevel, type SrRole } from '../lib/sr-levels';
 import { formatPrice, kstDateString } from '../lib/format';
-import { bollinger, lineSegments, MA_PERIODS, sma } from '../lib/indicators';
-import { touchedLevels, type IndicatorLevel } from '../lib/touch-levels';
+import { lineSegments, MA_PERIODS } from '../lib/indicators';
+import { srIndicatorLevels, srSwingLevels, touchedLevels, type IndicatorLevel } from '../lib/touch-levels';
 import { roundToTick } from '../lib/krx-tick';
 import { applyTickIntraday, axisLabelIndexes, bucketStartSec, CHART_INTERVALS, dayLabel, kstHm } from '../lib/intraday';
 import type { ChartInterval, Coach, DailyCandle, IntradayCandle, Position } from '../types';
@@ -21,7 +20,6 @@ import { useTradingGameStore } from '../store';
 import { useGameRules } from '../use-game-rules';
 import { TvChart, type TvChartData } from './tv-chart';
 
-type HPair = { resistance: HLevel | null; support: HLevel | null; candidates: HLevel[] };
 
 // CandleChart: 순수 View 캔들 차트(퀴즈 차트용). 좌표는 lib/chart-layout 의 순수 함수가 계산한다.
 // DailyChart(게임 차트): 웹과 같은 lightweight-charts 를 WebView 로(tv-chart). 이 파일은 데이터·캐시·틱만 맡는다.
@@ -33,33 +31,8 @@ const AXIS_H = 16; // 아래 시간축 라벨 줄
 const AXIS_LABEL_W = 48;
 // 보조지표 색(web TradingChart 와 같은 값) — 이동평균 5·20·60, 볼린저밴드
 const MA_COLORS: Record<(typeof MA_PERIODS)[number], string> = { 5: '#14b8a6', 20: '#f97316', 60: '#a16207' };
-const BB_COLOR = 'rgba(99, 102, 241, 0.7)'; // 페이지 chart-page-script 의 BB 와 같은 값
-
-/** 켜진 지표의 마지막 캔들 값(가로선 후보) — POC 색은 매물대 점과 같게 마지막 종가 이상 주황·아래 보라(웹 TradingChart 와 같은 규칙) */
-function indicatorLevelsAt(bars: Bar[], on: { ma: boolean; bb: boolean; poc: number | null }): IndicatorLevel[] {
-  const n = bars.length;
-  if (n === 0) return [];
-  const closes = bars.map((b) => b.close);
-  const out: IndicatorLevel[] = [];
-  if (on.poc !== null) {
-    out.push({ id: 'poc', name: '매물대 POC', price: on.poc, color: on.poc >= closes[n - 1] ? TREND_HIGH_COLOR : TREND_LOW_COLOR });
-  }
-  if (on.ma) {
-    for (const p of MA_PERIODS) {
-      const v = sma(closes, p)[n - 1];
-      if (v !== null) out.push({ id: `ma${p}`, name: `${p}일선`, price: v, color: MA_COLORS[p] });
-    }
-  }
-  if (on.bb) {
-    const b = bollinger(closes)[n - 1];
-    if (b !== null) {
-      out.push({ id: 'bbUpper', name: 'BB 상단', price: b.upper, color: BB_COLOR });
-      out.push({ id: 'bbMiddle', name: 'BB 중심', price: b.middle, color: BB_COLOR });
-      out.push({ id: 'bbLower', name: 'BB 하단', price: b.lower, color: BB_COLOR });
-    }
-  }
-  return out;
-}
+/** 몸통이 닿은 지지·저항 지표 + 역할(범례용) */
+type TouchedLevel = IndicatorLevel & { role: SrRole };
 
 /** tag: 웹 차트 가격축 태그처럼 오른쪽 끝에 색 채운 박스로 가격만 표시(현재가용) */
 export type PriceLine = { price: number; color: string; label: string; thick?: boolean; dashed?: boolean; tag?: boolean };
@@ -487,20 +460,17 @@ export function DailyChart({ ticker, lastPrice, coach, position, onSrLevels }: D
   const [pocOf, setPocOf] = useState<{ key: string; price: number | null }>({ key: '', price: null });
   const poc = showVp && pocOf.key === seriesKey ? pocOf.price : null;
   const onPoc = useCallback((price: number | null) => setPocOf({ key: seriesKey, price }), [seriesKey]);
-  const hLevels = useMemo(() => {
-    const none = { levels: { resistance: null, support: null, candidates: [] } as HPair, bars: [] as Bar[] };
+  // 지지·저항 = 지표 5개(매물대 POC·5일선·20일선(=BB 중심)·BB 상단·BB 하단)(설계 §8) + 전고점·전저점(현재가 바로 위·아래, §8-1) — 지표 칩과 무관, POC 만 매물대가 켜져 있을 때
+  const sr = useMemo(() => {
+    const none = { bars: [] as Bar[], ind: [] as IndicatorLevel[], price: 0 };
     if (!showSr || chartView === null || shown === null || !sameSeries(shown.series, ticker, interval)) return none;
     const bars = toBars(chartView.data);
     if (bars.length === 0) return none;
     const price = lastPrice ?? bars[bars.length - 1].close;
-    return { levels: horizontalLevels(bars, price, { poc }), bars };
+    return { bars, ind: [...srIndicatorLevels(bars.map((b) => b.close), poc), ...srSwingLevels(bars, price)], price };
   }, [showSr, chartView, shown, ticker, interval, lastPrice, poc]);
-  // 부모(감지기)에는 후보 레벨 전체를 올린다 — 그리는 2개만 올리면 가까운 쪽이 바뀔 때 상태가 지워져 돌파·이탈을 놓친다
-  const rawSr = useMemo<SrLevel[]>(() => {
-    const { bars, levels } = hLevels;
-    if (bars.length === 0) return [];
-    return srWatchLevels(levels.candidates, lastPrice ?? bars[bars.length - 1].close);
-  }, [hLevels, lastPrice]);
+  // 부모(감지기)에는 5개 전부(현재가 이상 저항·미만 지지)
+  const rawSr = useMemo<SrLevel[]>(() => (sr.bars.length === 0 ? [] : srFromIndicators(sr.ind, sr.price)), [sr]);
   const [srLevels, setSrLevels] = useState<SrLevel[]>([]);
   // 렌더 중 파생 상태 갱신(React 권장 패턴) — 효과 안 setState 대신
   if (srSignature(srLevels) !== srSignature(rawSr)) setSrLevels(rawSr);
@@ -509,39 +479,20 @@ export function DailyChart({ ticker, lastPrice, coach, position, onSrLevels }: D
   }, [srLevels, onSrLevels]);
   // 차트가 사라지면 부모의 목록도 비운다(감지기가 옛 선을 계속 보지 않게)
   useEffect(() => () => onSrLevels?.([]), [onSrLevels]);
-  // 지지·저항 가로선(설계 §7-4) — 차트 전체 폭 가격선(실선 2, 자동 범위 제외). 가격이 같으면 이전 배열 유지(틱마다 다시 보내지 않게)
-  const resistancePrice = hLevels.levels.resistance?.price ?? null;
-  const supportPrice = hLevels.levels.support?.price ?? null;
-  const srLines = useMemo<ChartLine[]>(
-    () => [
-      ...(resistancePrice !== null ? [{ price: resistancePrice, color: TREND_HIGH_COLOR, width: 2 as const, dashed: false, title: '저항선' }] : []),
-      ...(supportPrice !== null ? [{ price: supportPrice, color: TREND_LOW_COLOR, width: 2 as const, dashed: false, title: '지지선' }] : []),
-    ],
-    [resistancePrice, supportPrice],
-  );
-  // 마지막 캔들이 닿은(터치·관통) 켜진 지표 — 그 가격에 점선 가로 가격선(설계 §7-3). 지지·저항 칩이 꺼지면 없음(hLevels.bars 가 빔)
-  const rawTouched = useMemo<IndicatorLevel[]>(() => {
-    const { bars } = hLevels;
+  // 마지막 캔들 몸통(꼬리 제외)이 닿은 지표 — 그 가격에 차트 전체 폭 가로선(실선 2). 지지·저항 칩이 꺼지면 없음
+  const rawTouched = useMemo<TouchedLevel[]>(() => {
+    const { bars, ind, price } = sr;
     if (bars.length === 0) return [];
-    return touchedLevels(bars[bars.length - 1], indicatorLevelsAt(bars, { ma: showMa, bb: showBb, poc }));
-  }, [hLevels, showMa, showBb, poc]);
-  const [touched, setTouched] = useState<IndicatorLevel[]>([]);
-  // 서명(id·호가 가격·색)이 같으면 이전 배열 유지 — 틱마다 WebView 에 가격선을 다시 보내지 않게
-  const touchSig = (ls: IndicatorLevel[]) => ls.map((l) => `${l.id}:${roundToTick(l.price)}:${l.color}`).join('|');
+    return touchedLevels(bars[bars.length - 1], ind).map((l) => ({ ...l, role: l.price >= price ? 'resistance' : 'support' }));
+  }, [sr]);
+  const [touched, setTouched] = useState<TouchedLevel[]>([]);
+  // 서명(id·호가 가격·색·역할)이 같으면 이전 배열 유지 — 틱마다 WebView 에 가격선을 다시 보내지 않게
+  const touchSig = (ls: TouchedLevel[]) => ls.map((l) => `${l.id}:${roundToTick(l.price)}:${l.color}:${l.role}`).join('|');
   if (touchSig(touched) !== touchSig(rawTouched)) setTouched(rawTouched);
-  // 코치·포지션 선 + 지지·저항(실선) + 닿은 지표(점선) — 모두 가격선
+  // 코치·포지션 선 + 몸통이 닿은 지지·저항 — 모두 가격선
   const chartLines = useMemo(
-    () => [...lines, ...srLines, ...touched.map((l) => ({ price: l.price, color: l.color, width: 2 as const, dashed: false, dotted: true, title: l.name }))],
-    [lines, srLines, touched],
-  );
-  // 범례 — 켜져 있고 선이 있을 때(색은 역할로 고정)
-  const trendLegend = useMemo(
-    () =>
-      [
-        hLevels.levels.resistance ? { role: 'resistance' as SrRole, color: TREND_HIGH_COLOR } : null,
-        hLevels.levels.support ? { role: 'support' as SrRole, color: TREND_LOW_COLOR } : null,
-      ].filter((x) => x !== null),
-    [hLevels],
+    () => [...lines, ...touched.map((l) => ({ price: l.price, color: l.color, width: 2 as const, dashed: false, title: l.name }))],
+    [lines, touched],
   );
   // 다른 단위 데이터를 보여 주는 중(새 데이터 대기) — 흐리게 + 작은 로딩 표시
   const stale = shown !== null && !sameSeries(shown.series, ticker, interval);
@@ -586,7 +537,7 @@ export function DailyChart({ ticker, lastPrice, coach, position, onSrLevels }: D
             <ActivityIndicator size="small" />
           </View>
         ) : null}
-        {hasBars && chartReady && (showMa || lines.length > 0 || trendLegend.length > 0 || touched.length > 0) ? (
+        {hasBars && chartReady && (showMa || lines.length > 0 || touched.length > 0) ? (
           // 가격선 이름(지지·저항·진입·손절·익절)도 여기 — 차트 안 이름은 가까운 선끼리 겹쳐서 뺐다
           <View style={styles.legend} pointerEvents="none">
             {showMa
@@ -596,14 +547,9 @@ export function DailyChart({ ticker, lastPrice, coach, position, onSrLevels }: D
                   </Text>
                 ))
               : null}
-            {trendLegend.map((l) => (
-              <Text key={l.role} style={[styles.legendText, styles.legendLine]} allowFontScaling={false}>
-                <Text style={{ color: l.color }}>━</Text> {srRoleName(l.role, true)}
-              </Text>
-            ))}
             {touched.map((l) => (
               <Text key={l.id} style={[styles.legendText, styles.legendLine]} allowFontScaling={false}>
-                <Text style={{ color: l.color }}>┈</Text> {l.name} 닿음
+                <Text style={{ color: l.color }}>━</Text> {l.name} {srRoleName(l.role, true)}
               </Text>
             ))}
             {lines.map((l) => (

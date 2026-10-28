@@ -128,3 +128,12 @@ describe('srEventCopy', () => {
     expect(srEventCopy('RESISTANCE_TOUCH', 'BB상단', 74_200).title).toBe('🔔 [저항선 도달] BB상단(74,200원) 터치');
   });
 });
+
+describe('SrWatcher 지표 레벨', () => {
+  test('지표 값이 오차 안에서 움직여도 같은 선 — 돌파 이벤트에 이름이 실림', () => {
+    const w = new SrWatcher();
+    const at = (price: number): SrLevel => ({ key: 'ind:ma20', role: 'resistance', price, color: '#x', name: '20일선' });
+    w.update([at(50_000)], 49_000, 0);
+    expect(w.update([at(50_050)], 51_000, 1)).toEqual([{ type: 'RESISTANCE_BREAKOUT', key: 'ind:ma20', levelPrice: 50_050, price: 51_000, name: '20일선' }]);
+  });
+});

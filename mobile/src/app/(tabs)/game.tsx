@@ -312,7 +312,7 @@ export default function GameScreen() {
       {srEvent !== null && position !== null ? (
         <SrActionSheet
           event={srEvent}
-          name={srEventName(srEvent.type)}
+          name={srEvent.name ?? srEventName(srEvent.type)}
           position={position}
           closing={closing}
           onClosePosition={() => {
