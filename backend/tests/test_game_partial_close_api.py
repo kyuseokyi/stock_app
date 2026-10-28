@@ -43,6 +43,15 @@ async def test_close_without_body_is_full_close(api, maker, order_env):
     assert (acc.total_trades, acc.win_trades) == (1, 1)
 
 
+async def test_close_with_json_header_but_no_body_is_full_close(api, maker, order_env):
+    """옛 클라이언트(axios 기본 헤더)는 Content-Type 만 있고 본문이 비어 있다 — 전량."""
+    client, set_user = api
+    pid = await _open(client, maker, set_user)
+    res = await client.post(f"/api/game/positions/{pid}/close", headers={"content-type": "application/json"})
+    assert res.status_code == 200, res.text
+    assert res.json()["status"] == "CLOSED"
+
+
 async def test_close_with_empty_body_or_all_is_full_close(api, maker, order_env):
     client, set_user = api
     pid = await _open(client, maker, set_user)
