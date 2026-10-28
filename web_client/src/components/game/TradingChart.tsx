@@ -15,6 +15,7 @@ import { MA_PERIODS, bollinger, sma, type MaPeriod } from '../../lib/indicators'
 import { kstDateString } from '../../lib/format'
 import { THEME } from '../../lib/themeColors'
 import { VolumeProfilePrimitive } from '../../lib/volumeProfile'
+import { SrSegmentsPrimitive } from '../../lib/srSegments'
 import { srFromIndicators, srRoleName, srSignature, type SrLevel, type SrRole } from '../../lib/srLevels'
 import { srIndicatorLevels, srSwingLevels, touchedLevels, type IndicatorLevel } from '../../lib/touchLevels'
 import { roundToTick } from '../../lib/krxTick'
@@ -185,7 +186,7 @@ export default function TradingChart({ ticker, lastPrice, coach, position, onSrL
   const vpRef = useRef<VolumeProfilePrimitive | null>(null) // 매물대(보이는 구간)
   const srSigRef = useRef(SR_SIG_UNSET) // 마지막으로 부모에 올린 지지·저항 서명(같으면 다시 올리지 않음)
   const [dataVer, setDataVer] = useState(0) // 캔들을 새로 그릴 때마다 +1 — 추세선 다시 계산
-  const touchLinesRef = useRef<IPriceLine[]>([]) // 몸통이 닿은 지지·저항 지표 가로선(차트 전체 폭)
+  const segRef = useRef<SrSegmentsPrimitive | null>(null) // 몸통이 닿은 지지·저항 — 현재 캔들 주변 짧은 가로선(축 라벨 없음)
   const touchSigRef = useRef('') // 마지막으로 그린 닿은 지표(같으면 다시 그리지 않음)
   const [touched, setTouched] = useState<TouchedLevel[]>([]) // 범례용
   const reloadRef = useRef<(() => void) | null>(null) // 현재 차트의 캔들 재로드(스트림 재개 시)
@@ -245,7 +246,9 @@ export default function TradingChart({ ticker, lastPrice, coach, position, onSrL
     series.attachPrimitive(vp)
     vpRef.current = vp
     vp.onPocChange = setPoc
-    touchLinesRef.current = [] // 옛 차트의 가격선은 차트와 함께 사라짐
+    const seg = new SrSegmentsPrimitive()
+    series.attachPrimitive(seg)
+    segRef.current = seg
     touchSigRef.current = ''
     setTouched([])
     setLoaded(false)
@@ -356,6 +359,7 @@ export default function TradingChart({ ticker, lastPrice, coach, position, onSrL
       seriesRef.current = null
       indRef.current = null
       vpRef.current = null
+      segRef.current = null
       setPoc(null) // 옛 차트의 POC 를 새 차트가 쓰지 않게
       barsRef.current = []
       linesRef.current = []
@@ -450,12 +454,12 @@ export default function TradingChart({ ticker, lastPrice, coach, position, onSrL
     const lines: IPriceLine[] = []
     if (support !== null) {
       lines.push(series.createPriceLine({
-        price: support, color: SUPPORT, lineWidth: 1, lineStyle: LineStyle.Dashed, axisLabelVisible: true, title: '',
+        price: support, color: SUPPORT, lineWidth: 1, lineStyle: LineStyle.Dashed, axisLabelVisible: false, title: '',
       }))
     }
     if (resistance !== null) {
       lines.push(series.createPriceLine({
-        price: resistance, color: RESIST, lineWidth: 1, lineStyle: LineStyle.Dashed, axisLabelVisible: true, title: '',
+        price: resistance, color: RESIST, lineWidth: 1, lineStyle: LineStyle.Dashed, axisLabelVisible: false, title: '',
       }))
     }
     if (entry !== null && side !== null) {
@@ -478,7 +482,7 @@ export default function TradingChart({ ticker, lastPrice, coach, position, onSrL
   }, [support, resistance, entry, side, stopLoss, takeProfit, loaded, interval])
 
   // 3-1) 지지·저항 = 지표 5개(매물대 POC·5일선·20일선(=BB 중심)·BB 상단·BB 하단) + 전고점·전저점(현재가 바로 위·아래)(설계 2026-10-27 chart-game-sr-trendlines §8·§8-1).
-  // 감지기(부모)에는 5개 전부(현재가 이상 저항·미만 지지), 차트에는 마지막 캔들 몸통(꼬리 제외)이 닿은 것만 전체 폭 가로선.
+  // 감지기(부모)에는 5개 전부(현재가 이상 저항·미만 지지), 차트에는 마지막 캔들 몸통(꼬리 제외)이 닿은 것만 현재 캔들 주변 짧은 가로선(lib/srSegments).
   // 지표 칩(이동평균·볼린저)과 무관하게 계산 — POC 만 매물대가 켜져 있을 때. 지지·저항 칩이 꺼지면 둘 다 없음
   useEffect(() => {
     const series = seriesRef.current
@@ -503,10 +507,7 @@ export default function TradingChart({ ticker, lastPrice, coach, position, onSrL
     const touchSig = touches.map((l) => `${l.id}:${roundToTick(l.price)}:${l.color}:${l.role}`).join('|')
     if (touchSig !== touchSigRef.current) {
       touchSigRef.current = touchSig
-      for (const l of touchLinesRef.current) series.removePriceLine(l)
-      touchLinesRef.current = touches.map((l) =>
-        series.createPriceLine({ price: l.price, color: l.color, lineWidth: 2, lineStyle: LineStyle.Solid, axisLabelVisible: true, title: '' }),
-      )
+      segRef.current?.setSegments(touches.map((l) => ({ price: l.price, color: l.color })))
       setTouched(touches)
     }
   }, [lastPrice, loaded, showSr, showVp, poc, dataVer, interval, ticker, onSrLevels])

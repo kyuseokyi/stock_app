@@ -479,7 +479,7 @@ export function DailyChart({ ticker, lastPrice, coach, position, onSrLevels }: D
   }, [srLevels, onSrLevels]);
   // 차트가 사라지면 부모의 목록도 비운다(감지기가 옛 선을 계속 보지 않게)
   useEffect(() => () => onSrLevels?.([]), [onSrLevels]);
-  // 마지막 캔들 몸통(꼬리 제외)이 닿은 지표 — 그 가격에 차트 전체 폭 가로선(실선 2). 지지·저항 칩이 꺼지면 없음
+  // 마지막 캔들 몸통(꼬리 제외)이 닿은 지표 — 그 가격에 현재 캔들 주변만 짧은 가로선(실선 2, 축 라벨 없음). 지지·저항 칩이 꺼지면 없음
   const rawTouched = useMemo<TouchedLevel[]>(() => {
     const { bars, ind, price } = sr;
     if (bars.length === 0) return [];
@@ -489,9 +489,9 @@ export function DailyChart({ ticker, lastPrice, coach, position, onSrLevels }: D
   // 서명(id·호가 가격·색·역할)이 같으면 이전 배열 유지 — 틱마다 WebView 에 가격선을 다시 보내지 않게
   const touchSig = (ls: TouchedLevel[]) => ls.map((l) => `${l.id}:${roundToTick(l.price)}:${l.color}:${l.role}`).join('|');
   if (touchSig(touched) !== touchSig(rawTouched)) setTouched(rawTouched);
-  // 코치·포지션 선 + 몸통이 닿은 지지·저항 — 모두 가격선
+  // 코치·포지션 가격선 + 몸통이 닿은 지지·저항(짧은 선)
   const chartLines = useMemo(
-    () => [...lines, ...touched.map((l) => ({ price: l.price, color: l.color, width: 2 as const, dashed: false, title: l.name }))],
+    () => [...lines, ...touched.map((l) => ({ price: l.price, color: l.color, width: 2 as const, dashed: false, title: l.name, segment: true }))],
     [lines, touched],
   );
   // 다른 단위 데이터를 보여 주는 중(새 데이터 대기) — 흐리게 + 작은 로딩 표시

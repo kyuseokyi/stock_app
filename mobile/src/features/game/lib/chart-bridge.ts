@@ -41,6 +41,10 @@ export interface ChartLine {
   dashed: boolean;
   /** 점선(Dotted) — 마지막 캔들이 닿은 지표 가로선. dashed 보다 우선 */
   dotted?: boolean;
+  /** 가격축 라벨 숨김 — 지지·저항처럼 이름이 범례에 있는 선(라벨이 겹겹이 쌓이지 않게) */
+  noLabel?: boolean;
+  /** 전체 폭 가격선 대신 현재 캔들 주변에만 짧은 가로선(라벨 없음) — 몸통이 닿은 지지·저항(웹 lib/srSegments 와 같은 규칙) */
+  segment?: boolean;
   title: string;
   /**
    * 자동 범위(가격축)에 넣을지 — 'always'=항상(진입가), 'day'=일봉에서만(지지·저항: 분봉은 변동폭이 작아 캔들이 납작해짐),
@@ -217,10 +221,10 @@ export function priceLines(
 ): ChartLine[] {
   const out: ChartLine[] = [];
   if (coach?.support_price != null) {
-    out.push({ price: coach.support_price, color: SUPPORT_COLOR, width: 1, dashed: true, title: '지지', fit: 'day' });
+    out.push({ price: coach.support_price, color: SUPPORT_COLOR, width: 1, dashed: true, title: '지지', fit: 'day', noLabel: true });
   }
   if (coach?.resistance_price != null) {
-    out.push({ price: coach.resistance_price, color: RESIST_COLOR, width: 1, dashed: true, title: '저항', fit: 'day' });
+    out.push({ price: coach.resistance_price, color: RESIST_COLOR, width: 1, dashed: true, title: '저항', fit: 'day', noLabel: true });
   }
   if (position) {
     out.push({

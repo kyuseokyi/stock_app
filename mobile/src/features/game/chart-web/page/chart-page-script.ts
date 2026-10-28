@@ -38,6 +38,7 @@ let series: LWC.ISeriesApi<'Candlestick'> | null = null;
 let ind: IndSeries | null = null;
 let band: BandFill | null = null;
 let vpPrim: VolumeProfile | null = null;
+let segPrim: SrSegments | null = null;
 let mode: ChartMode | null = null;
 let colors: ChartColors = { up: '#c93a6c', down: '#4f73d9', text: '#8e8aa6', grid: '#f7f5ff', border: '#ebe7f7' };
 let vis = { ma: true, bb: true, vp: false };
@@ -181,6 +182,56 @@ function volumeProfile(pts: Bar[]): VolumeBin[] {
   });
   return buckets.map((v, j) => ({ low: min + j * w, high: min + (j + 1) * w, volume: v }));
 }
+// 몸통이 닿은 지지·저항 — 현재 캔들 앞 SEG_BEFORE 봉 ~ 뒤 SEG_AFTER 봉만 짧은 가로선(축 라벨 없음). 웹 lib/srSegments 와 같은 규칙
+const SEG_BEFORE = 6;
+const SEG_AFTER = 2;
+class SrSegments implements LWC.ISeriesPrimitive<Time> {
+  specs: ChartLine[] = [];
+  private param: LWC.SeriesAttachedParameter<Time> | null = null;
+  private readonly view: LWC.ISeriesPrimitivePaneView;
+
+  constructor() {
+    const renderer: LWC.ISeriesPrimitivePaneRenderer = { draw: (target) => this.draw(target) };
+    this.view = { zOrder: () => 'top', renderer: () => renderer };
+  }
+  attached(p: LWC.SeriesAttachedParameter<Time>) {
+    this.param = p;
+  }
+  detached() {
+    this.param = null;
+  }
+  paneViews() {
+    return [this.view];
+  }
+  update() {
+    this.param?.requestUpdate();
+  }
+  private draw(target: DrawTarget) {
+    const p = this.param;
+    if (!p || this.specs.length === 0) return;
+    const n = p.series.data().length;
+    if (n === 0) return;
+    const ts = p.chart.timeScale();
+    const x0 = ts.logicalToCoordinate(Math.max(0, n - 1 - SEG_BEFORE) as LWC.Logical);
+    const x1 = ts.logicalToCoordinate((n - 1 + SEG_AFTER) as LWC.Logical);
+    if (x0 === null || x1 === null) return;
+    const specs = this.specs;
+    target.useMediaCoordinateSpace(({ context: c }) => {
+      c.lineCap = 'round';
+      specs.forEach((s) => {
+        const y = p.series.priceToCoordinate(s.price);
+        if (y === null) return;
+        c.lineWidth = s.width;
+        c.strokeStyle = s.color;
+        c.beginPath();
+        c.moveTo(x0, y);
+        c.lineTo(x1, y);
+        c.stroke();
+      });
+    });
+  }
+}
+
 class VolumeProfile implements LWC.ISeriesPrimitive<Time> {
   points: Bar[] = [];
   visible = false;
@@ -311,6 +362,8 @@ function create(newMode: ChartMode) {
   lines.bbUpper.attachPrimitive(band);
   vpPrim = new VolumeProfile();
   s.attachPrimitive(vpPrim);
+  segPrim = new SrSegments();
+  s.attachPrimitive(segPrim);
   c.timeScale().subscribeVisibleLogicalRangeChange(onRange);
   priceLines = [];
   applyVis();
@@ -358,13 +411,17 @@ function applyLines() {
   const s = series;
   if (!s) return;
   priceLines.forEach((l) => s.removePriceLine(l));
-  priceLines = lineSpecs.map((spec) =>
+  priceLines = lineSpecs.filter((spec) => !spec.segment).map((spec) =>
     s.createPriceLine({
       price: spec.price, color: spec.color, lineWidth: spec.width,
       lineStyle: spec.dotted ? LW.LineStyle.Dotted : spec.dashed ? LW.LineStyle.Dashed : LW.LineStyle.Solid,
-      axisLabelVisible: true, title: '',
+      axisLabelVisible: !spec.noLabel, title: '',
     }),
   );
+  if (segPrim) {
+    segPrim.specs = lineSpecs.filter((spec) => spec.segment);
+    segPrim.update();
+  }
 }
 
 const handlers: { [K in ChartMessage['type']]: (m: MessageOf<K>) => void } = {
