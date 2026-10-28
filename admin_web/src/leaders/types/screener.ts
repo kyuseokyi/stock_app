@@ -76,4 +76,6 @@ export interface ScreenFilters {
   required: LetterKey[]
   sort: CanslimSort
   liquidOnly: boolean
+  /** 관리자 전용 — 역대(보유 일봉 전체) 최고가의 85% 이상 */
+  nearAth: boolean
 }

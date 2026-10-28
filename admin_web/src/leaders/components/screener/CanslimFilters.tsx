@@ -1,4 +1,4 @@
-// web_client/src/components/screener/CanslimFilters.tsx 복사본 — 원본과 같이 고칠 것
+// web_client/src/components/screener/CanslimFilters.tsx 복사본 — 원본과 같이 고칠 것 (관리자 추가: 역대 신고가 칩)
 import { chipClass } from '../ui/Chip'
 import { LETTER_KEYS, LETTER_NAMES, toggleRequired } from '../../lib/canslim'
 import type { CanslimSort, MarketFilter, ScreenFilters } from '../../types/screener'
@@ -56,6 +56,16 @@ export default function CanslimFilters({ value, onChange }: { value: ScreenFilte
             {LETTER_NAMES[k]}
           </button>
         ))}
+        <span className="mx-1 w-px shrink-0 bg-line" aria-hidden />
+        <button
+          type="button"
+          aria-pressed={value.nearAth}
+          className={chipClass(value.nearAth)}
+          title="종가가 역대 최고가의 85% 이상(보유한 일봉 전체 기준, 약 3년)"
+          onClick={() => set({ nearAth: !value.nearAth })}
+        >
+          역대 신고가
+        </button>
       </ScrollRow>
       <label className="flex min-h-11 cursor-pointer items-center gap-2.5 text-sm text-ink-muted">
         <input type="checkbox" className="h-5 w-5 shrink-0 accent-brand-strong" checked={value.liquidOnly} onChange={(e) => set({ liquidOnly: e.target.checked })} />
