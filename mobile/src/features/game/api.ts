@@ -338,7 +338,8 @@ export const DAILY_HISTORY_QUERY = `query DailyHistory($symbol: String!, $startD
 /** 과거 이어 받기 한 번에 요청하는 달력일 수(약 250거래일) */
 export const HISTORY_PAGE_DAYS = 365;
 
-const LOOKBACK_DAYS = 180;
+// 첫 화면은 180일(chart-bridge DAILY_VISIBLE_DAYS) — 앞쪽 100일(약 70거래일)은 60일선·볼린저 워밍업. 웹 api/stock.ts 와 같은 값
+const LOOKBACK_DAYS = 280;
 const DAY_MS = 86_400_000;
 
 /** beforeDate(YYYY-MM-DD, 제외) 직전 days 달력일의 일봉. 저장된 기간보다 과거면 []. 오류면 throw */
@@ -359,7 +360,7 @@ export async function getDailyCandlesBefore(
 type DailyVars = { symbol: string; startDate: string; endDate: string };
 type DailyResponse = { getChartData: { candles: DailyCandle[] } | null };
 
-/** 최근 약 180일 일봉(lookbackDays 로 늘릴 수 있음 — 종목 상세는 1년 + 50일선 워밍업). GraphQL 오류·빈 응답이면 throw(차트만 오류 표시) */
+/** 최근 약 280일 일봉(지표 워밍업 포함, lookbackDays 로 늘릴 수 있음 — 종목 상세는 1년 + 50일선 워밍업). GraphQL 오류·빈 응답이면 throw(차트만 오류 표시) */
 export async function getDailyCandles(
   ticker: string,
   now: Date = new Date(),
