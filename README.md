@@ -204,7 +204,6 @@ npm run android            # = expo run:android.       실기기: npm run androi
 # (C) EAS 로컬 빌드 — dev/prod 프로필 분리 (모두 --local, 무제한)
 npm run build:android:dev  # eas build --platform android --profile development --local
 npm run build:ios:sim      # iOS 시뮬레이터용 (development-sim 프로필)
-npm run build:android:preview # OTA 테스트용 APK(preview 채널·운영 서버·패키지명 com.stockapp)
 npm run build:android:prod # 상용(app-bundle) / build:ios:prod
 
 # (D) 개발 앱 독립실행형 APK — Metro 없이 실행, 다른 테스트 기기에 설치용(Gradle 로컬 빌드)
