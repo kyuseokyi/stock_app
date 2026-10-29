@@ -82,7 +82,6 @@
     "build:ios:prod": "eas build --platform ios --profile production --local",
     "build:android:dev": "eas build --platform android --profile development --local",
     "build:android:devapk": "bash ./scripts/build-dev-apk.sh",
-    "build:android:preview": "eas build --platform android --profile preview --local",
     "build:android:prod": "eas build --platform android --profile production --local",
     "ota:dev": "bash ./scripts/publish-ota.sh dev",
     "ota:preview": "bash ./scripts/publish-ota.sh preview",

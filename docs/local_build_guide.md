@@ -99,7 +99,6 @@ npm run android:prod
 cd mobile
 npm run build:android:prod        # eas build --platform android --profile production --local  → .aab
 npm run build:android:dev         # (참고) 개발용 APK 를 EAS 로컬 빌드로
-npm run build:android:preview     # (참고) OTA 테스트용 APK — preview 채널(npm run ota:preview 로 발행한 것만 받음)
 ```
 - `eas.json` 프로필: `development`(dev client APK) · `preview`(운영 설정 APK, 내부 배포) · `production`(AAB, 버전 자동 증가 — 원격 버전 기준).
 - `--local` 이라 빌드는 맥에서 하지만 **EAS 로그인(`eas login`)과 프로젝트 연결이 필요**하다. 업로드 키(서명)는 EAS 자격 증명으로 관리.
