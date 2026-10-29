@@ -16,8 +16,12 @@
 # 플랫폼: eas update 기본(--platform all)은 web 까지 export 하는데, web 정적 렌더링(서버에서 화면 그리기)은 Unistyles 테마 설정 전에
 #   StyleSheet.create 가 돌아 실패한다(OTA 대상도 아님) → 앱 플랫폼만 하나씩 발행. OTA_PLATFORMS="android" 처럼 줄일 수 있다.
 #
+# 예약 발행(CodePush --disabled 대응): OTA_STAGE=1 이면 채널 대신 `<채널>-staged` 브랜치에 올린다. 어느 채널도 이 브랜치를
+#   가리키지 않으므로 아무 앱도 받지 않는다. 원하는 때 scripts/activate-ota.sh(npm run ota:<대상>:activate)가 그 번들을 그대로
+#   채널로 재발행(republish)해 활성화한다 — 다시 빌드하지 않으므로 올려 둔 번들과 나가는 번들이 같다.
+#
 # 사용: npm run ota:dev -- "변경 요약"   (ota:preview / ota:prod 도 같음)
-#       DRY_RUN=1 → 확인만 하고 eas 명령은 출력만(파일을 만들지 않음)  ·  YES=1 → 확인 질문 생략
+#       DRY_RUN=1 → 확인만 하고 eas 명령은 출력만(파일을 만들지 않음)  ·  YES=1 → 확인 질문 생략  ·  OTA_STAGE=1 → 예약 발행
 # 값은 출력하지 않는다(키 이름만).
 set -euo pipefail
 
@@ -51,6 +55,17 @@ for p in $OTA_PLATFORMS; do
     *) echo "[ota] ✗ OTA_PLATFORMS 에는 android·ios 만: $p" >&2; exit 1 ;;
   esac
 done
+
+# 발행 대상 — 즉시(채널) 또는 예약(<채널>-staged 브랜치, 어느 채널에도 연결 안 됨)
+OTA_STAGE="${OTA_STAGE:-0}"
+if [ "$OTA_STAGE" = 1 ]; then
+  STAGED_BRANCH="$CHANNEL-staged"
+  DEST_ARGS=(--branch "$STAGED_BRANCH")
+  DEST_DESC="예약 — 브랜치 $STAGED_BRANCH(아무 앱도 받지 않음, 활성화: npm run ota:$TARGET:activate)"
+else
+  DEST_ARGS=(--channel "$CHANNEL")
+  DEST_DESC="즉시 — 채널 $CHANNEL(앱이 다음 확인 때 받음)"
+fi
 TMP=.env.production.local
 LOCALHOST_URL='^EXPO_PUBLIC_[A-Z_]*_URL=https?://(localhost|127\.0\.0\.1|10\.0\.2\.2)([:/]|$)'
 
@@ -102,7 +117,7 @@ if grep -qE "$LOCALHOST_URL" "$MERGED"; then
   exit 1
 fi
 
-echo "[ota] 대상 채널: $CHANNEL"
+echo "[ota] 발행 대상: $DEST_DESC"
 echo "[ota] APP_ENV=$APP_ENV_VALUE${UPDATES_CHANNEL:+ EXPO_UPDATES_CHANNEL=$UPDATES_CHANNEL}"
 echo "[ota] 번들 env: $ENV_DESC"
 echo "[ota] API 주소 키: $(grep -oE '^EXPO_PUBLIC_[A-Z_]*_URL' "$MERGED" | tr '\n' ' ')"
@@ -126,7 +141,7 @@ ENV_ARGS=(APP_ENV="$APP_ENV_VALUE")
 if [ "$DRY_RUN" = 1 ]; then
   [ "$TARGET" = dev ] && echo "[ota] (DRY_RUN) $TMP 생성·적용 후 삭제 — 실제로는 만들지 않음"
   for p in $OTA_PLATFORMS; do
-    echo "[ota] (DRY_RUN) env ${ENV_ARGS[*]} eas update --channel $CHANNEL --environment $EAS_ENV --platform $p --message \"$MESSAGE\""
+    echo "[ota] (DRY_RUN) env ${ENV_ARGS[*]} eas update ${DEST_ARGS[*]} --environment $EAS_ENV --platform $p --message \"$MESSAGE\""
   done
   exit 0
 fi
@@ -143,12 +158,17 @@ if [ "$TARGET" = dev ]; then
   # build-dev-apk.sh 처럼 합친 env 를 프로세스 env 로도 넘긴다 — app.config.js 평가(EAS_PROJECT_ID·GOOGLE_SERVICES_JSON 등)가
   #   빌드 때와 같아야 fingerprint 가 같다.
   for p in $OTA_PLATFORMS; do
-    (set -a; . "./$TMP"; set +a; env "${ENV_ARGS[@]}" "${EAS[@]}" update --channel "$CHANNEL" --environment "$EAS_ENV" --platform "$p" --message "$MESSAGE")
+    (set -a; . "./$TMP"; set +a; env "${ENV_ARGS[@]}" "${EAS[@]}" update "${DEST_ARGS[@]}" --environment "$EAS_ENV" --platform "$p" --message "$MESSAGE")
   done
 else
   for p in $OTA_PLATFORMS; do
-    env "${ENV_ARGS[@]}" "${EAS[@]}" update --channel "$CHANNEL" --environment "$EAS_ENV" --platform "$p" --message "$MESSAGE"
+    env "${ENV_ARGS[@]}" "${EAS[@]}" update "${DEST_ARGS[@]}" --environment "$EAS_ENV" --platform "$p" --message "$MESSAGE"
   done
 fi
 
-echo "[ota] ✓ $CHANNEL 채널 발행 완료"
+if [ "$OTA_STAGE" = 1 ]; then
+  echo "[ota] ✓ $STAGED_BRANCH 브랜치에 예약 발행 완료 — 아직 아무 앱도 받지 않습니다."
+  echo "[ota]   활성화: npm run ota:$TARGET:activate  (그룹 ID 를 주지 않으면 이 브랜치의 플랫폼별 최신 업데이트)"
+else
+  echo "[ota] ✓ $CHANNEL 채널 발행 완료"
+fi
