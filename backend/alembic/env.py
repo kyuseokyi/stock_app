@@ -10,6 +10,7 @@ from alembic import context
 from shared.models import Base
 import shared.game_models  # noqa: F401  (게임 테이블을 Base.metadata 에 등록)
 import shared.market_models  # noqa: F401  (시장 참조 테이블 — 프로필·업종·테마·일정)
+import shared.ai_models  # noqa: F401  (AI 시황 분석 — 모닝 브리핑·종목 정성 분석)
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
