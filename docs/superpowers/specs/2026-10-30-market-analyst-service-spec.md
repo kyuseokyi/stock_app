@@ -145,13 +145,21 @@ CREATE INDEX idx_ai_stock_eval_date ON ai_stock_evaluations (date);
   ```
 
 ### 4.2 네이버 뉴스 검색 클라이언트 (`naver_news.py`)
-* Endpoint: `GET https://openapi.naver.com/v1/search/news.json`
-* Headers:
-  * `X-Naver-Client-Id`: `settings.NAVER_CLIENT_ID`
-  * `X-Naver-Client-Secret`: `settings.NAVER_CLIENT_SECRET`
-* 쿼리 규칙:
+* **신규 규격 (NAVER API HUB, 권장)**:
+  * Endpoint: `GET https://naverapihub.apigw.ntruss.com/naversearch/v1/search/news.json`
+  * Headers:
+    * `X-NCP-APIGW-API-KEY-ID`: `config.naver_search_client_id()` (콘솔의 API Key ID)
+    * `X-NCP-APIGW-API-KEY`: `config.naver_search_client_secret()` (콘솔의 API Key)
+* **레거시 규격 (Developers Open API, 호환 유지)**:
+  * Endpoint: `GET https://openapi.naver.com/v1/search/news.json`
+  * Headers:
+    * `X-Naver-Client-Id` / `X-Naver-Client-Secret`
+* **호환성 처리**:
+  * `NAVER_SEARCH_API_HUB=true` (기본값) 설정 시 최신 NAVER API HUB 규격으로 호출하며, `false` 설정 시 구규격으로 폴백 지원.
+* **쿼리 규칙**:
   * 급등락 원인 검색: `query=f"{stock_name} 특징주"` (sort='date', display=5)
   * 테마/이슈 검색: `query=f"{theme_name} 관련주"` (sort='sim', display=5)
+
 
 ### 4.3 Pydantic 스키마 정의 (`schemas.py`)
 

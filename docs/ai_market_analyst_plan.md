@@ -58,28 +58,33 @@
 [외부 데이터 소스]
   ├─ KIS API (기존)         : 당일 시세, 등락률 순위, 거래대금, 해외 지수
   ├─ FRED API (기존)        : 미 국채금리, CPI, 환율 등 거시지표
-  ├─ Naver Search API (신규): 종목별 실시간 뉴스 검색 (무료 25,000건/일)
+  ├─ pykrx (신규)           : 투자자별(외인/기관/연기금/개인) 일별 순매수 전종목 일괄 수집
+  ├─ NAVER API HUB (신규)   : 네이버 클라우드 플랫폼 신규 검색 API (월 775,000건 무료)
   └─ OpenDART API (신규)    : 공시, 분기보고서, 재무제표 (무료 10,000건/일)
              │
              ▼
 [백엔드 수집 및 AI 파이프라인 (FastAPI + Celery)]
+  ├─ backend/apps/collector/
+  │    └── investor_flow.py       # pykrx 기반 외인/기관/연기금 순매수 랭킹 집계
   ├─ backend/apps/ai_analyst/
   │    ├─ clients/
-  │    │    ├─ gemini_client.py   (Gemini 2.0/1.5 Flash SDK 연동)
-  │    │    ├─ naver_news.py      (네이버 검색 뉴스 API 클라이언트)
+  │    │    ├─ gemini_client.py   (Gemini 2.0/3.8 Flash SDK 연동)
+  │    │    ├─ naver_news.py      (NAVER API HUB 검색 클라이언트, 레거시 폴백 지원)
   │    │    └─ opendart.py        (DART 전자공시 클라이언트)
-  │    ├─ prompts/                (구조화된 JSON 응답 유도 프롬프트)
+  │    ├─ prompts.py              (구조화된 JSON 응답 유도 프롬프트)
+  │    ├─ schemas.py              (Pydantic DTO 스키마)
   │    ├─ services/
-  │    │    ├─ screener_ai.py     (스크리너 통과 종목 정성 분석)
-  │    │    ├─ market_movers_ai.py(급등락 원인 추출)
-  │    │    └─ morning_brief_ai.py(글로벌 시황 분석)
+  │    │    ├─ morning_brief.py   (글로벌 시황 분석)
+  │    │    ├─ market_movers.py   (급등락 원인 추출)
+  │    │    ├─ investor_flow_ai.py(외인/기관 수급 AI 해설)
+  │    │    └─ stock_qualitative.py (스크리너 통과 종목 정성 분석)
   │    └─ tasks.py                (Celery 주기적 스케줄링)
              │
              ▼
 [저장 및 서빙]
-  ├─ Redis           : 실시간 급등락 원인 및 뉴스 매핑 캐시 (TTL 5~15분)
+  ├─ Redis           : 실시간 급등락 원인, 수급 랭킹 및 뉴스 매핑 캐시
   ├─ PostgreSQL      : 일별 모닝 브리핑, 스크리너 AI 평가 결과 영구 보관
-  └─ FastAPI Routers : /api/v1/ai/... (REST 엔드포인트)
+  └─ FastAPI Routers : /api/v1/market/... (REST 엔드포인트)
 ```
 
 ---
@@ -87,10 +92,12 @@
 ## 4. 단계별 구현 로드맵 (Roadmap)
 
 ### Phase 1: 기반 연동 및 외부 API 클라이언트 구축
-- [ ] Google GenAI SDK (`google-genai` 또는 `google-generativeai`) 설치 및 클라이언트 작성
-- [ ] 네이버 검색 API(뉴스) 클라이언트 작성 (`apps/ai_analyst/clients/naver_news.py`)
-- [ ] OpenDART API 클라이언트 작성 (`apps/ai_analyst/clients/opendart.py`)
-- [ ] `.env` 환경변수 키 주입 및 연결 테스트 유닛테스트 작성
+- [x] Google GenAI SDK (`google-genai` 또는 `google-generativeai`) 설치 및 클라이언트 작성
+- [x] 네이버 검색 API(뉴스) 클라이언트 작성 (`apps/ai_analyst/clients/naver_news.py`, NAVER API HUB 규격 지원)
+- [x] OpenDART API 클라이언트 작성 (`apps/ai_analyst/clients/opendart.py`)
+- [x] pykrx 수급 수집기 작성 (`apps/collector/investor_flow.py`)
+- [x] `.env` 환경변수 키 주입 및 연결 테스트 유닛테스트 작성
+
 
 ### Phase 2: AI 분석 코어 서비스 구현 (프롬프트 & JSON 파싱)
 - [ ] Gemini 구조화 출력(`response_mime_type="application/json"`) 기반 Pydantic 스키마 정의

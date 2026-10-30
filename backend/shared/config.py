@@ -35,7 +35,16 @@ def naver_search_client_secret() -> str | None:
     return _env("NAVER_SEARCH_CLIENT_SECRET")
 
 
+def naver_search_use_api_hub() -> bool:
+    """NAVER API HUB(네이버 클라우드 플랫폼 신규 규격) 사용 여부.
+    기본값은 True (NAVER_SEARCH_API_HUB=false 명시 시 구버전 Developers Open API로 폴백).
+    """
+    v = (_env("NAVER_SEARCH_API_HUB") or "true").lower()
+    return v in ("1", "true", "yes", "on")
+
+
 def opendart_api_key() -> str | None:
+
     return _env("OPENDART_API_KEY")
 
 

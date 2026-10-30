@@ -17,7 +17,11 @@ from shared import config
 
 log = logging.getLogger(__name__)
 
-NEWS_URL = "https://openapi.naver.com/v1/search/news.json"
+# 1) NAVER API HUB (네이버 클라우드 플랫폼 신규 통합 규격, https://guide.ncloud-docs.com/docs/apihub-overview)
+API_HUB_NEWS_URL = "https://naverapihub.apigw.ntruss.com/naversearch/v1/search/news.json"
+# 2) 기존 Developers Open API
+OPENAPI_NEWS_URL = "https://openapi.naver.com/v1/search/news.json"
+
 _TIMEOUT = 10.0
 _TAG_RE = re.compile(r"<[^>]+>")
 
@@ -49,19 +53,40 @@ def theme_query(name: str) -> tuple[str, str]:
 
 
 class NaverNewsClient:
-    def __init__(self, client_id: str, client_secret: str, transport: httpx.BaseTransport | None = None):
+    def __init__(
+        self,
+        client_id: str,
+        client_secret: str,
+        *,
+        use_api_hub: bool = False,
+        transport: httpx.BaseTransport | None = None,
+    ):
         self._client_id = client_id
         self._client_secret = client_secret
+        self._use_api_hub = use_api_hub
         self._transport = transport
 
     def search(self, query: str, *, display: int = 5, sort: str = "date") -> list[NewsItem]:
-        headers = {"X-Naver-Client-Id": self._client_id, "X-Naver-Client-Secret": self._client_secret}
+        # NAVER API HUB vs Developers Open API 헤더 및 URL 분기
+        if self._use_api_hub:
+            url = API_HUB_NEWS_URL
+            headers = {
+                "X-NCP-APIGW-API-KEY-ID": self._client_id,
+                "X-NCP-APIGW-API-KEY": self._client_secret,
+            }
+        else:
+            url = OPENAPI_NEWS_URL
+            headers = {
+                "X-Naver-Client-Id": self._client_id,
+                "X-Naver-Client-Secret": self._client_secret,
+            }
         params = {"query": query, "display": display, "sort": sort}
         try:
             with httpx.Client(transport=self._transport, timeout=_TIMEOUT) as c:
-                resp = c.get(NEWS_URL, headers=headers, params=params)
+                resp = c.get(url, headers=headers, params=params)
             resp.raise_for_status()
             items = resp.json().get("items") or []
+
         except httpx.HTTPStatusError as e:
             log.warning("네이버 뉴스 검색 실패 (HTTP %s)", e.response.status_code)
             return []
@@ -86,4 +111,7 @@ def get_naver_news_client() -> NaverNewsClient | None:
     cid, secret = config.naver_search_client_id(), config.naver_search_client_secret()
     if not (cid and secret):
         return None
-    return NaverNewsClient(cid, secret)
+    # NAVER_SEARCH_API_HUB=true 이거나 키 형태에 따라 API HUB 모드 지원
+    use_api_hub = config.naver_search_use_api_hub()
+    return NaverNewsClient(cid, secret, use_api_hub=use_api_hub)
+
