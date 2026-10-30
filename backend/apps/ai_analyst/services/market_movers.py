@@ -174,6 +174,7 @@ def analyze(now: datetime, *, kis_client, session=None, force: bool = False) -> 
         losers=[_to_mover(r, reasons.get(r["ticker"])) for r in losers],
     ).model_dump(exclude={"keywords"})
     cache.put_json(cache.MOVERS_KEY, body, cache.MOVERS_TTL)
+    cache.put_json(cache.MOVERS_LAST_KEY, body, cache.LAST_TTL)
     return {**body, "keywords": cache.get_json(cache.KEYWORDS_KEY) or []}
 
 
@@ -215,15 +216,23 @@ def hot_keywords(movers: dict, *, force: bool = False) -> list[dict]:
         tickers = [t for t in (norm_ticker(x) for x in k.tickers) if t in known]  # 목록 밖 코드는 버린다
         out.append({"keyword": k.keyword, "background": k.background, "tickers": tickers})
     cache.put_json(cache.KEYWORDS_KEY, out, cache.KEYWORDS_TTL)
+    cache.put_json(cache.KEYWORDS_LAST_KEY, out, cache.LAST_TTL)
     return out
 
 
 def get_cached() -> dict:
-    """API 용 — movers 캐시 + keywords 캐시를 계약 모양으로. 없으면 빈 모양."""
-    movers = cache.get_json(cache.MOVERS_KEY) or {}
+    """API 용 — movers 캐시 + keywords 캐시를 계약 모양으로. 없으면 빈 모양.
+
+    today 캐시가 만료됐으면(장 마감 뒤·개장 전) 마지막 성공 결과(last)로 폴백한다 — 화면은 updated_at 으로 시점을 보여 준다.
+    movers·keywords 는 TTL 이 달라 각각 따로 폴백한다.
+    """
+    movers = cache.get_json(cache.MOVERS_KEY) or cache.get_json(cache.MOVERS_LAST_KEY) or {}
+    keywords = cache.get_json(cache.KEYWORDS_KEY)
+    if keywords is None:
+        keywords = cache.get_json(cache.KEYWORDS_LAST_KEY)
     return {
         "updated_at": movers.get("updated_at"),
         "gainers": movers.get("gainers") or [],
         "losers": movers.get("losers") or [],
-        "keywords": cache.get_json(cache.KEYWORDS_KEY) or [],
+        "keywords": keywords or [],
     }

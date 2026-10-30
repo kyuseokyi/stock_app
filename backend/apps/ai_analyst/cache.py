@@ -14,6 +14,10 @@ KEYWORDS_KEY = "ai:market:keywords:today"
 KEYWORDS_TTL = 1800
 INVESTOR_FLOW_KEY = "market:investor_flow:today"
 INVESTOR_FLOW_TTL = 26 * 3600
+# 장 마감 뒤·다음 날 개장 전에도 화면이 비지 않게 — 마지막 성공 결과를 따로 오래 보관(주말·연휴 포함 4일)
+MOVERS_LAST_KEY = "ai:market:movers:last"
+KEYWORDS_LAST_KEY = "ai:market:keywords:last"
+LAST_TTL = 4 * 86400
 
 
 def put_json(key: str, value, ttl: int, *, client=None) -> bool:
