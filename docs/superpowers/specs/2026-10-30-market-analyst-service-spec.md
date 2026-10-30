@@ -146,7 +146,7 @@ CREATE INDEX idx_ai_stock_eval_date ON ai_stock_evaluations (date);
 
 ### 4.2 네이버 뉴스 검색 클라이언트 (`naver_news.py`)
 * **신규 규격 (NAVER API HUB, 권장)**:
-  * Endpoint: `GET https://naverapihub.apigw.ntruss.com/naversearch/v1/search/news.json`
+  * Endpoint: `GET https://naverapihub.apigw.ntruss.com/search/v1/news`
   * Headers:
     * `X-NCP-APIGW-API-KEY-ID`: `config.naver_search_client_id()` (콘솔의 API Key ID)
     * `X-NCP-APIGW-API-KEY`: `config.naver_search_client_secret()` (콘솔의 API Key)

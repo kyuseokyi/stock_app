@@ -18,7 +18,8 @@ from shared import config
 log = logging.getLogger(__name__)
 
 # 1) NAVER API HUB (네이버 클라우드 플랫폼 신규 통합 규격, https://guide.ncloud-docs.com/docs/apihub-overview)
-API_HUB_NEWS_URL = "https://naverapihub.apigw.ntruss.com/naversearch/v1/search/news.json"
+# 공식 문서(api.ncloud-docs.com/docs/naver-api-hub-search-news) 기준 경로 — 2026-10-30 서버에서 200 확인
+API_HUB_NEWS_URL = "https://naverapihub.apigw.ntruss.com/search/v1/news"
 # 2) 기존 Developers Open API
 OPENAPI_NEWS_URL = "https://openapi.naver.com/v1/search/news.json"
 
