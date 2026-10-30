@@ -153,6 +153,12 @@ celery_app.conf.beat_schedule = {
         "task": "ai.collect_investor_flow",
         "schedule": crontab(hour=18, minute=10, day_of_week="mon-fri"),
     },
+    # KRX 로그인(pykrx)이 없으면 KIS investor_daily 폴백인데, 그 적재가 20:30 일일 파이프라인이라 15:45·18:10 은
+    # 전 거래일 숫자다 → 파이프라인 뒤에 한 번 더 모아 당일 숫자로 맞춘다(기준일이 바뀌면 해설도 새로 만든다).
+    "ai-investor-flow-after-pipeline": {
+        "task": "ai.collect_investor_flow",
+        "schedule": crontab(hour=22, minute=0, day_of_week="mon-fri"),
+    },
     # 스크리너 통과 종목 정성 평가(DART·뉴스·Gemini) — 이미 평가한 종목은 건너뛴다
     "ai-screener-evaluation": {
         "task": "ai.evaluate_screener_stocks",

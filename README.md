@@ -653,7 +653,7 @@ cd backend && uv run --with pykrx python -m apps.collector.verify.spot_check --n
   |---|---|---|---|
   | `ai-morning-briefing` | `ai.generate_morning_briefing` | 평일 08:30 | 미국 지수·거시·뉴스 → Gemini → PG `ai_daily_briefings`. 거래일만, 같은 날 이미 있으면 재사용 |
   | `ai-market-movers` | `ai.analyze_market_movers` | 평일 9~15시 10분 간격 | 거래일 09:10~15:30 만 실행(09:00·15:40·15:50 은 skipped). Redis 잠금(9분) → KIS 등락률 순위 → 뉴스 → Gemini → Redis `ai:market:movers:today`(10분)·`ai:market:keywords:today`(30분) + 마지막 결과 `ai:market:*:last`(4일, 장 마감 뒤 화면용) |
-  | `ai-investor-flow-close` / `ai-investor-flow-final` | `ai.collect_investor_flow` | 평일 15:45 / 18:10 | pykrx(→ KIS 폴백) 외국인·기관·연기금 Top 10·쌍끌이 + Gemini 2줄 해설 → Redis `market:investor_flow:today`(26시간). 18:10 은 확정치 갱신, 같은 기준일·출처면 해설 재사용 |
+  | `ai-investor-flow-close` / `ai-investor-flow-final` / `ai-investor-flow-after-pipeline` | `ai.collect_investor_flow` | 평일 15:45 / 18:10 / 22:00 | pykrx(→ KIS 폴백) 외국인·기관·연기금 Top 10·쌍끌이 + Gemini 2줄 해설 → Redis `market:investor_flow:today`(26시간). 18:10 은 확정치 갱신, 같은 기준일·출처면 해설 재사용. 22:00 은 KIS 폴백(KRX 로그인 없음)일 때 20:30 파이프라인이 적재한 당일 숫자로 갱신 |
   | `ai-screener-evaluation` | `ai.evaluate_screener_stocks` | 평일 16:00 | CANSLIM 상위 30종목 DART·뉴스 → Gemini 정성 평가 → PG `ai_stock_evaluations`(이미 평가한 종목 건너뜀) |
 
   수동 실행 예: `uv run celery -A apps.collector.celery_app call ai.generate_morning_briefing`

@@ -64,7 +64,7 @@ def test_include_and_beat_schedule():
     assert "apps.ai_analyst.tasks" in celery_app.conf.include
     beat = celery_app.conf.beat_schedule
     ai = {k: v for k, v in beat.items() if v["task"].startswith("ai.")}
-    assert len(ai) == 5
+    assert len(ai) == 6
     assert {v["task"] for v in ai.values()} == {"ai.generate_morning_briefing", "ai.analyze_market_movers",
                                                  "ai.collect_investor_flow", "ai.evaluate_screener_stocks"}
     brief = beat["ai-morning-briefing"]["schedule"]
@@ -72,9 +72,9 @@ def test_include_and_beat_schedule():
     movers = beat["ai-market-movers"]["schedule"]
     assert movers.minute == set(range(0, 60, 10)) and movers.hour == set(range(9, 16))
     assert movers.day_of_week == {1, 2, 3, 4, 5}
-    flows = sorted((v["schedule"].hour, v["schedule"].minute) for v in ai.values()
+    flows = sorted((min(v["schedule"].hour), min(v["schedule"].minute)) for v in ai.values()
                    if v["task"] == "ai.collect_investor_flow")
-    assert flows == [({15}, {45}), ({18}, {10})]
+    assert flows == [(15, 45), (18, 10), (22, 0)]
     ev = beat["ai-screener-evaluation"]["schedule"]
     assert ev.hour == {16} and ev.minute == {0}
     for name in ("ai.generate_morning_briefing", "ai.analyze_market_movers", "ai.collect_investor_flow",
