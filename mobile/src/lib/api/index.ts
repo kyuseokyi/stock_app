@@ -2,6 +2,7 @@
  * API 계층 진입점. 화면/서비스 코드는 여기서만 가져다 쓴다.
  *  - blogApi / authApi : REST(fetch) 서비스별 인스턴스
  *  - stockRequest      : stock_api GraphQL 요청
+ *  - stockApi          : stock_api REST(시황 AI 브리핑·급등락·수급·히트맵)
  */
 import { ENV } from '@/lib/env';
 
@@ -15,3 +16,6 @@ export const blogApi = createHttpClient(ENV.blogApiUrl);
 
 /** 인증(게스트 로그인 등) REST — 포트 8001 */
 export const authApi = createHttpClient(ENV.authApiUrl);
+
+/** stock_api REST — 포트 8002(GraphQL 과 같은 서버, 주소는 ENV.stockApiUrl) */
+export const stockApi = createHttpClient(ENV.stockApiUrl);

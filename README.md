@@ -170,7 +170,7 @@ npm test                               # 단위 테스트(Vitest, src/**/*.test.
 - API 응답 타입은 `web_client/src/types/`(백엔드 pydantic 스키마 기준)에 있다. 백엔드 응답 스키마를 바꾸면 admin_web 타입과 함께 갱신한다.
 - **메뉴(앱과 동일)**: 홈 `/`(📌 추천 글 `featured=true`) · 커뮤니티 `/community`(→ 첫 게시판, `/boards/:id`·`/posts/:id` 포함) · 게임 `/game` · 내정보 `/me`(로그인 / 닉네임·로그아웃·탈퇴).
   - 데스크톱은 상단 메뉴, 모바일 폭은 하단 고정 탭바(`components/AppNav.tsx`)에 둔다. 게임 주문바는 탭바 바로 위에 붙는다.
-  - 앱 하단 탭 이름도 홈 · 커뮤니티 · 게임 · 내정보로 맞췄다.
+  - 앱 하단 탭은 2026-10-30 부터 홈 · 시황 · 스크리너 · 게임 · 내정보(커뮤니티는 홈의 '커뮤니티 전체 보기' → `/blog`).
   - 설계 문서: `docs/superpowers/specs/2026-10-15-unified-nav-design.md`
 - **게임 탭(`/game`)** 은 trading_game(8003)·stock_api(8002, 일봉 차트)를 호출한다. 실시간 화면을 보려면 auth(8001)·blog(8000)와 함께 두 서비스도 띄운다. `VITE_GAME_API_URL`·`VITE_STOCK_API_URL`은 **선택** 변수 — dev 미설정 시 `http://localhost:8003`·`http://localhost:8002/graphql`, 배포 빌드 미설정이면 게임 탭은 "시즌을 준비하고 있어요"(빌드는 실패하지 않음). trading_game 운영 배포 전까지 필수 목록에 넣지 않는다.
 - **게임 모달(6b)**: 헤더 `🏆 랭킹`(시즌 Top 100·명예의 전당 MBTI 칩, 비로그인 열람) · `🎯 퀘스트`(Q1~Q3 진행률·보상 수령·뱃지) · `🧩 퀴즈`(야간 10초 차트 퀴즈 — KST 15:30 이후·주말엔 주문 패널 위 배너, 관리자 플래그 QUIZ 가 꺼지면 숨김), 5x 🔒 칩 → 아카데미(활성 문항 전부 정답 시 5배 레버리지 해금), 헤더 `🔥 n일 연속` Streak 칩. 백엔드 변경 없음(Phase 5b API). 퀘스트·퀴즈·아카데미는 로그인 필요.
@@ -180,7 +180,7 @@ npm test                               # 단위 테스트(Vitest, src/**/*.test.
 - **앱 리프레시 토큰(앱만)**: 앱 로그인(`/guest` `platform:"app"`, 간편 로그인 `client=app`) 응답에 `refresh_token`·`expires_in`(초)이 추가된다(웹·관리자는 `null`, 기존 그대로). 앱 접근 토큰은 60분(`JWT_APP_EXPIRE_MINUTES`), 리프레시는 30일(`REFRESH_EXPIRE_DAYS`, 갱신마다 새 30일)이며 서버(`refresh_tokens`, 마이그레이션 `d2e3f4a5b6c7`)엔 SHA-256 해시만 저장한다. `POST /api/v1/auth/refresh` {refresh_token} → 새 접근·리프레시 토큰(회전, sid 유지 — 다른 기기 끊김 없음). 이미 쓴 토큰이 30초 안에 다시 오면 다시 회전(앞선 후속 토큰 폐기), 30초가 지나면 탈취로 보고 그 세션의 리프레시 전부 폐기 + 앱 세션 삭제 → 401 `REFRESH_REUSED`. 그 밖 401 코드 `REFRESH_INVALID`·`REFRESH_EXPIRED`·`SESSION_REPLACED`. `POST /api/v1/auth/logout` {refresh_token} 은 그 세션 폐기 + 앱 세션 삭제(항상 204). 인증 401 은 `detail={code,message}` — 만료 `TOKEN_EXPIRED`(앱은 갱신 시도), 그 밖 `TOKEN_INVALID`, 교체 `SESSION_REPLACED`. 게임 WS 는 만료 시 4401 reason `TOKEN_EXPIRED`.
 
 ### 5. 모바일 앱 (Expo / React Native)
-Expo SDK 57 · React Native 0.86 · expo-router(하단 5탭: 홈/커뮤니티/게임/스크리너/내정보 — 스크리너는 시장·테마·업종·일정·주도주·조건검색, 설계 `docs/superpowers/specs/2026-10-20-mobile-screener-design.md` · 주도주·종목 상세 `docs/superpowers/specs/2026-10-21-mobile-leaders-design.md` · 조건검색 `docs/superpowers/specs/2026-10-21-screener-presets-design.md`. 종목 상세 `/stock/[ticker]`(점수표·일봉 차트 50일선·52주 고점·점수 추이)는 주도주·조건검색 목록과 테마·업종 상세의 구성 종목에서 들어간다) · **Unistyles v3**(테마 스타일링) · zustand.
+Expo SDK 57 · React Native 0.86 · expo-router(하단 5탭: 홈/시황/스크리너/게임/내정보 — 시황은 '오늘의 증시' 개요·테마·업종·일정, 스크리너는 주도주·조건검색·패턴, 커뮤니티 목록은 탭 밖 Stack 화면 `app/blog/index.tsx`(홈 '커뮤니티 전체 보기'), 탭 재구성 설계 `docs/superpowers/specs/2026-10-30-mobile-market-tab-design.md` · 스크리너 설계 `docs/superpowers/specs/2026-10-20-mobile-screener-design.md` · 주도주·종목 상세 `docs/superpowers/specs/2026-10-21-mobile-leaders-design.md` · 조건검색 `docs/superpowers/specs/2026-10-21-screener-presets-design.md`. 종목 상세 `/stock/[ticker]`(점수표·일봉 차트 50일선·52주 고점·점수 추이)는 주도주·조건검색 목록과 테마·업종 상세의 구성 종목에서 들어간다) · **Unistyles v3**(테마 스타일링) · zustand.
 > 📦 기기 설치·빌드 종류별(개발용 / 단독 실행 APK / 스토어 배포용) 절차: [`docs/local_build_guide.md`](docs/local_build_guide.md)
 >
 > ⚠️ **Unistyles는 네이티브 코드라 Expo Go에서 실행되지 않습니다.** 반드시 **개발 빌드(dev build)** 로 실행하세요. 스타일 없이 UI 구조만 빠르게 볼 때는 웹(`npm run web`)이 가장 가볍습니다.
@@ -215,7 +215,7 @@ npm run build:android:devapk  # → android/app/build/outputs/apk/release/app-re
   - dev → `StockApp Dev` / `com.stockapp.dev`, prod → `StockApp` / `com.stockapp` (`app.config.js`)
 - **API 주소(MSA 서비스별)**: `EXPO_PUBLIC_STOCK_GRAPHQL_URL`(stock_api :8002/graphql) · `EXPO_PUBLIC_BLOG_API_URL`(blog :8000) · `EXPO_PUBLIC_AUTH_API_URL`(auth :8001). `src/lib/env.ts` 단일 접근점, 통신은 `src/lib/api`(GraphQL+REST). 운영은 Cloudflare Tunnel이 서브도메인별로 라우팅. 실기기 테스트 시 `localhost` → 개발 PC의 LAN IP로 교체.
 - **홈 추천 글(큐레이션)**: 관리자 게시글 목록에서 ⭐ 토글로 "홈 추천"을 켜면(`blog_posts.featured_at`), 모바일 홈 탭에 최근에 켠 순으로 노출된다. API: `GET /api/v1/blogs?featured=true`.
-- **블로그(웹 클라이언트 동일 기능)**: 블로그 탭은 게시판(보드) 선택 + 페이지네이션(`GET /boards`, `GET /blogs?board_id=&page=`), 카드 탭 시 **글 상세**(`app/blog/[id].tsx`)로 이동해 본문 HTML을 **WebView**로 렌더(차트 base64 이미지 포함). 상세에서 **댓글 읽기/쓰기**(`GET/POST /blogs/{id}/comments`, 게시판 `comments_enabled` 게이팅).
+- **블로그(웹 클라이언트 동일 기능)**: 커뮤니티 화면(`app/blog/index.tsx`, 홈 '커뮤니티 전체 보기')은 게시판(보드) 선택 + 페이지네이션(`GET /boards`, `GET /blogs?board_id=&page=`), 카드 탭 시 **글 상세**(`app/blog/[id].tsx`)로 이동해 본문 HTML을 **WebView**로 렌더(차트 base64 이미지 포함). 상세에서 **댓글 읽기/쓰기**(`GET/POST /blogs/{id}/comments`, 게시판 `comments_enabled` 게이팅).
 - **로그인(카카오·네이버)**: 내정보 탭 버튼 → `expo-web-browser` `openAuthSessionAsync`(인앱 브라우저, 네이티브 SDK 미사용) (start 에 `cc` 동봉) → auth 콜백이 `stockapp://auth?code=…`(dev 빌드는 `stockapp-dev://auth`)로 복귀 → `POST /auth/social/exchange {code, code_verifier}`(verifier 는 `startSocialLogin` 지역 변수 — 같은 스킴을 가로챈 앱은 교환 불가. Hermes 에 Web Crypto 가 없어 SHA-256 은 순수 TS `features/auth/pkce.ts`, 난수는 expo-modules-core 네이티브 `uuidv4`(CSPRNG) 기반 `features/auth/verifier.ts`, 새 네이티브 의존성 없음) → 토큰은 `expo-secure-store`, `src/lib/api`가 Bearer 자동 부착 + 401 시 정리(`src/features/auth`). 닉네임 게스트 로그인은 **개발용** — `EXPO_PUBLIC_ENABLE_GUEST_LOGIN`(미설정 시 production 이 아닐 때만 노출).
   - ⚠️ **dev 앱 스킴이 `stockapp` → `stockapp-dev` 로 바뀌었다**(prod 와 같은 기기 공존 시 복귀 링크 충돌 방지). 기존 dev build 는 **1회 재생성** 필요: `npm run prebuild:dev` 후 `npm run android:dev`/`ios:dev`(또는 EAS dev 빌드). Expo Go 는 Unistyles 로 원래 미지원.
   - 에뮬레이터는 auth 콜백이 브라우저에서 열리므로 `adb reverse tcp:8001 tcp:8001` 이 필요하다(기존 목록에 포함).
@@ -581,7 +581,7 @@ cd backend && uv run --with pykrx python -m apps.collector.verify.spot_check --n
 - 보고서 파일은 커밋하지 않는다.
 
 ### 🗺️ 스크리너 탭 — 시장·테마·업종·일정 (스크리너 프로젝트 3)
-설계 `docs/superpowers/specs/2026-10-19-market-dashboard-design.md`. 웹 `/screener/market|themes|sectors|calendar|leaders|finder`(`/screener` → 시장 탭, 비로그인 공개).
+설계 `docs/superpowers/specs/2026-10-19-market-dashboard-design.md`. 웹 `/screener/market|themes|sectors|calendar|leaders|finder`(`/screener` → 시장 탭, 비로그인 공개). 앱은 2026-10-30 부터 이 네 화면이 **시황 탭**(`app/(tabs)/market.tsx`)의 칩으로 옮겨 갔다.
 - **계산**: `collector.compute_market_groups` — 20:30 일일 파이프라인 맨 끝(CANSLIM 뒤). 보통주의 1·5·20일 등락·거래대금(종가×거래량)·시총(종가×상장주식수)을 CH `market_stock_daily`, 테마·업종 단순 평균·대장주·순위를 `market_group_daily` 에 저장. 관리자 테마 보정 API 가 바꿀 때마다 최신 기준일만 다시 계산(`send_task`).
 - **처음 한 번**: 순위 추이·'n일째 상위'용 60거래일 — `uv run celery -A apps.collector.celery_app call collector.backfill_market_groups` (과거 날짜도 현재 테마 소속 기준).
 - **API(stock_api GraphQL)**: `marketOverview`(지수·FRED 거시 — 장중엔 Redis 장중 값을 덧씌워 `MarketIndex.live`·`asOf`, 지수·거시 CH 조회 30초 메모리 캐시, resolver 는 스레드풀 실행), `marketGroups(kind, period, sort, limit, offset)`, `marketTreemap(kind, size, period)`, `marketGroup(kind, id)`, `marketCalendar(start, end, category)`.

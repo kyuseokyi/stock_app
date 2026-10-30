@@ -6,6 +6,7 @@ import { formatIndex } from '@/features/market/format';
 import { usePullRefresh } from '@/hooks/use-pull-refresh';
 import { Chip, ListState } from '@/ui';
 
+import { AI_ANALYSIS_TOP_N } from '../ai-rest';
 import { activeFilterCount, listView } from '../canslim';
 import { FilterSheet } from '../components/filter-sheet';
 import { LeaderRow } from '../components/leader-row';
@@ -61,7 +62,7 @@ export function LeadersSection({ onOpenStock }: { onOpenStock: (ticker: string, 
           }
           renderItem={({ item, index }) => (
             <View style={[styles.item, index === 0 && styles.first, index === lastIndex && styles.last]}>
-              <LeaderRow item={item} onPress={() => onOpenStock(item.ticker, item.name)} />
+              <LeaderRow item={item} onPress={() => onOpenStock(item.ticker, item.name)} aiEnabled={index < AI_ANALYSIS_TOP_N} />
             </View>
           )}
           ItemSeparatorComponent={() => (

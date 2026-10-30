@@ -40,6 +40,9 @@
 | `upSoft` | `#fbd6e4` | `#3d2230` | BUY 버튼·수익 배지 배경 (신규) |
 | `down` | `#4f73d9` | `#8aa4ff` | 하락/손실 글자 = 블루 |
 | `downSoft` | `#d8e3fd` | `#23305a` | SELL 버튼·손실 배지 배경 (신규) |
+| `safe` / `safeSoft` | `#1f8a5b` / `#d9f2e6` | `#74d6a4` / `#1e3a2e` | 상태: 안전(AI 지뢰 CLEAN) 글자/배지 배경 (2026-10-30) |
+| `caution` / `cautionSoft` | `#b4600f` / `#fdebd3` | `#f3b36b` / `#3f2f1b` | 상태: 주의(AI 지뢰 WARNING) 글자/배지 배경 (2026-10-30) |
+| `danger` / `dangerSoft` | `#b3261e` / `#fbdcd8` | `#ff8f80` / `#46231f` | 상태: 위험(AI 지뢰 DANGER) 글자/배지 배경 — 가격 방향 `up`(핑크레드)과 구분되는 벽돌빨강 (2026-10-30) |
 
 > 카드는 모두 `surface`(흰색). 핑크는 포인트에만(BUY·수익 배지 `upSoft`, 상승 글자 `up`, 탭 선택 `accent`) — 핑크 카드 없음. 오늘의 코치·퀴즈 배너(·게임 안내 박스)만 `surfaceBlue`. 칩·입력·드롭다운 트리거는 `fill`, 선택 칩은 `primarySoft`. BUY=`upSoft` 배경+`up` 글자, SELL=`downSoft` 배경+`down` 글자. 하단 탭바 선택 tint=`accent`.
 > 카카오·네이버 버튼은 공급자 가이드 색 유지(토큰 대상 아님).

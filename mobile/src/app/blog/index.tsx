@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, RefreshControl, Text, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StyleSheet } from 'react-native-unistyles';
 
 import { BlogCard } from '@/features/blog/blog-card';
@@ -11,8 +10,9 @@ import { usePullRefresh } from '@/hooks/use-pull-refresh';
 
 const PAGE_SIZE = 10;
 
+/** 커뮤니티 목록 — 하단 탭에서 빠져 루트 Stack 화면(/blog, 헤더 '커뮤니티')이 됐다. 홈의 '커뮤니티 전체 보기'로 들어온다.
+ *  상단 안전 영역은 Stack 헤더가 맡으므로 상단 여백을 따로 주지 않는다 */
 export default function BlogScreen() {
-  const insets = useSafeAreaInsets();
   const { boards, loaded: boardsLoaded, error: boardsError, load: loadBoards } = useBoardStore();
   const [selectedBoardId, setSelectedBoardId] = useState<number | undefined>(undefined);
   const [page, setPage] = useState(1);
@@ -47,7 +47,7 @@ export default function BlogScreen() {
 
   if (boardsError) {
     return (
-      <View style={[styles.center, { paddingTop: insets.top }]}>
+      <View style={styles.center}>
         <Text style={styles.errorTitle}>게시판을 불러오지 못했습니다</Text>
         <Text style={styles.hint}>{boardsError}</Text>
         <Pressable style={styles.retry} onPress={loadBoards}>
@@ -59,7 +59,7 @@ export default function BlogScreen() {
 
   if (!boardsLoaded) {
     return (
-      <View style={[styles.center, { paddingTop: insets.top }]}>
+      <View style={styles.center}>
         <ActivityIndicator />
         <Text style={styles.hint}>게시판을 불러오는 중…</Text>
       </View>
@@ -68,14 +68,14 @@ export default function BlogScreen() {
 
   if (boards.length === 0) {
     return (
-      <View style={[styles.center, { paddingTop: insets.top }]}>
+      <View style={styles.center}>
         <Text style={styles.hint}>게시판이 없습니다</Text>
       </View>
     );
   }
 
   return (
-    <View style={[styles.screen, { paddingTop: insets.top }]}>
+    <View style={styles.screen}>
       <BoardTabs boards={boards} selectedBoardId={selectedBoardId} onSelect={handleSelectBoard} />
 
       {/* 처음 불러올 때만 전체 로딩. 빈 상태·오류도 목록 안에 둬서 당겨서 새로고침이 되게 한다 */}

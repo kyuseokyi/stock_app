@@ -6,6 +6,7 @@
 import * as Application from 'expo-application';
 
 import { detectEnvMismatch, type EnvMismatch } from './env-guard';
+import { deriveStockApiUrl } from './stock-api-url';
 
 const appEnv = process.env.EXPO_PUBLIC_APP_ENV ?? 'development';
 
@@ -49,9 +50,13 @@ const gameApiUrl: string | undefined =
 const guestFlag = process.env.EXPO_PUBLIC_ENABLE_GUEST_LOGIN;
 const enableGuestLogin: boolean = guestFlag ? guestFlag === 'true' : appEnv !== 'production';
 
+const stockGraphqlUrl = process.env.EXPO_PUBLIC_STOCK_GRAPHQL_URL ?? 'http://localhost:8002/graphql';
+
 export const ENV = {
   appEnv,
-  stockGraphqlUrl: process.env.EXPO_PUBLIC_STOCK_GRAPHQL_URL ?? 'http://localhost:8002/graphql',
+  stockGraphqlUrl,
+  /** stock_api REST(시황 AI·히트맵) — GraphQL 주소에서 '/graphql' 을 뗀 값(별도 env 키 없음) */
+  stockApiUrl: deriveStockApiUrl(stockGraphqlUrl),
   blogApiUrl: process.env.EXPO_PUBLIC_BLOG_API_URL ?? 'http://localhost:8000',
   authApiUrl: process.env.EXPO_PUBLIC_AUTH_API_URL ?? 'http://localhost:8001',
   gameApiUrl,

@@ -30,6 +30,13 @@ const lightTheme = {
     upSoft: '#fbd6e4', // BUY 버튼·수익 배지 배경
     down: '#4f73d9', // 하락/손실 글자 = 블루
     downSoft: '#d8e3fd', // SELL 버튼·손실 배지 배경
+    // 상태 의미색(AI 지뢰 감지 뱃지 등) — up/down(가격 방향)과 섞이지 않게 초록·주황·벽돌빨강 계열
+    safe: '#1f8a5b', // 안전(CLEAN) 글자
+    safeSoft: '#d9f2e6', // 안전 배지 배경
+    caution: '#b4600f', // 주의(WARNING) 글자
+    cautionSoft: '#fdebd3', // 주의 배지 배경
+    danger: '#b3261e', // 위험(DANGER) 글자
+    dangerSoft: '#fbdcd8', // 위험 배지 배경
   },
   ...shared,
 };
@@ -51,6 +58,12 @@ const darkTheme = {
     upSoft: '#3d2230',
     down: '#8aa4ff',
     downSoft: '#23305a',
+    safe: '#74d6a4',
+    safeSoft: '#1e3a2e',
+    caution: '#f3b36b',
+    cautionSoft: '#3f2f1b',
+    danger: '#ff8f80',
+    dangerSoft: '#46231f',
   },
   ...shared,
 };

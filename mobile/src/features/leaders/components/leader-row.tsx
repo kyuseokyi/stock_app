@@ -4,10 +4,16 @@ import { StyleSheet } from 'react-native-unistyles';
 import { formatChg, formatIndex } from '@/features/market/format';
 
 import type { CanslimItem } from '../types';
+import { useScreenerAnalysis } from '../use-screener-analysis';
+import { AiAnalysisBlock } from './ai-analysis-block';
 import { LetterBadges } from './letter-badges';
 
-/** 주도주 목록 한 줄 — 점수 상자·종목명/티커·C~M 배지·업종(없으면 시장)·RS·종가·고점 대비. 누르면 onPress */
-export function LeaderRow({ item, onPress }: { item: CanslimItem; onPress: () => void }) {
+/**
+ * 주도주 목록 한 줄 — 점수 상자·종목명/티커·C~M 배지·업종(없으면 시장)·RS·종가·고점 대비. 누르면 onPress.
+ * aiEnabled(목록 상위 N개)면 AI 분석을 불러와 있을 때만 아래에 AI 영역을 붙인다(누르면 자세히 시트 — 행 탭과 분리).
+ */
+export function LeaderRow({ item, onPress, aiEnabled = false }: { item: CanslimItem; onPress: () => void; aiEnabled?: boolean }) {
+  const analysis = useScreenerAnalysis(item.ticker, aiEnabled);
   // 라벨이 자식 글자를 덮으므로 화면 낭독기가 들을 값을 모두 담는다
   const label = [
     `${item.name} ${item.ticker}`,
@@ -20,7 +26,7 @@ export function LeaderRow({ item, onPress }: { item: CanslimItem; onPress: () =>
   ]
     .filter(Boolean)
     .join(', ');
-  return (
+  const row = (
     <Pressable
       style={({ pressed }) => [styles.row, pressed && styles.pressed]}
       onPress={onPress}
@@ -48,6 +54,13 @@ export function LeaderRow({ item, onPress }: { item: CanslimItem; onPress: () =>
         {item.pctFromHigh !== null ? <Text style={styles.meta}>고점 {formatChg(item.pctFromHigh)}</Text> : null}
       </View>
     </Pressable>
+  );
+  if (!analysis) return row;
+  return (
+    <View>
+      {row}
+      <AiAnalysisBlock analysis={analysis} />
+    </View>
   );
 }
 

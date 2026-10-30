@@ -1,4 +1,5 @@
 import { ActivityIndicator, FlatList, Pressable, RefreshControl, Text, View } from 'react-native';
+import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StyleSheet } from 'react-native-unistyles';
 
@@ -9,6 +10,7 @@ import { usePullRefresh } from '@/hooks/use-pull-refresh';
 
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   const { data, loading, error, reload, refresh } = useFeaturedPosts();
   const { refreshing, onRefresh } = usePullRefresh(refresh);
 
@@ -30,7 +32,19 @@ export default function HomeScreen() {
         ]}
         data={data}
         keyExtractor={(item) => String(item.id)}
-        ListHeaderComponent={<Text style={styles.title}>📌 추천 글</Text>}
+        ListHeaderComponent={
+          // 커뮤니티는 하단 탭에서 빠졌으므로 추천 글 헤더 오른쪽에서 전체 목록(/blog)으로 보낸다
+          <View style={styles.header}>
+            <Text style={styles.title}>📌 추천 글</Text>
+            <Pressable
+              onPress={() => router.push('/blog')}
+              hitSlop={8}
+              accessibilityRole="link"
+              accessibilityLabel="커뮤니티 전체 보기">
+              <Text style={styles.moreLink}>커뮤니티 전체 보기 ›</Text>
+            </Pressable>
+          </View>
+        }
         renderItem={({ item }) => <BlogCard post={item} />}
         ItemSeparatorComponent={() => <View style={styles.sep} />}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
@@ -71,11 +85,21 @@ const styles = StyleSheet.create((theme) => ({
     gap: theme.gap(1),
     padding: theme.gap(3),
   },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: theme.gap(1.5),
+  },
   title: {
     fontSize: 20,
     fontWeight: '800',
     color: theme.colors.text,
-    marginBottom: theme.gap(1.5),
+  },
+  moreLink: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: theme.colors.primary,
   },
   hint: {
     fontSize: 14,
