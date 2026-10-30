@@ -93,3 +93,16 @@ def parse_ipo(rows) -> list[dict]:
         if listing:
             events.append({"kind": "listing", "event_date": listing, "ticker": ticker, "name": name, "payload": payload})
     return events
+
+
+def parse_fluctuation(rows) -> list[dict]:
+    """등락률 순위(FHPST01700000) 행 → {ticker,name,price,change_rate,volume,rank}. 숫자 변환 실패 행은 건너뜀."""
+    out: list[dict] = []
+    for r in rows or []:
+        ticker = str(r.get("stck_shrn_iscd") or "").strip()
+        price, rate, vol, rank = _f(r.get("stck_prpr")), _f(r.get("prdy_ctrt")), _f(r.get("acml_vol")), _f(r.get("data_rank"))
+        if not ticker or price is None or rate is None or vol is None or rank is None:
+            continue
+        out.append({"ticker": ticker, "name": str(r.get("hts_kor_isnm") or "").strip(), "price": price,
+                    "change_rate": rate, "volume": int(vol), "rank": int(rank)})
+    return out

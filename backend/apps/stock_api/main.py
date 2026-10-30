@@ -14,6 +14,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from strawberry.fastapi import GraphQLRouter
 
+from apps.ai_analyst.router import ai_router, market_router
 from apps.stock_api.graphql.schema import schema
 from apps.stock_api.routers import market_admin, screener_admin, themes_admin
 from shared.cors import build_allowed_origins
@@ -42,6 +43,10 @@ app.include_router(market_admin.router)
 
 # 스크리너 탭 보이기 스위치(관리자 JWT) — 조건검색·차트 패턴 탭 켜고 끄기(공개 읽기는 GraphQL screenerFeatures)
 app.include_router(screener_admin.router)
+
+# AI 시황(공개 GET) — 모닝 브리핑·급등락 원인·수급·트리맵(/api/v1/market/*), 스크리너 정성 분석(/api/v1/ai/*)
+app.include_router(market_router)
+app.include_router(ai_router)
 
 
 @app.get("/health", tags=["health"])

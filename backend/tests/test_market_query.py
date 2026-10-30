@@ -502,7 +502,7 @@ def test_mobile_leaders_queries_match_schema(monkeypatch):
     assert res.data["canslimScreen"]["items"][0]["letters"] == {k: 1 for k in "canslim"}
     assert res.data["canslimScreen"]["items"][0]["pctFromHigh"] is None
     assert seen == {"market": "KOSDAQ", "min_pass": 3, "required": ["c", "l"], "sort": "rs", "liquid_only": False,
-                    "limit": 50, "offset": 50}
+                    "limit": 50, "offset": 50, "near_ath": False}  # 모바일은 nearAth 미전송 → 기본값 False
 
     monkeypatch.setattr(cq, "score", lambda ticker: None if ticker == "ETF1" else {
         "date": "2026-10-16", "ticker": ticker, "name": "에이", "market": "KOSPI", "sector_name": "전기·전자",

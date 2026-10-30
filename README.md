@@ -452,6 +452,11 @@ uv run pytest tests/test_universe_cooldown.py    # 특정 파일
 | `KIS_RATE_PER_SEC` | collector | `15`(prod) / `8`(vps) | 전종목 수집 KIS 초당 호출 상한 — 모든 스레드 공유, HTTP 요청(J 폴백·재시도 포함)마다 셈(실전 한도 ~20) |
 | `KIS_WORKERS` | collector | `4` | 전종목 수집·백필 병렬 스레드 수(`1`=기존 순차) |
 | `FRED_API_KEY` | collector | (없음) | 미국 거시 지표(FRED, 무료 발급). 없으면 거시 지표 수집만 건너뜀 |
+| `GEMINI_API_KEY` | collector·stock_api(ai_analyst) | (없음) | AI 시황 분석(Gemini). 없으면 AI 태스크가 `skipped`, 화면은 시세만(원인·해설 null) |
+| `GEMINI_MODEL` | collector(ai_analyst) | `gemini-3.8-flash` | Gemini 모델 이름. 스펙의 `gemini-2.0-flash` 는 2026-06-01 지원 종료라 기본값을 바꿈 |
+| `NAVER_SEARCH_CLIENT_ID` / `NAVER_SEARCH_CLIENT_SECRET` | collector(ai_analyst) | (없음) | 네이버 검색(뉴스) Open API — **소셜 로그인 키(`NAVER_CLIENT_*`)와 별개**. 없으면 뉴스 없이 AI 분석 |
+| `OPENDART_API_KEY` | collector(ai_analyst) | (없음) | DART 공시(스크리너 정성 평가 지뢰 탐지). 없으면 공시 없이 평가 |
+| `KRX_ID` / `KRX_PW` | collector(ai_analyst) | (없음) | pykrx 투자자 수급 조회용 KRX 로그인. 없으면 CH `investor_daily`(KIS) 집계로 폴백 — 연기금 없음·기준일이 전 거래일일 수 있음 |
 | `MACRO_SERIES_EXTRA` | collector | (없음) | 추가 FRED 시리즈(쉼표) |
 | `MARKET_INDEX_EXTRA` | collector | (없음) | 추가 미국 대표 종목(쉼표, 기본 NVDA·MU·AAPL·MSFT·TSLA) |
 | `FUNDAMENTALS_Q_CUMULATIVE` | collector | (없음) | CANSLIM C 켜기 — KIS 분기 EPS 가 누적이면 `true`, 단독이면 `false`. 비우면 C 는 '준비 중' |
@@ -637,6 +642,32 @@ cd backend && uv run --with pykrx python -m apps.collector.verify.spot_check --n
   - 기준값은 미국 종목 MarketSurge 화면에 맞춘 값이다. 국내 상·하한가(±30%)·변동성 차이는 반영하지 않았다(실데이터 분포를 보고 조정 예정).
   - 일봉만(주봉 패턴 없음). 과거 날짜 스냅샷이 없어 차트의 베이스 이력은 최신 기준일에서 본 이력이다.
   - 돌파는 장중 고가가 피벗을 넘은 첫 봉(종가 아님, 거래량 조건 없음 — 참고 엔진·MS 와 같음). 돌파 거래량은 지표로만 표시.
+
+### 🤖 AI 시황 분석 (ai_analyst) — 모닝 브리핑·급등락 원인·수급 해설·정성 평가
+설계 `docs/superpowers/specs/2026-10-30-market-analyst-service-spec.md`, 계획 `docs/superpowers/plans/2026-10-30-market-tab-ai-analyst.md`. 코드 `backend/apps/ai_analyst/`(clients·schemas·prompts·repository·cache·services·tasks·router), 수급 수집 `backend/apps/collector/investor_flow.py`.
+- **환경변수**: `GEMINI_API_KEY`·`GEMINI_MODEL`(기본 `gemini-3.8-flash` — `gemini-2.0-flash` 는 2026-06-01 종료)·`NAVER_SEARCH_CLIENT_ID/SECRET`(소셜 로그인 키와 별개, 검색 API 권한 필요)·`OPENDART_API_KEY`·`KRX_ID/KRX_PW`(pykrx 로그인). 위 "주요 환경변수" 표 참고, 이름은 `backend/.env.example`.
+- **키가 없을 때(Graceful Fail)**: 아무것도 깨지지 않는다. 태스크는 `{"skipped": ...}` 로 끝나고, API 는 항상 200 + 빈 값(`brief: null`, 빈 목록 등). Gemini 만 없으면 급등락·수급 숫자는 그대로 나오고 원인·해설만 `null`. 네이버·DART 가 없으면 뉴스·공시 없이 분석. KRX 로그인이 없으면 수급은 KIS 폴백(`source: "kis"`, 연기금 빈 목록). Redis·PG·ClickHouse 장애도 API 는 200 + 빈 값.
+- **Celery 스케줄**(beat, KST, `apps/collector/celery_app.py` 의 `ai-*`):
+
+  | beat 키 | 태스크 | 시각 | 동작 |
+  |---|---|---|---|
+  | `ai-morning-briefing` | `ai.generate_morning_briefing` | 평일 08:30 | 미국 지수·거시·뉴스 → Gemini → PG `ai_daily_briefings`. 거래일만, 같은 날 이미 있으면 재사용 |
+  | `ai-market-movers` | `ai.analyze_market_movers` | 평일 9~15시 10분 간격 | 거래일 09:10~15:30 만 실행(09:00·15:40·15:50 은 skipped). Redis 잠금(9분) → KIS 등락률 순위 → 뉴스 → Gemini → Redis `ai:market:movers:today`(10분)·`ai:market:keywords:today`(30분) + 마지막 결과 `ai:market:*:last`(4일, 장 마감 뒤 화면용) |
+  | `ai-investor-flow-close` / `ai-investor-flow-final` / `ai-investor-flow-after-pipeline` | `ai.collect_investor_flow` | 평일 15:45 / 18:10 / 22:00 | pykrx(→ KIS 폴백) 외국인·기관·연기금 Top 10·쌍끌이 + Gemini 2줄 해설 → Redis `market:investor_flow:today`(26시간). 18:10 은 확정치 갱신, 같은 기준일·출처면 해설 재사용. 22:00 은 KIS 폴백(KRX 로그인 없음)일 때 20:30 파이프라인이 적재한 당일 숫자로 갱신 |
+  | `ai-screener-evaluation` | `ai.evaluate_screener_stocks` | 평일 16:00 | CANSLIM 상위 30종목 DART·뉴스 → Gemini 정성 평가 → PG `ai_stock_evaluations`(이미 평가한 종목 건너뜀) |
+
+  수동 실행 예: `uv run celery -A apps.collector.celery_app call ai.generate_morning_briefing`
+- **REST(stock_api, 공개 GET, `Cache-Control: public, max-age=30`)**:
+  - `GET /api/v1/market/morning-brief` → `{"brief": {...} | null}` (오늘 것, 없으면 최근 1건)
+  - `GET /api/v1/market/movers` → `{"updated_at", "gainers": [...], "losers": [...], "keywords": [...]}` (오늘 캐시가 없으면 마지막 결과 — 화면은 `updated_at` 을 보여 줄 것)
+  - `GET /api/v1/market/investor-flow` → `{"date", "source", "foreign_top", "institution_top", "pension_top", "double_buy", "ai_comment", "updated_at"}`
+  - `GET /api/v1/market/heatmap?kind=sector|theme&size=mcap|value&period=1d|5d|20d` → GraphQL `marketTreemap` 과 같은 결과 `{"date", "groups": [{"id","name","chg","size","stocks":[{"ticker","name","chg","size"}]}]}`. 잘못된 값은 422 `{"detail": {"code", "message"}}`
+  - `GET /api/v1/ai/screener-analysis/{ticker}` → `{"analysis": {...} | null}` (ticker 는 영문·숫자 6자리, 아니면 422)
+- **DB 마이그레이션**: 리비전 `8e2b4c6d1f30`(`ai_daily_briefings`·`ai_stock_evaluations`) — 배포 워크플로(`deploy-server.yml`)의 `alembic upgrade head` 로 적용된다. 배포 후 Celery **beat·워커 재시작**(새 태스크 모듈·beat 엔트리)과 stock_api 재시작(새 라우터).
+- **미검증 항목(실호출 확인 필요)**
+  - KIS 등락률 순위(`FHPST01700000`)의 하락률 정렬 코드 `"1"` — 공식 예제에 없음. 서비스가 등락 방향을 다시 걸러서 틀려도 상승 종목이 하락 목록에 섞이지는 않지만, 하락 목록이 비어 있으면 이 값을 의심.
+  - KIS 투자자 순매수 거래대금(`*_ntby_tr_pbmn`) 단위를 백만원으로 가정(×1,000,000 → 원). 검증 방법은 `apps/collector/investor_flow.py` 주석.
+  - pykrx 순매수 응답 컬럼명(`종목명`·`순매수거래대금`) — 설치본 소스 기준, 컬럼이 없으면 경고 로그 후 KIS 폴백.
 
 ## 🔔 알림 아키텍처
 - **웹(SSE)**: 블로그 서비스의 `GET /api/v1/notifications/stream` 에 EventSource 로 연결 → 새 글 작성 시 Redis pub/sub 로 즉시 토스트 알림.

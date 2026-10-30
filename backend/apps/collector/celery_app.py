@@ -38,6 +38,7 @@ celery_app = Celery(
         "apps.collector.tasks.patterns",
         "apps.collector.tasks.push_sends",
         "apps.collector.tasks.bootstrap",
+        "apps.ai_analyst.tasks",
     ],
 )
 
@@ -130,5 +131,37 @@ celery_app.conf.beat_schedule = {
         "task": "collector.dispatch_scheduled_pushes",
         "schedule": 60.0,
         "options": {"expires": 55},
+    },
+    # ---- AI 시황 분석(apps/ai_analyst/tasks.py) — 키(GEMINI 등)가 없으면 태스크가 skipped 로 바로 끝난다
+    # 모닝 브리핑 — 미국 지수(06:30·07:30)·FRED(08:00) 수집 뒤, 개장 전
+    "ai-morning-briefing": {
+        "task": "ai.generate_morning_briefing",
+        "schedule": crontab(hour=8, minute=30, day_of_week="mon-fri"),
+    },
+    # 급등락 원인 — 10분 간격. 09:10~15:30 밖(09:00·15:40·15:50)·휴장일은 태스크가 거른다. 밀린 실행은 버린다
+    "ai-market-movers": {
+        "task": "ai.analyze_market_movers",
+        "schedule": crontab(minute="*/10", hour="9-15", day_of_week="mon-fri"),
+        "options": {"expires": 540},
+    },
+    # 투자자 수급 — 장 마감 직후 잠정치, 18:10 확정치(pykrx) 갱신
+    "ai-investor-flow-close": {
+        "task": "ai.collect_investor_flow",
+        "schedule": crontab(hour=15, minute=45, day_of_week="mon-fri"),
+    },
+    "ai-investor-flow-final": {
+        "task": "ai.collect_investor_flow",
+        "schedule": crontab(hour=18, minute=10, day_of_week="mon-fri"),
+    },
+    # KRX 로그인(pykrx)이 없으면 KIS investor_daily 폴백인데, 그 적재가 20:30 일일 파이프라인이라 15:45·18:10 은
+    # 전 거래일 숫자다 → 파이프라인 뒤에 한 번 더 모아 당일 숫자로 맞춘다(기준일이 바뀌면 해설도 새로 만든다).
+    "ai-investor-flow-after-pipeline": {
+        "task": "ai.collect_investor_flow",
+        "schedule": crontab(hour=22, minute=0, day_of_week="mon-fri"),
+    },
+    # 스크리너 통과 종목 정성 평가(DART·뉴스·Gemini) — 이미 평가한 종목은 건너뛴다
+    "ai-screener-evaluation": {
+        "task": "ai.evaluate_screener_stocks",
+        "schedule": crontab(hour=16, minute=0, day_of_week="mon-fri"),
     },
 }

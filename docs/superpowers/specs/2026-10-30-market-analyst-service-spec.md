@@ -225,23 +225,30 @@ Prefix: `/api/v1/market` (또는 `/api/v1/ai`)
 
 클로드코드로 작업 시 아래 순서대로 정확하게 진행합니다:
 
-- [ ] **Step 1: 환경변수 및 의존성 추가**
+- [x] **Step 1: 환경변수 및 의존성 추가**
   - `requirements.txt` / `pyproject.toml`에 `google-genai` 또는 `google-generativeai` 추가
   - `shared/config.py`에 `GEMINI_API_KEY`, `NAVER_CLIENT_ID`, `NAVER_CLIENT_SECRET`, `OPENDART_API_KEY` 선언
-- [ ] **Step 2: 외부 API 클라이언트 모듈 작성**
+  - > 구현: `backend/pyproject.toml`(google-genai·pykrx), `backend/shared/config.py` getter 함수 — 네이버 검색은 `NAVER_SEARCH_CLIENT_ID/SECRET` 로 분리, 모델 기본 `gemini-3.8-flash`, `KRX_ID/KRX_PW` 추가([계획](../plans/2026-10-30-market-tab-ai-analyst.md) "조정한 것").
+- [x] **Step 2: 외부 API 클라이언트 모듈 작성**
   - `apps/ai_analyst/clients/gemini_client.py` (비용 최적화된 flash 모델 연결)
   - `apps/ai_analyst/clients/naver_news.py` (네이버 뉴스 검색)
   - `apps/ai_analyst/clients/opendart.py` (DART 전자공시 검색)
-- [ ] **Step 3: Pydantic 스키마 및 프롬프트 정의**
+  - > 구현: `backend/apps/ai_analyst/clients/` 3종(키 없으면 None) + KIS 등락률 순위 `backend/apps/collector/kis/ranking.py`(하락 정렬 코드 실호출 미검증, [계획](../plans/2026-10-30-market-tab-ai-analyst.md)).
+- [x] **Step 3: Pydantic 스키마 및 프롬프트 정의**
   - `apps/ai_analyst/schemas.py`, `apps/ai_analyst/prompts.py`
-- [ ] **Step 4: AI 서비스 레이어 작성**
+  - > 구현: `backend/apps/ai_analyst/schemas.py`·`prompts.py` — 급등락 category 구분자 `|`, API 응답 모양은 [계획](../plans/2026-10-30-market-tab-ai-analyst.md) "API 계약".
+- [x] **Step 4: AI 서비스 레이어 작성**
   - `apps/ai_analyst/services/morning_brief.py`
   - `apps/ai_analyst/services/market_movers.py`
   - `apps/ai_analyst/services/stock_qualitative.py`
-- [ ] **Step 5: DB 마이그레이션 (Alembic)**
+  - > 구현: 위 3개 + 수급 해설 `services/investor_flow_ai.py`, 수급 수집 `backend/apps/collector/investor_flow.py`(pykrx → KIS `investor_daily` 폴백). 급등락은 장 마감 뒤용 `ai:market:*:last`(4일) 폴백 추가([계획](../plans/2026-10-30-market-tab-ai-analyst.md)).
+- [x] **Step 5: DB 마이그레이션 (Alembic)**
   - `ai_daily_briefings`, `ai_stock_evaluations` 테이블 생성 마이그레이션 생성 및 실행
-- [ ] **Step 6: Celery 태스크 및 FastAPI 라우터 등록**
+  - > 구현: `backend/shared/ai_models.py` + 리비전 `8e2b4c6d1f30`(제약 이름 `uq_ai_stock_eval_ticker_date`). 실행은 배포 워크플로의 `alembic upgrade head`(로컬 미실행, [계획](../plans/2026-10-30-market-tab-ai-analyst.md)).
+- [x] **Step 6: Celery 태스크 및 FastAPI 라우터 등록**
   - `apps/ai_analyst/tasks.py`를 Celery beat에 스케줄링
   - `backend/apps/stock_api` 또는 main FastAPI 앱에 라우터 연결
-- [ ] **Step 7: 유닛 테스트 및 Mock 통합 테스트 작성**
+  - > 구현: `backend/apps/ai_analyst/tasks.py`(`ai.*` 4종, beat 5항목 `apps/collector/celery_app.py`, 급등락은 9~15시 10분 beat + 태스크 안에서 09:10~15:30·nx 잠금), `apps/ai_analyst/router.py` → `apps/stock_api/main.py`. heatmap 은 `market_query.treemap` 위임([계획](../plans/2026-10-30-market-tab-ai-analyst.md)).
+- [x] **Step 7: 유닛 테스트 및 Mock 통합 테스트 작성**
   - 외부 API 키가 없을 때도 Graceful Fail 하는지 테스트 검증
+  - > 구현: `backend/tests/test_ai_config.py`·`test_ai_schemas_prompts.py`·`test_ai_repository.py`·`test_ai_services.py`·`test_ai_tasks.py`·`test_ai_router.py`(가짜 클라이언트·fakeredis·sqlite, 실제 외부 호출 0회, [계획](../plans/2026-10-30-market-tab-ai-analyst.md)).

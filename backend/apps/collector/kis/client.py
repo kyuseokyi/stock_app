@@ -35,6 +35,7 @@ TR_OVERSEAS_DAILY = "FHKST03030100"  # 해외주식 종목/지수/환율기간�
 TR_INVESTOR = "FHKST01010900"  # 주식현재가 투자자(최근 약 30거래일)
 TR_FIN_RATIO = "FHKST66430300"  # 국내주식 재무비율(0:년 1:분기)
 TR_IPO = "HHKDB669108C0"  # 예탁원정보(공모주청약일정)
+TR_FLUCTUATION = "FHPST01700000"  # 국내주식 등락률 순위(최대 30건)
 
 _MAX_RETRIES = 5
 _TIMEOUT = 15
@@ -228,6 +229,33 @@ class KISClient:
         url = f"{self.cfg.base_url}/uapi/domestic-stock/v1/finance/financial-ratio"
         params = {"FID_DIV_CLS_CODE": period, "fid_cond_mrkt_div_code": KRX_MARKET_CODE, "fid_input_iscd": ticker}
         return _as_list(self._request_with_retry("get", url, TR_FIN_RATIO, params).get("output"))
+
+    # --- 순위 ---
+    def get_fluctuation_ranking(self, *, descending: bool, market_code: str) -> list[dict]:
+        """등락률 순위 원시 행(output). 파라미터는 KIS 공식 예제 examples_llm/domestic_stock/fluctuation 기준.
+
+        descending=True 면 상승률 순(fid_rank_sort_cls_code="0"), False 면 하락률 순("1").
+        ⚠️ 하락 "1" 은 공식 예제에 없어 실호출로 검증되지 않았다(문서상 0:상승율순 1:하락율순).
+        UN→J 폴백은 상위 `apps.collector.kis.ranking.fetch_fluctuation` 이 담당한다.
+        """
+        url = f"{self.cfg.base_url}/uapi/domestic-stock/v1/ranking/fluctuation"
+        params = {
+            "fid_cond_mrkt_div_code": market_code,
+            "fid_cond_scr_div_code": "20170",
+            "fid_input_iscd": "0000",  # 0000 = 전체
+            "fid_rank_sort_cls_code": "0" if descending else "1",
+            "fid_input_cnt_1": "0",
+            "fid_prc_cls_code": "0",
+            "fid_input_price_1": "",
+            "fid_input_price_2": "",
+            "fid_vol_cnt": "",
+            "fid_trgt_cls_code": "0",
+            "fid_trgt_exls_cls_code": "0",
+            "fid_div_cls_code": "0",
+            "fid_rsfl_rate1": "",
+            "fid_rsfl_rate2": "",
+        }
+        return _as_list(self._request_with_retry("get", url, TR_FLUCTUATION, params).get("output"))
 
     # --- 예탁원 ---
     def get_ipo_schedule(self, from_yyyymmdd: str, to_yyyymmdd: str) -> list[dict]:
