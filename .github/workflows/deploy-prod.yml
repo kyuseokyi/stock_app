@@ -1,0 +1,116 @@
+name: Deploy Prod (상용 — release 태그)
+
+# 개발/상용 분리: main push → 개발 서버(deploy-server.yml·deploy-web.yml, 바뀐 경로만)
+#                 release/vX.Y.Z 태그 push → 상용 서버(이 파일, 백엔드+웹 전체). 문서: docs/deploy/prod-release.md
+#
+# 안전장치(하나라도 빠지면 배포하지 않는다)
+#  1) 저장소 변수 PROD_DEPLOY_ENABLED == 'true' 일 때만 실행 — 상용 서버·러너를 준비하기 전에는 job 이 건너뛰어진다.
+#  2) 러너 라벨 [self-hosted, prod] — 상용 서버에 설치한 러너만 가져간다(개발 러너는 dev 라벨, 문서 1단계).
+#  3) environment: production — GitHub Environment 승인자가 승인해야 시작, 상용 전용 시크릿·변수는 여기에만.
+#  4) 태그 형식 release/vX.Y.Z + 태그 커밋이 main 에 포함돼야 함(main 밖 커밋을 상용에 내보내지 않게).
+# deploy/* 태그(개발 배포 기록, --follow-tags 로 매번 올라감)와 접두사가 달라 개발 배포가 상용을 건드리지 않는다.
+on:
+  push:
+    tags: [ "release/v*" ]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "배포할 release 태그(예: release/v1.2.0) — 이전 태그를 넣으면 그 버전으로 롤백"
+        required: true
+
+concurrency:
+  group: deploy-prod
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy Prod (APIs·Celery·Web)
+    if: vars.PROD_DEPLOY_ENABLED == 'true'
+    runs-on: [ self-hosted, prod ]
+    environment: production
+    env:
+      # 수동 실행이면 입력값, 태그 push 면 태그 이름. 셸에서는 이 env 로만 읽는다(입력값을 스크립트에 직접 끼우지 않음).
+      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+    steps:
+    - name: Validate tag format
+      id: tag
+      run: |
+        if ! [[ "$RELEASE_TAG" =~ ^release/v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+          echo "::error::태그 형식이 release/vX.Y.Z 가 아님: $RELEASE_TAG"
+          exit 1
+        fi
+        # 도커 이미지 태그에는 '/' 를 쓸 수 없다 → v1.2.0
+        echo "image=${RELEASE_TAG#release/}" >> "$GITHUB_OUTPUT"
+
+    - name: Checkout tag
+      uses: actions/checkout@v4
+      with:
+        ref: refs/tags/${{ env.RELEASE_TAG }}
+        fetch-depth: 0
+
+    - name: Tag commit must be on main
+      run: |
+        git fetch --no-tags origin main
+        if ! git merge-base --is-ancestor HEAD origin/main; then
+          echo "::error::$RELEASE_TAG 커밋이 main 에 없음 — main 에 머지된 커밋에만 release 태그를 붙이세요."
+          exit 1
+        fi
+        echo "배포 커밋: $(git rev-parse --short HEAD) ($RELEASE_TAG)"
+
+    - name: Web unit tests (Vitest — 실패하면 배포 중단)
+      run: |
+        # deploy-web.yml 과 같음 — 러너에 Node 가 없어도 되게 node:20-alpine 컨테이너에서, 소스는 읽기 전용.
+        docker run --rm -v "$PWD/web_client:/src:ro" node:20-alpine sh -c \
+          'mkdir /app && cp -r /src/. /app && rm -rf /app/node_modules && cd /app && npm ci --no-audit --no-fund && npm test'
+
+    - name: Load Production Env from Host (fail if missing)
+      run: |
+        # 상용 서버의 호스트 고정 경로 — 개발 서버와 같은 규칙(docs/server_setup.md §3), 값은 상용 서버에만 있다.
+        HOST_ENV=/opt/stock_app/env
+        if [ ! -f "$HOST_ENV/.env.production" ]; then
+          echo "::error::$HOST_ENV/.env.production not found on host. See docs/server_setup.md (§3)."
+          exit 1
+        fi
+        cp "$HOST_ENV/.env.production" backend/.env.production
+        if [ -f "$HOST_ENV/compose.env" ]; then
+          cp "$HOST_ENV/compose.env" .env
+        fi
+
+    - name: Detect deploy mode (Swarm stack 'stock' → 무중단, 없으면 compose)
+      id: mode
+      run: |
+        if [ "$(docker info --format '{{.Swarm.LocalNodeState}}')" = active ] && docker stack ls --format '{{.Name}}' | grep -qx stock; then
+          echo "swarm=true" >> "$GITHUB_OUTPUT"; echo "모드: Swarm(start-first)"
+        else
+          echo "swarm=false" >> "$GITHUB_OUTPUT"; echo "모드: compose"
+        fi
+
+    - name: Deploy backend then web (Swarm, 무중단)
+      if: steps.mode.outputs.swarm == 'true'
+      env:
+        IMAGE_TAG: ${{ steps.tag.outputs.image }}
+      run: |
+        # 백엔드(마이그레이션 포함) 먼저 — 새 웹이 새 API 를 기대할 수 있으므로
+        bash deploy/swarm/deploy.sh backend "$IMAGE_TAG"
+        bash deploy/swarm/deploy.sh web "$IMAGE_TAG"
+
+    - name: Build all images
+      if: steps.mode.outputs.swarm != 'true'
+      run: |
+        docker compose -f docker-compose.prod.yml build \
+          auth_api stock_api blog_api trading_game game_ws celery_worker celery_beat web_client admin_web
+
+    - name: Migrate PostgreSQL schema (alembic upgrade head)
+      if: steps.mode.outputs.swarm != 'true'
+      run: docker compose -f docker-compose.prod.yml run --rm stock_api alembic upgrade head
+
+    - name: Deploy all services
+      if: steps.mode.outputs.swarm != 'true'
+      run: |
+        docker compose -f docker-compose.prod.yml up -d \
+          auth_api stock_api blog_api trading_game game_ws celery_worker celery_beat web_client admin_web
+        echo "✅ 상용 배포 완료: $RELEASE_TAG"
+
+    - name: Cleanup dangling images
+      if: always()
+      run: docker image prune -f
