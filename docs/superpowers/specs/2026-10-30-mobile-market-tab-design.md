@@ -136,3 +136,28 @@
 - [ ] 5개 탭의 너비가 360px 기기(작은 안드로이드)에서도 텍스트 잘림 없이 표시되는지 확인
 - [ ] 토스 파스텔 C안 컬러 토큰(`background`, `surface`, `surfaceBlue`, `up`, `down`, `accent`) 준수 여부
 - [ ] 탭 선택 시 `accent`(핑크 포인트) 하이라이트 정상 작동 확인
+
+---
+
+## 구현 메모(2026-10-30)
+> 설계 본문은 그대로 두고 구현 결과만 적는다. §4 체크리스트는 기기 확인 뒤 체크한다.
+
+**구현 위치**
+* 하단 탭(M1): `mobile/src/app/(tabs)/_layout.tsx` — 홈·시황·스크리너·게임·내정보
+* 시황 탭(M2): `mobile/src/app/(tabs)/market.tsx` + `mobile/src/features/market/*`(REST 클라이언트 `rest.ts`·정규화 `rest-normalize.ts`·`use-rest-resource.ts`, 대시보드 순수 함수 `dashboard.ts`·`treemap.ts`, 컴포넌트 `brief-card`·`index-chip-card`·`heatmap`·`movers-board`·`flow-board`)
+* 주도주 AI 뱃지(M3): `mobile/src/features/leaders/ai-analysis.ts`(정규화·뱃지 문구·캐시·동시성 제한, 순수 함수) · `ai-rest.ts`(`GET /api/v1/ai/screener-analysis/{ticker}`) · `use-screener-analysis.ts` · `components/ai-analysis-block.tsx`(카드 하단 AI 영역 + 자세히 시트) — `leader-row.tsx` 에 연결
+  * 목록 상위 30개만 요청(백엔드 평가 대상과 같은 범위), 동시 4개, 결과(null 포함) 10분 세션 캐시, 실패는 조용히 null(1분 뒤 재시도)
+  * 분석이 없으면 AI 영역을 통째로 숨김. 색은 새 상태 토큰 `safe`·`caution`·`danger`(+`Soft`) — `mobile/unistyles.ts`, `docs/mobile_design_language.md` 표에 추가
+* 차트 패턴(VCP) 결과 뷰(§2.2 ③)는 기존 `features/patterns/components/pattern-row.tsx` 가 이미 단계·피벗·피벗 대비 % 를 보여 줘 이번에 새로 만들지 않음
+
+**스펙과 다르게 한 점**
+* 장운영 뱃지를 2단계가 아닌 3단계(장 전·장중·장 마감)로 표시
+* 히트맵을 카드 안에 넣어 화면 폭보다 약간 좁음
+* 대시보드는 섹션별로 따로 로딩·오류 처리(하나가 실패해도 나머지는 표시)
+* AI 지뢰 뱃지: 뱃지만이 아니라 카드 하단 AI 영역 전체가 자세히 시트를 여는 터치 영역(종목 상세로 가는 행 터치와 분리)
+
+**기기에서 확인할 것**
+* 360px 기기에서 AI 포착 사유 2줄 말줄임·긴 WARNING 사유 뱃지 말줄임
+* 라이트·다크에서 CLEAN(초록)·WARNING(주황)·DANGER(벽돌빨강)가 상승 핑크레드와 헷갈리지 않는지
+* AI 영역 탭 → 시트, 위쪽 행 탭 → 종목 상세가 서로 섞이지 않는지
+* 주도주 목록 진입 시 상단 진행 표시줄이 오래 남지 않는지(최대 30건 요청)
