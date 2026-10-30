@@ -178,15 +178,23 @@
 - [x] admin_web `prose` 스타일 — `@tailwindcss/typography`(0.5.19) 도입으로 에디터/코치 미리보기 제목·목록 스타일 적용 (2026-10-13)
 - [x] 명예의 전당 응답 `season_number` — 웹·모바일 그룹 헤더가 시즌 id 대신 시즌 번호 표기 (2026-10-13)
 - [x] 게스트 로그인 백엔드 게이트 `AUTH_GUEST_ENABLED` — 미설정 시 `APP_ENV=development|test` 에서만 허용, 꺼지면 404. develop 서버는 `true` (2026-10-13)
-- [x] **버그: 차트 삽입 모달 버튼이 글 폼을 submit** — `ChartSnapshotModal` 버튼 7개에 `type="button"` 누락 + 모달이 `BlogEditorPage` `<form>` 내부 렌더 → 수정 화면에서 그리기 도구 클릭 시 글이 저장·이동됨(TS 전환 이전부터 존재, 2026-10-12 스모크에서 발견 → 같은 날 수정·브라우저 재검증)
+### AI 주식 분석 & 글로벌/국내 시황 서비스 (Gemini API 기반)
+> 상세 설계 및 로드맵: [`docs/ai_market_analyst_plan.md`](ai_market_analyst_plan.md)
+- [ ] Phase 1: Gemini 2.0 Flash + Naver 뉴스 검색 API + OpenDART API 클라이언트 구축
+- [ ] Phase 2: 스크리너 정성 분석, 실시간 급등락 원인 추출, 모닝 글로벌 브리핑 코어 엔진
+- [ ] Phase 3: Celery 주기적 스케줄링 및 Redis/DB 캐싱 파이프라인
+- [ ] Phase 4: FastAPI REST API 엔드포인트 (`/api/v1/ai/...`)
+- [ ] Phase 5: 프론트엔드(웹/앱) 시황 및 스크리너 카드 연동
 
 ---
 
 ## 참고 문서
+- **AI 시장 분석 및 글로벌 시황 기획: `docs/ai_market_analyst_plan.md`**
 - **트레이딩 게임 마스터 기획: `docs/trading_game_plan.md`**
 - 아키텍처: `docs/architecture_plan.md`
 - 스크리너 기획: `docs/screener_plan.md`
 - 기능별 프롬프트: `docs/prompts/`
 - AMS 참고 분석: `docs/ams-reference/`
 - 설계 스펙: `docs/superpowers/specs/`
+
 
