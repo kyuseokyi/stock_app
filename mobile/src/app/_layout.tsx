@@ -36,6 +36,8 @@ export default function RootLayout() {
       <StatusBar style="auto" />
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="(tabs)" />
+        {/* 커뮤니티 목록(/blog) — 하단 탭에서 빠져 홈의 '커뮤니티 전체 보기'로 진입. 정적 index 가 동적 [id] 보다 우선 매칭된다 */}
+        <Stack.Screen name="blog/index" options={{ headerShown: true, title: '커뮤니티' }} />
         <Stack.Screen name="blog/[id]" options={{ headerShown: true, title: '글 상세' }} />
         <Stack.Screen name="fund/index" options={{ headerShown: true, title: '내 펀드 수익' }} />
         <Stack.Screen name="fund/[id]" options={{ headerShown: true, title: '펀드 리포트' }} />

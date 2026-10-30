@@ -2,6 +2,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { Tabs } from 'expo-router';
 import { useUnistyles } from 'react-native-unistyles';
 
+/** 하단 탭 5개 — 홈 · 시황 · 스크리너 · 게임 · 내정보(스펙 2026-10-30 §1.2).
+ *  커뮤니티는 탭에서 빠져 홈의 '커뮤니티 전체 보기' → /blog(Stack 화면)로 들어간다 */
 export default function TabsLayout() {
   const { theme } = useUnistyles();
 
@@ -24,10 +26,17 @@ export default function TabsLayout() {
         }}
       />
       <Tabs.Screen
-        name="blog"
+        name="market"
         options={{
-          title: '커뮤니티', // 웹 메뉴와 같은 이름(홈·커뮤니티·게임·내정보) — 라우트는 blog 유지
-          tabBarIcon: ({ color, size }) => <Ionicons name="newspaper-outline" color={color} size={size} />,
+          title: '시황',
+          tabBarIcon: ({ color, size }) => <Ionicons name="pulse-outline" color={color} size={size} />,
+        }}
+      />
+      <Tabs.Screen
+        name="screener"
+        options={{
+          title: '스크리너',
+          tabBarIcon: ({ color, size }) => <Ionicons name="search-outline" color={color} size={size} />,
         }}
       />
       <Tabs.Screen
@@ -37,13 +46,6 @@ export default function TabsLayout() {
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="game-controller-outline" color={color} size={size} />
           ),
-        }}
-      />
-      <Tabs.Screen
-        name="screener"
-        options={{
-          title: '스크리너',
-          tabBarIcon: ({ color, size }) => <Ionicons name="stats-chart-outline" color={color} size={size} />,
         }}
       />
       <Tabs.Screen

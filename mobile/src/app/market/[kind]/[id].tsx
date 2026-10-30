@@ -21,8 +21,8 @@ export default function GroupDetailScreen() {
 
 function NotFound() {
   const router = useRouter();
-  // 딥링크로 들어와 스택이 이 화면뿐이면 back() 이 동작하지 않으므로 스크리너 탭으로 보낸다
-  const goBack = () => (router.canGoBack() ? router.back() : router.replace('/screener'));
+  // 딥링크로 들어와 스택이 이 화면뿐이면 back() 이 동작하지 않으므로 시황 탭으로 보낸다(테마·업종 목록이 시황 탭으로 옮겨 감)
+  const goBack = () => (router.canGoBack() ? router.back() : router.replace('/market'));
   return (
     <View style={styles.center}>
       <ListState mode="empty" emoji="🔍" title="이 그룹 정보를 찾을 수 없어요" hint="목록이 바뀌었을 수 있어요" />
