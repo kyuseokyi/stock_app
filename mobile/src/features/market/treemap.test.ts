@@ -1,4 +1,4 @@
-import { squarify, tileLabelLevel } from './treemap';
+import { fitLabel, squarify, tileLabelLevel } from './treemap';
 
 const rect = { x: 0, y: 0, w: 350, h: 220 };
 const EPS = 1e-6;
@@ -40,5 +40,14 @@ describe('tileLabelLevel', () => {
     expect(tileLabelLevel(80, 20)).toBe(0);
     expect(tileLabelLevel(60, 30)).toBe(1);
     expect(tileLabelLevel(60, 40)).toBe(2);
+  });
+});
+
+describe('fitLabel', () => {
+  it('들어가면 그대로, 안 들어가면 말줄임', () => {
+    expect(fitLabel('반도체', 60)).toBe('반도체');
+    expect(fitLabel('2차전지(소재)', 200)).toBe('2차전지(소재)');
+    expect(fitLabel('전기전자부품', 40)).toBe('전기…');
+    expect(fitLabel('반도체', 5)).toBe('');
   });
 });

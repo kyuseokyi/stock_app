@@ -6,5 +6,6 @@ export { Card } from './card';
 export { Chip } from './chip';
 export { ListRow } from './list-row';
 export { ListState } from './list-state';
+export { SectionHead } from './section-head';
 export { formatPct, formatSignedWon, formatWon } from './format';
 export { AppToaster, showToast, useAppToastStore } from './app-toast';

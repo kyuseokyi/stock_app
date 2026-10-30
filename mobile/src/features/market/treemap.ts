@@ -81,3 +81,23 @@ export function tileLabelLevel(w: number, h: number): 0 | 1 | 2 {
   if (w < 44 || h < 22) return 0;
   return h >= 38 && w >= 52 ? 2 : 1;
 }
+
+/**
+ * SVG 글자는 자동 말줄임이 없어 폭에 맞게 자른다 — 한글 한 자 ≈ fontSize, 영문·숫자 ≈ 0.6×fontSize 로 어림.
+ * 안 들어가면 뒤를 자르고 '…'. 한 자도 안 들어가면 ''.
+ */
+export function fitLabel(text: string, width: number, fontSize = 12): string {
+  const charW = (ch: string) => (/[\u0000-ÿ]/.test(ch) ? 0.6 : 1) * fontSize;
+  const chars = Array.from(text);
+  const total = chars.reduce((a, c) => a + charW(c), 0);
+  if (total <= width) return text;
+  const room = width - charW('…');
+  let used = 0;
+  let out = '';
+  for (const c of chars) {
+    if (used + charW(c) > room) break;
+    used += charW(c);
+    out += c;
+  }
+  return out ? `${out}…` : '';
+}
