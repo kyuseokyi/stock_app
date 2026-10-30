@@ -672,6 +672,7 @@ cd backend && uv run --with pykrx python -m apps.collector.verify.spot_check --n
 |---|---|---|
 | `deploy-server.yml` | `backend/**`, `docker-compose.prod.yml` | auth/stock/blog API + trading_game(8004, `game.haezean.com`)·game_ws(KIS 실시간) + celery worker/beat. 기동 전 `alembic upgrade head` 자동 |
 | `deploy-web.yml` | `web_client/**`, `admin_web/**`, `docker-compose.prod.yml` | web_client(3000) + admin_web(3001) |
+| `deploy-prod.yml` | 태그 `release/vX.Y.Z` push(또는 수동, 태그 입력) | **상용 서버** 백엔드+웹 전체 — 지금은 꺼져 있음(`PROD_DEPLOY_ENABLED`), 상용 서버 준비 절차 [`docs/deploy/prod-release.md`](docs/deploy/prod-release.md) |
 
 - **자동**: `dev → main` 병합 후 push → **변경 경로에 해당하는 워크플로만** 실행(각자 지정 서비스만 `up -d --build`, 나머지 컨테이너·볼륨 보존).
 - **수동**: GitHub **Actions** 탭 → `Deploy Server`/`Deploy Web` → **Run workflow**(Branch `main`), 또는 `gh workflow run deploy-server.yml --ref main`. 수집 시간(매일 20:30)을 피해 배포할 때 사용.

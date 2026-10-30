@@ -11,6 +11,7 @@
 | [`deploy/k8s/base/`](../../deploy/k8s/base) | Kubernetes 공통 정의 (단계 C) |
 | [`deploy/k8s/overlays/dev/`](../../deploy/k8s/overlays/dev) | 내 컴퓨터(k3d) 실습용 |
 | [`deploy/k8s/overlays/prod/`](../../deploy/k8s/overlays/prod) | 상용 클러스터용 (레플리카 2+, 오토스케일) |
+| [`prod-release.md`](prod-release.md) | 상용 배포 — `release/v*` 태그로 개발 서버와 분리(`.github/workflows/deploy-prod.yml`) |
 
 ---
 
