@@ -137,7 +137,12 @@ def evaluate_batch(day: date, *, session: Session, limit: int = CANDIDATE_LIMIT)
     if not cands:
         return {"ok": 0, "skipped": 0, "failed": [], "note": "no_candidates"}
     dart, news = _dart(), _news()
-    done = repository.evaluated_tickers(session, day)
+    try:
+        done = repository.evaluated_tickers(session, day)
+    except Exception as exc:  # noqa: BLE001 — PG 장애면 이번 회차 전체를 건너뛴다
+        log.warning("기존 평가 조회 실패(%s)", type(exc).__name__)
+        session.rollback()
+        return {"skipped": "pg_error"}
     ok, skipped, failed = 0, 0, []
     for c in cands:
         if c["ticker"] in done:
@@ -159,5 +164,10 @@ def evaluate_batch(day: date, *, session: Session, limit: int = CANDIDATE_LIMIT)
 
 
 def get_latest(ticker: str, *, session: Session) -> dict | None:
-    """API 용 — 종목의 가장 최근 정성 평가."""
-    return repository.get_latest_evaluation(session, ticker)
+    """API 용 — 종목의 가장 최근 정성 평가. PG 장애면 None(API 는 200 + 빈 값)."""
+    try:
+        return repository.get_latest_evaluation(session, ticker)
+    except Exception as exc:  # noqa: BLE001
+        log.warning("정성 평가 조회 실패(%s): %s", ticker, type(exc).__name__)
+        session.rollback()
+        return None

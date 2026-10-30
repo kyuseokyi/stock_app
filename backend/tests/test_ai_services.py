@@ -406,3 +406,20 @@ def test_evaluate_batch_skips_done_and_isolates_failure(session, monkeypatch):
 
 def test_evaluate_batch_no_key_skips_everything(session):
     assert sq.evaluate_batch(DAY, session=session) == {"skipped": "no_gemini_key"}  # _screen(_boom) 도 안 부름
+
+
+# ---------------------------------------------------------------- PG 장애
+def test_api_getters_swallow_pg_errors(session, monkeypatch):
+    def pg_down(*a, **k):
+        raise RuntimeError("PG 장애")
+
+    monkeypatch.setattr(repo, "get_briefing", pg_down)
+    monkeypatch.setattr(repo, "get_latest_evaluation", pg_down)
+    monkeypatch.setattr(repo, "evaluated_tickers", pg_down)
+    assert mb.get_latest(DAY, session=session) is None
+    assert sq.get_latest("000001", session=session) is None
+    g = FakeGemini()
+    monkeypatch.setattr(sq, "_gemini", lambda: g)
+    monkeypatch.setattr(sq, "_screen", lambda limit: SCREEN)
+    assert sq.evaluate_batch(DAY, session=session) == {"skipped": "pg_error"}
+    assert g.calls == []

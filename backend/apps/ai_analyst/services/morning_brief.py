@@ -83,7 +83,7 @@ def _us_news():
 def generate(day: date, *, session: Session, force: bool = False) -> dict | None:
     """day 의 브리핑을 만들어 PG 에 저장하고 API 모양 dict 로 반환. 이미 있으면(force 아님) Gemini 없이 그대로."""
     if not force:
-        got = repository.get_briefing(session, day)
+        got = get_latest(day, session=session)
         # get_briefing 은 그날 것이 없으면 이전 최근 1건을 주므로 날짜가 같을 때만 적중
         if got and got.get("date") == day.isoformat():
             return got
@@ -120,5 +120,10 @@ def generate(day: date, *, session: Session, force: bool = False) -> dict | None
 
 
 def get_latest(day: date, *, session: Session) -> dict | None:
-    """API 용 — day 의 브리핑, 없으면 그 이전 최근 1건."""
-    return repository.get_briefing(session, day)
+    """API 용 — day 의 브리핑, 없으면 그 이전 최근 1건. PG 장애면 None(API 는 200 + 빈 값)."""
+    try:
+        return repository.get_briefing(session, day)
+    except Exception as exc:  # noqa: BLE001
+        log.warning("모닝 브리핑 조회 실패(%s)", type(exc).__name__)
+        session.rollback()
+        return None

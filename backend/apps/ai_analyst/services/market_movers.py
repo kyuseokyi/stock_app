@@ -149,6 +149,8 @@ def analyze(now: datetime, *, kis_client, session=None, force: bool = False) -> 
             universe = _universe()
     except Exception as exc:  # noqa: BLE001 — PG 장애
         log.warning("분석 유니버스 조회 실패(%s) — 급등락 갱신 건너뜀", type(exc).__name__)
+        if session is not None:
+            session.rollback()
         return {"skipped": "universe_error"}
     if not universe:
         return {"skipped": "empty_universe"}
