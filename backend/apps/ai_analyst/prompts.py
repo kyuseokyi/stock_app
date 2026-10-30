@@ -102,7 +102,7 @@ def movers_prompt(gainers: Iterable[Mapping], losers: Iterable[Mapping], news_by
     out.append(
         "각 종목마다 급등·급락의 핵심 원인을 30자 내외 1문장으로 요약하라(items 에 위 모든 종목). "
         "ticker·stock_name·change_rate 는 위 값을 그대로 쓴다. "
-        "category 는 수주계약/실적호조/테마수급/경영권/유상증자/악재/단순수급 중 하나, "
+        "category 는 수주계약 | 실적호조 | 테마수급 | 경영권 | 유상증자/악재 | 단순수급 중 하나, "
         "reliability 는 뉴스 실체가 분명하면 상, 정황뿐이면 중, 근거 없으면 하. "
         "단기 추격매수 위험이 있으면 risk_warning 에 쓴다."
     )

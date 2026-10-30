@@ -93,6 +93,7 @@ def test_movers_prompt_limits_news_and_cuts_description():
     assert "제목4" in text and "제목5" not in text  # 최대 5건
     assert "가" * p.DESC_MAX not in text and "…" in text  # 120자로 자름
     assert "(관련 뉴스 없음)" in text  # 베타는 뉴스 없음
+    assert "경영권 | 유상증자/악재 | 단순수급" in text  # 유상증자/악재 는 한 값
 
 
 def test_news_accepts_dicts():
