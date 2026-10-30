@@ -69,3 +69,16 @@ def test_query_helpers():
 
 def test_clean_text_none():
     assert clean_text(None) == ""
+
+
+def test_api_hub_mode_uses_official_path_and_ncp_headers():
+    # 공식 문서(api.ncloud-docs.com/docs/naver-api-hub-search-news): GET /search/v1/news + X-NCP-APIGW-API-KEY(-ID)
+    calls: list[httpx.Request] = []
+    c = NaverNewsClient("cid", "csec", use_api_hub=True, transport=_transport(200, _BODY, calls))
+    assert len(c.search("삼성전자 특징주")) == 1
+    req = calls[0]
+    assert req.url.host == "naverapihub.apigw.ntruss.com"
+    assert req.url.path == "/search/v1/news"
+    assert req.headers["X-NCP-APIGW-API-KEY-ID"] == "cid"
+    assert req.headers["X-NCP-APIGW-API-KEY"] == "csec"
+    assert "X-Naver-Client-Id" not in req.headers
