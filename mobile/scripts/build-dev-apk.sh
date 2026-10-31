@@ -62,7 +62,10 @@ echo "[devapk] ABI: $ABIS"
 #   설정이 다른 기존 데몬을 재사용하지 않게 먼저 멈춘다. 바꾸려면 DEVAPK_JVMARGS 지정.
 JVMARGS="${DEVAPK_JVMARGS:--Xmx4096m -XX:MaxMetaspaceSize=1536m}"
 (cd android && ./gradlew --stop >/dev/null 2>&1 || true)
-(set -a; . "./$TMP"; set +a; cd android && APP_ENV=development ./gradlew assembleRelease \
+# fingerprint(runtimeVersion) 는 expo-updates 의 createReleaseUpdatesResources 가 assets/fingerprint 로 굽는데, 이 태스크는
+#   fingerprint.config.js·package.json 을 입력으로 추적하지 않아 UP-TO-DATE 로 옛 값을 재사용했다(2026-10-31: APK 00c918ae vs OTA 3331277a).
+#   → 매 빌드마다 이 태스크만 다시 실행(--rerun)해 APK 지문이 지금 소스 기준과 같게 한다(ota:dev 가 계산하는 값과 일치).
+(set -a; . "./$TMP"; set +a; cd android && APP_ENV=development ./gradlew :app:createReleaseUpdatesResources --rerun assembleRelease \
   -PreactNativeArchitectures="$ABIS" "-Dorg.gradle.jvmargs=$JVMARGS")
 
 # 푸시 설정이 실제로 들어갔는지 확인(값은 출력하지 않음)
