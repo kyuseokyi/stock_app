@@ -67,13 +67,13 @@ def _pick(rows: list[dict], universe: set[str], *, up: bool) -> list[dict]:
         rate = r.get("change_rate")
         if r.get("ticker") not in universe or rate is None:
             continue
-        # 정렬 코드(특히 하락 "1")가 실호출 미검증이라 방향을 다시 확인한다
+        # 방향 재확인(하락 정렬 "1" 은 2026-11-02 실호출로 확인했지만 방어로 둔다)
         if (up and rate <= 0) or (not up and rate >= 0):
             continue
         out.append(r)
-        if len(out) >= TOP_N:
-            break
-    return out
+    # KIS 응답 순서가 등락률 순이 아니었다(2026-11-02: 1위 +17.99%, 2위 +21.09%) → 직접 정렬 후 자른다
+    out.sort(key=lambda r: r["change_rate"], reverse=up)
+    return out[:TOP_N]
 
 
 def in_session_window(now: datetime) -> bool:
