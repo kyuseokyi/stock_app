@@ -168,7 +168,7 @@ npm test                               # 단위 테스트(Vitest, src/**/*.test.
 > `npm run build`(prod 모드)는 `VITE_API_BASE_URL`·`VITE_AUTH_BASE_URL` 누락 시 실패하므로, 로컬 검증은 `.env.development`를 로드하는 `-- --mode development`로 돌립니다.
 - web_client 는 **TypeScript(strict)** 다. `npm run build` = `tsc --noEmit && vite build` 이므로 타입 에러가 있으면 빌드(및 Docker 배포 빌드)가 실패한다. 타입만 확인하려면 `npx tsc --noEmit`.
 - API 응답 타입은 `web_client/src/types/`(백엔드 pydantic 스키마 기준)에 있다. 백엔드 응답 스키마를 바꾸면 admin_web 타입과 함께 갱신한다.
-- **메뉴(앱과 동일)**: 홈 `/`(📌 추천 글 `featured=true`) · 커뮤니티 `/community`(→ 첫 게시판, `/boards/:id`·`/posts/:id` 포함) · 게임 `/game` · 내정보 `/me`(로그인 / 닉네임·로그아웃·탈퇴).
+- **메뉴**: 홈 `/`(📌 추천 글 `featured=true`) · 마켓 `/market`('오늘의 증시' 개요·테마·업종·일정) · 스크리너 `/screener`(주도주·조건검색·패턴 — 관리자 '종목 찾기' 스위치가 켜졌을 때만 메뉴에 보이고, 꺼져 있으면 주소로 들어와도 `/market` 으로) · 커뮤니티 `/community`(→ 첫 게시판, `/boards/:id`·`/posts/:id` 포함) · 게임 `/game` · 내정보 `/me`(로그인 / 닉네임·로그아웃·탈퇴).
   - 데스크톱은 상단 메뉴, 모바일 폭은 하단 고정 탭바(`components/AppNav.tsx`)에 둔다. 게임 주문바는 탭바 바로 위에 붙는다.
   - 앱 하단 탭은 2026-10-30 부터 홈 · 마켓 · 스크리너 · 게임 · 내정보(커뮤니티는 홈의 '커뮤니티 전체 보기' → `/blog`).
   - 설계 문서: `docs/superpowers/specs/2026-10-15-unified-nav-design.md`
@@ -580,8 +580,8 @@ cd backend && uv run --with pykrx python -m apps.collector.verify.spot_check --n
 - **종료 코드:** 0 이상 없음(경고만) / 1 위반·내부 불일치 또는 내부 점검 실패 / 2 그 날짜 일봉 없음 / 3 KRX 조회 오류가 표본의 과반(외부 비교 신뢰 불가).
 - 보고서 파일은 커밋하지 않는다.
 
-### 🗺️ 스크리너 탭 — 시장·테마·업종·일정 (스크리너 프로젝트 3)
-설계 `docs/superpowers/specs/2026-10-19-market-dashboard-design.md`. 웹 `/screener/market|themes|sectors|calendar|leaders|finder`(`/screener` → 시장 탭, 비로그인 공개). 앱은 2026-10-30 부터 이 네 화면이 **마켓 탭**(`app/(tabs)/market.tsx`)의 칩으로 옮겨 갔다.
+### 🗺️ 마켓 — 시장·테마·업종·일정 (스크리너 프로젝트 3)
+설계 `docs/superpowers/specs/2026-10-19-market-dashboard-design.md`. 웹 `/market`(개요)·`/market/themes`·`/market/sectors`·`/market/calendar`(비로그인 공개) — 옛 주소 `/screener/market|themes|sectors|calendar` 는 쿼리·해시를 유지해 새 주소로 넘어간다. 개요는 GraphQL 에 더해 stock_api REST `/api/v1/market/morning-brief|movers|investor-flow`(AI 장전 브리핑·급등락·수급·핫 키워드)를 쓰며, REST 주소는 `VITE_STOCK_API_URL` 끝의 `/graphql` 을 뗀 값이다(별도 환경변수 없음). 앱은 2026-10-30 부터 이 네 화면이 **마켓 탭**(`app/(tabs)/market.tsx`)의 칩으로 옮겨 갔다.
 - **계산**: `collector.compute_market_groups` — 20:30 일일 파이프라인 맨 끝(CANSLIM 뒤). 보통주의 1·5·20일 등락·거래대금(종가×거래량)·시총(종가×상장주식수)을 CH `market_stock_daily`, 테마·업종 단순 평균·대장주·순위를 `market_group_daily` 에 저장. 관리자 테마 보정 API 가 바꿀 때마다 최신 기준일만 다시 계산(`send_task`).
 - **처음 한 번**: 순위 추이·'n일째 상위'용 60거래일 — `uv run celery -A apps.collector.celery_app call collector.backfill_market_groups` (과거 날짜도 현재 테마 소속 기준).
 - **API(stock_api GraphQL)**: `marketOverview`(지수·FRED 거시 — 장중엔 Redis 장중 값을 덧씌워 `MarketIndex.live`·`asOf`, 지수·거시 CH 조회 30초 메모리 캐시, resolver 는 스레드풀 실행), `marketGroups(kind, period, sort, limit, offset)`, `marketTreemap(kind, size, period)`, `marketGroup(kind, id)`, `marketCalendar(start, end, category)`.

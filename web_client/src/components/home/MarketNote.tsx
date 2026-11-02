@@ -14,7 +14,7 @@ import type { GroupItem, MarketOverview, TreemapGroup } from '../../types/market
 import { Skeleton } from '../ui/Skeleton'
 
 // 홈 '오늘 시장 노트' — 날짜 제목 + 한 줄 요약 + 지수 3 + 주도 테마 3 + 업종 지도 미리보기.
-// 전체는 스크리너 시장 탭. 조각마다 따로 불러 하나가 실패해도 나머지는 보인다.
+// 전체는 마켓(/market). 조각마다 따로 불러 하나가 실패해도 나머지는 보인다.
 function More({ to, label = '더 보기' }: { to: string; label?: string }) {
   return (
     <Link to={to} className="-my-2 inline-flex min-h-11 items-center text-sm font-medium text-brand-strong">
@@ -64,7 +64,7 @@ export default function MarketNote() {
     }
   }, [])
 
-  // 장중 지수 — 시장 탭과 같은 30초 주기·10초 제한·옛 응답 버림
+  // 장중 지수 — 마켓 개요와 같은 30초 주기·10초 제한·옛 응답 버림
   useVisibleInterval(() => {
     if (ovBusy.current) return
     ovBusy.current = true
@@ -144,7 +144,7 @@ export default function MarketNote() {
             <h2 className="text-base font-bold text-ink">
               주도 테마 {closeBasisLabel(date) && <span className="text-xs font-normal text-ink-muted">{closeBasisLabel(date)}</span>}
             </h2>
-            <More to="/screener/themes" />
+            <More to="/market/themes" />
           </div>
           <ol className="divide-y divide-line">
             {themes.map((t) => (
@@ -167,9 +167,9 @@ export default function MarketNote() {
             <h2 className="text-base font-bold text-ink">
               업종 지도 <span className="text-xs font-normal text-ink-muted">면적 = 시가총액{closeBasisLabel(sectorDate) ? ` · ${closeBasisLabel(sectorDate)}` : ''}</span>
             </h2>
-            <More to="/screener/sectors" label="업종 전체" />
+            <More to="/market/sectors" label="업종 전체" />
           </div>
-          <Treemap groups={sectors} period="1d" nested={false} height={180} onGroupSelect={() => navigate('/screener/sectors')} />
+          <Treemap groups={sectors} period="1d" nested={false} height={180} onGroupSelect={() => navigate('/market/sectors')} />
         </Card>
       )}
 
