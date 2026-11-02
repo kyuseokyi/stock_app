@@ -1,4 +1,4 @@
-import { Stack, ThemeProvider } from 'expo-router';
+import { type Href, Stack, ThemeProvider } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
 import { AppState } from 'react-native';
@@ -9,8 +9,21 @@ import { useBackgroundTasks } from '@/features/fund/background/tasks';
 import { useFundAutoRefresh } from '@/features/fund/auto-refresh';
 import { useFundSignal } from '@/features/fund/fund-signal';
 import { usePushSetup } from '@/features/push/handlers';
+import { lastScreenerFeatures } from '@/features/screener/use-screener-features';
+import { stockBackHref } from '@/features/screener/visibility';
 import { useSystemTheme } from '@/hooks/use-system-theme';
-import { ApiProgressBar, AppToaster } from '@/ui';
+import { ApiProgressBar, AppToaster, HeaderBack } from '@/ui';
+
+/** 탭 밖 화면 헤더 — iOS·Android 같은 모양(꺾쇠 + 가운데 제목). fallback: 푸시·딥링크로 바로 열었을 때 돌아갈 곳 */
+function detail(title: string, fallback: Href | (() => Href)) {
+  return {
+    headerShown: true,
+    title,
+    headerTitleAlign: 'center' as const,
+    headerShadowVisible: false,
+    headerLeft: () => <HeaderBack fallback={fallback} />,
+  };
+}
 
 export default function RootLayout() {
   useFundAutoRefresh(); // 실행·복귀 시 등록 펀드 자동 갱신(로그인 상태일 때만)
@@ -37,14 +50,14 @@ export default function RootLayout() {
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="(tabs)" />
         {/* 커뮤니티 목록(/blog) — 하단 탭에서 빠져 홈의 '커뮤니티 전체 보기'로 진입. 정적 index 가 동적 [id] 보다 우선 매칭된다 */}
-        <Stack.Screen name="blog/index" options={{ headerShown: true, title: '커뮤니티' }} />
-        <Stack.Screen name="blog/[id]" options={{ headerShown: true, title: '글 상세' }} />
-        <Stack.Screen name="fund/index" options={{ headerShown: true, title: '내 펀드 수익' }} />
-        <Stack.Screen name="fund/[id]" options={{ headerShown: true, title: '펀드 리포트' }} />
-        <Stack.Screen name="fund/history/[id]" options={{ headerShown: true, title: '수익 히스토리' }} />
-        <Stack.Screen name="fund/backup" options={{ headerShown: true, title: '기록 백업' }} />
-        <Stack.Screen name="market/[kind]/[id]" options={{ headerShown: true, title: '그룹 상세' }} />
-        <Stack.Screen name="stock/[ticker]" options={{ headerShown: true, title: '종목 상세' }} />
+        <Stack.Screen name="blog/index" options={detail('커뮤니티', '/')} />
+        <Stack.Screen name="blog/[id]" options={detail('글 상세', '/blog')} />
+        <Stack.Screen name="fund/index" options={detail('내 펀드 수익', '/profile')} />
+        <Stack.Screen name="fund/[id]" options={detail('펀드 리포트', '/fund')} />
+        <Stack.Screen name="fund/history/[id]" options={detail('수익 히스토리', '/fund')} />
+        <Stack.Screen name="fund/backup" options={detail('기록 백업', '/fund')} />
+        <Stack.Screen name="market/[kind]/[id]" options={detail('그룹 상세', '/market')} />
+        <Stack.Screen name="stock/[ticker]" options={detail('종목 상세', () => stockBackHref(lastScreenerFeatures()))} />
       </Stack>
       <AppToaster />
       <ApiProgressBar />

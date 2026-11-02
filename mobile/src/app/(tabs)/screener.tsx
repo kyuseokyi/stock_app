@@ -55,7 +55,7 @@ export default function ScreenerScreen() {
 
 const styles = StyleSheet.create((theme) => ({
   screen: { flex: 1, backgroundColor: theme.colors.background },
-  chipsBar: { flexGrow: 0 },
+  chipsBar: { flexGrow: 0, flexShrink: 0 }, // ScrollView 기본 flexShrink:1 — 아래 본문이 길면 칩 줄이 눌려 글자가 잘렸다
   chips: { gap: theme.gap(1), paddingHorizontal: theme.gap(2), paddingVertical: theme.gap(1.5) },
   chipsGap: { height: theme.gap(1.5) }, // 칩 줄이 숨겨졌을 때 안내 문구가 상단에 붙지 않게
 }));

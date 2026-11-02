@@ -11,6 +11,11 @@ let last: ScreenerFeatures | null = null;
 /** 관리자가 켜고 끄는 스크리너 스위치(종목 찾기 전체·조건검색·차트 패턴). 화면에 들어올 때(포커스)마다 다시 물어
  *  관리자 변경이 앱 재시작 없이 반영된다. null = 아직 한 번도 답을 못 받음(로딩).
  *  첫 요청이 실패하면 모두 꺼짐(HIDDEN)으로 확정한다(숨김 쪽이 안전). 재요청 실패는 마지막 값을 유지. */
+/** 마지막으로 받은 스위치 값(없으면 null) — 훅을 쓸 수 없는 곳(헤더 버튼의 누를 때 판정)에서 읽는다 */
+export function lastScreenerFeatures(): ScreenerFeatures | null {
+  return last;
+}
+
 export function useScreenerFeaturesState(): ScreenerFeatures | null {
   const [features, setFeatures] = useState<ScreenerFeatures | null>(last);
   useFocusEffect(
