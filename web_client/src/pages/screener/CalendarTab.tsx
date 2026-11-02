@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Card from '../../components/ui/Card'
 import { chipClass } from '../../components/ui/Chip'
 import EmptyState from '../../components/ui/EmptyState'
 import EventList from '../../components/market/EventList'
 import { getMarketCalendar } from '../../api/market'
+import { useReturnRefresh } from '../../hooks/useReturnRefresh'
 import { kstDateString } from '../../lib/format'
 import type { CalendarEvent } from '../../types/market'
 import PageHeader from '../../components/ui/PageHeader'
@@ -24,9 +25,12 @@ export default function CalendarTab() {
   const [events, setEvents] = useState<CalendarEvent[]>([])
   const [state, setState] = useState<'loading' | 'ready' | 'failed'>('loading')
   const [showPast, setShowPast] = useState(false)
+  const fetchedAt = useRef<number | null>(null) // 마지막 조회가 끝난 시각(복귀 재조회 판정용)
+  const loadSeq = useRef(0) // 분류가 바뀌면 진행 중인 복귀 재조회 응답을 버린다
 
   useEffect(() => {
     let cancelled = false
+    loadSeq.current += 1
     setState('loading')
     getMarketCalendar(shift(today, -7), shift(today, 60), category)
       .then((e) => {
@@ -35,10 +39,26 @@ export default function CalendarTab() {
         setState('ready')
       })
       .catch(() => !cancelled && setState('failed'))
+      .finally(() => {
+        fetchedAt.current = Date.now()
+      })
     return () => {
       cancelled = true
     }
   }, [category, today])
+
+  // 일정은 하루 두 번 바뀐다 — 타이머 없이 탭 복귀 때 마지막 조회 후 10분이 지났으면 1회만 조용히 다시 받는다
+  useReturnRefresh(async () => {
+    const seq = loadSeq.current
+    try {
+      const e = await getMarketCalendar(shift(today, -7), shift(today, 60), category)
+      if (seq !== loadSeq.current) return
+      setEvents(e)
+      setState('ready')
+    } finally {
+      fetchedAt.current = Date.now()
+    }
+  }, fetchedAt)
 
   const past = events.filter((e) => e.date < today)
   const upcoming = events.filter((e) => e.date >= today)

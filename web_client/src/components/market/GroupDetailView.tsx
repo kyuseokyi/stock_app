@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { getMarketGroup } from '../../api/market'
-import { formatAmount, formatPct, formatPrice, pnlClass } from '../../lib/format'
+import { closeBasisLabel, formatAmount, formatPct, formatPrice, pnlClass } from '../../lib/format'
 import { THEME } from '../../lib/themeColors'
 import type { GroupDetail, GroupKind } from '../../types/market'
 
@@ -47,7 +47,8 @@ function Stat({ label, value, cls = 'text-ink' }: { label: string; value: string
 const pct = (n: number | null) => (n == null ? '—' : formatPct(n))
 
 // 테마·업종 상세 — 헤더(1·5·20일·거래대금·시총), 순위 추이, 구성 종목(대장주·편입 사유). 종목 → 주도주 분석.
-export default function GroupDetailView({ kind, id }: { kind: GroupKind; id: string }) {
+// asOf: 목록의 기준일 — 복귀 재조회로 기준일이 바뀌면 상세도 다시 받는다.
+export default function GroupDetailView({ kind, id, asOf }: { kind: GroupKind; id: string; asOf?: string | null }) {
   const [data, setData] = useState<GroupDetail | null>(null)
   const [state, setState] = useState<'loading' | 'ready' | 'none' | 'failed'>('loading')
 
@@ -64,7 +65,7 @@ export default function GroupDetailView({ kind, id }: { kind: GroupKind; id: str
     return () => {
       cancelled = true
     }
-  }, [kind, id])
+  }, [kind, id, asOf])
 
   if (state === 'loading') return <p className="py-8 text-center text-sm text-ink-muted">불러오는 중…</p>
   if (state === 'failed') return <p className="py-8 text-center text-sm text-ink-muted">상세를 불러오지 못했어요</p>
@@ -75,8 +76,9 @@ export default function GroupDetailView({ kind, id }: { kind: GroupKind; id: str
       <div>
         <div className="flex items-baseline justify-between gap-2">
           <h2 className="truncate text-lg font-bold text-ink">{data.name}</h2>
-          {data.rank > 0 && <span className="shrink-0 text-sm text-ink-muted">오늘 {data.rank}위</span>}
+          {data.rank > 0 && <span className="shrink-0 text-sm text-ink-muted">{data.rank}위</span>}
         </div>
+        {closeBasisLabel(data.date) && <p className="mt-0.5 text-xs text-ink-muted">{closeBasisLabel(data.date)}</p>}
         {data.description && <p className="mt-0.5 text-sm text-ink-muted">{data.description}</p>}
       </div>
       <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">

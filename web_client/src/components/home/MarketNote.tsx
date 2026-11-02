@@ -5,9 +5,10 @@ import BasisNote from '../market/BasisNote'
 import { IndexCards } from '../market/IndexCards'
 import Treemap from '../market/Treemap'
 import { getMarketGroups, getMarketOverview, getMarketTreemap } from '../../api/market'
+import { useReturnRefresh } from '../../hooks/useReturnRefresh'
 import { useVisibleInterval } from '../../hooks/useVisibleInterval'
 import { MARKET_REFRESH_MS, MARKET_REQUEST_TIMEOUT_MS } from '../../lib/marketLive'
-import { formatPct, pnlClass } from '../../lib/format'
+import { closeBasisLabel, formatPct, pnlClass } from '../../lib/format'
 import { noteIndices, noteSummary, noteTitle } from '../../lib/marketSummary'
 import type { GroupItem, MarketOverview, TreemapGroup } from '../../types/market'
 import { Skeleton } from '../ui/Skeleton'
@@ -28,9 +29,13 @@ export default function MarketNote() {
   const [themes, setThemes] = useState<GroupItem[]>([])
   const [sectors, setSectors] = useState<TreemapGroup[]>([])
   const [date, setDate] = useState<string | null>(null)
+  const [sectorDate, setSectorDate] = useState<string | null>(null)
   const [state, setState] = useState<'loading' | 'ready'>('loading')
   const ovSeq = useRef(0)
   const ovBusy = useRef(false)
+  // 테마·업종 지도를 마지막으로 받은 시각, 지금 보여 주는 지도의 기준일(복귀 재조회 판정용)
+  const dailyFetchedAt = useRef<number | null>(null)
+  const shownSectorDate = useRef<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -40,13 +45,18 @@ export default function MarketNote() {
       getMarketGroups('theme', '1d', 'chg', 0, 3),
       getMarketTreemap('sector', 'mcap', '1d'),
     ]).then(([ov, th, tm]) => {
+      dailyFetchedAt.current = Date.now()
       if (cancelled) return
       if (ov.status === 'fulfilled' && ovId === ovSeq.current) setOverview(ov.value)
       if (th.status === 'fulfilled') {
         setThemes(th.value.items)
         setDate(th.value.date)
       }
-      if (tm.status === 'fulfilled') setSectors(tm.value.groups)
+      if (tm.status === 'fulfilled') {
+        setSectors(tm.value.groups)
+        setSectorDate(tm.value.date)
+        shownSectorDate.current = tm.value.date
+      }
       setState('ready')
     })
     return () => {
@@ -69,6 +79,25 @@ export default function MarketNote() {
       })
   }, MARKET_REFRESH_MS, state === 'ready', { runOnVisible: true })
 
+  // 테마·업종 지도는 저녁에 한 번 바뀐다 — 타이머 없이 탭 복귀 때 마지막 조회 후 10분이 지났으면 1회만, 실패한 조각은 이전 값 유지.
+  // 지도는 기준일이 바뀔 때만 교체한다(교체하면 들어가 있던 종목 보기가 풀린다)
+  useReturnRefresh(async () => {
+    const [th, tm] = await Promise.allSettled([
+      getMarketGroups('theme', '1d', 'chg', 0, 3),
+      getMarketTreemap('sector', 'mcap', '1d'),
+    ])
+    dailyFetchedAt.current = Date.now()
+    if (th.status === 'fulfilled') {
+      setThemes(th.value.items)
+      setDate(th.value.date)
+    }
+    if (tm.status === 'fulfilled' && tm.value.date !== shownSectorDate.current) {
+      setSectors(tm.value.groups)
+      setSectorDate(tm.value.date)
+      shownSectorDate.current = tm.value.date
+    }
+  }, dailyFetchedAt)
+
   if (state === 'loading') {
     // 높이는 실제 화면 측정값(제목 84/60 · 지수 136 · 테마 230 · 업종 지도 248 · 안내 32/16)
     return (
@@ -78,6 +107,7 @@ export default function MarketNote() {
           <Skeleton className="h-8 w-56" />
           <Skeleton className="mt-2 h-5 w-full sm:w-3/4" />
         </div>
+        <div className="h-4" />
         <div className="grid grid-cols-3 gap-2">
           {[0, 1, 2].map((i) => <Skeleton key={i} className="h-[136px] rounded-card" />)}
         </div>
@@ -104,12 +134,16 @@ export default function MarketNote() {
         )}
       </header>
 
+      <p className="text-xs text-ink-muted">ⓘ 실시간 시세가 아니어서 실제 값과 차이가 있을 수 있어요</p>
+
       {trio.length > 0 && <IndexCards indices={trio} gridClass="grid-cols-3" />}
 
       {themes.length > 0 && (
         <Card>
           <div className="flex items-center justify-between">
-            <h2 className="text-base font-bold text-ink">주도 테마</h2>
+            <h2 className="text-base font-bold text-ink">
+              주도 테마 {closeBasisLabel(date) && <span className="text-xs font-normal text-ink-muted">{closeBasisLabel(date)}</span>}
+            </h2>
             <More to="/screener/themes" />
           </div>
           <ol className="divide-y divide-line">
@@ -131,7 +165,7 @@ export default function MarketNote() {
         <Card>
           <div className="mb-2 flex items-center justify-between">
             <h2 className="text-base font-bold text-ink">
-              업종 지도 <span className="text-xs font-normal text-ink-muted">면적 = 시가총액</span>
+              업종 지도 <span className="text-xs font-normal text-ink-muted">면적 = 시가총액{closeBasisLabel(sectorDate) ? ` · ${closeBasisLabel(sectorDate)}` : ''}</span>
             </h2>
             <More to="/screener/sectors" label="업종 전체" />
           </div>

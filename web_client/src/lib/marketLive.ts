@@ -6,12 +6,24 @@ export const MARKET_REFRESH_MS = 30_000
 /** 자동 새로고침 요청 제한 시간 — 응답 없이 멈춘 요청이 다음 주기를 막지 않게 */
 export const MARKET_REQUEST_TIMEOUT_MS = 10_000
 
+/** 복귀 재조회 기준 — 하루 몇 번만 바뀌는 데이터(테마·업종·일정)는 마지막 조회 후 이만큼 지나야 다시 받는다 */
+export const RETURN_REFRESH_MS = 600_000
+
 /**
  * 탭이 다시 보일 때 즉시 갱신할지 — 마지막 실행 후 주기 이상 지났을 때만(탭을 빠르게 오갈 때 중복 방지).
  * 한 번도 안 돌았거나 시계가 거꾸로 갔으면 즉시.
  */
 export function shouldRefreshNow(lastAt: number | null, now: number, ms = MARKET_REFRESH_MS): boolean {
   return lastAt == null || now < lastAt || now - lastAt >= ms
+}
+
+/**
+ * 탭 복귀 때 다시 조회할지 — 마지막 조회 후 ms 이상 지났을 때만.
+ * 아직 조회한 적이 없으면(첫 진입, 첫 로딩이 진행 중) 중복을 막으려 false. 시계가 거꾸로 갔으면 true.
+ */
+export function shouldRefetchOnReturn(lastFetchedAt: number | null, now: number, ms = RETURN_REFRESH_MS): boolean {
+  if (lastFetchedAt == null) return false
+  return now < lastFetchedAt || now - lastFetchedAt >= ms
 }
 
 /** 지수 카드 날짜 자리 — 장중이면 '장중 14:32'(live, 화면엔 좁은 폭을 위해 짧은 label '14:32' — 앞의 ● 는 화면에서 aria-hidden 으로 붙인다), 국내 확정이면 없음, 해외·환율은 M/D(기존 표기) */

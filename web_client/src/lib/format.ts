@@ -59,6 +59,13 @@ export function daysUntil(endIso: string | null, now: Date = new Date()): number
   return Math.max(0, Math.round((end - today) / DAY_MS))
 }
 
+/** 'YYYY-MM-DD' → '10/22 종가 기준'. 날짜가 없으면 null, 모양이 다르면 받은 그대로 + 문구 */
+export function closeBasisLabel(date: string | null | undefined): string | null {
+  if (!date) return null
+  const m = /^\d{4}-(\d{2})-(\d{2})/.exec(date)
+  return `${m ? `${Number(m[1])}/${Number(m[2])}` : date} 종가 기준`
+}
+
 const DOW = ['일', '월', '화', '수', '목', '금', '토']
 
 /** ISO 시각 → KST "10/12(월) 09:00" (브라우저 시간대 무관) */

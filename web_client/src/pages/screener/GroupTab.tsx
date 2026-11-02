@@ -8,6 +8,8 @@ import GroupList from '../../components/market/GroupList'
 import Treemap from '../../components/market/Treemap'
 import { GROUP_PAGE, getMarketGroups, getMarketTreemap } from '../../api/market'
 import { useMediaQuery } from '../../hooks/useMediaQuery'
+import { useReturnRefresh } from '../../hooks/useReturnRefresh'
+import { closeBasisLabel } from '../../lib/format'
 import type { GroupItem, GroupKind, TreemapGroup } from '../../types/market'
 import PageHeader from '../../components/ui/PageHeader'
 import { ListSkeleton } from '../../components/ui/Skeleton'
@@ -40,6 +42,8 @@ export default function GroupTab({ kind }: { kind: GroupKind }) {
   const [loadingMore, setLoadingMore] = useState(false)
   const [selected, setSelected] = useState<string | null>(null)
   const detailRef = useRef<HTMLDivElement>(null)
+  const fetchedAt = useRef<number | null>(null) // 마지막 조회가 끝난 시각(복귀 재조회 판정용)
+  const loadSeq = useRef(0) // 조건이 바뀌면 진행 중인 복귀 재조회 응답을 버린다
 
   // 좁은 화면 트리맵에서 그룹을 고르면 아래 상세로 스크롤
   useEffect(() => {
@@ -48,6 +52,7 @@ export default function GroupTab({ kind }: { kind: GroupKind }) {
 
   useEffect(() => {
     let cancelled = false
+    loadSeq.current += 1
     setState('loading')
     const load = ctrl.view === 'list'
       ? getMarketGroups(kind, ctrl.period, ctrl.sort).then((r) => {
@@ -61,11 +66,39 @@ export default function GroupTab({ kind }: { kind: GroupKind }) {
         setDate(r.date)
         setGroups(r.groups)
       })
-    load.then(() => !cancelled && setState('ready')).catch(() => !cancelled && setState('failed'))
+    load
+      .then(() => !cancelled && setState('ready'))
+      .catch(() => !cancelled && setState('failed'))
+      .finally(() => {
+        fetchedAt.current = Date.now()
+      })
     return () => {
       cancelled = true
     }
   }, [kind, ctrl.view, ctrl.period, ctrl.sort, ctrl.size])
+
+  // 순위·지도는 기준일(20:30 갱신)이 바뀔 때만 달라진다 — 탭 복귀 때 마지막 조회 후 10분이 지났으면 1회만 조용히 확인하고,
+  // 기준일이 같으면 더 불러온 목록·트리맵 상태를 그대로 둔다
+  useReturnRefresh(async () => {
+    const seq = loadSeq.current
+    try {
+      if (ctrl.view === 'list') {
+        const r = await getMarketGroups(kind, ctrl.period, ctrl.sort)
+        if (seq !== loadSeq.current || (state === 'ready' && r.date === date)) return
+        setDate(r.date)
+        setItems(r.items)
+        setTotal(r.total)
+      } else {
+        const r = await getMarketTreemap(kind, ctrl.size, ctrl.period)
+        if (seq !== loadSeq.current || (state === 'ready' && r.date === date)) return
+        setDate(r.date)
+        setGroups(r.groups)
+      }
+      setState('ready')
+    } finally {
+      fetchedAt.current = Date.now()
+    }
+  }, fetchedAt)
 
   const loadMore = () => {
     setLoadingMore(true)
@@ -105,13 +138,13 @@ export default function GroupTab({ kind }: { kind: GroupKind }) {
           <Card>
             {isList ? (
               <>
-                <p className="mb-1 text-xs text-ink-muted">{total.toLocaleString('ko-KR')}개 {TEXT[kind].title}</p>
+                <p className="mb-1 text-xs text-ink-muted">{total.toLocaleString('ko-KR')}개 {TEXT[kind].title} · {closeBasisLabel(date)}</p>
                 <GroupList
                   items={items}
                   selected={shown}
                   onSelect={onSelect}
                   showRank={ctrl.period === '1d' && ctrl.sort === 'chg'}
-                  renderInline={wide ? undefined : (id) => <GroupDetailView kind={kind} id={id} />}
+                  renderInline={wide ? undefined : (id) => <GroupDetailView kind={kind} id={id} asOf={date} />}
                 />
                 {items.length < total && (
                   <Button variant="tertiary" full className="mt-2" onClick={loadMore} disabled={loadingMore}>
@@ -126,20 +159,20 @@ export default function GroupTab({ kind }: { kind: GroupKind }) {
                 nested={wide}
                 height={wide ? 560 : 440}
                 onGroupSelect={setSelected}
-                note={kind === 'theme' ? '거래대금 상위 30개 테마 · 한 종목이 여러 테마에 겹칠 수 있어요' : undefined}
+                note={[closeBasisLabel(date), kind === 'theme' ? '거래대금 상위 30개 테마 · 한 종목이 여러 테마에 겹칠 수 있어요' : null].filter(Boolean).join(' · ')}
               />
             )}
           </Card>
           {wide && shown && (
             <Card as="aside" className="lg:sticky lg:top-[7.5rem]">
-              <GroupDetailView kind={kind} id={shown} />
+              <GroupDetailView kind={kind} id={shown} asOf={date} />
             </Card>
           )}
           {!wide && !isList && shown && (
             // 좁은 화면 트리맵: 상세는 트리맵 아래 — 열리면 그 자리로 스크롤
             <div ref={detailRef} className="mt-3 scroll-mt-4">
               <Card>
-                <GroupDetailView key={shown} kind={kind} id={shown} />
+                <GroupDetailView key={shown} kind={kind} id={shown} asOf={date} />
               </Card>
             </div>
           )}
