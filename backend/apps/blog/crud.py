@@ -62,18 +62,24 @@ async def list_blogs(
     *,
     board_id: int | None = None,
     featured: bool | None = None,
+    active_boards_only: bool = False,
     page: int = 1,
     size: int = 20,
 ) -> tuple[int, list[BlogPost]]:
     """(total, items) 페이지네이션 결과.
 
     featured=True 면 추천(featured_at IS NOT NULL)만 최근에 켠 순으로 반환.
+    active_boards_only=True 면 숨긴 게시판의 글을 뺀다(앱 커뮤니티 '전체').
     """
     base = select(BlogPost)
     count_stmt = select(func.count()).select_from(BlogPost)
     if board_id is not None:
         base = base.where(BlogPost.board_id == board_id)
         count_stmt = count_stmt.where(BlogPost.board_id == board_id)
+    if active_boards_only:
+        active_ids = select(Board.id).where(Board.is_active.is_(True))
+        base = base.where(BlogPost.board_id.in_(active_ids))
+        count_stmt = count_stmt.where(BlogPost.board_id.in_(active_ids))
     if featured is True:
         base = base.where(BlogPost.featured_at.is_not(None))
         count_stmt = count_stmt.where(BlogPost.featured_at.is_not(None))

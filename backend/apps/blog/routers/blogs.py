@@ -20,12 +20,18 @@ router = APIRouter(prefix="/api/v1/blogs", tags=["blogs"])
 async def read_blogs(
     board_id: int | None = Query(None, description="게시판 ID로 필터"),
     featured: bool | None = Query(None, description="true면 홈 추천글만"),
+    active_boards_only: bool = Query(False, description="true면 활성 게시판의 글만"),
     page: int = Query(1, ge=1),
     size: int = Query(20, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
 ):
     total, items = await crud.list_blogs(
-        db, board_id=board_id, featured=featured, page=page, size=size
+        db,
+        board_id=board_id,
+        featured=featured,
+        active_boards_only=active_boards_only,
+        page=page,
+        size=size,
     )
     return schemas.BlogListOut(total=total, page=page, size=size, items=items)
 
