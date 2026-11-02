@@ -46,11 +46,11 @@ export default function HomeScreen() {
           // 함수가 아니라 요소로 넘겨 머리글이 다시 마운트되지 않게 한다(급등·급락 칩 선택 유지)
           <>
             <HomeSummary summary={summary} />
-            {/* 커뮤니티는 하단 탭에서 빠졌으므로 추천 글 헤더 오른쪽에서 전체 목록(/blog)으로 보낸다 */}
+            {/* 추천 글 헤더 오른쪽에서 커뮤니티 탭으로 보낸다 */}
             <View style={styles.header}>
               <Text style={styles.title} accessibilityRole="header">📌 추천 글</Text>
               <Pressable
-                onPress={() => router.push('/blog')}
+                onPress={() => router.push('/community')}
                 hitSlop={8}
                 accessibilityRole="link"
                 accessibilityLabel="커뮤니티 전체 보기">

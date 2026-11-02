@@ -42,12 +42,14 @@ function toBlogPost(r: RawBlog): BlogPost {
 export async function fetchBlogList(params?: {
   boardId?: number;
   featured?: boolean;
+  activeBoardsOnly?: boolean;
   page?: number;
   size?: number;
 }): Promise<BlogListResponse> {
   const raw = await blogApi.get<RawBlogList>('/api/v1/blogs', {
     board_id: params?.boardId,
     featured: params?.featured,
+    active_boards_only: params?.activeBoardsOnly,
     page: params?.page,
     size: params?.size ?? 20,
   });
