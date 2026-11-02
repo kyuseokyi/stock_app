@@ -17,6 +17,10 @@ describe('history-page', () => {
     expect(HISTORY_HTML).not.toContain('Intl.');
   });
 
+  it('빠진 평일은 기록이 없다는 뜻이 드러나는 문구로 표시한다', () => {
+    expect(HISTORY_HTML).toContain("r.gapFrom + ' 이후 기록 없음'");
+  });
+
   it('리포트와 같은 스타일 토큰을 쓴다', () => {
     expect(HISTORY_HTML).toContain('--accent');
     expect(HISTORY_HTML).toContain('.row {');
