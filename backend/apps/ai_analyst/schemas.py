@@ -22,7 +22,7 @@ class MoverReasonItem(BaseModel):
     stock_name: str
     change_rate: float
     reason_summary: str = Field(description="급등 또는 급락의 핵심 원인 1문장 (30자 내외)")
-    category: str = Field(description="수주계약 | 실적호조 | 테마수급 | 경영권 | 유상증자/악재 | 단순수급")
+    category: str = Field(description="수주계약 | 실적호조 | 실적부진 | 테마수급 | 경영권 | 유상증자/악재 | 단순수급")
     reliability: str = Field(description="상 | 중 | 하 (뉴스 실체 여부)")
     risk_warning: str | None = Field(None, description="단기 추격매수 시 주의점")
 

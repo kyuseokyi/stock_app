@@ -213,6 +213,16 @@ def test_fetch_movers_filters_universe_and_direction():
     assert all(r["change_rate"] > 0 for r in g) and all(r["change_rate"] < 0 for r in l)
 
 
+def test_fetch_movers_sorts_by_change_rate():
+    # KIS 응답 순서가 등락률 순이 아니어도(2026-11-02 실측) 급등은 큰 순, 급락은 작은(더 음수) 순
+    up = [_kis_row("000001", "a", 17.99, 1), _kis_row("000002", "b", 21.09, 2), _kis_row("000003", "c", 12.05, 3)]
+    down = [_kis_row("000101", "d", -13.32, 1), _kis_row("000102", "e", -13.75, 2), _kis_row("000103", "f", -9.0, 3)]
+    universe = {"000001", "000002", "000003", "000101", "000102", "000103"}
+    g, l = mm.fetch_movers(FakeKis(up, down), universe=universe)
+    assert [r["change_rate"] for r in g] == [21.09, 17.99, 12.05]
+    assert [r["change_rate"] for r in l] == [-13.75, -13.32, -9.0]
+
+
 def test_movers_one_gemini_call_and_ticker_match(monkeypatch, _isolate):
     g = FakeGemini({MoverReasonsResponse: _reasons})
     news = FakeNews()
