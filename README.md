@@ -262,7 +262,7 @@ npm run build:android:devapk  # → android/app/build/outputs/apk/release/app-re
     - 무음 push 확인(콜드): 앱을 최근 앱 목록에서 밀어 닫고 관리자 웹에서 즉시 발송한다. release 빌드는 `[fund-bg]` 로그가 나오지 않으므로 `adb logcat` 의 네이티브 `TaskService: Finished task 'fund-refresh-push'` 시각으로 판정한다(정상: 화면 없이 11초 안팎).
     - 로컬 E2E 발송(서버 env 를 건드리지 않음): 개발 DB 터널(`scripts/dev-db-tunnel.sh`)을 켜고, 로컬 blog 와 Celery 워커를 `REDIS_URL=redis://localhost:6379/5 PUSH_BACKEND=expo` 로 띄운 뒤 로컬 admin_web 에서 즉시 발송한다. **반드시 Redis DB 5** — DB 0 에는 예전 세션의 미처리 수집 작업이 남아 실행될 수 있다. 테스트 발송은 관리자 계정 기기에만 간다.
     - 자세한 관찰: 설계 §7.1 "실기기 관찰"
-- 히스토리에서 빠진 평일은 날짜 옆에 "이전 기록 M.D" 로 표시한다(값을 메우지는 않음).
+- 히스토리에서 빠진 평일은 날짜 옆에 "M.D 이후 기록 없음" 으로 표시한다(값을 메우지는 않음).
 - 설계: `docs/superpowers/specs/2026-10-18-fund-report-viewer-design.md`
 
 ### 펀드 히스토리 · Google Drive 백업 (앱)

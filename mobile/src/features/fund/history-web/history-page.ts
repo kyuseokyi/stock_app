@@ -63,7 +63,7 @@ const PAGE_SCRIPT = String.raw`
 
   function row(r) {
     var date = [h('span', 'num', [r.date])];
-    if (r.gapFrom) date.push(h('span', 'gap', ['이전 기록 ' + r.gapFrom]));
+    if (r.gapFrom) date.push(h('span', 'gap', [r.gapFrom + ' 이후 기록 없음']));
     return h('div', 'hrow', [
       h('div', 'line', [h('div', 'k', date), val(r.value, 'v', 'div')]),
       h('div', 'sub', [h('span', 'muted', ['당일 ']), val(r.day), h('span', 'muted', [' · 월 ']), val(r.month)])
