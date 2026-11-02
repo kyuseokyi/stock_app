@@ -1,10 +1,16 @@
 import { Suspense } from 'react'
-import { Outlet } from 'react-router-dom'
+import { Navigate, Outlet, useLocation } from 'react-router-dom'
 import ScreenerNav from '../../components/screener/ScreenerNav'
+import { useScreenerFeatures } from '../../hooks/useScreenerFeatures'
+import { screenerMenuVisible } from '../../lib/screenerFeatures'
 
-// 스크리너 공통 틀 — 한 줄 탭(시장 · 종목 찾기 두 묶음) + 탭 화면. 탭마다 주소가 있어 새로고침·뒤로 가기·공유가 그대로 된다.
-
+// 스크리너 공통 틀 — 한 줄 탭(주도주·조건검색·패턴) + 탭 화면.
+// 종목 찾기 스위치가 꺼져 있으면(오류 포함) 메뉴와 같이 화면도 닫고 마켓으로 보낸다. 묻는 동안은 그리지 않는다.
 export default function ScreenerLayout() {
+  const features = useScreenerFeatures()
+  const { search, hash } = useLocation()
+  if (features === null) return null
+  if (!screenerMenuVisible(features)) return <Navigate to={{ pathname: '/market', search, hash }} replace />
   return (
     <div className="space-y-3 sm:space-y-4">
       <ScreenerNav />

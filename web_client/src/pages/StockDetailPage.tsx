@@ -18,6 +18,8 @@ import type { DailyCandle } from '../types/game'
 import type { CanslimScore } from '../types/screener'
 import { Skeleton } from '../components/ui/Skeleton'
 import { useDocumentTitle } from '../hooks/useDocumentTitle'
+import { useScreenerFeatures } from '../hooks/useScreenerFeatures'
+import { stockBackPath } from '../lib/screenerFeatures'
 
 // 종목 상세 — 검색창 + 헤더(이름·종가·주도주 점수) + 일봉 차트(기간 선택, 50일선·52주 고점·현재 패턴 선)
 //   + 패턴(현재 베이스·이력) + 주도주(CANSLIM 7항목·점수 추이). 스크리너 상세 패널과 같은 부품을 쓴다.
@@ -39,6 +41,7 @@ export default function StockDetailPage() {
   const ticker = raw.toUpperCase()
   const valid = TICKER_RE.test(ticker)
   const navigate = useNavigate()
+  const features = useScreenerFeatures()
 
   const [score, setScore] = useState<Load<CanslimScore | null>>({ state: 'loading' })
   const [bases, setBases] = useState<Load<PatternBases>>({ state: 'loading' })
@@ -113,10 +116,10 @@ export default function StockDetailPage() {
   const days = PERIODS.find((p) => p.key === period)?.days ?? 370
 
   const goBack = () => {
-    // 직접 들어온 경우(뒤로 갈 곳 없음)는 스크리너로
+    // 직접 들어온 경우(뒤로 갈 곳 없음)는 스크리너가 보일 때만 스크리너로, 아니면 마켓으로
     const idx = (window.history.state as { idx?: number } | null)?.idx ?? 0
     if (idx > 0) navigate(-1)
-    else navigate('/screener')
+    else navigate(stockBackPath(features))
   }
 
   return (

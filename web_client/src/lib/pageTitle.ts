@@ -1,11 +1,13 @@
 // 경로별 브라우저 탭 제목(WCAG 2.4.2) — Layout 이 경로가 바뀔 때 넣고, 글·종목 상세는 데이터가 오면 useDocumentTitle 로 구체화한다.
 const BRAND = 'StockApp'
 
-const SCREENER: Record<string, string> = {
-  market: '세계 시장',
+const MARKET: Record<string, string> = {
   themes: '테마',
   sectors: '업종',
   calendar: '일정',
+}
+
+const SCREENER: Record<string, string> = {
   leaders: '주도주 분석',
   finder: '조건검색',
   patterns: '차트 패턴',
@@ -26,8 +28,10 @@ export function titleFor(pathname: string, boardName: (id: number) => string): s
       return withBrand('게시글')
     case 'game':
       return withBrand('트레이딩 게임')
+    case 'market':
+      return withBrand((sub && MARKET[sub]) || '오늘의 증시')
     case 'screener':
-      return withBrand(SCREENER[sub ?? 'market'] ?? '스크리너')
+      return withBrand((sub && (MARKET[sub] ?? SCREENER[sub])) || '스크리너')
     case 'stock':
       return withBrand('종목 상세')
     case 'me':

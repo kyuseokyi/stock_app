@@ -1,17 +1,17 @@
 import { describe, expect, it } from 'vitest'
 import type { ScreenerFeatures } from '../api/screenerFeatures'
-import { stockTabGate, stockTabVisible } from './screenerFeatures'
+import { screenerMenuVisible, stockBackPath, stockTabGate, stockTabVisible } from './screenerFeatures'
 
 const f = (stockFinder: boolean, finder: boolean, patterns: boolean): ScreenerFeatures => ({ stockFinder, finder, patterns })
 
 describe('종목 찾기 노출 판정', () => {
-  it('STOCK_FINDER 가 꺼지면 FINDER·PATTERNS 와 무관하게 모두 숨기고 시장 개요로 보낸다', () => {
+  it('STOCK_FINDER 가 꺼지면 FINDER·PATTERNS 와 무관하게 모두 숨기고 마켓으로 보낸다', () => {
     for (const fi of [true, false]) {
       for (const pa of [true, false]) {
         const x = f(false, fi, pa)
         for (const t of ['leaders', 'finder', 'patterns'] as const) {
           expect(stockTabVisible(x, t)).toBe(false)
-          expect(stockTabGate(x, t)).toBe('/screener/market')
+          expect(stockTabGate(x, t)).toBe('/market')
         }
       }
     }
@@ -30,5 +30,14 @@ describe('종목 찾기 노출 판정', () => {
   it('답을 받기 전(null)은 메뉴 숨김·라우트는 기다림', () => {
     expect(stockTabVisible(null, 'leaders')).toBe(false)
     expect(stockTabGate(null, 'leaders')).toBe('wait')
+  })
+
+  it('스크리너 메뉴·뒤로 갈 곳은 스위치가 확실히 켜졌을 때만 스크리너', () => {
+    expect(screenerMenuVisible(f(true, false, false))).toBe(true)
+    expect(stockBackPath(f(true, false, false))).toBe('/screener')
+    for (const x of [f(false, true, true), null]) {
+      expect(screenerMenuVisible(x)).toBe(false)
+      expect(stockBackPath(x)).toBe('/market')
+    }
   })
 })

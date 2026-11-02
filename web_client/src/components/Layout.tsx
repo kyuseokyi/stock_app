@@ -3,7 +3,8 @@ import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-do
 import { useBoardStore } from '../store/boards'
 import { useAuthStore } from '../store/auth'
 import { chipClass } from './ui/Chip'
-import { BottomTabBar, TopNav, sectionOf } from './AppNav'
+import { BottomTabBar, TopNav } from './AppNav'
+import { sectionOf } from '../lib/navSections'
 import LoginModal from './LoginModal'
 import NotificationToaster from './NotificationToaster'
 import UserMenu from './UserMenu'
@@ -25,9 +26,9 @@ export default function Layout() {
   // 섹션 판별: 경로로(별도 상태 불필요) — 게시판·글 상세는 커뮤니티
   const section = sectionOf(location.pathname)
   // 헤더·본문 바깥 틀은 항상 같은 폭 — 로고·제목·본문의 왼쪽 선이 모든 화면에서 같다.
-  // 넓은 화면(lg+)에서 2단을 쓰는 곳(홈·게시판 목록·게임·스크리너)만 전체 폭, 나머지(글 상세·내 정보)는 읽기 폭을 왼쪽에 붙인다.
+  // 넓은 화면(lg+)에서 2단을 쓰는 곳(홈·게시판 목록·게임·마켓(종목 상세 포함)·스크리너)만 전체 폭, 나머지(글 상세·내 정보)는 읽기 폭을 왼쪽에 붙인다.
   const headerWidth = 'max-w-3xl lg:max-w-6xl'
-  const wide = section === 'game' || section === 'screener' || section === 'home' || location.pathname.startsWith('/boards/')
+  const wide = section === 'game' || section === 'market' || section === 'screener' || section === 'home' || location.pathname.startsWith('/boards/')
   useFundAutoRefresh() // 접속·탭 복귀 시 등록 펀드 자동 갱신(로그인 상태일 때만)
   // 경로별 탭 제목 — 값이 바뀔 때만 넣어서, 글·종목 상세가 구체화한 제목을 게시판 목록 갱신이 덮지 않게 한다
   const routeTitle = titleFor(location.pathname, boardName)
@@ -79,7 +80,7 @@ export default function Layout() {
             )}
           </div>
 
-          {/* 1차 메뉴: 홈 · 커뮤니티 · 게임 · 내정보 (데스크톱 상단 — 모바일 폭은 아래 BottomTabBar) */}
+          {/* 1차 메뉴: 홈 · 마켓 · 스크리너 · 커뮤니티 · 게임 · 내정보 (데스크톱 상단 — 모바일 폭은 아래 BottomTabBar) */}
           <TopNav section={section} />
 
           {/* 커뮤니티 섹션일 때만 게시판 탭 */}
