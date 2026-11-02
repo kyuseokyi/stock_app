@@ -5,12 +5,11 @@ import BasisNote from '../../components/market/BasisNote'
 import GroupControls, { type GroupControlValue } from '../../components/market/GroupControls'
 import GroupDetailView from '../../components/market/GroupDetailView'
 import GroupList from '../../components/market/GroupList'
-import Treemap from '../../components/market/Treemap'
-import { GROUP_PAGE, getMarketGroups, getMarketTreemap } from '../../api/market'
+import { GROUP_PAGE, getMarketGroups } from '../../api/market'
 import { useMediaQuery } from '../../hooks/useMediaQuery'
 import { useReturnRefresh } from '../../hooks/useReturnRefresh'
 import { closeBasisLabel } from '../../lib/format'
-import type { GroupItem, GroupKind, TreemapGroup } from '../../types/market'
+import type { GroupItem, GroupKind } from '../../types/market'
 import PageHeader from '../../components/ui/PageHeader'
 import { ListSkeleton } from '../../components/ui/Skeleton'
 import Button from '../../components/ui/Button'
@@ -23,50 +22,35 @@ const TEXT: Record<GroupKind, { title: string; desc: string; empty: string }> = 
   },
   sector: {
     title: '업종',
-    desc: '업종별 평균 등락률과 시가총액 지도를 보여줘요. 타일 색이 진할수록 많이 오르거나 내린 거예요.',
+    desc: '업종에 속한 종목들의 평균 등락률로 순위를 매겨요.',
     empty: '업종 데이터가 없어요',
   },
 }
 
-// 테마·업종 탭(같은 화면, kind 만 다름) — 목록/트리맵 전환, 넓은 화면은 오른쪽 상세, 좁은 화면은 펼침.
+// 테마·업종 탭(같은 화면, kind 만 다름) — 넓은 화면은 오른쪽 상세, 좁은 화면은 펼침.
 export default function GroupTab({ kind }: { kind: GroupKind }) {
   const wide = useMediaQuery('(min-width: 1024px)')
-  const [ctrl, setCtrl] = useState<GroupControlValue>({
-    view: kind === 'theme' ? 'list' : 'treemap', period: '1d', sort: 'chg', size: 'mcap',
-  })
+  const [ctrl, setCtrl] = useState<GroupControlValue>({ period: '1d', sort: 'chg' })
   const [date, setDate] = useState<string | null>(null)
   const [items, setItems] = useState<GroupItem[]>([])
   const [total, setTotal] = useState(0)
-  const [groups, setGroups] = useState<TreemapGroup[]>([])
   const [state, setState] = useState<'loading' | 'ready' | 'failed'>('loading')
   const [loadingMore, setLoadingMore] = useState(false)
   const [selected, setSelected] = useState<string | null>(null)
-  const detailRef = useRef<HTMLDivElement>(null)
   const fetchedAt = useRef<number | null>(null) // 마지막 조회가 끝난 시각(복귀 재조회 판정용)
   const loadSeq = useRef(0) // 조건이 바뀌면 진행 중인 복귀 재조회 응답을 버린다
-
-  // 좁은 화면 트리맵에서 그룹을 고르면 아래 상세로 스크롤
-  useEffect(() => {
-    if (selected && !wide && ctrl.view === 'treemap') detailRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-  }, [selected, wide, ctrl.view])
 
   useEffect(() => {
     let cancelled = false
     loadSeq.current += 1
     setState('loading')
-    const load = ctrl.view === 'list'
-      ? getMarketGroups(kind, ctrl.period, ctrl.sort).then((r) => {
+    getMarketGroups(kind, ctrl.period, ctrl.sort)
+      .then((r) => {
         if (cancelled) return
         setDate(r.date)
         setItems(r.items)
         setTotal(r.total)
       })
-      : getMarketTreemap(kind, ctrl.size, ctrl.period).then((r) => {
-        if (cancelled) return
-        setDate(r.date)
-        setGroups(r.groups)
-      })
-    load
       .then(() => !cancelled && setState('ready'))
       .catch(() => !cancelled && setState('failed'))
       .finally(() => {
@@ -75,25 +59,18 @@ export default function GroupTab({ kind }: { kind: GroupKind }) {
     return () => {
       cancelled = true
     }
-  }, [kind, ctrl.view, ctrl.period, ctrl.sort, ctrl.size])
+  }, [kind, ctrl.period, ctrl.sort])
 
-  // 순위·지도는 기준일(20:30 갱신)이 바뀔 때만 달라진다 — 탭 복귀 때 마지막 조회 후 10분이 지났으면 1회만 조용히 확인하고,
-  // 기준일이 같으면 더 불러온 목록·트리맵 상태를 그대로 둔다
+  // 순위는 기준일(20:30 갱신)이 바뀔 때만 달라진다 — 탭 복귀 때 마지막 조회 후 10분이 지났으면 1회만 조용히 확인하고,
+  // 기준일이 같으면 더 불러온 목록을 그대로 둔다
   useReturnRefresh(async () => {
     const seq = loadSeq.current
     try {
-      if (ctrl.view === 'list') {
-        const r = await getMarketGroups(kind, ctrl.period, ctrl.sort)
-        if (seq !== loadSeq.current || (state === 'ready' && r.date === date)) return
-        setDate(r.date)
-        setItems(r.items)
-        setTotal(r.total)
-      } else {
-        const r = await getMarketTreemap(kind, ctrl.size, ctrl.period)
-        if (seq !== loadSeq.current || (state === 'ready' && r.date === date)) return
-        setDate(r.date)
-        setGroups(r.groups)
-      }
+      const r = await getMarketGroups(kind, ctrl.period, ctrl.sort)
+      if (seq !== loadSeq.current || (state === 'ready' && r.date === date)) return
+      setDate(r.date)
+      setItems(r.items)
+      setTotal(r.total)
       setState('ready')
     } finally {
       fetchedAt.current = Date.now()
@@ -108,11 +85,10 @@ export default function GroupTab({ kind }: { kind: GroupKind }) {
       .finally(() => setLoadingMore(false))
   }
 
-  const isList = ctrl.view === 'list'
-  const empty = isList ? items.length === 0 : groups.length === 0
+  const empty = items.length === 0
   // 넓은 화면 목록은 1위를 바로 보여준다(좁은 화면은 누를 때만 펼침)
-  const shown = selected ?? (wide && isList ? items[0]?.id ?? null : null)
-  const onSelect = (id: string) => setSelected((cur) => (!wide && isList && cur === id ? null : id))
+  const shown = selected ?? (wide ? items[0]?.id ?? null : null)
+  const onSelect = (id: string) => setSelected((cur) => (!wide && cur === id ? null : id))
 
   return (
     <div className="space-y-3 sm:space-y-4">
@@ -133,48 +109,26 @@ export default function GroupTab({ kind }: { kind: GroupKind }) {
       )}
 
       {state === 'ready' && date !== null && !empty && (
-        // 트리맵에서 아직 고르지 않았으면 오른쪽 상세 칸 없이 폭 전체를 쓴다
         <div className={wide && shown ? 'lg:grid lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)] lg:items-start lg:gap-4' : ''}>
           <Card>
-            {isList ? (
-              <>
-                <p className="mb-1 text-xs text-ink-muted">{total.toLocaleString('ko-KR')}개 {TEXT[kind].title} · {closeBasisLabel(date)}</p>
-                <GroupList
-                  items={items}
-                  selected={shown}
-                  onSelect={onSelect}
-                  showRank={ctrl.period === '1d' && ctrl.sort === 'chg'}
-                  renderInline={wide ? undefined : (id) => <GroupDetailView kind={kind} id={id} asOf={date} />}
-                />
-                {items.length < total && (
-                  <Button variant="tertiary" full className="mt-2" onClick={loadMore} disabled={loadingMore}>
-                    {loadingMore ? '불러오는 중…' : `더 보기 (${Math.min(GROUP_PAGE, total - items.length)}개)`}
-                  </Button>
-                )}
-              </>
-            ) : (
-              <Treemap
-                groups={groups}
-                period={ctrl.period}
-                nested={wide}
-                height={wide ? 560 : 440}
-                onGroupSelect={setSelected}
-                note={[closeBasisLabel(date), kind === 'theme' ? '거래대금 상위 30개 테마 · 한 종목이 여러 테마에 겹칠 수 있어요' : null].filter(Boolean).join(' · ')}
-              />
+            <p className="mb-1 text-xs text-ink-muted">{total.toLocaleString('ko-KR')}개 {TEXT[kind].title} · {closeBasisLabel(date)}</p>
+            <GroupList
+              items={items}
+              selected={shown}
+              onSelect={onSelect}
+              showRank={ctrl.period === '1d' && ctrl.sort === 'chg'}
+              renderInline={wide ? undefined : (id) => <GroupDetailView kind={kind} id={id} asOf={date} />}
+            />
+            {items.length < total && (
+              <Button variant="tertiary" full className="mt-2" onClick={loadMore} disabled={loadingMore}>
+                {loadingMore ? '불러오는 중…' : `더 보기 (${Math.min(GROUP_PAGE, total - items.length)}개)`}
+              </Button>
             )}
           </Card>
           {wide && shown && (
             <Card as="aside" className="lg:sticky lg:top-[7.5rem]">
               <GroupDetailView kind={kind} id={shown} asOf={date} />
             </Card>
-          )}
-          {!wide && !isList && shown && (
-            // 좁은 화면 트리맵: 상세는 트리맵 아래 — 열리면 그 자리로 스크롤
-            <div ref={detailRef} className="mt-3 scroll-mt-4">
-              <Card>
-                <GroupDetailView key={shown} kind={kind} id={shown} asOf={date} />
-              </Card>
-            </div>
           )}
         </div>
       )}

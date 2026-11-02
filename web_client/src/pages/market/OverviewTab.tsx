@@ -7,22 +7,20 @@ import GroupDetailView from '../../components/market/GroupDetailView'
 import HotKeywords from '../../components/market/HotKeywords'
 import { IndexCards, MacroCards } from '../../components/market/IndexCards'
 import MoversBoard from '../../components/market/MoversBoard'
-import { SectionError, SectionHead, TabChips } from '../../components/market/SectionHead'
-import Treemap from '../../components/market/Treemap'
+import { SectionError, SectionHead } from '../../components/market/SectionHead'
 import Card from '../../components/ui/Card'
 import Modal from '../../components/ui/Modal'
 import PageHeader from '../../components/ui/PageHeader'
 import { Skeleton } from '../../components/ui/Skeleton'
-import { getMarketCalendar, getMarketGroups, getMarketOverview, getMarketTreemap } from '../../api/market'
+import { getMarketCalendar, getMarketGroups, getMarketOverview } from '../../api/market'
 import { getInvestorFlow, getMorningBrief, getMovers } from '../../api/marketRest'
 import { useMarketSection } from '../../hooks/useMarketSection'
-import { useMediaQuery } from '../../hooks/useMediaQuery'
 import { useReturnRefresh } from '../../hooks/useReturnRefresh'
 import { useVisibleInterval } from '../../hooks/useVisibleInterval'
 import { closeBasisLabel, formatPct, kstDateString, pnlClass } from '../../lib/format'
 import { flowCaption, formatBasis, hasFlowData, indexHeaderBasis, marketSession, splitOverview, tickerNames } from '../../lib/marketDashboard'
 import { MARKET_REFRESH_MS } from '../../lib/marketLive'
-import type { GroupKind, MacroValue, MarketIndex, Treemap as TreemapData, TreemapSize } from '../../types/market'
+import type { GroupKind, MacroValue, MarketIndex } from '../../types/market'
 
 // 오르는 게 좋은 일이 아닌 지표 — 핑크(상승) 대신 회색에 부호, 뜻을 한 줄로(Pink-Is-a-Point)
 const NEUTRAL_HINT: Record<string, string> = {
@@ -32,12 +30,7 @@ const NEUTRAL_HINT: Record<string, string> = {
 /** 급등락 자동 갱신 주기 — 서버 AI 원인 분석이 몇 분 단위라 지수(30초)보다 느리게(앱과 같은 값) */
 const MOVERS_REFRESH_MS = 60_000
 
-const KIND_OPTIONS: [GroupKind, string][] = [['sector', '업종'], ['theme', '테마']]
-const SIZE_OPTIONS: [TreemapSize, string][] = [['mcap', '시가총액 기준'], ['value', '거래대금 기준']]
-
 const fetchThemes = () => getMarketGroups('theme', '1d', 'chg', 0, 5)
-// 지도는 기준일이 바뀔 때만 교체한다(교체하면 들어가 있던 종목 보기가 풀린다)
-const sameDate = (cur: TreemapData, next: TreemapData) => cur.date === next.date
 
 function addDays(iso: string, days: number): string {
   const d = new Date(`${iso}T00:00:00Z`)
@@ -99,23 +92,18 @@ function Pair({ left, right }: { left: ReactNode; right: ReactNode }) {
   )
 }
 
-// 마켓 개요 — 앱 마켓 탭과 같은 순서: 브리핑 → 지수 → 돈의 흐름·경제지표 → 히트맵 → 급등락 → 수급 → 핫 키워드·주도 테마 → 일정.
+// 마켓 개요 — 앱 마켓 탭과 같은 순서: 브리핑 → 지수 → 돈의 흐름·경제지표 → 급등락 → 수급 → 핫 키워드·주도 테마 → 일정.
 // 섹션마다 따로 불러와 하나가 실패해도 나머지는 보이고, 실패한 칸에만 '다시 시도'를 둔다.
 export default function OverviewTab() {
-  const wide = useMediaQuery('(min-width: 1024px)')
   const today = kstDateString()
-  const [heatKind, setHeatKind] = useState<GroupKind>('sector')
-  const [heatSize, setHeatSize] = useState<TreemapSize>('mcap')
   const [openGroup, setOpenGroup] = useState<{ kind: GroupKind; id: string } | null>(null)
 
-  const fetchHeat = useCallback(() => getMarketTreemap(heatKind, heatSize, '1d'), [heatKind, heatSize])
   const fetchEvents = useCallback(async () => (await getMarketCalendar(today, addDays(today, 60))).slice(0, 5), [today])
 
   const overview = useMarketSection(getMarketOverview)
   const brief = useMarketSection(getMorningBrief)
   const movers = useMarketSection(getMovers)
   const flow = useMarketSection(getInvestorFlow)
-  const heat = useMarketSection(fetchHeat, sameDate)
   const themes = useMarketSection(fetchThemes)
   const events = useMarketSection(fetchEvents)
 
@@ -128,7 +116,6 @@ export default function OverviewTab() {
   useReturnRefresh(brief.silentRefresh, brief.fetchedAt)
   useReturnRefresh(movers.silentRefresh, movers.fetchedAt)
   useReturnRefresh(flow.silentRefresh, flow.fetchedAt)
-  useReturnRefresh(heat.silentRefresh, heat.fetchedAt)
   useReturnRefresh(themes.silentRefresh, themes.fetchedAt)
   useReturnRefresh(events.silentRefresh, events.fetchedAt)
 
@@ -269,34 +256,6 @@ export default function OverviewTab() {
           <MacroCards macro={split.otherMacro} />
         </>
       )}
-
-      <Card as="section" aria-label="시장 히트맵">
-        <SectionHead title="시장 히트맵" caption={!heat.loading && heat.data ? closeBasisLabel(heat.data.date) : null} />
-        <div className="flex flex-wrap gap-x-4">
-          <TabChips label="묶음" value={heatKind} options={KIND_OPTIONS} onChange={setHeatKind} />
-          <TabChips label="칸 크기" value={heatSize} options={SIZE_OPTIONS} onChange={setHeatSize} />
-        </div>
-        {heat.failed ? (
-          <div className="flex items-center justify-between gap-2 py-4">
-            <p className="min-w-0 text-sm text-ink-muted">히트맵을 불러오지 못했어요</p>
-            <button type="button" onClick={heat.reload} className="shrink-0 text-sm font-medium text-brand-strong">다시 시도</button>
-          </div>
-        ) : heat.data && heat.data.groups.length > 0 ? (
-          <div aria-busy={heat.loading} className={heat.loading ? 'opacity-60' : ''}>
-            <Treemap
-              groups={heat.data.groups}
-              period="1d"
-              nested={wide}
-              height={wide ? 480 : 320}
-              onGroupSelect={(id) => setOpenGroup({ kind: heatKind, id })}
-            />
-          </div>
-        ) : heat.loading ? (
-          <Skeleton className={`rounded-btn ${wide ? 'h-[480px]' : 'h-80'}`} />
-        ) : (
-          <p className="py-4 text-center text-sm text-ink-muted">히트맵 데이터를 준비하고 있어요</p>
-        )}
-      </Card>
 
       <Pair left={moversCard} right={flowCard} />
       <Pair left={keywordCard} right={eventsCard} />
