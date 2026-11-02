@@ -76,7 +76,7 @@
 - [ ] 분기 선택은 **web·모바일 새 버전 배포 후**(구 버전은 월간 보상 토스트를 주간 문구로 표시)
 
 ## 4. 외부 준비가 필요한 것
-- [ ] **간편 로그인 키 발급**: 카카오 REST 키, 네이버 Client ID/Secret(+검수, 검수 전엔 테스트 계정만), Redirect URI 등록(README 목록), `SOCIAL_STATE_SECRET` 설정
+- [ ] **간편 로그인 키 발급**: 카카오 REST 키, 네이버 Client ID/Secret(+검수, 검수 전엔 테스트 계정만), Redirect URI 등록(README 목록), `SOCIAL_STATE_SECRET` 설정 — 개발 서버 카카오(10-23)·네이버(11-02) 등록 완료, 네이버 검수와 상용 서버용 키는 남음
 - [ ] **모바일 dev build 재생성**: 개발 앱 스킴이 `stockapp-dev` 로 바뀜(`npm run prebuild:dev` 후 재설치)
 - [ ] 에뮬레이터 사용 시 `adb reverse tcp:8003 tcp:8003` 추가
 - [x] **FRED API 키 발급**(2026-10-23 로컬·운영 env 등록, 운영 Deploy Server 재배포로 적용) (미국 CPI·고용·금리 등 거시 지표) — fred.stlouisfed.org 계정 → My Account → API Keys(무료) → 서버 `.env.production` 에 `FRED_API_KEY`. 없으면 거시 지표 수집만 건너뜀 (스펙 `docs/superpowers/specs/2026-10-18-market-data-foundation-design.md` 10절)
