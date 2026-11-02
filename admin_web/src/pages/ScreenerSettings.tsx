@@ -5,7 +5,12 @@ import { formatDateTime } from '../lib/marketFormat'
 import { showToast } from '../lib/toast'
 
 // 스크리너 탭 보이기 — 다듬는 중인 탭을 사용자 화면(웹·앱)에서 숨기거나 다시 연다. 기본은 꺼짐.
+// 목록 순서는 서버(KNOWN) 순서 — 종목 찾기 전체가 맨 위. 관리자 화면(주도주·패턴 관리 등)은 이 스위치와 무관하게 항상 보인다.
 const META: Record<ScreenerFeatureKey, { title: string; description: string }> = {
+  STOCK_FINDER: {
+    title: '종목 찾기(사용자 화면)',
+    description: '끄면 웹·앱에서 주도주·조건검색·패턴이 모두 숨겨져요(관리자 화면은 그대로)',
+  },
   FINDER: {
     title: '조건검색 탭',
     description: '끄면 웹·앱 스크리너의 "종목 찾기"에서 조건검색 탭이 사라지고, 주소로 들어와도 주도주 탭으로 보냅니다.',

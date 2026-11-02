@@ -1,4 +1,4 @@
-"""스크리너 탭 보이기 스위치 관리자 REST — 조건검색(FINDER)·차트 패턴(PATTERNS). 관리자 JWT 만."""
+"""스크리너 탭 보이기 스위치 관리자 REST — 종목 찾기 전체(STOCK_FINDER)·조건검색(FINDER)·차트 패턴(PATTERNS). 관리자 JWT 만."""
 from __future__ import annotations
 
 import logging

@@ -1,4 +1,4 @@
-import { useRouter } from 'expo-router';
+import { Redirect, useRouter } from 'expo-router';
 import { useState } from 'react';
 import { ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -7,14 +7,13 @@ import { StyleSheet } from 'react-native-unistyles';
 import { FinderSection } from '@/features/finder/sections/finder-section';
 import { LeadersSection } from '@/features/leaders/sections/leaders-section';
 import { PatternsSection } from '@/features/patterns/sections/patterns-section';
-import { useScreenerFeatures } from '@/features/screener/use-screener-features';
-import type { ScreenerFeatures } from '@/features/screener/api';
+import { useScreenerFeaturesState } from '@/features/screener/use-screener-features';
+import { screenerChipVisible, screenerEntry, type ScreenerTab } from '@/features/screener/visibility';
 import { Chip } from '@/ui';
 
-type Tab = 'leaders' | 'finder' | 'patterns';
+type Tab = ScreenerTab;
 // 시장 묶음(개요·테마·업종·일정)은 시황 탭으로 옮겨 갔다 — 여기는 '종목 찾기'만
-// 조건검색·패턴은 관리자 스위치(관리자 > 스크리너 설정)가 켜졌을 때만 보인다
-const FEATURE_OF: Partial<Record<Tab, keyof ScreenerFeatures>> = { finder: 'finder', patterns: 'patterns' };
+// 종목 찾기 전체는 관리자 스위치 STOCK_FINDER, 조건검색·패턴은 각자 스위치(관리자 > 스크리너 설정)가 켜졌을 때만 보인다
 const TABS: [Tab, string][] = [['leaders', '주도주'], ['finder', '조건검색'], ['patterns', '패턴']];
 
 /** 스크리너 탭 — 주도주·조건검색·패턴(웹 순서와 같음). 칩이 하나뿐이면(스위치 모두 꺼짐) 칩 줄을 숨긴다 */
@@ -22,17 +21,19 @@ export default function ScreenerScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const [tab, setTab] = useState<Tab>('leaders');
-  const features = useScreenerFeatures();
-  const visible = (t: Tab) => {
-    const f = FEATURE_OF[t];
-    return f === undefined || features[f];
-  };
+  const features = useScreenerFeaturesState();
+  const visible = (t: Tab) => screenerChipVisible(features, t);
   const tabs = TABS.filter(([v]) => visible(v));
   // 보고 있던 탭이 관리자 스위치로 꺼지면 주도주로
   const current: Tab = visible(tab) ? tab : 'leaders';
 
   const openStock = (ticker: string, name: string) =>
     router.push({ pathname: '/stock/[ticker]', params: { ticker, name } });
+
+  // 종목 찾기가 꺼져 있으면(탭은 숨겨짐) 딥링크·돌아가기로 들어와도 시황으로. 답을 받기 전엔 빈 화면으로 기다린다
+  const entry = screenerEntry(features);
+  if (entry === 'redirect') return <Redirect href="/market" />;
+  if (entry === 'wait') return <View style={[styles.screen, { paddingTop: insets.top }]} />;
 
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}>

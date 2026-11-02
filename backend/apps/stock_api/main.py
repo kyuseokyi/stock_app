@@ -41,7 +41,7 @@ app.include_router(themes_admin.router)
 # 관리자 시장 데이터(관리자 JWT) — 데이터 현황, KIS 를 호출하지 않는 계산 수동 실행
 app.include_router(market_admin.router)
 
-# 스크리너 탭 보이기 스위치(관리자 JWT) — 조건검색·차트 패턴 탭 켜고 끄기(공개 읽기는 GraphQL screenerFeatures)
+# 스크리너 탭 보이기 스위치(관리자 JWT) — 종목 찾기 전체·조건검색·차트 패턴 탭 켜고 끄기(공개 읽기는 GraphQL screenerFeatures)
 app.include_router(screener_admin.router)
 
 # AI 시황(공개 GET) — 모닝 브리핑·급등락 원인·수급·트리맵(/api/v1/market/*), 스크리너 정성 분석(/api/v1/ai/*)

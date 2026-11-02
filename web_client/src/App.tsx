@@ -58,8 +58,9 @@ export default function App() {
           <Route path="themes" element={<GroupTab key="theme" kind="theme" />} />
           <Route path="sectors" element={<GroupTab key="sector" kind="sector" />} />
           <Route path="calendar" element={<CalendarTab />} />
-          <Route path="leaders" element={<ScreenerPage />} />
-          {/* 조건검색·패턴은 관리자 스위치(관리자 > 스크리너 설정)가 켜졌을 때만 — 꺼져 있으면 주도주로 */}
+          {/* 종목 찾기(주도주·조건검색·패턴)는 관리자 스위치 '종목 찾기(사용자 화면)'가 켜졌을 때만 — 꺼져 있으면 시장 개요로.
+              조건검색·패턴은 각자 스위치도 켜져야 하고, 그 탭만 꺼져 있으면 주도주로(관리자 > 스크리너 설정) */}
+          <Route path="leaders" element={<ScreenerFeatureGate feature="leaders"><ScreenerPage /></ScreenerFeatureGate>} />
           <Route path="finder" element={<ScreenerFeatureGate feature="finder"><FinderTab /></ScreenerFeatureGate>} />
           <Route path="patterns" element={<ScreenerFeatureGate feature="patterns"><PatternsTab /></ScreenerFeatureGate>} />
           <Route path="*" element={<Navigate to="market" replace />} />
