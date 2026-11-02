@@ -76,6 +76,6 @@ const styles = StyleSheet.create((theme) => ({
   },
   sessionOpen: { color: theme.colors.up, backgroundColor: theme.colors.upSoft },
   basis: { fontSize: 12, color: theme.colors.textSecondary },
-  chipsBar: { flexGrow: 0 },
+  chipsBar: { flexGrow: 0, flexShrink: 0 }, // ScrollView 기본 flexShrink:1 — 아래 본문이 길면 칩 줄이 눌려 글자가 잘렸다
   chips: { gap: theme.gap(1), paddingHorizontal: theme.gap(2), paddingVertical: theme.gap(1.5) },
 }));

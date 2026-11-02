@@ -223,6 +223,7 @@ const styles = StyleSheet.create((theme) => ({
   },
   tabs: {
     flexGrow: 0,
+    flexShrink: 0, // ScrollView 기본 flexShrink:1 — 목록이 길면 게시판 칩 줄이 눌린다
     borderBottomWidth: 1,
     borderBottomColor: theme.colors.border,
   },
