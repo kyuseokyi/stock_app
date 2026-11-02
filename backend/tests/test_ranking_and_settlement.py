@@ -170,7 +170,9 @@ async def test_settlement_closes_archives_and_rolls_over(db):
 
 
 async def test_settlement_idempotent(db):
-    past = datetime(2026, 9, 30, 11, 0, tzinfo=timezone.utc)
+    # 고정 날짜(9/30)면 정산이 만든 다음 시즌(10월)이 11월부터는 이미 끝난 시즌이 되어 두 번째 호출이 그것을 정산했다
+    # → 종료를 '지금 하루 전'으로 두어 다음 달 시즌이 항상 미래가 되게 한다(정산 코드 문제 아님).
+    past = datetime.now(timezone.utc) - timedelta(days=1)
     await _seed_season_with_players(db, end_at=past)
     await settlement.settle_due_season(db, None, lambda t, e: Decimal("110"))
     second = await settlement.settle_due_season(db, None, lambda t, e: Decimal("110"))
