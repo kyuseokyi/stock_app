@@ -4,25 +4,35 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StyleSheet } from 'react-native-unistyles';
 
 import { BlogCard } from '@/features/blog/blog-card';
+import type { BlogPost } from '@/features/blog/types';
 import { useFeaturedPosts } from '@/features/blog/use-featured-posts';
+import { HomeSummary } from '@/features/home/home-summary';
+import { useHomeSummary } from '@/features/home/use-home-summary';
 import { HomePushPrompt } from '@/features/push/home-push-prompt';
 import { usePullRefresh } from '@/hooks/use-pull-refresh';
+
+// 목록 소품은 모듈 수준으로 — 지수 30초 갱신마다 화면이 다시 그려져도 구분선·행이 다시 마운트되지 않게
+const postKey = (item: BlogPost) => String(item.id);
+const renderPost = ({ item }: { item: BlogPost }) => <BlogCard post={item} />;
+const PostSeparator = () => <View style={styles.sep} />;
 
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { data, loading, error, reload, refresh } = useFeaturedPosts();
-  const { refreshing, onRefresh } = usePullRefresh(refresh);
+  const summary = useHomeSummary();
 
-  // 처음 불러올 때만 전체 화면 로딩 — 당겨서 새로고침 중에는 목록을 그대로 둔다
-  const content =
-    loading && data.length === 0 ? (
-      <View style={[styles.center, { paddingTop: insets.top }]}>
-        <ActivityIndicator />
-        <Text style={styles.hint}>불러오는 중…</Text>
-      </View>
-    ) : (
-      // 빈 상태·오류도 목록 안에 둬서 당겨서 새로고침이 되게 한다
+  // 요약은 실패해도 조용히 숨기고 받아 둔 값을 유지한다 — 토스트는 지금까지처럼 추천 글이 실패했을 때만
+  const refreshAll = async () => {
+    const [posts] = await Promise.allSettled([refresh(), summary.refresh()]);
+    if (posts.status === 'rejected') throw posts.reason;
+  };
+  const { refreshing, onRefresh } = usePullRefresh(refreshAll);
+
+  // 시트는 Fragment 의 두 번째 자리에 고정 — 다시 마운트되지 않는다
+  return (
+    <>
+      {/* 요약과 추천 글이 따로 로딩되도록 목록을 항상 그린다. 빈 상태·오류도 목록 안에 둬서 당겨서 새로고침이 되게 한다 */}
       <FlatList
         style={styles.list}
         contentContainerStyle={[
@@ -31,25 +41,34 @@ export default function HomeScreen() {
           data.length === 0 && styles.grow,
         ]}
         data={data}
-        keyExtractor={(item) => String(item.id)}
+        keyExtractor={postKey}
         ListHeaderComponent={
-          // 커뮤니티는 하단 탭에서 빠졌으므로 추천 글 헤더 오른쪽에서 전체 목록(/blog)으로 보낸다
-          <View style={styles.header}>
-            <Text style={styles.title}>📌 추천 글</Text>
-            <Pressable
-              onPress={() => router.push('/blog')}
-              hitSlop={8}
-              accessibilityRole="link"
-              accessibilityLabel="커뮤니티 전체 보기">
-              <Text style={styles.moreLink}>커뮤니티 전체 보기 ›</Text>
-            </Pressable>
-          </View>
+          // 함수가 아니라 요소로 넘겨 머리글이 다시 마운트되지 않게 한다(급등·급락 칩 선택 유지)
+          <>
+            <HomeSummary summary={summary} />
+            {/* 커뮤니티는 하단 탭에서 빠졌으므로 추천 글 헤더 오른쪽에서 전체 목록(/blog)으로 보낸다 */}
+            <View style={styles.header}>
+              <Text style={styles.title} accessibilityRole="header">📌 추천 글</Text>
+              <Pressable
+                onPress={() => router.push('/blog')}
+                hitSlop={8}
+                accessibilityRole="link"
+                accessibilityLabel="커뮤니티 전체 보기">
+                <Text style={styles.moreLink}>커뮤니티 전체 보기 ›</Text>
+              </Pressable>
+            </View>
+          </>
         }
-        renderItem={({ item }) => <BlogCard post={item} />}
-        ItemSeparatorComponent={() => <View style={styles.sep} />}
+        renderItem={renderPost}
+        ItemSeparatorComponent={PostSeparator}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
         ListEmptyComponent={
-          error ? (
+          loading ? (
+            <View style={styles.center}>
+              <ActivityIndicator />
+              <Text style={styles.hint}>불러오는 중…</Text>
+            </View>
+          ) : error ? (
             <View style={styles.center}>
               <Text style={styles.errorTitle}>추천 글을 불러오지 못했습니다</Text>
               <Text style={styles.hint}>{error}</Text>
@@ -65,12 +84,6 @@ export default function HomeScreen() {
           )
         }
       />
-    );
-
-  // 시트는 Fragment 의 두 번째 자리에 고정 — 로딩→목록 전환에도 다시 마운트되지 않는다
-  return (
-    <>
-      {content}
       <HomePushPrompt />
     </>
   );
@@ -92,8 +105,8 @@ const styles = StyleSheet.create((theme) => ({
     marginBottom: theme.gap(1.5),
   },
   title: {
-    fontSize: 20,
-    fontWeight: '800',
+    fontSize: 18,
+    fontWeight: '700',
     color: theme.colors.text,
   },
   moreLink: {
@@ -127,7 +140,7 @@ const styles = StyleSheet.create((theme) => ({
     backgroundColor: theme.colors.background,
   },
   listContent: {
-    padding: theme.gap(2),
+    padding: theme.gap(2.5),
   },
   sep: {
     height: theme.gap(1.5),

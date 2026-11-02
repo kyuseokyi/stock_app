@@ -1,5 +1,6 @@
 // 시장 칩 묶음 — 지수·거시 지표를 국내 증시 / 밤사이 미국 증시 / 돈의 흐름 / 미국 경제지표로 나눈다(웹 '세계 시장' 탭과 같은 분류).
 // 모바일 홈에는 시장 노트가 없어 국내 지수도 이 칩에 남긴다. 처음 보는 코드도 버리지 않고 가까운 묶음 끝에 붙인다.
+import { toneOf, type Tone } from './format';
 import type { MacroValue, MarketIndex } from './types';
 
 /** 미국 증시 순서(KIS 해외지수) — 목록에 없는 미국 코드는 뒤에 붙는다 */
@@ -14,6 +15,11 @@ export const NEUTRAL_HINT: Record<string, string> = {
   'FX:USDKRW': '오르면 원화 약세',
   'US:VIX': '공포지수 · 오르면 불안이 커졌다는 뜻',
 };
+
+/** 지수 등락률 색 — 오르는 게 좋은 일이 아닌 지표(NEUTRAL_HINT)는 본문색, 나머지는 상승·하락 색 */
+export function indexTone(ix: Pick<MarketIndex, 'code' | 'chg1d'>): Tone {
+  return NEUTRAL_HINT[ix.code] ? 'flat' : toneOf(ix.chg1d);
+}
 
 export interface OverviewGroups {
   kr: MarketIndex[];

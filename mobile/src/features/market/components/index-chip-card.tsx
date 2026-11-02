@@ -1,16 +1,14 @@
 import { Text, View } from 'react-native';
 import { StyleSheet } from 'react-native-unistyles';
 
-import { formatChg, formatIndex, indexChipCaption, toneOf } from '../format';
+import { formatChg, formatIndex, indexChipCaption } from '../format';
+import { indexTone } from '../overview-groups';
 import type { MarketIndex } from '../types';
 import { Sparkline } from './sparkline';
 
-/** 원/달러는 오르는 게 좋은 일이 아니라 등락률을 본문색으로(IndexCard 의 hint 와 같은 규칙) */
-const NEUTRAL = ['FX:USDKRW', 'US:VIX'];
-
 /** 지수 캐러셀 카드(140×90, surface) — 지수명·현재값·등락률·기준 시각 캡션·미니 추세선. 2열 IndexCard 의 가로 스크롤용 변형 */
 export function IndexChipCard({ index }: { index: MarketIndex }) {
-  const tone = NEUTRAL.includes(index.code) ? 'flat' : toneOf(index.chg1d);
+  const tone = indexTone(index); // 원/달러는 오르는 게 좋은 일이 아니라 본문색(IndexCard 의 hint 와 같은 규칙)
   const caption = indexChipCaption(index);
   return (
     <View
