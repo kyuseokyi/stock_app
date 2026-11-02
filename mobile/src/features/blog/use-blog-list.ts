@@ -14,10 +14,15 @@ type State = {
 };
 
 type UseBlogListOptions = {
-  boardId?: number;
+  /** 숫자=그 게시판, null=활성 게시판 전체, undefined=아직 정해지지 않음(요청하지 않음) */
+  boardId?: number | null;
   page?: number;
   size?: number;
 };
+
+function listParams(boardId: number | null, page: number, size: number) {
+  return boardId === null ? { activeBoardsOnly: true, page, size } : { boardId, page, size };
+}
 
 /** 블로그 글 목록(게시판 필터 + 페이지네이션)을 불러오고 로딩/에러/재시도 상태를 제공한다. */
 export function useBlogList(options: UseBlogListOptions = {}) {
@@ -32,7 +37,7 @@ export function useBlogList(options: UseBlogListOptions = {}) {
     }
     setState((s) => ({ ...s, loading: true, error: null }));
     try {
-      const res = await fetchBlogList({ boardId, page, size });
+      const res = await fetchBlogList(listParams(boardId, page, size));
       setState({ data: res.items, total: res.total, page: res.page, loading: false, error: null });
     } catch (e) {
       const msg =
@@ -46,7 +51,7 @@ export function useBlogList(options: UseBlogListOptions = {}) {
   /** 당겨서 새로고침 — 화면을 "불러오는 중"으로 바꾸지 않고, 성공하면 목록만 바꾼다(실패는 throw → 토스트). */
   const refresh = useCallback(async () => {
     if (boardId === undefined) return;
-    const res = await fetchBlogList({ boardId, page, size });
+    const res = await fetchBlogList(listParams(boardId, page, size));
     setState({ data: res.items, total: res.total, page: res.page, loading: false, error: null });
   }, [boardId, page, size]);
 

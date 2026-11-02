@@ -20,13 +20,15 @@ export function fmtDate(iso: string): string {
   return `${d.getFullYear()}.${p(d.getMonth() + 1)}.${p(d.getDate())}`;
 }
 
-export function BlogCard({ post }: { post: BlogPost }) {
+/** boardName 을 주면 제목 위에 소속 게시판을 표시한다(커뮤니티 '전체'처럼 여러 게시판이 섞일 때) */
+export function BlogCard({ post, boardName }: { post: BlogPost; boardName?: string }) {
   const router = useRouter();
   return (
     <Pressable
       onPress={() => router.push(`/blog/${post.id}`)}
       style={({ pressed }) => [pressed && styles.pressed]}>
       <Card>
+        {boardName ? <Text style={styles.board} numberOfLines={1}>{boardName}</Text> : null}
         <Text style={styles.title} numberOfLines={1}>
           {post.title}
         </Text>
@@ -43,6 +45,7 @@ export function BlogCard({ post }: { post: BlogPost }) {
 
 const styles = StyleSheet.create((theme) => ({
   pressed: { opacity: 0.7 },
+  board: { fontSize: 12, fontWeight: '700', color: theme.colors.primary },
   title: { fontSize: 16, fontWeight: '700', color: theme.colors.text },
   snippet: { fontSize: 13, lineHeight: 18, color: theme.colors.textSecondary },
   meta: { marginTop: theme.gap(0.5), fontSize: 12, color: theme.colors.textSecondary },

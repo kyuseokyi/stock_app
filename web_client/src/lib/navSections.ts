@@ -1,7 +1,7 @@
 import type { ScreenerFeatures } from '../api/screenerFeatures'
 import { screenerMenuVisible } from './screenerFeatures'
 
-// 1차 메뉴 판정 — 순수 함수. 순서는 앱 하단 탭(홈·마켓·스크리너·게임·내정보)에 웹의 커뮤니티를 더한 것.
+// 1차 메뉴 판정 — 순수 함수. 순서는 앱 하단 탭과 같다.
 export type Section = 'home' | 'market' | 'screener' | 'community' | 'game' | 'me'
 
 const SECTIONS: Section[] = ['home', 'market', 'screener', 'community', 'game', 'me']

@@ -1,82 +1,66 @@
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, FlatList, Pressable, RefreshControl, Text, View } from 'react-native';
+import { ActivityIndicator, FlatList, Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StyleSheet } from 'react-native-unistyles';
 
 import { BlogCard } from '@/features/blog/blog-card';
 import { useBlogList } from '@/features/blog/use-blog-list';
+import { boardChips, resolveBoardFilter, type BoardFilter } from '@/features/boards/filter';
 import { useBoardStore } from '@/features/boards/store';
-import type { Board } from '@/features/boards/types';
 import { usePullRefresh } from '@/hooks/use-pull-refresh';
+import { Chip } from '@/ui';
 
 const PAGE_SIZE = 10;
 
-/** 커뮤니티 목록 — 하단 탭에서 빠져 루트 Stack 화면(/blog, 헤더 '커뮤니티')이 됐다. 홈의 '커뮤니티 전체 보기'로 들어온다.
- *  상단 안전 영역은 Stack 헤더가 맡으므로 상단 여백을 따로 주지 않는다 */
-export default function BlogScreen() {
+/** 커뮤니티 탭 — 기본은 '전체'(활성 게시판의 새 글), 칩으로 게시판을 고른다. '전체'일 때만 카드에 게시판 이름을 붙인다.
+ *  탭 화면은 Stack 헤더가 없어 상단 안전 영역을 직접 비운다 */
+export default function CommunityScreen() {
+  const insets = useSafeAreaInsets();
   const { boards, loaded: boardsLoaded, error: boardsError, load: loadBoards } = useBoardStore();
-  const [selectedBoardId, setSelectedBoardId] = useState<number | undefined>(undefined);
+  const refreshBoards = useBoardStore((s) => s.refresh);
+  const [selected, setSelected] = useState<BoardFilter>(null);
   const [page, setPage] = useState(1);
 
   useEffect(() => {
     loadBoards();
   }, [loadBoards]);
 
-  // 게시판 로딩 완료 시 첫 번째 게시판을 기본 선택(웹의 첫 게시판 리다이렉트와 동일한 동작).
+  const filter = resolveBoardFilter(selected, boards, boardsLoaded);
+  // 고른 게시판이 숨겨져 '전체'로 돌아가면 쪽 번호도 처음으로
   useEffect(() => {
-    if (boardsLoaded && boards.length > 0 && selectedBoardId === undefined) {
-      setSelectedBoardId(boards[0].id);
+    if (filter !== selected) {
+      setSelected(filter);
+      setPage(1);
     }
-  }, [boardsLoaded, boards, selectedBoardId]);
+  }, [filter, selected]);
 
   const { data, total, loading, error, reload, refresh } = useBlogList({
-    boardId: selectedBoardId,
+    boardId: filter,
     page,
     size: PAGE_SIZE,
   });
-  const refreshBoards = useBoardStore((s) => s.refresh);
-  // 당겨서 새로고침: 게시판 목록(이름·순서 변경 반영)과 현재 게시판 글을 함께 다시 가져온다
+  // 당겨서 새로고침: 게시판 목록(이름·순서 변경 반영)과 현재 글을 함께 다시 가져온다
   const { refreshing, onRefresh } = usePullRefresh(() => Promise.all([refreshBoards(), refresh()]));
 
-  const handleSelectBoard = (boardId: number) => {
-    if (boardId === selectedBoardId) return;
-    setSelectedBoardId(boardId);
+  const handleSelect = (value: BoardFilter) => {
+    if (value === filter) return;
+    setSelected(value);
     setPage(1);
   };
 
+  const boardName = (id: number) => boards.find((b) => b.id === id)?.name;
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
-  if (boardsError) {
-    return (
-      <View style={styles.center}>
-        <Text style={styles.errorTitle}>게시판을 불러오지 못했습니다</Text>
-        <Text style={styles.hint}>{boardsError}</Text>
-        <Pressable style={styles.retry} onPress={loadBoards}>
-          <Text style={styles.retryText}>다시 시도</Text>
-        </Pressable>
-      </View>
-    );
-  }
-
-  if (!boardsLoaded) {
-    return (
-      <View style={styles.center}>
-        <ActivityIndicator />
-        <Text style={styles.hint}>게시판을 불러오는 중…</Text>
-      </View>
-    );
-  }
-
-  if (boards.length === 0) {
-    return (
-      <View style={styles.center}>
-        <Text style={styles.hint}>게시판이 없습니다</Text>
-      </View>
-    );
-  }
-
   return (
-    <View style={styles.screen}>
-      <BoardTabs boards={boards} selectedBoardId={selectedBoardId} onSelect={handleSelectBoard} />
+    <View style={[styles.screen, { paddingTop: insets.top }]}>
+      <Text style={styles.title} accessibilityRole="header">커뮤니티</Text>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipsBar} contentContainerStyle={styles.chips}>
+        {boardChips(boards).map((c) => (
+          <Chip key={c.value ?? 'all'} label={c.label} selected={c.value === filter} onPress={() => handleSelect(c.value)} />
+        ))}
+        {/* 게시판 목록만 실패해도 '전체' 글은 볼 수 있으니 화면을 막지 않는다 */}
+        {boardsError ? <Chip label="게시판 다시 불러오기" onPress={loadBoards} /> : null}
+      </ScrollView>
 
       {/* 처음 불러올 때만 전체 로딩. 빈 상태·오류도 목록 안에 둬서 당겨서 새로고침이 되게 한다 */}
       {loading && data.length === 0 ? (
@@ -90,7 +74,9 @@ export default function BlogScreen() {
           contentContainerStyle={[styles.listContent, data.length === 0 && styles.grow]}
           data={data}
           keyExtractor={(item) => String(item.id)}
-          renderItem={({ item }) => <BlogCard post={item} />}
+          renderItem={({ item }) => (
+            <BlogCard post={item} boardName={filter === null ? boardName(item.boardId) : undefined} />
+          )}
           ItemSeparatorComponent={() => <View style={styles.sep} />}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
           ListEmptyComponent={
@@ -117,39 +103,6 @@ export default function BlogScreen() {
         />
       )}
     </View>
-  );
-}
-
-function BoardTabs({
-  boards,
-  selectedBoardId,
-  onSelect,
-}: {
-  boards: Board[];
-  selectedBoardId: number | undefined;
-  onSelect: (id: number) => void;
-}) {
-  return (
-    <FlatList
-      style={styles.tabs}
-      contentContainerStyle={styles.tabsContent}
-      data={boards}
-      horizontal
-      showsHorizontalScrollIndicator={false}
-      keyExtractor={(item) => String(item.id)}
-      ItemSeparatorComponent={() => <View style={styles.tabSep} />}
-      renderItem={({ item }) => {
-        const selected = item.id === selectedBoardId;
-        return (
-          <Pressable
-            style={[styles.tab, selected && styles.tabSelected]}
-            onPress={() => onSelect(item.id)}
-          >
-            <Text style={[styles.tabText, selected && styles.tabTextSelected]}>{item.name}</Text>
-          </Pressable>
-        );
-      }}
-    />
   );
 }
 
@@ -221,39 +174,15 @@ const styles = StyleSheet.create((theme) => ({
     color: '#ffffff',
     fontWeight: '700',
   },
-  tabs: {
-    flexGrow: 0,
-    flexShrink: 0, // ScrollView 기본 flexShrink:1 — 목록이 길면 게시판 칩 줄이 눌린다
-    borderBottomWidth: 1,
-    borderBottomColor: theme.colors.border,
-  },
-  tabsContent: {
+  title: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: theme.colors.text,
     paddingHorizontal: theme.gap(2),
-    paddingVertical: theme.gap(1.5),
+    paddingTop: theme.gap(2),
   },
-  tabSep: {
-    width: theme.gap(1),
-  },
-  tab: {
-    paddingVertical: theme.gap(0.75),
-    paddingHorizontal: theme.gap(1.5),
-    borderRadius: 999,
-    backgroundColor: theme.colors.surface,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-  },
-  tabSelected: {
-    backgroundColor: theme.colors.primary,
-    borderColor: theme.colors.primary,
-  },
-  tabText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: theme.colors.textSecondary,
-  },
-  tabTextSelected: {
-    color: '#ffffff',
-  },
+  chipsBar: { flexGrow: 0, flexShrink: 0 }, // ScrollView 기본 flexShrink:1 — 목록이 길면 칩 줄이 눌린다
+  chips: { gap: theme.gap(1), paddingHorizontal: theme.gap(2), paddingVertical: theme.gap(1.5) },
   list: {
     flex: 1,
     backgroundColor: theme.colors.background,
