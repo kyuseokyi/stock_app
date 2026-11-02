@@ -1,5 +1,5 @@
 import { useRouter } from 'expo-router';
-import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { type ReactNode, useCallback, useEffect, useMemo, useState } from 'react';
 import { RefreshControl, ScrollView, Text, View } from 'react-native';
 import { StyleSheet } from 'react-native-unistyles';
 
@@ -34,7 +34,7 @@ import { useHeatmap } from '../use-heatmap';
 import { useInvestorFlow } from '../use-investor-flow';
 import { useMarketOverview } from '../use-market-overview';
 import { useMorningBrief } from '../use-morning-brief';
-import { MOVERS_REFRESH_MS, useMovers } from '../use-movers';
+import { useMovers, useMoversAutoRefresh } from '../use-movers';
 import { useReturnRefresh } from '../use-return-refresh';
 
 type Props = {
@@ -76,16 +76,7 @@ export function MarketSection({ onMore, onOpenGroup, onHeader }: Props) {
 
   // 지수·거시는 30초(기존), 급등락은 정규장일 때만 60초마다 조용히 갱신 — 화면이 포커스·앱이 앞에 있을 때만
   useAutoRefresh(overview.silentRefresh);
-  const sessionRef = useRef(session);
-  useEffect(() => {
-    sessionRef.current = session;
-  }, [session]);
-  const moversSilent = movers.silentRefresh;
-  const refreshMoversInSession = useCallback(
-    async () => (sessionRef.current === '정규장' ? moversSilent() : undefined),
-    [moversSilent],
-  );
-  useAutoRefresh(refreshMoversInSession, MOVERS_REFRESH_MS);
+  useMoversAutoRefresh(movers.silentRefresh, session);
 
   // 하루 몇 번만 바뀌는 데이터는 타이머 없이, 화면·앱 복귀 때 마지막 조회 후 10분이 지났으면 1회만 조용히 다시 받는다
   useReturnRefresh(overview.silentRefreshAll, overview.fetchedAt);

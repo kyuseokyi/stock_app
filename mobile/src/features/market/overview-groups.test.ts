@@ -1,4 +1,4 @@
-import { groupOverview } from './overview-groups';
+import { groupOverview, indexTone } from './overview-groups';
 import type { MacroValue, MarketIndex } from './types';
 
 const ix = (code: string, region: string): MarketIndex => ({
@@ -27,5 +27,19 @@ describe('groupOverview', () => {
     const g = groupOverview([], [mv('CPIAUCSL'), mv('DGS2'), mv('UNRATE'), mv('DGS10')]);
     expect(g.rates.map((m) => m.seriesId)).toEqual(['DGS10', 'DGS2']);
     expect(g.otherMacro.map((m) => m.seriesId)).toEqual(['CPIAUCSL', 'UNRATE']);
+  });
+});
+
+describe('indexTone', () => {
+  it('원/달러·VIX 는 올라도 내려도 본문색이다', () => {
+    expect(indexTone({ code: 'FX:USDKRW', chg1d: 1.2 })).toBe('flat');
+    expect(indexTone({ code: 'FX:USDKRW', chg1d: -1.2 })).toBe('flat');
+    expect(indexTone({ code: 'US:VIX', chg1d: 5 })).toBe('flat');
+  });
+
+  it('그 밖의 지수는 등락에 따라 색이 갈린다', () => {
+    expect(indexTone({ code: 'KR:0001', chg1d: 1.2 })).toBe('up');
+    expect(indexTone({ code: 'KR:1001', chg1d: -1.2 })).toBe('down');
+    expect(indexTone({ code: 'KR:0001', chg1d: null })).toBe('flat');
   });
 });
