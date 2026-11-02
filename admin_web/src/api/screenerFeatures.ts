@@ -1,7 +1,7 @@
 import { stockAdminClient as http } from './client'
 
 // stock_api 스크리너 탭 보이기 스위치(관리자 JWT). 웹·모바일은 GraphQL screenerFeatures 로 읽는다.
-export type ScreenerFeatureKey = 'FINDER' | 'PATTERNS'
+export type ScreenerFeatureKey = 'STOCK_FINDER' | 'FINDER' | 'PATTERNS'
 
 export interface ScreenerFeature {
   key: ScreenerFeatureKey

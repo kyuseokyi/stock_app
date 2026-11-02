@@ -4,10 +4,12 @@ import { gql } from './screener'
 // 이 파일에서 그대로 읽어 실제 스키마로 실행한다 — `export const X_QUERY = \`...\`` 형식을 바꾸지 말 것.
 
 export const SCREENER_FEATURES_QUERY = `query ScreenerFeatures {
-  screenerFeatures { finder patterns }
+  screenerFeatures { stockFinder finder patterns }
 }`
 
 export interface ScreenerFeatures {
+  /** 사용자 화면 종목 찾기(주도주·조건검색·패턴) 전체 — 꺼지면 finder·patterns 와 무관하게 모두 숨김 */
+  stockFinder: boolean
   finder: boolean
   patterns: boolean
 }

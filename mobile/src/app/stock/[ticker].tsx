@@ -12,6 +12,8 @@ import { formatIndex } from '@/features/market/format';
 import { PatternSummary } from '@/features/patterns/components/pattern-summary';
 import { currentBase, patternChartLines } from '@/features/patterns/patterns';
 import { usePatternBases } from '@/features/patterns/use-pattern-bases';
+import { useScreenerFeaturesState } from '@/features/screener/use-screener-features';
+import { stockBackHref } from '@/features/screener/visibility';
 import { usePullRefresh } from '@/hooks/use-pull-refresh';
 import { Button, ListState } from '@/ui';
 
@@ -32,9 +34,10 @@ export default function StockDetailScreen() {
 
 function NotFound() {
   const router = useRouter();
+  const features = useScreenerFeaturesState();
   // 딥링크로 들어와 스택이 이 화면뿐이면 back() 이 동작하지 않으므로 스크리너 탭으로 보낸다
-  // (시황 탭이 생겼어도 종목 상세는 주도주·조건검색·패턴 등 스크리너에서 주로 들어오므로 /screener 유지)
-  const goBack = () => (router.canGoBack() ? router.back() : router.replace('/screener'));
+  // (종목 상세는 주로 스크리너에서 들어오므로 /screener. 단 관리자 스위치로 종목 찾기가 꺼졌으면(로딩 전 포함) 시황 탭)
+  const goBack = () => (router.canGoBack() ? router.back() : router.replace(stockBackHref(features)));
   return (
     <View style={styles.center}>
       <ListState mode="empty" emoji="🔍" title="종목 정보를 찾을 수 없어요" hint="주소를 다시 확인해 주세요" />

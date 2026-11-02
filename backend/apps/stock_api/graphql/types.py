@@ -317,6 +317,7 @@ class MarketOverview:
 
 @strawberry.type(description="스크리너 탭 보이기 스위치 — 관리자가 켜고 끈다. 꺼진 탭은 웹·모바일 메뉴에서 숨긴다")
 class ScreenerFeatures:
+    stock_finder: bool = strawberry.field(description="사용자 화면 종목 찾기(주도주·조건검색·패턴) 전체 — 꺼지면 finder·patterns 와 무관하게 모두 숨김")
     finder: bool
     patterns: bool
 

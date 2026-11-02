@@ -1,4 +1,6 @@
-"""스크리너 탭 보이기 스위치 — 관리자가 조건검색·차트 패턴 탭을 켜고 끈다(웹·모바일이 GraphQL screenerFeatures 로 읽음).
+"""스크리너 탭 보이기 스위치 — 관리자가 사용자 화면의 종목 찾기 전체(STOCK_FINDER)와 조건검색(FINDER)·차트 패턴(PATTERNS) 탭을
+켜고 끈다(웹·모바일이 GraphQL screenerFeatures 로 읽음). STOCK_FINDER 가 꺼지면 FINDER·PATTERNS 와 무관하게 종목 찾기
+(주도주·조건검색·패턴)가 모두 숨겨진다 — 판정은 클라이언트가 한다(관리자 화면은 이 스위치와 무관).
 
 DB(screener_features) 원장. 행이 없으면 OFF(숨김) — 다듬는 중인 탭을 기본으로 막아 둔다.
 stock_api 는 Redis 를 쓰지 않으므로 공개 조회는 프로세스 안 30초 캐시. 관리자가 바꾸면 이 프로세스 캐시는 바로 비우고,
@@ -15,7 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from shared.database import SyncSessionLocal
 from shared.market_models import ScreenerFeature
 
-KNOWN = ("FINDER", "PATTERNS")
+KNOWN = ("STOCK_FINDER", "FINDER", "PATTERNS")
 CACHE_TTL_SECONDS = 30
 
 _cache: tuple[float, dict[str, bool]] | None = None
@@ -31,7 +33,7 @@ def _fill(rows: list[ScreenerFeature]) -> dict[str, bool]:
 
 
 def enabled_map() -> dict[str, bool]:
-    """공개 조회(동기) — {'FINDER': bool, 'PATTERNS': bool}. DB 오류면 전부 OFF(숨김 쪽이 안전)."""
+    """공개 조회(동기) — {'STOCK_FINDER': bool, 'FINDER': bool, 'PATTERNS': bool}. DB 오류면 전부 OFF(숨김 쪽이 안전)."""
     global _cache
     now = time.monotonic()
     if _cache is not None and now - _cache[0] < CACHE_TTL_SECONDS:

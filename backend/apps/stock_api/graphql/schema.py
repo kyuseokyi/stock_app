@@ -291,10 +291,10 @@ class Query:
         return GroupDetail(**{**out, "history": [GroupHistory(**h) for h in out["history"]],
                               "stocks": [GroupStock(**s) for s in out["stocks"]]})
 
-    @strawberry.field(description="스크리너 탭 보이기 스위치(조건검색·차트 패턴) — 행이 없거나 조회 실패면 꺼짐")
+    @strawberry.field(description="스크리너 탭 보이기 스위치(종목 찾기 전체·조건검색·차트 패턴) — 행이 없거나 조회 실패면 꺼짐")
     async def screener_features(self) -> ScreenerFeatures:
         m = await run_in_threadpool(screener_features.enabled_map)
-        return ScreenerFeatures(finder=m["FINDER"], patterns=m["PATTERNS"])
+        return ScreenerFeatures(stock_finder=m["STOCK_FINDER"], finder=m["FINDER"], patterns=m["PATTERNS"])
 
     @strawberry.field(description="일정 — 공모주·경제지표(최대 92일)")
     def market_calendar(self, start: str, end: str, category: str | None = None) -> list[CalendarEvent]:
