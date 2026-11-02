@@ -1,4 +1,4 @@
-// 시황 대시보드(개요 칩) 표시용 순수 함수 — 기준 시각·장운영 뱃지·억 단위·히트맵 색 단계·지수 캐러셀 분류.
+// 마켓 대시보드(개요 칩) 표시용 순수 함수 — 기준 시각·장운영 뱃지·억 단위·히트맵 색 단계·지수 캐러셀 분류.
 // RN·네트워크 의존 없음(테스트 대상).
 import type { HeatmapGroup, HeatmapStock } from './rest-types';
 import type { MarketIndex } from './types';

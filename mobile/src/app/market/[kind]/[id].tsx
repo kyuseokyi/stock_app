@@ -23,7 +23,7 @@ export default function GroupDetailScreen() {
 
 function NotFound() {
   const router = useRouter();
-  // 딥링크로 들어와 스택이 이 화면뿐이면 back() 이 동작하지 않으므로 시황 탭으로 보낸다(테마·업종 목록이 시황 탭으로 옮겨 감)
+  // 딥링크로 들어와 스택이 이 화면뿐이면 back() 이 동작하지 않으므로 마켓 탭으로 보낸다(테마·업종 목록이 마켓 탭으로 옮겨 감)
   const goBack = () => (router.canGoBack() ? router.back() : router.replace('/market'));
   return (
     <View style={styles.center}>

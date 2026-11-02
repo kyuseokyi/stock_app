@@ -7,7 +7,7 @@ import { createLatest } from './latest';
 export type ResourceState<T> = { data: T | null; loading: boolean; error: string | null };
 
 /**
- * REST 한 건을 불러오는 공용 상태(시황 대시보드 섹션마다 따로 — 하나가 실패해도 나머지는 그대로).
+ * REST 한 건을 불러오는 공용 상태(마켓 대시보드 섹션마다 따로 — 하나가 실패해도 나머지는 그대로).
  * - fetcher 가 바뀌면(히트맵 기준 전환 등) 다시 불러온다 — 호출부는 useCallback 으로 고정해 넘긴다
  * - reload: 첫 로딩·[다시 시도]. 실패해도 이전 데이터는 남긴다(오류 코드만 기록)
  * - refresh: 당겨서 새로고침 — 실패하면 throw(호출부가 모아서 판단)

@@ -13,7 +13,7 @@ import { screenerChipVisible, screenerEntry, type ScreenerTab } from '@/features
 import { Chip } from '@/ui';
 
 type Tab = ScreenerTab;
-// 시장 묶음(개요·테마·업종·일정)은 시황 탭으로 옮겨 갔다 — 여기는 '종목 찾기'만
+// 시장 묶음(개요·테마·업종·일정)은 마켓 탭으로 옮겨 갔다 — 여기는 '종목 찾기'만
 // 종목 찾기 전체는 관리자 스위치 STOCK_FINDER, 조건검색·패턴은 각자 스위치(관리자 > 스크리너 설정)가 켜졌을 때만 보인다
 const TABS: [Tab, string][] = [['leaders', '주도주'], ['finder', '조건검색'], ['patterns', '패턴']];
 
@@ -31,7 +31,7 @@ export default function ScreenerScreen() {
   const openStock = (ticker: string, name: string) =>
     router.push({ pathname: '/stock/[ticker]', params: { ticker, name } });
 
-  // 종목 찾기가 꺼져 있으면(탭은 숨겨짐) 딥링크·돌아가기로 들어와도 시황으로. 답을 받기 전엔 빈 화면으로 기다린다
+  // 종목 찾기가 꺼져 있으면(탭은 숨겨짐) 딥링크·돌아가기로 들어와도 마켓으로. 답을 받기 전엔 빈 화면으로 기다린다
   const entry = screenerEntry(features);
   if (entry === 'redirect') return <Redirect href="/market" />;
   if (entry === 'wait') return <View style={[styles.screen, { paddingTop: insets.top }]} />;
