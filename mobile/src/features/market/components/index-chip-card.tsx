@@ -1,21 +1,22 @@
 import { Text, View } from 'react-native';
 import { StyleSheet } from 'react-native-unistyles';
 
-import { formatChg, formatIndex, toneOf } from '../format';
+import { formatChg, formatIndex, indexChipCaption, toneOf } from '../format';
 import type { MarketIndex } from '../types';
 import { Sparkline } from './sparkline';
 
 /** 원/달러는 오르는 게 좋은 일이 아니라 등락률을 본문색으로(IndexCard 의 hint 와 같은 규칙) */
 const NEUTRAL = ['FX:USDKRW', 'US:VIX'];
 
-/** 지수 캐러셀 카드(140×90, surface) — 지수명·현재값·등락률·미니 추세선. 2열 IndexCard 의 가로 스크롤용 변형 */
+/** 지수 캐러셀 카드(140×90, surface) — 지수명·현재값·등락률·기준 시각 캡션·미니 추세선. 2열 IndexCard 의 가로 스크롤용 변형 */
 export function IndexChipCard({ index }: { index: MarketIndex }) {
   const tone = NEUTRAL.includes(index.code) ? 'flat' : toneOf(index.chg1d);
+  const caption = indexChipCaption(index);
   return (
     <View
       style={styles.card}
       accessible
-      accessibilityLabel={`${index.name} ${formatIndex(index.close)}, 전일 대비 ${formatChg(index.chg1d)}${index.live && index.asOf ? `, 장중 ${index.asOf} 기준` : ''}`}
+      accessibilityLabel={`${index.name} ${formatIndex(index.close)}, 전일 대비 ${formatChg(index.chg1d)}${caption ? `, ${caption} 기준` : ''}`}
     >
       <View style={styles.head}>
         <Text style={styles.name} numberOfLines={1}>{index.name}</Text>
@@ -25,8 +26,9 @@ export function IndexChipCard({ index }: { index: MarketIndex }) {
         <Text style={styles.close} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{formatIndex(index.close)}</Text>
         <Text style={[styles.chg, styles[tone]]}>{formatChg(index.chg1d)}</Text>
       </View>
+      {caption ? <Text style={styles.caption} numberOfLines={1}>{caption}</Text> : null}
       <View style={styles.spark}>
-        <Sparkline values={index.spark} height={24} />
+        <Sparkline values={index.spark} height={18} />
       </View>
     </View>
   );
@@ -43,6 +45,7 @@ const styles = StyleSheet.create((theme) => ({
   row: { flexDirection: 'row', alignItems: 'baseline', gap: theme.gap(0.5), marginTop: 2 },
   close: { flexShrink: 1, fontSize: 16, fontWeight: '800', color: theme.colors.text },
   chg: { fontSize: 12, fontWeight: '700' },
+  caption: { fontSize: 11, lineHeight: 13, color: theme.colors.textSecondary },
   up: { color: theme.colors.up },
   down: { color: theme.colors.down },
   flat: { color: theme.colors.text },

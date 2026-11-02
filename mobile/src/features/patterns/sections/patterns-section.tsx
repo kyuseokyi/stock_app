@@ -2,6 +2,7 @@ import { ActivityIndicator, FlatList, Pressable, RefreshControl, Text, View } fr
 import { StyleSheet } from 'react-native-unistyles';
 
 import { listView } from '@/features/leaders/canslim';
+import { CloseBasisCaption } from '@/features/market/components/close-basis-caption';
 import { formatIndex } from '@/features/market/format';
 import { usePullRefresh } from '@/hooks/use-pull-refresh';
 import { ListState } from '@/ui';
@@ -23,6 +24,7 @@ export function PatternsSection({ onOpenStock }: { onOpenStock: (ticker: string,
   return (
     <View style={styles.screen}>
       <PatternChips value={r.query} onReport={r.setReport} onPattern={r.togglePattern} />
+      <CloseBasisCaption date={r.date} />
       {view === 'loading' ? (
         <ListState mode="loading" />
       ) : (

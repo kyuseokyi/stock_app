@@ -5,9 +5,10 @@ import { StyleSheet } from 'react-native-unistyles';
 import { usePullRefresh } from '@/hooks/use-pull-refresh';
 import { Chip, ListState } from '@/ui';
 
-import { BasisNote } from '../components/basis-note';
+import { CalendarNote } from '../components/basis-note';
 import { EventList } from '../components/event-list';
 import { type CalendarCategory, useCalendar } from '../use-calendar';
+import { useReturnRefresh } from '../use-return-refresh';
 
 const CATEGORIES: CalendarCategory[] = ['전체', '공모주', '경제지표'];
 
@@ -15,6 +16,7 @@ const CATEGORIES: CalendarCategory[] = ['전체', '공모주', '경제지표'];
 export function CalendarSection() {
   const c = useCalendar();
   const { refreshing, onRefresh } = usePullRefresh(c.refresh);
+  useReturnRefresh(c.silentRefresh, c.fetchedAt);
   const [showPast, setShowPast] = useState(false);
 
   return (
@@ -51,7 +53,7 @@ export function CalendarSection() {
               ) : (
                 <ListState mode="empty" emoji="🗓️" title="앞으로 60일 안에 잡힌 일정이 없어요" hint="새 일정은 매일 아침 수집돼요" />
               )}
-              <BasisNote date={null} />
+              <CalendarNote />
             </>
           )}
         </ScrollView>

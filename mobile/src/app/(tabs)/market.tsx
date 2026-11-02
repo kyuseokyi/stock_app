@@ -4,6 +4,7 @@ import { ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StyleSheet } from 'react-native-unistyles';
 
+import { StaleNotice } from '@/features/market/components/stale-notice';
 import { CalendarSection } from '@/features/market/sections/calendar-section';
 import { GroupSection } from '@/features/market/sections/group-section';
 import type { MarketSession } from '@/features/market/dashboard';
@@ -47,7 +48,7 @@ export default function MarketScreen() {
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips} style={styles.chipsBar}>
         {TABS.map(([v, t]) => <Chip key={v} label={t} selected={tab === v} onPress={() => setTab(v)} />)}
       </ScrollView>
-      <Text style={styles.notice}>ⓘ 실시간 시세가 아니어서 실제 값과 차이가 있을 수 있어요</Text>
+      <StaleNotice />
       {/* 섹션 본문 — MarketSection 의 '더보기'(테마·일정)는 이 화면 안 칩 전환으로 연결 */}
       {tab === 'market' ? <MarketSection onMore={setTab} onOpenGroup={openGroup} onHeader={onHeader} /> : null}
       {tab === 'theme' ? <GroupSection key="theme" kind="theme" onOpenGroup={openGroup} /> : null}
@@ -77,5 +78,4 @@ const styles = StyleSheet.create((theme) => ({
   basis: { fontSize: 12, color: theme.colors.textSecondary },
   chipsBar: { flexGrow: 0 },
   chips: { gap: theme.gap(1), paddingHorizontal: theme.gap(2), paddingVertical: theme.gap(1.5) },
-  notice: { fontSize: 12, color: theme.colors.textSecondary, paddingHorizontal: theme.gap(2), paddingBottom: theme.gap(0.5) },
 }));

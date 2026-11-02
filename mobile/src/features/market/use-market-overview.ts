@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { kstDateString } from '@/features/game/lib/format';
 
+import { stampFetch } from './auto-refresh';
 import { fetchMarketCalendar, fetchMarketGroups, fetchMarketOverview } from './api';
 import { errorCode, shiftDate } from './format';
 import { createLatest } from './latest';
@@ -10,8 +11,11 @@ import type { CalendarEvent, GroupItem, MarketOverview } from './types';
 type Data = { overview: MarketOverview; themes: GroupItem[]; date: string | null; events: CalendarEvent[] };
 type State = { data: Data | null; loading: boolean; error: string | null };
 
-/** 개요·주도 테마 Top 5·다가오는 일정 3건을 따로 불러온다. 개요가 실패하면 오류, 나머지는 실패해도 그 칸만 비운다. */
-async function fetchAll(): Promise<Data> {
+/**
+ * 개요·주도 테마 Top 5·다가오는 일정 3건을 따로 불러온다. 개요가 실패하면 오류, 나머지는 실패해도 그 칸만 비운다.
+ * prev 를 주면(복귀 재조회) 실패한 칸은 비우지 않고 이전 값을 유지한다.
+ */
+async function fetchAll(prev?: Data | null): Promise<Data> {
   const today = kstDateString();
   const [ov, th, ev] = await Promise.allSettled([
     fetchMarketOverview(),
@@ -21,9 +25,9 @@ async function fetchAll(): Promise<Data> {
   if (ov.status === 'rejected') throw ov.reason;
   return {
     overview: ov.value,
-    themes: th.status === 'fulfilled' ? th.value.items : [],
-    date: th.status === 'fulfilled' ? th.value.date : null,
-    events: ev.status === 'fulfilled' ? ev.value.slice(0, 3) : [],
+    themes: th.status === 'fulfilled' ? th.value.items : prev?.themes ?? [],
+    date: th.status === 'fulfilled' ? th.value.date : prev?.date ?? null,
+    events: ev.status === 'fulfilled' ? ev.value.slice(0, 3) : prev?.events ?? [],
   };
 }
 
@@ -34,12 +38,18 @@ export function useMarketOverview() {
   // 자동 새로고침이 데이터 유무를 렌더 없이 보기 위한 최신 값
   const hasData = useRef(false);
   hasData.current = state.data != null;
+  const latestData = useRef<Data | null>(null);
+  useEffect(() => {
+    latestData.current = state.data;
+  }, [state.data]);
+  // 전체(개요·테마·일정)를 마지막으로 받은 시각 — 30초 자동 갱신은 개요만 받으므로 여기에 남기지 않는다
+  const fetchedAt = useRef<number | null>(null);
 
   const reload = useCallback(async () => {
     const id = gate.next();
     setState((s) => ({ ...s, loading: true, error: null }));
     try {
-      const data = await fetchAll();
+      const data = await stampFetch(fetchedAt, () => fetchAll());
       if (gate.isLatest(id)) setState({ data, loading: false, error: null });
     } catch (e) {
       if (gate.isLatest(id)) setState({ data: null, loading: false, error: errorCode(e) });
@@ -49,8 +59,15 @@ export function useMarketOverview() {
   /** 당겨서 새로고침 — 기존 내용 유지, 성공하면 교체(실패는 throw) */
   const refresh = useCallback(async () => {
     const id = gate.next();
-    const data = await fetchAll();
+    const data = await stampFetch(fetchedAt, () => fetchAll());
     if (gate.isLatest(id)) setState({ data, loading: false, error: null });
+  }, [gate]);
+
+  /** 복귀 재조회 — 테마·일정까지 전체를 조용히 다시 받는다. 일부가 실패해도 그 칸은 이전 값을 유지한다 */
+  const silentRefreshAll = useCallback(async () => {
+    const id = gate.current();
+    const data = await stampFetch(fetchedAt, () => fetchAll(latestData.current));
+    if (gate.isLatest(id)) setState((s) => ({ ...s, data, error: null }));
   }, [gate]);
 
   /**
@@ -70,5 +87,5 @@ export function useMarketOverview() {
     void reload();
   }, [reload]);
 
-  return { ...state, reload, refresh, silentRefresh };
+  return { ...state, reload, refresh, silentRefresh, silentRefreshAll, fetchedAt };
 }

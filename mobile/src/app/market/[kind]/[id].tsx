@@ -4,6 +4,8 @@ import { StyleSheet } from 'react-native-unistyles';
 
 import { BasisNote } from '@/features/market/components/basis-note';
 import { BreadthBar } from '@/features/market/components/breadth-bar';
+import { StaleNotice } from '@/features/market/components/stale-notice';
+import { closeBasis } from '@/features/market/dashboard';
 import { formatAmount, formatChg, formatIndex, toneOf } from '@/features/market/format';
 import type { GroupKind } from '@/features/market/types';
 import { useGroupDetail } from '@/features/market/use-group-detail';
@@ -45,8 +47,10 @@ function GroupDetailBody({ kind, id }: { kind: GroupKind; id: string }) {
   return (
     <ScrollView style={styles.flex} contentContainerStyle={styles.content} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
       <Stack.Screen options={{ title: data.name }} />
+      <StaleNotice inset={false} />
       <View style={styles.card}>
         <Text style={styles.kind}>{kind === 'theme' ? '테마' : '업종'} · {data.rank ? `${data.rank}위` : '순위 없음'}</Text>
+        {closeBasis(data.date) ? <Text style={styles.meta}>{closeBasis(data.date)}</Text> : null}
         {data.description ? <Text style={styles.desc}>{data.description}</Text> : null}
         <View style={styles.chgRow}>
           {([['1일', data.chg1d], ['5일', data.chg5d], ['20일', data.chg20d]] as const).map(([t, v]) => (

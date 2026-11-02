@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { kstDateString } from '@/features/game/lib/format';
 
+import { stampFetch } from './auto-refresh';
 import { fetchMarketCalendar } from './api';
 import { errorCode, shiftDate, splitEvents } from './format';
 import { createLatest } from './latest';
@@ -17,12 +18,15 @@ export function useCalendar() {
   const [state, setState] = useState<State>({ past: [], upcoming: [], loading: true, error: null });
   const gate = useRef(createLatest()).current;
   const today = kstDateString();
+  const fetchedAt = useRef<number | null>(null);
 
   const fetchSplit = useCallback(async () => {
-    const events = await fetchMarketCalendar(
-      shiftDate(today, -7),
-      shiftDate(today, 60),
-      category === '전체' ? undefined : category,
+    const events = await stampFetch(fetchedAt, () =>
+      fetchMarketCalendar(
+        shiftDate(today, -7),
+        shiftDate(today, 60),
+        category === '전체' ? undefined : category,
+      ),
     );
     return splitEvents(events, today);
   }, [category, today]);
@@ -56,9 +60,16 @@ export function useCalendar() {
     setState({ ...r, loading: false, error: null });
   }, [fetchSplit, gate]);
 
+  /** 복귀 재조회 — 번호를 올리지 않고 스피너 없이 바꾼다. 실패는 호출한 쪽이 삼킨다 */
+  const silentRefresh = useCallback(async () => {
+    const id = gate.current();
+    const r = await fetchSplit();
+    if (gate.isLatest(id)) setState((s) => ({ ...r, loading: s.loading, error: null }));
+  }, [fetchSplit, gate]);
+
   useEffect(() => {
     void reload();
   }, [reload]);
 
-  return { ...state, today, category, setCategory, reload, refresh };
+  return { ...state, today, category, setCategory, reload, refresh, silentRefresh, fetchedAt };
 }

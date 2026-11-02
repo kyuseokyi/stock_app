@@ -3,6 +3,7 @@ import { ActivityIndicator, FlatList, Pressable, RefreshControl, ScrollView, Tex
 import { StyleSheet } from 'react-native-unistyles';
 
 import { listView } from '@/features/leaders/canslim';
+import { CloseBasisCaption } from '@/features/market/components/close-basis-caption';
 import { formatIndex } from '@/features/market/format';
 import { usePullRefresh } from '@/hooks/use-pull-refresh';
 import { Chip, ListState } from '@/ui';
@@ -45,6 +46,7 @@ export function FinderSection({ onOpenStock }: { onOpenStock: (ticker: string, n
           ) : null}
         </Pressable>
       </View>
+      <CloseBasisCaption date={r.date} />
       {view === 'loading' ? (
         <ListState mode="loading" />
       ) : (

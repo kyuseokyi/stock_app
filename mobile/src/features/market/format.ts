@@ -51,6 +51,13 @@ export function indexBadge(
   return { text: md, label: md, live: false };
 }
 
+/** 지수 캐러셀 카드 작은 캡션 — 장중 '장중 14:32'(점은 카드 제목 줄에 따로 있음) · 해외·환율 '10/30 마감' · 국내 확정은 없음 */
+export function indexChipCaption(ix: Pick<MarketIndex, 'region' | 'date' | 'live' | 'asOf'>): string | null {
+  const badge = indexBadge(ix);
+  if (!badge) return null;
+  return badge.live ? badge.text : `${badge.text} 마감`;
+}
+
 /** 지수 종가 → '2,601.5' (소수 최대 두 자리, 뒤 0 생략) */
 export function formatIndex(n: number): string {
   const r = Math.round(n * 100) / 100;

@@ -5,9 +5,11 @@ import { usePullRefresh } from '@/hooks/use-pull-refresh';
 import { Chip, ListState } from '@/ui';
 
 import { BasisNote } from '../components/basis-note';
+import { CloseBasisCaption } from '../components/close-basis-caption';
 import { GroupRow } from '../components/group-row';
 import type { GroupKind, GroupSort, Period } from '../types';
 import { useGroupRanking } from '../use-group-ranking';
+import { useReturnRefresh } from '../use-return-refresh';
 
 const PERIODS: [Period, string][] = [['1d', '1일'], ['5d', '5일'], ['20d', '20일']];
 const SORTS: [GroupSort, string][] = [['chg', '등락률'], ['value', '거래대금']];
@@ -16,6 +18,7 @@ const SORTS: [GroupSort, string][] = [['chg', '등락률'], ['value', '거래대
 export function GroupSection({ kind, onOpenGroup }: { kind: GroupKind; onOpenGroup: (kind: GroupKind, id: string) => void }) {
   const r = useGroupRanking(kind);
   const { refreshing, onRefresh } = usePullRefresh(r.refresh);
+  useReturnRefresh(r.silentRefresh, r.fetchedAt);
   const label = kind === 'theme' ? '테마' : '업종';
 
   return (
@@ -25,6 +28,7 @@ export function GroupSection({ kind, onOpenGroup }: { kind: GroupKind; onOpenGro
         <View style={styles.sep} />
         {SORTS.map(([v, t]) => <Chip key={v} label={t} selected={r.sort === v} onPress={() => r.setSort(v)} />)}
       </View>
+      <CloseBasisCaption date={r.date} />
       {r.loading && r.items.length === 0 ? (
         <ListState mode="loading" />
       ) : (

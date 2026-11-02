@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+import { stampFetch } from './auto-refresh';
 import { fetchMarketGroups } from './api';
 import { errorCode, GROUP_PAGE, hasMoreGroups, mergeGroupPage } from './format';
 import { createLatest } from './latest';
@@ -26,9 +27,14 @@ export function useGroupRanking(kind: GroupKind) {
   const [sort, setSort] = useState<GroupSort>('chg');
   const [state, setState] = useState<State>(INITIAL);
   const gate = useRef(createLatest()).current;
+  const fetchedAt = useRef<number | null>(null);
+  const shownDate = useRef<string | null>(null);
+  useEffect(() => {
+    shownDate.current = state.date;
+  }, [state.date]);
 
   const fetchFirst = useCallback(async () => {
-    const r = await fetchMarketGroups(kind, period, sort, 0);
+    const r = await stampFetch(fetchedAt, () => fetchMarketGroups(kind, period, sort, 0));
     return {
       items: r.items, total: r.total, date: r.date, hasMore: hasMoreGroups(r.items.length, r.total, r.items.length),
     };
@@ -67,6 +73,19 @@ export function useGroupRanking(kind: GroupKind) {
     setState({ ...INITIAL, ...first, loading: false });
   }, [fetchFirst, gate]);
 
+  /**
+   * 복귀 재조회 — 순위는 기준일(20:30 갱신)이 바뀔 때만 달라지므로, 기준일이 같으면 더 불러온 목록·스크롤을 그대로 둔다.
+   * 기준일이 바뀌었으면 첫 페이지로 교체하고, 진행 중인 더 불러오기 응답은 버린다. 실패는 호출한 쪽이 삼킨다.
+   */
+  const silentRefresh = useCallback(async () => {
+    const id = gate.current();
+    const first = await fetchFirst();
+    if (!gate.isLatest(id)) return;
+    if (first.date != null && first.date === shownDate.current) return;
+    gate.next();
+    setState({ ...INITIAL, ...first, loading: false });
+  }, [fetchFirst, gate]);
+
   /** 목록 끝에서 다음 30개 — 번호를 올리지 않고 지금 조건의 응답일 때만 반영 */
   const loadMore = useCallback(async () => {
     if (state.loading || state.loadingMore || !state.hasMore) return;
@@ -89,5 +108,5 @@ export function useGroupRanking(kind: GroupKind) {
     void reload();
   }, [reload]);
 
-  return { ...state, period, sort, setPeriod, setSort, reload, refresh, loadMore };
+  return { ...state, period, sort, setPeriod, setSort, reload, refresh, silentRefresh, fetchedAt, loadMore };
 }

@@ -18,10 +18,10 @@ import { IndexCard, MacroCard } from '../components/index-card';
 import { IndexChipCard } from '../components/index-chip-card';
 import { MoversBoard } from '../components/movers-board';
 import {
+  closeBasis,
   formatBasis,
   formatShortDate,
-  indexBasisTime,
-  latestTime,
+  indexHeaderBasis,
   marketSession,
   type MarketSession,
   splitCarousel,
@@ -35,6 +35,7 @@ import { useInvestorFlow } from '../use-investor-flow';
 import { useMarketOverview } from '../use-market-overview';
 import { useMorningBrief } from '../use-morning-brief';
 import { MOVERS_REFRESH_MS, useMovers } from '../use-movers';
+import { useReturnRefresh } from '../use-return-refresh';
 
 type Props = {
   onMore: (tab: 'theme' | 'calendar') => void;
@@ -86,12 +87,15 @@ export function MarketSection({ onMore, onOpenGroup, onHeader }: Props) {
   );
   useAutoRefresh(refreshMoversInSession, MOVERS_REFRESH_MS);
 
-  // ① 헤더 기준 시각 — 국내 지수·급등락·수급 중 가장 최근
-  const basis = formatBasis(latestTime([
-    ...indices.map(indexBasisTime),
-    movers.data?.updatedAt,
-    flow.data?.updatedAt,
-  ]));
+  // 하루 몇 번만 바뀌는 데이터는 타이머 없이, 화면·앱 복귀 때 마지막 조회 후 10분이 지났으면 1회만 조용히 다시 받는다
+  useReturnRefresh(overview.silentRefreshAll, overview.fetchedAt);
+  useReturnRefresh(brief.silentRefresh, brief.fetchedAt);
+  useReturnRefresh(movers.silentRefresh, movers.fetchedAt);
+  useReturnRefresh(flow.silentRefresh, flow.fetchedAt);
+  useReturnRefresh(heat.silentRefresh, heat.fetchedAt);
+
+  // ① 헤더 기준 시각 — 섹션마다 기준이 달라(급등락·수급은 각 카드에 표시) 국내 지수 기준으로 한정한다
+  const basis = indexHeaderBasis(indices);
   useEffect(() => {
     onHeader?.(basis, session);
   }, [onHeader, basis, session]);
@@ -170,7 +174,7 @@ export function MarketSection({ onMore, onOpenGroup, onHeader }: Props) {
 
       {/* ④ 시장 히트맵 */}
       <View style={styles.card}>
-        <SectionHead title="시장 히트맵" caption={heat.data?.date ? `${formatShortDate(heat.data.date)} 기준 · 1일 등락` : null} />
+        <SectionHead title="시장 히트맵" caption={heat.data?.date ? `${closeBasis(heat.data.date, today)} · 1일 등락` : null} />
         <View style={styles.toggles}>
           <Chip label="업종" selected={heatKind === 'sector'} onPress={() => setHeatKind('sector')} />
           <Chip label="테마" selected={heatKind === 'theme'} onPress={() => setHeatKind('theme')} />
@@ -218,7 +222,15 @@ export function MarketSection({ onMore, onOpenGroup, onHeader }: Props) {
       {(mv?.keywords.length ?? 0) > 0 || themes.length > 0 ? (
         <View style={styles.card}>
           <SectionHead title="핫 키워드 & 주도 테마" onMore={themes.length > 0 ? () => onMore('theme') : undefined} />
-          {mv && mv.keywords.length > 0 ? <HotKeywords keywords={mv.keywords} names={names} onOpenStock={openStock} /> : null}
+          {mv && mv.keywords.length > 0 ? (
+            <>
+              {formatBasis(mv.updatedAt) ? <Text style={styles.subCaption}>핫 키워드 · {formatBasis(mv.updatedAt)}</Text> : null}
+              <HotKeywords keywords={mv.keywords} names={names} onOpenStock={openStock} />
+            </>
+          ) : null}
+          {themes.length > 0 && closeBasis(overview.data?.date) ? (
+            <Text style={styles.subCaption}>주도 테마 · {closeBasis(overview.data?.date)}</Text>
+          ) : null}
           {themes.map((t) => <GroupRow key={t.id} item={t} onPress={() => onOpenGroup('theme', t.id)} />)}
         </View>
       ) : null}
@@ -269,5 +281,6 @@ const styles = StyleSheet.create((theme) => ({
   toggles: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: theme.gap(0.75) },
   toggleGap: { width: theme.gap(0.5) },
   muted: { fontSize: 14, color: theme.colors.textSecondary },
+  subCaption: { fontSize: 13, color: theme.colors.textSecondary },
   inlineError: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: theme.gap(1) },
 }));

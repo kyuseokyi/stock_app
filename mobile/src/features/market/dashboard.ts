@@ -49,6 +49,33 @@ export function indexBasisTime(ix: Pick<MarketIndex, 'region' | 'date' | 'live' 
   return `${ix.date.slice(0, 10)}T${hm}:00+09:00`;
 }
 
+/**
+ * 일봉 데이터 기준일 문구 — '10.30 종가 기준'. today 를 주면 오늘이 아닌 날짜는 '전 거래일(10.30) 종가 기준'
+ * (장중에 같은 화면의 지수와 헷갈리지 않게). 날짜가 없으면 null.
+ */
+export function closeBasis(date: string | null | undefined, today?: string): string | null {
+  if (!date) return null;
+  const short = formatShortDate(date);
+  return today && date.slice(0, 10) !== today ? `전 거래일(${short}) 종가 기준` : `${short} 종가 기준`;
+}
+
+/**
+ * ① 헤더 기준 시각 — 섹션마다 기준이 달라 '국내 지수' 기준임을 문구로 밝힌다.
+ * 장중: '지수 장중 14:32 기준'(시각을 모르면 '지수 장중') · 확정: '지수 10.30 15:30 기준' · 국내 지수 없음: null
+ */
+export function indexHeaderBasis(indices: Pick<MarketIndex, 'region' | 'date' | 'live' | 'asOf'>[]): string | null {
+  const kr = indices.filter((ix) => ix.region === 'KR');
+  if (kr.some((ix) => ix.live)) {
+    const times = kr
+      .filter((ix) => ix.live && ix.asOf && /^\d{2}:\d{2}$/.test(ix.asOf))
+      .map((ix) => ix.asOf as string)
+      .sort();
+    return times.length > 0 ? `지수 장중 ${times[times.length - 1]} 기준` : '지수 장중';
+  }
+  const basis = formatBasis(latestTime(kr.map(indexBasisTime)));
+  return basis ? `지수 ${basis}` : null;
+}
+
 /** 후보 시각 중 가장 최근 것(읽을 수 있는 것만). 없으면 null */
 export function latestTime(candidates: (string | null | undefined)[]): string | null {
   let best: { s: string; ms: number } | null = null;
