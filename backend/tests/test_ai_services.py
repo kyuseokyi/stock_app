@@ -101,6 +101,7 @@ def _isolate(monkeypatch):
     monkeypatch.setattr(flow, "_collect", _boom)
     monkeypatch.setattr(flow, "_sector_map", lambda session=None: {})
     monkeypatch.setattr(sq, "_screen", _boom)
+    monkeypatch.setattr(sq, "_fund_rows", lambda ticker: [])  # 실제 ClickHouse 접속 금지
     yield fake
 
 
@@ -423,3 +424,46 @@ def test_api_getters_swallow_pg_errors(session, monkeypatch):
     monkeypatch.setattr(sq, "_screen", lambda limit: SCREEN)
     assert sq.evaluate_batch(DAY, session=session) == {"skipped": "pg_error"}
     assert g.calls == []
+
+
+# ---------------------------------------------------------------- 실적 품질 근거(재무 추이)
+_FUND = [  # (period, stac_yymm, sales, op, ni, roe, debt) — 최신순(분기·연간 섞임)
+    ("Q", "202609", 12.5, 30.1, 25.0, 15.2, 80.0),
+    ("Y", "202512", 8.0, 20.0, 18.0, 14.0, 85.0),
+    ("Q", "202606", 10.0, 22.0, None, 14.8, 82.0),
+    ("Q", "202603", 5.0, 9.0, 7.0, 13.0, 84.0),
+    ("Q", "202512", 4.0, 6.0, 5.0, 12.0, 86.0),
+    ("Q", "202509", 3.0, 2.0, 1.0, 11.0, 88.0),  # 5번째 분기 — 잘린다
+    ("Y", "202412", 1.0, -3.0, 2.0, 10.0, 90.0),
+    ("Y", "202312", 0.0, 0.0, 0.0, 9.0, 95.0),   # 3번째 연간 — 잘린다
+]
+
+
+def test_fundamentals_keeps_recent_quarters_and_years(monkeypatch):
+    monkeypatch.setattr(sq, "_fund_rows", lambda ticker: _FUND)
+    got = sq.fundamentals("000001")
+    assert [(f["period"], f["stac_yymm"]) for f in got] == [
+        ("Q", "202609"), ("Y", "202512"), ("Q", "202606"), ("Q", "202603"), ("Q", "202512"), ("Y", "202412")]
+    assert got[0]["op_growth"] == 30.1 and got[2]["ni_growth"] is None
+
+
+def test_fundamentals_ch_failure_is_empty(monkeypatch):
+    monkeypatch.setattr(sq, "_fund_rows", _boom)
+    assert sq.fundamentals("000001") == []
+
+
+def test_evaluate_puts_fundamentals_in_prompt(session, monkeypatch):
+    monkeypatch.setattr(sq, "_fund_rows", lambda ticker: _FUND)
+    g = FakeGemini({ScreenerQualitativeResponse: _qual("CLEAN")})
+    sq.evaluate(DAY, "000001", "종목", {}, session=session, dart=FakeDart([]), news=None, gemini=g)
+    prompt = g.calls[0][1]
+    assert "[재무 추이" in prompt
+    assert "분기 202609: 매출 +12.5%, 영업이익 +30.1%, 순이익 +25.0%, ROE 15.2%, 부채비율 80%" in prompt
+    assert "분기 202606: 매출 +10.0%, 영업이익 +22.0%, 순이익 -" in prompt
+    assert "본업성장" in prompt and "일회성이익" in prompt
+
+
+def test_evaluate_without_fundamentals_says_none(session):
+    g = FakeGemini({ScreenerQualitativeResponse: _qual("CLEAN")})
+    sq.evaluate(DAY, "000001", "종목", {}, session=session, dart=FakeDart([]), news=None, gemini=g)
+    assert "(재무 데이터 없음)" in g.calls[0][1]

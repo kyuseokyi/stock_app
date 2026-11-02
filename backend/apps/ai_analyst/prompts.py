@@ -156,10 +156,23 @@ def investor_flow_prompt(foreign_top, institution_top, pension_top, double_buy, 
     return "\n".join(out)
 
 
+def _growth(v) -> str:
+    return "-" if v is None else f"{v:+.1f}%"
+
+
+def _fund_line(f: Mapping) -> str:
+    kind = "분기" if f.get("period") == "Q" else "연간"
+    roe, debt = f.get("roe"), f.get("debt_ratio")
+    return (f"- {kind} {f.get('stac_yymm')}: 매출 {_growth(f.get('sales_growth'))}, 영업이익 {_growth(f.get('op_growth'))}, "
+            f"순이익 {_growth(f.get('ni_growth'))}, ROE {'-' if roe is None else f'{roe:.1f}%'}, "
+            f"부채비율 {'-' if debt is None else f'{debt:.0f}%'}")
+
+
 def stock_qualitative_prompt(ticker: str, name: str, canslim_summary: Mapping | str | None,
                              disclosures: Iterable | None, red_flag_hints: Iterable[str] | None,
-                             news: Iterable | None) -> str:
-    """canslim_summary: {항목: 값} 또는 문자열, disclosures: Disclosure 또는 dict(report_nm, rcept_dt)."""
+                             news: Iterable | None, *, fundamentals: Iterable[Mapping] | None = None) -> str:
+    """canslim_summary: {항목: 값} 또는 문자열, disclosures: Disclosure 또는 dict(report_nm, rcept_dt).
+    fundamentals: [{period(Q|Y), stac_yymm, sales_growth, op_growth, ni_growth, roe, debt_ratio}] — 증가율은 전년 동기 대비 %."""
     out = [f"[종목] {name}({ticker})", "[CANSLIM 요약]"]
     if isinstance(canslim_summary, Mapping):
         out.extend(f"- {k}: {v}" for k, v in canslim_summary.items())
@@ -167,6 +180,11 @@ def stock_qualitative_prompt(ticker: str, name: str, canslim_summary: Mapping | 
         out.append(f"- {_cut(canslim_summary, 400)}")
     else:
         out.append("- (없음)")
+    out.append("[재무 추이(KIS 재무비율, 증가율은 전년 동기 대비 %)]")
+    funds = list(fundamentals or [])
+    out.extend(_fund_line(f) for f in funds)
+    if not funds:
+        out.append("- (재무 데이터 없음)")
     out.append("[최근 공시]")
     disc = list(disclosures or [])[:10]
     out.extend(f"- {_get(d, 'rcept_dt') or ''} {_cut(_get(d, 'report_nm'))}".rstrip() for d in disc)
@@ -182,7 +200,9 @@ def stock_qualitative_prompt(ticker: str, name: str, canslim_summary: Mapping | 
     out.extend(_news_lines(news, indent=""))
     out.append(
         "이 종목이 스크리너에 포착된 사유를 1줄(hook_summary)로 쓰고, 실적 품질(growth_quality)을 "
-        "본업성장/일회성이익/불확실 중 하나로 판정하라(근거 부족하면 불확실). financial_quality_note 에 근거를 쓰고, "
+        "본업성장/일회성이익/불확실 중 하나로 판정하라. 판정 기준: 매출과 영업이익 증가율이 함께 플러스(최근 분기 중심)면 본업성장, "
+        "순이익 증가가 영업이익 증가를 크게 웃돌거나 영업이익은 줄었는데 순이익만 늘면 일회성이익, 재무 데이터가 없거나 "
+        "방향이 엇갈려 판단이 어려우면 불확실. financial_quality_note 에 근거 수치(분기·증가율)를 쓰고, "
         "지뢰 위험도(red_flag_level)를 CLEAN/WARNING/DANGER 중 하나로, red_flags 에 감지된 리스크를 나열하라. "
         f"ticker 는 {ticker} 로 둔다."
     )

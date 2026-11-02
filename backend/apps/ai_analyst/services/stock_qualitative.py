@@ -29,6 +29,40 @@ _LETTER_NAMES = {"c": "C(분기 실적)", "a": "A(연간 실적)", "n": "N(신�
 
 
 # ---------------------------------------------------------------- 외부 의존(테스트에서 바꿔 끼운다)
+FUND_QUARTERS = 4  # 최근 분기 수
+FUND_YEARS = 2  # 최근 연간 수
+
+
+def _fund_rows(ticker: str) -> list[tuple]:
+    """CH fundamentals_periodic(KIS 재무비율, 증가율은 전년 동기 대비 %) — 테스트에서 바꿔 끼운다."""
+    from shared.clickhouse_schema import CLICKHOUSE_DB, get_client
+
+    return get_client().query(
+        f"SELECT period, stac_yymm, sales_growth, op_growth, ni_growth, roe, debt_ratio "
+        f"FROM {CLICKHOUSE_DB}.fundamentals_periodic FINAL WHERE ticker = %(t)s "
+        "ORDER BY stac_yymm DESC LIMIT 20",
+        parameters={"t": ticker},
+    ).result_rows
+
+
+def fundamentals(ticker: str) -> list[dict]:
+    """실적 품질 판정 근거 — 최근 분기 4개 + 연간 2개(최신순). 데이터 없거나 CH 장애면 []."""
+    try:
+        rows = _fund_rows(ticker)
+    except Exception as exc:  # noqa: BLE001 — 재무가 없어도 평가는 진행(불확실로 판정됨)
+        log.warning("재무 조회 실패(%s): %s", ticker, type(exc).__name__)
+        return []
+    keys = ("sales_growth", "op_growth", "ni_growth", "roe", "debt_ratio")
+    out, count = [], {"Q": 0, "Y": 0}
+    limit = {"Q": FUND_QUARTERS, "Y": FUND_YEARS}
+    for period, ym, *vals in rows:
+        if period not in limit or count[period] >= limit[period]:
+            continue
+        count[period] += 1
+        out.append({"period": period, "stac_yymm": str(ym), **dict(zip(keys, vals))})
+    return out
+
+
 def _screen(limit: int) -> dict:
     from apps.stock_api.services import canslim_query
 
@@ -117,7 +151,8 @@ def evaluate(day: date, ticker: str, name: str, canslim_summary, *, session: Ses
         except Exception as exc:  # noqa: BLE001
             log.warning("종목 뉴스 조회 실패(%s): %s", ticker, type(exc).__name__)
 
-    prompt = prompts.stock_qualitative_prompt(ticker, name, canslim_summary, disclosures, hints, articles)
+    prompt = prompts.stock_qualitative_prompt(ticker, name, canslim_summary, disclosures, hints, articles,
+                                              fundamentals=fundamentals(ticker))
     resp = gemini.generate_json(prompt, ScreenerQualitativeResponse, system=prompts.SYSTEM_PROMPT)
     if resp is None:
         return None
@@ -128,8 +163,8 @@ def evaluate(day: date, ticker: str, name: str, canslim_summary, *, session: Ses
     return {**resp.model_dump(), "date": day.isoformat()}
 
 
-def evaluate_batch(day: date, *, session: Session, limit: int = CANDIDATE_LIMIT) -> dict:
-    """후보 일괄 평가 — 이미 평가한 종목은 건너뛰고, 종목별 실패는 격리한다."""
+def evaluate_batch(day: date, *, session: Session, limit: int = CANDIDATE_LIMIT, force: bool = False) -> dict:
+    """후보 일괄 평가 — 이미 평가한 종목은 건너뛰고(force=True 면 다시 평가해 덮어씀), 종목별 실패는 격리한다."""
     gemini = _gemini()
     if gemini is None:
         return {"skipped": "no_gemini_key"}  # 30종목 DART·뉴스 호출도 하지 않는다
@@ -145,7 +180,7 @@ def evaluate_batch(day: date, *, session: Session, limit: int = CANDIDATE_LIMIT)
         return {"skipped": "pg_error"}
     ok, skipped, failed = 0, 0, []
     for c in cands:
-        if c["ticker"] in done:
+        if c["ticker"] in done and not force:
             skipped += 1
             continue
         try:
