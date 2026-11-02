@@ -55,7 +55,7 @@ const stockGraphqlUrl = process.env.EXPO_PUBLIC_STOCK_GRAPHQL_URL ?? 'http://loc
 export const ENV = {
   appEnv,
   stockGraphqlUrl,
-  /** stock_api REST(시황 AI·히트맵) — GraphQL 주소에서 '/graphql' 을 뗀 값(별도 env 키 없음) */
+  /** stock_api REST(마켓 AI·히트맵) — GraphQL 주소에서 '/graphql' 을 뗀 값(별도 env 키 없음) */
   stockApiUrl: deriveStockApiUrl(stockGraphqlUrl),
   blogApiUrl: process.env.EXPO_PUBLIC_BLOG_API_URL ?? 'http://localhost:8000',
   authApiUrl: process.env.EXPO_PUBLIC_AUTH_API_URL ?? 'http://localhost:8001',

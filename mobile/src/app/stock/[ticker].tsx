@@ -37,7 +37,7 @@ function NotFound() {
   const router = useRouter();
   const features = useScreenerFeaturesState();
   // 딥링크로 들어와 스택이 이 화면뿐이면 back() 이 동작하지 않으므로 스크리너 탭으로 보낸다
-  // (종목 상세는 주로 스크리너에서 들어오므로 /screener. 단 관리자 스위치로 종목 찾기가 꺼졌으면(로딩 전 포함) 시황 탭)
+  // (종목 상세는 주로 스크리너에서 들어오므로 /screener. 단 관리자 스위치로 종목 찾기가 꺼졌으면(로딩 전 포함) 마켓 탭)
   const goBack = () => (router.canGoBack() ? router.back() : router.replace(stockBackHref(features)));
   return (
     <View style={styles.center}>

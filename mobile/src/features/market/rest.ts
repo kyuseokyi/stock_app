@@ -1,4 +1,4 @@
-// stock_api REST(시황 AI·히트맵) 호출 — 응답은 rest-normalize 로 모양을 맞춰 돌려준다.
+// stock_api REST(마켓 AI·히트맵) 호출 — 응답은 rest-normalize 로 모양을 맞춰 돌려준다.
 // GraphQL 계약 파일(api.ts)과 분리: api.ts 는 백엔드 계약 테스트가 읽으므로 손대지 않는다.
 import { stockApi } from '@/lib/api';
 

@@ -15,7 +15,7 @@ import { Chip } from '@/ui';
 type Tab = 'market' | 'theme' | 'sector' | 'calendar';
 const TABS: [Tab, string][] = [['market', '개요'], ['theme', '테마'], ['sector', '업종'], ['calendar', '일정']];
 
-/** 시황 탭 — 개요(대시보드: AI 브리핑·지수 캐러셀·히트맵·급등락·수급·핫 키워드·일정, 스펙 §2.1 ①~⑦)와
+/** 마켓 탭 — 개요(대시보드: AI 브리핑·지수 캐러셀·히트맵·급등락·수급·핫 키워드·일정, 스펙 §2.1 ①~⑦)와
  *  테마·업종·일정 전체 랭킹 칩. ① 헤더의 기준 시각·장운영 뱃지는 개요 칩이 데이터를 받아 올려 준다 */
 export default function MarketScreen() {
   const insets = useSafeAreaInsets();

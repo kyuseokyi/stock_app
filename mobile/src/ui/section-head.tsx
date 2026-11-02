@@ -13,7 +13,7 @@ type Props = {
   right?: ReactNode;
 };
 
-/** 섹션 머리글 — 굵은 제목(18) + 보조문구 + 오른쪽 '더 보기'. 시황 대시보드 등 여러 섹션 공용 */
+/** 섹션 머리글 — 굵은 제목(18) + 보조문구 + 오른쪽 '더 보기'. 마켓 대시보드 등 여러 섹션 공용 */
 export function SectionHead({ title, caption, onMore, moreLabel = '더 보기', right }: Props) {
   return (
     <View style={styles.head}>

@@ -29,7 +29,7 @@ describe('스크리너 노출 판정', () => {
     expect(stockBackHref(x)).toBe('/screener');
   });
 
-  it('답을 받기 전(null)은 탭 숨김·화면은 기다림·돌아가기는 시황', () => {
+  it('답을 받기 전(null)은 탭 숨김·화면은 기다림·돌아가기는 마켓', () => {
     expect(screenerTabVisible(null)).toBe(false);
     expect(screenerChipVisible(null, 'leaders')).toBe(false);
     expect(screenerEntry(null)).toBe('wait');

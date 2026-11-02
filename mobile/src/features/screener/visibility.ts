@@ -18,13 +18,13 @@ export function screenerChipVisible(features: ScreenerFeatures | null, tab: Scre
   return true;
 }
 
-/** /screener 로 직접 들어왔을 때 — 'wait'(답 기다림) · 'redirect'(시황으로) · 'show' */
+/** /screener 로 직접 들어왔을 때 — 'wait'(답 기다림) · 'redirect'(마켓으로) · 'show' */
 export function screenerEntry(features: ScreenerFeatures | null): 'wait' | 'redirect' | 'show' {
   if (features === null) return 'wait';
   return screenerTabVisible(features) ? 'show' : 'redirect';
 }
 
-/** 종목 상세에서 돌아갈 곳(스택이 비었을 때) — 스크리너가 숨겨져 있으면(로딩 포함) 시황 탭 */
+/** 종목 상세에서 돌아갈 곳(스택이 비었을 때) — 스크리너가 숨겨져 있으면(로딩 포함) 마켓 탭 */
 export function stockBackHref(features: ScreenerFeatures | null): '/screener' | '/market' {
   return screenerTabVisible(features) ? '/screener' : '/market';
 }

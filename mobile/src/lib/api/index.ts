@@ -2,7 +2,7 @@
  * API 계층 진입점. 화면/서비스 코드는 여기서만 가져다 쓴다.
  *  - blogApi / authApi : REST(fetch) 서비스별 인스턴스
  *  - stockRequest      : stock_api GraphQL 요청
- *  - stockApi          : stock_api REST(시황 AI 브리핑·급등락·수급·히트맵)
+ *  - stockApi          : stock_api REST(마켓 AI 브리핑·급등락·수급·히트맵)
  */
 import { ENV } from '@/lib/env';
 
