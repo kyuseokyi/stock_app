@@ -1,9 +1,11 @@
 import {
+  closeBasis,
   formatBasis,
   formatEok,
   formatShortDate,
   heatLevel,
   indexBasisTime,
+  indexHeaderBasis,
   latestTime,
   marketSession,
   parseKst,
@@ -119,5 +121,46 @@ describe('splitCarousel', () => {
     const { carousel, rest } = splitCarousel(codes.map((code) => ({ code })));
     expect(carousel.map((i) => i.code)).toEqual(['KR:0001', 'US:COMP', 'US:SPX', 'FX:USDKRW']);
     expect(rest.map((i) => i.code)).toEqual(['US:VIX', 'KR:2001']);
+  });
+});
+
+describe('closeBasis', () => {
+  it('날짜만 주면 MM.DD 종가 기준', () => {
+    expect(closeBasis('2026-10-30')).toBe('10.30 종가 기준');
+  });
+  it('오늘 날짜면 그대로', () => {
+    expect(closeBasis('2026-11-02', '2026-11-02')).toBe('11.02 종가 기준');
+  });
+  it('오늘이 아니면 전 거래일 표시', () => {
+    expect(closeBasis('2026-10-30', '2026-11-02')).toBe('전 거래일(10.30) 종가 기준');
+  });
+  it('날짜가 없으면 null', () => {
+    expect(closeBasis(null)).toBeNull();
+    expect(closeBasis(undefined, '2026-11-02')).toBeNull();
+    expect(closeBasis('', '2026-11-02')).toBeNull();
+  });
+});
+
+describe('indexHeaderBasis', () => {
+  const kr = (over: Partial<{ date: string; live: boolean; asOf: string | null }> = {}) => ({
+    region: 'KR', date: '2026-11-02', live: false, asOf: null, ...over,
+  });
+  const us = { region: 'US', date: '2026-11-03', live: false, asOf: null };
+
+  it('장중이면 가장 늦은 시각을 지수 장중으로', () => {
+    expect(indexHeaderBasis([kr({ live: true, asOf: '14:30' }), kr({ live: true, asOf: '14:32' }), us])).toBe('지수 장중 14:32 기준');
+  });
+  it('장중인데 시각을 모르면 시각 없이', () => {
+    expect(indexHeaderBasis([kr({ live: true })])).toBe('지수 장중');
+  });
+  it('장 마감 후엔 그날 15:30', () => {
+    expect(indexHeaderBasis([kr()])).toBe('지수 11.02 15:30 기준');
+  });
+  it('미국·환율 날짜는 쓰지 않는다', () => {
+    expect(indexHeaderBasis([kr(), us])).toBe('지수 11.02 15:30 기준');
+  });
+  it('국내 지수가 없으면 null', () => {
+    expect(indexHeaderBasis([us])).toBeNull();
+    expect(indexHeaderBasis([])).toBeNull();
   });
 });

@@ -1,6 +1,13 @@
 import { startForegroundInterval } from '@/features/game/lib/foreground-interval';
 
-import { createSilentRunner, MARKET_REFRESH_MS, shouldRefreshNow } from './auto-refresh';
+import {
+  createSilentRunner,
+  MARKET_REFRESH_MS,
+  RETURN_REFRESH_MS,
+  shouldRefetchOnReturn,
+  shouldRefreshNow,
+  stampFetch,
+} from './auto-refresh';
 
 /** 프로미스 연쇄(then·catch·finally)가 끝날 때까지 마이크로태스크를 흘려보낸다 */
 const flush = async () => {
@@ -85,5 +92,49 @@ describe('shouldRefreshNow', () => {
   });
   it('시계가 거꾸로 가면 즉시', () => {
     expect(shouldRefreshNow(5000, 1000)).toBe(true);
+  });
+});
+
+describe('shouldRefetchOnReturn', () => {
+  const t0 = 1_000_000;
+  it('기준은 10분', () => {
+    expect(RETURN_REFRESH_MS).toBe(600_000);
+  });
+  it('9분 59초면 다시 받지 않는다', () => {
+    expect(shouldRefetchOnReturn(t0, t0 + 599_000)).toBe(false);
+  });
+  it('10분 직전(1ms 전)도 다시 받지 않는다', () => {
+    expect(shouldRefetchOnReturn(t0, t0 + 599_999)).toBe(false);
+  });
+  it('정확히 10분이면 다시 받는다', () => {
+    expect(shouldRefetchOnReturn(t0, t0 + 600_000)).toBe(true);
+  });
+  it('첫 진입(아직 조회 전)은 첫 로딩과 겹치지 않게 다시 받지 않는다', () => {
+    expect(shouldRefetchOnReturn(null, t0)).toBe(false);
+  });
+  it('시계가 거꾸로 갔으면 다시 받는다', () => {
+    expect(shouldRefetchOnReturn(t0, t0 - 1)).toBe(true);
+  });
+});
+
+describe('stampFetch', () => {
+  it('성공하면 값을 돌려주고 끝난 시각을 남긴다', async () => {
+    const clock = { current: null as number | null };
+    await expect(stampFetch(clock, async () => 'ok', () => 42)).resolves.toBe('ok');
+    expect(clock.current).toBe(42);
+  });
+  it('실패해도 시각을 남기고 오류는 그대로 던진다', async () => {
+    const clock = { current: null as number | null };
+    await expect(stampFetch(clock, async () => { throw new Error('x'); }, () => 42)).rejects.toThrow('x');
+    expect(clock.current).toBe(42);
+  });
+  it('끝나기 전에는 시각을 남기지 않는다', async () => {
+    const clock = { current: null as number | null };
+    let done: (v: string) => void = () => undefined;
+    const pending = stampFetch(clock, () => new Promise<string>((r) => { done = r; }), () => 42);
+    expect(clock.current).toBeNull();
+    done('ok');
+    await pending;
+    expect(clock.current).toBe(42);
   });
 });

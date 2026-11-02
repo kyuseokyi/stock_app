@@ -1,12 +1,13 @@
 import { Redirect, useRouter } from 'expo-router';
 import { useState } from 'react';
-import { ScrollView, Text, View } from 'react-native';
+import { ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StyleSheet } from 'react-native-unistyles';
 
 import { FinderSection } from '@/features/finder/sections/finder-section';
 import { LeadersSection } from '@/features/leaders/sections/leaders-section';
 import { PatternsSection } from '@/features/patterns/sections/patterns-section';
+import { StaleNotice } from '@/features/market/components/stale-notice';
 import { useScreenerFeaturesState } from '@/features/screener/use-screener-features';
 import { screenerChipVisible, screenerEntry, type ScreenerTab } from '@/features/screener/visibility';
 import { Chip } from '@/ui';
@@ -44,7 +45,7 @@ export default function ScreenerScreen() {
       ) : (
         <View style={styles.chipsGap} />
       )}
-      <Text style={styles.notice}>ⓘ 실시간 시세가 아니어서 실제 값과 차이가 있을 수 있어요</Text>
+      <StaleNotice />
       {current === 'leaders' ? <LeadersSection onOpenStock={openStock} /> : null}
       {current === 'finder' ? <FinderSection onOpenStock={openStock} /> : null}
       {current === 'patterns' ? <PatternsSection onOpenStock={openStock} /> : null}
@@ -57,5 +58,4 @@ const styles = StyleSheet.create((theme) => ({
   chipsBar: { flexGrow: 0 },
   chips: { gap: theme.gap(1), paddingHorizontal: theme.gap(2), paddingVertical: theme.gap(1.5) },
   chipsGap: { height: theme.gap(1.5) }, // 칩 줄이 숨겨졌을 때 안내 문구가 상단에 붙지 않게
-  notice: { fontSize: 12, color: theme.colors.textSecondary, paddingHorizontal: theme.gap(2), paddingBottom: theme.gap(0.5) },
 }));

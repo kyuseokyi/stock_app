@@ -4,6 +4,7 @@ import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
 import { TvChart, type TvChartData } from '@/features/game/components/tv-chart';
 import type { ChartColors, ChartLine } from '@/features/game/lib/chart-bridge';
+import { closeBasis } from '@/features/market/dashboard';
 
 import {
   MA50_COLOR,
@@ -51,8 +52,11 @@ export function StockDailyChart({
     [d.rows, d.seq, d.prepended],
   );
 
+  const basis = closeBasis(d.rows?.[d.rows.length - 1]?.date);
+
   return (
     <View style={styles.wrap}>
+      {basis ? <Text style={styles.basis}>{basis}</Text> : null}
       <View style={styles.legend}>
         <Text style={[styles.legendText, { color: MA50_COLOR }]}>━ 50일선</Text>
         <Text style={styles.legendText}>▤ 매물대</Text>
@@ -93,6 +97,7 @@ export function StockDailyChart({
 
 const styles = StyleSheet.create((theme) => ({
   wrap: { gap: theme.gap(0.5) },
+  basis: { fontSize: 13, color: theme.colors.textSecondary },
   legend: { flexDirection: 'row', flexWrap: 'wrap', columnGap: theme.gap(1.5), rowGap: 2 },
   legendText: { fontSize: 11, color: theme.colors.textSecondary },
   overlay: {

@@ -1,5 +1,6 @@
 import { describe, test, expect } from 'vitest'
 import {
+  closeBasisLabel,
   daysUntil,
   formatAmount,
   formatKrw,
@@ -112,5 +113,17 @@ describe('formatAmount (앱 market formatAmount)', () => {
   })
   test('반올림해 0 이 되는 음수는 0원(앱과 같음)', () => {
     expect(formatAmount(-0.4)).toBe('0원')
+  })
+})
+
+describe('closeBasisLabel', () => {
+  test('M/D 종가 기준(앞 0 제거)', () => {
+    expect(closeBasisLabel('2026-10-22')).toBe('10/22 종가 기준')
+    expect(closeBasisLabel('2026-03-05')).toBe('3/5 종가 기준')
+  })
+  test('날짜가 없으면 null', () => {
+    expect(closeBasisLabel(null)).toBeNull()
+    expect(closeBasisLabel(undefined)).toBeNull()
+    expect(closeBasisLabel('')).toBeNull()
   })
 })

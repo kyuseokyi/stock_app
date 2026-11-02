@@ -8,6 +8,7 @@ import {
   formatIndex,
   formatMacro,
   formatMacroDiff,
+  indexChipCaption,
   groupByDate,
   hasMoreGroups,
   indexBadge,
@@ -176,5 +177,18 @@ describe('지수 카드 날짜 자리(장중 배지)', () => {
   });
   it('live 인데 시각이 없으면 확정처럼 다룬다', () => {
     expect(indexBadge({ ...ix, live: true, asOf: null })).toBeNull();
+  });
+});
+
+describe('indexChipCaption', () => {
+  it('장중이면 점 없이 장중 시각', () => {
+    expect(indexChipCaption({ region: 'KR', date: '2026-11-02', live: true, asOf: '14:32' })).toBe('장중 14:32');
+  });
+  it('해외·환율은 MM/DD 마감', () => {
+    expect(indexChipCaption({ region: 'US', date: '2026-10-30', live: false, asOf: null })).toBe('10/30 마감');
+    expect(indexChipCaption({ region: 'FX', date: '2026-10-30', live: false, asOf: null })).toBe('10/30 마감');
+  });
+  it('국내 확정은 없음(헤더가 알려 준다)', () => {
+    expect(indexChipCaption({ region: 'KR', date: '2026-10-30', live: false, asOf: null })).toBeNull();
   });
 });

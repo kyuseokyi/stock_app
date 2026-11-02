@@ -8,6 +8,7 @@ import { ScoreHistory } from '@/features/leaders/components/score-history';
 import { ScoreTable } from '@/features/leaders/components/score-table';
 import { StockDailyChart } from '@/features/leaders/components/stock-daily-chart';
 import { useCanslimScore } from '@/features/leaders/use-canslim-score';
+import { StaleNotice } from '@/features/market/components/stale-notice';
 import { formatIndex } from '@/features/market/format';
 import { PatternSummary } from '@/features/patterns/components/pattern-summary';
 import { currentBase, patternChartLines } from '@/features/patterns/patterns';
@@ -84,6 +85,7 @@ function StockDetailBody({ ticker, fallbackName }: { ticker: string; fallbackNam
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
     >
       <Stack.Screen options={{ title }} />
+      <StaleNotice inset={false} />
       <View style={[styles.card, styles.headRow]}>
         <View style={styles.headMain}>
           <Text style={styles.name} numberOfLines={1}>{title}</Text>

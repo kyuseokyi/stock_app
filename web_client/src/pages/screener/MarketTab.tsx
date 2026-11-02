@@ -7,6 +7,7 @@ import BasisNote from '../../components/market/BasisNote'
 import EventList from '../../components/market/EventList'
 import { MacroCards } from '../../components/market/IndexCards'
 import { getMarketCalendar, getMarketOverview } from '../../api/market'
+import { useReturnRefresh } from '../../hooks/useReturnRefresh'
 import { useVisibleInterval } from '../../hooks/useVisibleInterval'
 import { MARKET_REFRESH_MS, MARKET_REQUEST_TIMEOUT_MS } from '../../lib/marketLive'
 import { formatPct, kstDateString, pnlClass } from '../../lib/format'
@@ -88,11 +89,13 @@ export default function MarketTab() {
   // 개요 요청 번호 — 초기 로드와 30초 자동 새로고침이 겹쳐도 늦게 온 옛 응답이 최신 값을 덮지 않게 한다.
   const ovSeq = useRef(0)
   const ovBusy = useRef(false)
+  const eventsFetchedAt = useRef<number | null>(null) // 일정을 마지막으로 받은 시각(복귀 재조회 판정용)
 
   useEffect(() => {
     let cancelled = false
     const ovId = ++ovSeq.current
     Promise.allSettled([getMarketOverview(), getMarketCalendar(today, addDays(today, 60))]).then(([ov, ev]) => {
+      eventsFetchedAt.current = Date.now()
       if (cancelled) return
       if (ov.status === 'fulfilled' && ovId === ovSeq.current) setOverview(ov.value)
       if (ev.status === 'fulfilled') setEvents(ev.value.slice(0, 5))
@@ -118,6 +121,13 @@ export default function MarketTab() {
         ovBusy.current = false
       })
   }, MARKET_REFRESH_MS, state === 'ready', { runOnVisible: true })
+
+  // 일정은 하루 두 번 바뀐다 — 타이머 없이 탭 복귀 때 마지막 조회 후 10분이 지났으면 1회만(개요는 위 30초 주기가 맡는다)
+  useReturnRefresh(() => getMarketCalendar(today, addDays(today, 60))
+    .then((ev) => setEvents(ev.slice(0, 5)))
+    .finally(() => {
+      eventsFetchedAt.current = Date.now()
+    }), eventsFetchedAt)
 
   const header = <PageHeader title="밤사이 세계 시장" description="미국 장 마감 기준으로, 내일 국내장에 영향을 줄 바깥 신호를 모았어요." />
 
