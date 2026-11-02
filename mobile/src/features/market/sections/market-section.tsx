@@ -1,5 +1,5 @@
 import { useRouter } from 'expo-router';
-import { type ReactNode, useCallback, useEffect, useMemo, useState } from 'react';
+import { type ReactNode, useCallback, useEffect, useMemo } from 'react';
 import { RefreshControl, ScrollView, Text, View } from 'react-native';
 import { StyleSheet } from 'react-native-unistyles';
 
@@ -12,7 +12,6 @@ import { BriefCard } from '../components/brief-card';
 import { EventList } from '../components/event-list';
 import { FlowBoard } from '../components/flow-board';
 import { GroupRow } from '../components/group-row';
-import { Heatmap } from '../components/heatmap';
 import { HotKeywords } from '../components/hot-keywords';
 import { IndexCard, MacroCard } from '../components/index-card';
 import { IndexChipCard } from '../components/index-chip-card';
@@ -27,10 +26,8 @@ import {
   splitCarousel,
 } from '../dashboard';
 import { groupOverview, NEUTRAL_HINT } from '../overview-groups';
-import type { HeatmapKind, HeatmapSize } from '../rest-types';
 import type { GroupKind } from '../types';
 import { useAutoRefresh } from '../use-auto-refresh';
-import { useHeatmap } from '../use-heatmap';
 import { useInvestorFlow } from '../use-investor-flow';
 import { useMarketOverview } from '../use-market-overview';
 import { useMorningBrief } from '../use-morning-brief';
@@ -46,7 +43,7 @@ type Props = {
 
 /**
  * 개요 칩 = 마켓 대시보드(스펙 §2.1 ②~⑦).
- * ② AI 장전 브리핑 → ③ 지수 캐러셀(+ 돈의 흐름·경제지표) → ④ 히트맵 → ⑤ 급등락 & AI 원인 → ⑤-2 수급 전광판
+ * ② AI 장전 브리핑 → ③ 지수 캐러셀(+ 돈의 흐름·경제지표) → ⑤ 급등락 & AI 원인 → ⑤-2 수급 전광판
  * → ⑥ 핫 키워드·주도 테마 → ⑦ 다가오는 일정.
  * 섹션마다 따로 불러와 하나가 실패해도 나머지는 보인다. 전부 실패했을 때만 전체 오류 화면.
  */
@@ -56,9 +53,6 @@ export function MarketSection({ onMore, onOpenGroup, onHeader }: Props) {
   const brief = useMorningBrief();
   const movers = useMovers();
   const flow = useInvestorFlow();
-  const [heatKind, setHeatKind] = useState<HeatmapKind>('sector');
-  const [heatSize, setHeatSize] = useState<HeatmapSize>('mcap');
-  const heat = useHeatmap(heatKind, heatSize);
   const today = kstDateString();
 
   const indices = useMemo(() => overview.data?.overview.indices ?? [], [overview.data]);
@@ -66,7 +60,7 @@ export function MarketSection({ onMore, onOpenGroup, onHeader }: Props) {
   const session = marketSession(indices);
 
   // 당겨서 새로고침 — 모든 섹션을 함께, 전부 실패했을 때만 토스트(일부 실패는 그 섹션만 이전 값 유지)
-  const sources = [overview, brief, movers, flow, heat];
+  const sources = [overview, brief, movers, flow];
   const refreshAll = async () => {
     const results = await Promise.allSettled(sources.map((s) => s.refresh()));
     if (results.every((r) => r.status === 'rejected')) throw (results[0] as PromiseRejectedResult).reason;
@@ -83,7 +77,6 @@ export function MarketSection({ onMore, onOpenGroup, onHeader }: Props) {
   useReturnRefresh(brief.silentRefresh, brief.fetchedAt);
   useReturnRefresh(movers.silentRefresh, movers.fetchedAt);
   useReturnRefresh(flow.silentRefresh, flow.fetchedAt);
-  useReturnRefresh(heat.silentRefresh, heat.fetchedAt);
 
   // ① 헤더 기준 시각 — 섹션마다 기준이 달라(급등락·수급은 각 카드에 표시) 국내 지수 기준으로 한정한다
   const basis = indexHeaderBasis(indices);
@@ -96,16 +89,15 @@ export function MarketSection({ onMore, onOpenGroup, onHeader }: Props) {
     [router],
   );
 
-  // 핫 키워드 시트에서 티커를 이름으로 보여 주기 위한 표(급등락·수급·히트맵에서 모은다)
+  // 핫 키워드 시트에서 티커를 이름으로 보여 주기 위한 표(급등락·수급에서 모은다)
   const names = useMemo(() => {
     const m = new Map<string, string>();
     for (const x of [...(movers.data?.gainers ?? []), ...(movers.data?.losers ?? [])]) m.set(x.ticker, x.stockName);
     for (const x of [...(flow.data?.foreignTop ?? []), ...(flow.data?.institutionTop ?? []), ...(flow.data?.pensionTop ?? [])]) {
       m.set(x.ticker, x.name);
     }
-    for (const g of heat.data?.groups ?? []) for (const s of g.stocks) if (s.ticker) m.set(s.ticker, s.name);
     return m;
-  }, [movers.data, flow.data, heat.data]);
+  }, [movers.data, flow.data]);
 
   const nothingYet = sources.every((s) => s.loading && s.data == null);
   const allFailed = sources.every((s) => s.error != null && s.data == null);
@@ -162,27 +154,6 @@ export function MarketSection({ onMore, onOpenGroup, onHeader }: Props) {
           {g.otherMacro.map((m) => <MacroCard key={m.seriesId} macro={m} />)}
         </Group>
       ) : null}
-
-      {/* ④ 시장 히트맵 */}
-      <View style={styles.card}>
-        <SectionHead title="시장 히트맵" caption={heat.data?.date ? `${closeBasis(heat.data.date, today)} · 1일 등락` : null} />
-        <View style={styles.toggles}>
-          <Chip label="업종" selected={heatKind === 'sector'} onPress={() => setHeatKind('sector')} />
-          <Chip label="테마" selected={heatKind === 'theme'} onPress={() => setHeatKind('theme')} />
-          <View style={styles.toggleGap} />
-          <Chip label="시가총액 기준" selected={heatSize === 'mcap'} onPress={() => setHeatSize('mcap')} />
-          <Chip label="거래대금 기준" selected={heatSize === 'value'} onPress={() => setHeatSize('value')} />
-        </View>
-        {heat.data && heat.data.groups.length > 0 ? (
-          <Heatmap groups={heat.data.groups} onOpenStock={openStock} />
-        ) : heat.loading ? (
-          <Text style={styles.muted}>불러오고 있어요…</Text>
-        ) : heat.error ? (
-          <InlineError text="히트맵을 불러오지 못했어요" onRetry={heat.reload} />
-        ) : (
-          <Text style={styles.muted}>히트맵 데이터를 준비하고 있어요</Text>
-        )}
-      </View>
 
       {/* ⑤ 급등락 & AI 원인 */}
       {mv && mv.gainers.length + mv.losers.length > 0 ? (
@@ -269,8 +240,6 @@ const styles = StyleSheet.create((theme) => ({
   groupTitle: { fontSize: 16, fontWeight: '700', color: theme.colors.text },
   grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', rowGap: theme.gap(1.5) },
   card: { backgroundColor: theme.colors.surface, borderRadius: theme.radius.card, padding: theme.gap(2), gap: theme.gap(1.5) },
-  toggles: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: theme.gap(0.75) },
-  toggleGap: { width: theme.gap(0.5) },
   muted: { fontSize: 14, color: theme.colors.textSecondary },
   subCaption: { fontSize: 13, color: theme.colors.textSecondary },
   inlineError: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: theme.gap(1) },
