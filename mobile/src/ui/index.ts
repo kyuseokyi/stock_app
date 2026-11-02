@@ -4,6 +4,7 @@ export { BottomSheet } from './bottom-sheet';
 export { Button } from './button';
 export { Card } from './card';
 export { Chip } from './chip';
+export { HeaderBack } from './header-back';
 export { ListRow } from './list-row';
 export { ListState } from './list-state';
 export { SectionHead } from './section-head';
