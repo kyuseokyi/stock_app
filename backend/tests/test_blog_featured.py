@@ -84,3 +84,22 @@ async def test_refeature_preserves_original_time(session):
     assert first is not None
     await crud.update_blog(session, posts[0], schemas.BlogUpdate(featured=True))
     assert posts[0].featured_at == first
+
+
+async def test_active_boards_only_excludes_inactive_board_posts(session):
+    """커뮤니티 '전체' — 숨긴 게시판의 글은 목록·전체 건수 모두에서 빠진다."""
+    board, posts = await _seed(session, n=2)
+    hidden = Board(name="숨김", order_index=1, is_active=False)
+    session.add(hidden)
+    await session.commit()
+    await session.refresh(hidden)
+    session.add(BlogPost(board_id=hidden.id, title="숨은 글", content="<p>x</p>"))
+    await session.commit()
+
+    total, items = await crud.list_blogs(session, active_boards_only=True)
+    assert total == 2
+    assert {p.board_id for p in items} == {board.id}
+
+    # 기본값은 지금과 같다(관리자 화면이 숨긴 게시판 글도 봐야 한다)
+    total_all, _ = await crud.list_blogs(session)
+    assert total_all == 3
