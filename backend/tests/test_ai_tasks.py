@@ -49,7 +49,8 @@ def env(monkeypatch):
     monkeypatch.setattr(tasks, "_kis_client", _boom)
     engine = create_engine("sqlite://")
     monkeypatch.setattr(tasks, "SyncSessionLocal", sessionmaker(engine))
-    for fn in (("generate", morning_brief), ("analyze", market_movers), ("hot_keywords", market_movers),
+    for fn in (("generate", morning_brief), ("analyze", market_movers), ("refresh_list", market_movers),
+               ("hot_keywords", market_movers),
                ("build", investor_flow_ai), ("evaluate_batch", stock_qualitative)):
         monkeypatch.setattr(fn[1], fn[0], _boom)
     return fake
@@ -64,20 +65,27 @@ def test_include_and_beat_schedule():
     assert "apps.ai_analyst.tasks" in celery_app.conf.include
     beat = celery_app.conf.beat_schedule
     ai = {k: v for k, v in beat.items() if v["task"].startswith("ai.")}
-    assert len(ai) == 6
+    assert len(ai) == 7
     assert {v["task"] for v in ai.values()} == {"ai.generate_morning_briefing", "ai.analyze_market_movers",
-                                                 "ai.collect_investor_flow", "ai.evaluate_screener_stocks"}
+                                                 "ai.refresh_market_movers_list", "ai.collect_investor_flow",
+                                                 "ai.evaluate_screener_stocks"}
     brief = beat["ai-morning-briefing"]["schedule"]
     assert brief.hour == {8} and brief.minute == {30} and brief.day_of_week == {1, 2, 3, 4, 5}
     movers = beat["ai-market-movers"]["schedule"]
     assert movers.minute == set(range(0, 60, 10)) and movers.hour == set(range(9, 16))
     assert movers.day_of_week == {1, 2, 3, 4, 5}
+    listing = beat["ai-market-movers-list"]
+    assert listing["task"] == "ai.refresh_market_movers_list"
+    assert listing["schedule"].minute == set(range(0, 60, 2)) and listing["schedule"].hour == set(range(9, 16))
+    assert listing["schedule"].day_of_week == {1, 2, 3, 4, 5}
+    assert 0 < listing["options"]["expires"] < 120  # 밀린 실행은 다음 회차 전에 버린다
     flows = sorted((min(v["schedule"].hour), min(v["schedule"].minute)) for v in ai.values()
                    if v["task"] == "ai.collect_investor_flow")
     assert flows == [(15, 45), (18, 10), (22, 0)]
     ev = beat["ai-screener-evaluation"]["schedule"]
     assert ev.hour == {16} and ev.minute == {0}
-    for name in ("ai.generate_morning_briefing", "ai.analyze_market_movers", "ai.collect_investor_flow",
+    for name in ("ai.generate_morning_briefing", "ai.analyze_market_movers", "ai.refresh_market_movers_list",
+                 "ai.collect_investor_flow",
                  "ai.evaluate_screener_stocks"):
         assert name in celery_app.tasks
 
@@ -183,6 +191,75 @@ def test_movers_error_releases_lock(monkeypatch, env):
     out = tasks.analyze_market_movers()
     assert out["error"].startswith("RuntimeError")
     assert kis.closed and env.get(tasks.MOVERS_LOCK_KEY) is None
+
+
+# ---------------------------------------------------------------- 급등락 순위(2분)
+@pytest.mark.parametrize("now", [datetime(2026, 10, 30, 9, 0, tzinfo=KST), datetime(2026, 10, 30, 9, 8, tzinfo=KST),
+                                 datetime(2026, 10, 30, 15, 32, tzinfo=KST), SAT_1000])
+def test_movers_list_outside_session_no_kis(monkeypatch, env, now):
+    _at(monkeypatch, now)  # _kis_client·refresh_list 는 _boom — 불리면 error 로 끝나 단언이 깨진다
+    assert tasks.refresh_market_movers_list() == {"skipped": "outside_session"}
+    assert env.get(tasks.MOVERS_LIST_LOCK_KEY) is None
+
+
+def test_movers_list_manual_holiday_no_kis(monkeypatch):
+    monkeypatch.setenv("MARKET_HOLIDAYS", "2026-10-30")
+    assert tasks.refresh_market_movers_list() == {"skipped": "outside_session"}
+
+
+def test_movers_list_locked(env):
+    env.set(tasks.MOVERS_LIST_LOCK_KEY, "남의토큰", ex=100)
+    assert tasks.refresh_market_movers_list() == {"skipped": "locked"}
+    assert env.get(tasks.MOVERS_LIST_LOCK_KEY) == "남의토큰"
+
+
+def test_movers_list_ok_releases_lock(monkeypatch, env):
+    kis = FakeKis()
+    monkeypatch.setattr(tasks, "_kis_client", lambda: kis)
+    seen = {}
+
+    def refresh(now, *, kis_client, session=None):
+        seen["args"] = (now, kis_client)
+        assert env.get(tasks.MOVERS_LIST_LOCK_KEY)  # 잠근 상태에서 실행
+        assert 0 < env.ttl(tasks.MOVERS_LIST_LOCK_KEY) <= tasks.MOVERS_LIST_LOCK_TTL
+        return {"updated_at": "t", "gainers": [{"ticker": "005930"}], "losers": []}
+
+    monkeypatch.setattr(market_movers, "refresh_list", refresh)
+    assert tasks.refresh_market_movers_list() == {"updated_at": "t", "gainers": 1, "losers": 0}
+    assert seen["args"] == (FRI_1000, kis)
+    assert kis.closed and env.get(tasks.MOVERS_LIST_LOCK_KEY) is None
+
+
+def test_movers_list_skipped_and_error_release_lock(monkeypatch, env):
+    kis = FakeKis()
+    monkeypatch.setattr(tasks, "_kis_client", lambda: kis)
+    monkeypatch.setattr(market_movers, "refresh_list", lambda now, *, kis_client, session=None:
+                        {"skipped": "kis_error"})
+    assert tasks.refresh_market_movers_list() == {"skipped": "kis_error"}
+    assert kis.closed and env.get(tasks.MOVERS_LIST_LOCK_KEY) is None
+
+    def fail(now, *, kis_client, session=None):
+        raise RuntimeError("터짐")
+
+    monkeypatch.setattr(market_movers, "refresh_list", fail)
+    assert tasks.refresh_market_movers_list()["error"].startswith("RuntimeError")
+    assert env.get(tasks.MOVERS_LIST_LOCK_KEY) is None
+
+
+def test_movers_two_locks_do_not_block_each_other(monkeypatch, env):
+    """:10 처럼 함께 깨는 회차에 순위 갱신 때문에 Gemini 분석이 빠지면 안 되고, 그 반대도 마찬가지."""
+    monkeypatch.setattr(tasks, "_kis_client", FakeKis)
+    monkeypatch.setattr(market_movers, "refresh_list", lambda now, *, kis_client, session=None:
+                        {"updated_at": "t", "gainers": [], "losers": []})
+    monkeypatch.setattr(market_movers, "analyze", lambda now, *, kis_client, session=None, force=False:
+                        {"updated_at": "t", "gainers": [], "losers": []})
+    monkeypatch.setattr(market_movers, "hot_keywords", lambda movers, *, force=False: [])
+    env.set(tasks.MOVERS_LOCK_KEY, "분석중", ex=100)
+    assert "skipped" not in tasks.refresh_market_movers_list()
+    env.delete(tasks.MOVERS_LOCK_KEY)
+    env.set(tasks.MOVERS_LIST_LOCK_KEY, "순위중", ex=100)
+    assert "skipped" not in tasks.analyze_market_movers()
+    assert env.get(tasks.MOVERS_LIST_LOCK_KEY) == "순위중"  # 상대 잠금을 지우지 않는다
 
 
 # ---------------------------------------------------------------- 수급

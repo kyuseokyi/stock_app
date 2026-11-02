@@ -1,4 +1,4 @@
-"""AI 시황 분석 Celery 태스크 — 모닝 브리핑·급등락 원인·수급 해설·스크리너 정성 평가.
+"""AI 시황 분석 Celery 태스크 — 모닝 브리핑·급등락 순위·급등락 원인·수급 해설·스크리너 정성 평가.
 
 원칙(Graceful Fail): 외부 키가 없거나 휴장일이면 `{"skipped": 사유}`, 예외는 잡아서 `{"error": ...}` 로 끝낸다
 (워커를 흔들지 않고, 비밀값은 로그에 남기지 않는다 — repr 은 300자로 자른다).
@@ -23,6 +23,11 @@ log = logging.getLogger(__name__)
 # 돌지 못해도 다음 회차 전에 풀린다.
 MOVERS_LOCK_KEY = "ai:market:movers:lock"
 MOVERS_LOCK_TTL = 540
+# 순위 갱신(2분)은 잠금을 따로 쓴다 — 같이 쓰면 :00·:10 처럼 함께 깨는 회차에 순위 쪽이 먼저 잠가 Gemini 분석이 통째로 빠지고,
+# 10분 태스크가 죽어 남긴 잠금(9분)에 순위 갱신도 묶인다. 동시 실행의 정합성은 market_movers 의 병합 기준이 맡는다.
+# TTL 은 하드 시간 제한(90초)보다 길고 beat 간격(2분)보다 짧게.
+MOVERS_LIST_LOCK_KEY = "ai:market:movers:list:lock"
+MOVERS_LIST_LOCK_TTL = 100
 
 
 # ---------------------------------------------------------------- 외부 의존(테스트에서 바꿔 끼운다)
@@ -44,11 +49,11 @@ def _kis_client():
     return KISClient(limiter=RateLimiter(_DEFAULT_RATE))
 
 
-def _release_lock(redis, token: str) -> None:
+def _release_lock(redis, token: str, key: str = MOVERS_LOCK_KEY) -> None:
     """내 토큰일 때만 해제(collector.poll_intraday_indices 와 같은 방식). 실패하면 TTL 로 풀린다."""
     try:
-        if redis.get(MOVERS_LOCK_KEY) == token:
-            redis.delete(MOVERS_LOCK_KEY)
+        if redis.get(key) == token:
+            redis.delete(key)
     except Exception as e:  # noqa: BLE001
         log.warning("급등락 잠금 해제 실패: %s", type(e).__name__)
 
@@ -70,6 +75,39 @@ def generate_morning_briefing() -> dict:
         return {"error": repr(e)[:300]}
 
 
+# ---------------------------------------------------------------- 급등락 순위(평일 9~15시 2분 간격)
+# 회당 KIS 2건(UN), UN 이 비면 4건(J 폴백) — 분당 1~2건. 뉴스·Gemini 는 부르지 않는다.
+@celery_app.task(name="ai.refresh_market_movers_list", ignore_result=True, soft_time_limit=60, time_limit=90)
+def refresh_market_movers_list() -> dict:
+    """09:10~15:30(거래일)에만 KIS 를 부른다. beat 가 그 밖에 깨우면 호출 없이 끝난다."""
+    redis = None
+    client = None
+    token = uuid.uuid4().hex
+    locked = False
+    try:
+        now = _now()
+        if not market_movers.in_session_window(now):
+            return {"skipped": "outside_session"}
+        redis = get_sync_redis()
+        if not redis.set(MOVERS_LIST_LOCK_KEY, token, nx=True, ex=MOVERS_LIST_LOCK_TTL):
+            return {"skipped": "locked"}
+        locked = True
+        client = _kis_client()
+        result = market_movers.refresh_list(now, kis_client=client)
+        if "skipped" in result:
+            return result
+        return {"updated_at": result.get("updated_at"), "gainers": len(result.get("gainers") or []),
+                "losers": len(result.get("losers") or [])}
+    except Exception as e:  # noqa: BLE001 — 시간 제한 예외 포함. 캐시는 건드리지 않은 채로 남는다
+        log.exception("급등락 순위 갱신 태스크 실패")
+        return {"error": repr(e)[:300]}
+    finally:
+        if client is not None:
+            client.close()
+        if locked:
+            _release_lock(redis, token, MOVERS_LIST_LOCK_KEY)
+
+
 # ---------------------------------------------------------------- 급등락 원인(평일 9~15시 10분 간격)
 # ignore_result — 하루 40회 돌고 아무도 결과를 읽지 않는다.
 @celery_app.task(name="ai.analyze_market_movers", ignore_result=True, soft_time_limit=240, time_limit=300)
@@ -88,7 +126,7 @@ def analyze_market_movers() -> dict:
             return {"skipped": "locked"}
         locked = True
         client = _kis_client()
-        # force=True — 캐시 TTL(600s)과 beat 간격(10분)이 같아 force 없으면 캐시 적중으로 20분마다만 갱신된다
+        # force=True — 2분 순위 갱신이 캐시를 계속 채우므로 force 없으면 캐시 적중으로 원인 분석이 돌지 않는다
         result = market_movers.analyze(now, kis_client=client, force=True)
         if "skipped" in result:
             return result

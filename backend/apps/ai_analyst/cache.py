@@ -9,7 +9,10 @@ from shared.sync_redis import get_sync_redis
 log = logging.getLogger(__name__)
 
 MOVERS_KEY = "ai:market:movers:today"
-MOVERS_TTL = 600
+MOVERS_TTL = 300  # 순위 갱신(2분) 두세 회차를 건너뛰어도 남는 길이. 만료되면 get_cached 가 last 로 폴백
+# 최근 AI 원인(ticker → 방향·원인) — 10분 분석만 쓰고, 2분 순위 갱신은 읽기만 한다. date 가 오늘이 아니면 버린다
+MOVERS_REASONS_KEY = "ai:market:movers:reasons"
+MOVERS_REASONS_TTL = 86400
 KEYWORDS_KEY = "ai:market:keywords:today"
 KEYWORDS_TTL = 1800
 INVESTOR_FLOW_KEY = "market:investor_flow:today"

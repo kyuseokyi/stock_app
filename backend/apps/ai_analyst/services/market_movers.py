@@ -3,6 +3,12 @@
 - 20종목(상승 10 + 하락 10)을 Gemini 한 번으로 묶는다(`MoverReasonsResponse`). 응답은 ticker 로 매칭, 빠진 종목은 원인 None.
 - KIS 실패(또는 두 목록 모두 빈 결과)면 이전 캐시를 덮지 않는다.
 - Gemini 가 없으면 원인 None 인 목록이라도 캐시한다(시세 목록 자체는 유효).
+
+주기가 둘이다 — 순위만 2분(`refresh_list`, KIS 만), 원인까지 10분(`analyze`, KIS·뉴스·Gemini). 잠금이 달라 동시에 돌 수 있어
+두 경로 모두 `_save_movers` 하나로 저장하고, 어느 쪽이 나중에 써도 결과가 같도록 기준을 정했다:
+- 목록: updated_at 이 더 새로운 KIS 스냅샷이 이긴다(Gemini 를 기다린 10분 분석이 더 새로운 2분 목록을 되돌리지 않게).
+- 원인: 언제나 쓰기 직전에 읽은 `MOVERS_REASONS_KEY` 에서 ticker·방향이 모두 같을 때만 붙인다.
+  이전 movers 본문에서 복사하지 않는다 — 옛 본문을 읽은 2분 회차가 새 원인을 덮으면 그 뒤 회차들이 옛 원인을 계속 물려받는다.
 """
 from __future__ import annotations
 
@@ -24,6 +30,7 @@ NEWS_PER_STOCK = prompts.NEWS_PER_ITEM  # 5
 KEYWORD_NEWS_STOCKS = 5  # 핫 키워드용 테마 뉴스를 찾을 상위 종목 수(상승·하락 각각)
 SESSION_START = time(9, 10)
 SESSION_END = time(15, 30)
+REASON_FIELDS = ("reason_summary", "category", "reliability", "risk_warning")
 
 
 # ---------------------------------------------------------------- 외부 의존(테스트에서 바꿔 끼운다)
@@ -109,12 +116,11 @@ def _stock_news(news_client, rows: list[dict]) -> dict[str, list]:
     return out
 
 
-def _to_mover(r: dict, reason) -> dict:
+def _to_mover(r: dict, reason: dict | None) -> dict:
     m = Mover(ticker=r["ticker"], stock_name=r.get("name") or r["ticker"], price=r.get("price"),
               change_rate=r["change_rate"])
     if reason is not None:
-        m = m.model_copy(update={"reason_summary": reason.reason_summary, "category": reason.category,
-                                 "reliability": reason.reliability, "risk_warning": reason.risk_warning})
+        m = m.model_copy(update={f: reason.get(f) for f in REASON_FIELDS})
     return m.model_dump()
 
 
@@ -129,17 +135,77 @@ def _reasons(gemini, gainers, losers, news_by_ticker) -> dict:
     return {norm_ticker(it.ticker): it for it in resp.items}
 
 
-# ---------------------------------------------------------------- 진입점
-def analyze(now: datetime, *, kis_client, session=None, force: bool = False) -> dict:
-    """급등락 원인 분석 → 캐시. 반환은 API 계약 모양 dict, 건너뛰면 {"skipped": 사유}.
+# ---------------------------------------------------------------- 저장(두 주기 공통 — 병합 기준은 모듈 설명)
+def _kst(now: datetime) -> datetime:
+    return now.replace(tzinfo=KST) if now.tzinfo is None else now.astimezone(KST)
 
-    session: 유니버스 조회에 쓸 동기 세션(없으면 SyncSessionLocal 을 직접 연다).
-    """
-    if not force:
-        hit = cache.get_json(cache.MOVERS_KEY)
-        if hit:
-            return {**hit, "keywords": cache.get_json(cache.KEYWORDS_KEY) or []}
 
+def _load_reasons(day: str) -> dict:
+    """오늘 원인만 {ticker: {side, 원인 필드}}. 어제 원인이 오늘 첫 회차 종목에 붙지 않게 날짜를 확인한다."""
+    raw = cache.get_json(cache.MOVERS_REASONS_KEY)
+    if not isinstance(raw, dict) or raw.get("date") != day or not isinstance(raw.get("items"), dict):
+        return {}
+    return raw["items"]
+
+
+def _save_reasons(now_kst: datetime, gainers: list[dict], losers: list[dict], reasons: dict) -> None:
+    """새 원인을 같은 날 원인에 덮어 합친다. Gemini 가 빠뜨린 종목은 직전 원인 유지, 실패({})면 아무것도 바꾸지 않는다."""
+    if not reasons:
+        return
+    day = now_kst.date().isoformat()
+    items = _load_reasons(day)
+    for side, rows in (("up", gainers), ("down", losers)):
+        for r in rows:
+            it = reasons.get(r["ticker"])
+            if it is not None:
+                items[r["ticker"]] = {"side": side, **{f: getattr(it, f) for f in REASON_FIELDS}}
+    cache.put_json(cache.MOVERS_REASONS_KEY, {"date": day, "items": items}, cache.MOVERS_REASONS_TTL)
+
+
+def _attach(rows: list[dict], reasons: dict, side: str) -> list[dict]:
+    """방향까지 같을 때만 원인을 붙인다 — 오전에 급등했다 오후에 급락한 종목에 급등 원인이 붙지 않게."""
+    out = []
+    for r in rows:
+        reason = reasons.get(r["ticker"])
+        out.append(_to_mover(r, reason if isinstance(reason, dict) and reason.get("side") == side else None))
+    return out
+
+
+def _is_newer(updated_at, now_kst: datetime) -> bool:
+    """캐시의 updated_at 이 내 스냅샷(초 단위)보다 뒤인가. 같으면 False — 내 것을 쓴다. 형식이 깨졌으면 False."""
+    try:
+        return _kst(datetime.fromisoformat(updated_at)) > now_kst.replace(microsecond=0)
+    except (TypeError, ValueError):
+        return False
+
+
+def _cached_rows(movers: list[dict]) -> list[dict]:
+    return [{"ticker": m["ticker"], "name": m.get("stock_name"), "price": m.get("price"),
+             "change_rate": m["change_rate"]} for m in movers]
+
+
+def _save_movers(now: datetime, gainers: list[dict], losers: list[dict]) -> dict:
+    """목록 + 오늘 원인 → today·last 저장(읽고 쓰는 사이는 원자적이지 않다 — 어긋나도 다음 2분 회차에 바로잡힌다)."""
+    now_kst = _kst(now)
+    updated_at = now_kst.isoformat(timespec="seconds")
+    current = cache.get_json(cache.MOVERS_KEY)
+    if isinstance(current, dict) and _is_newer(current.get("updated_at"), now_kst):
+        updated_at = current["updated_at"]
+        gainers = _cached_rows(current.get("gainers") or [])
+        losers = _cached_rows(current.get("losers") or [])
+    reasons = _load_reasons(now_kst.date().isoformat())
+    body = MarketMoversResponse(
+        updated_at=updated_at,
+        gainers=_attach(gainers, reasons, "up"),
+        losers=_attach(losers, reasons, "down"),
+    ).model_dump(exclude={"keywords"})
+    cache.put_json(cache.MOVERS_KEY, body, cache.MOVERS_TTL)
+    cache.put_json(cache.MOVERS_LAST_KEY, body, cache.LAST_TTL)
+    return body
+
+
+def _fetch_snapshot(kis_client, session) -> tuple[list[dict], list[dict], str | None]:
+    """(상승, 하락, 건너뛸 사유). 사유가 있으면 캐시를 건드리지 말 것 — PG·KIS 장애나 빈 결과로 이전 캐시를 덮지 않는다."""
     try:
         if session is not None:
             from shared import market_repo
@@ -151,30 +217,49 @@ def analyze(now: datetime, *, kis_client, session=None, force: bool = False) -> 
         log.warning("분석 유니버스 조회 실패(%s) — 급등락 갱신 건너뜀", type(exc).__name__)
         if session is not None:
             session.rollback()
-        return {"skipped": "universe_error"}
+        return [], [], "universe_error"
     if not universe:
-        return {"skipped": "empty_universe"}
+        return [], [], "empty_universe"
 
     try:
         gainers, losers = fetch_movers(kis_client, universe=universe)
     except Exception as exc:  # noqa: BLE001 — KIS 실패면 이전 캐시를 그대로 둔다
         log.warning("등락률 순위 조회 실패(%s) — 이전 캐시 유지", type(exc).__name__)
-        return {"skipped": "kis_error"}
+        return [], [], "kis_error"
     if not gainers and not losers:
-        return {"skipped": "no_movers"}
+        return [], [], "no_movers"
+    return gainers, losers, None
+
+
+# ---------------------------------------------------------------- 진입점
+def refresh_list(now: datetime, *, kis_client, session=None) -> dict:
+    """순위만 갱신(2분 주기) — KIS 만 부른다. 뉴스·Gemini·핫 키워드는 부르지 않는다. 건너뛰면 {"skipped": 사유}."""
+    gainers, losers, skipped = _fetch_snapshot(kis_client, session)
+    if skipped:
+        return {"skipped": skipped}
+    return _save_movers(now, gainers, losers)
+
+
+def analyze(now: datetime, *, kis_client, session=None, force: bool = False) -> dict:
+    """급등락 원인 분석 → 캐시. 반환은 API 계약 모양 dict, 건너뛰면 {"skipped": 사유}.
+
+    session: 유니버스 조회에 쓸 동기 세션(없으면 SyncSessionLocal 을 직접 연다).
+    """
+    if not force:
+        hit = cache.get_json(cache.MOVERS_KEY)
+        if hit:
+            return {**hit, "keywords": cache.get_json(cache.KEYWORDS_KEY) or []}
+
+    gainers, losers, skipped = _fetch_snapshot(kis_client, session)
+    if skipped:
+        return {"skipped": skipped}
 
     gemini = _gemini()
     news = _stock_news(_news(), gainers + losers) if gemini is not None else {}
     reasons = _reasons(gemini, gainers, losers, news)
 
-    now_kst = now.replace(tzinfo=KST) if now.tzinfo is None else now.astimezone(KST)
-    body = MarketMoversResponse(
-        updated_at=now_kst.isoformat(timespec="seconds"),
-        gainers=[_to_mover(r, reasons.get(r["ticker"])) for r in gainers],
-        losers=[_to_mover(r, reasons.get(r["ticker"])) for r in losers],
-    ).model_dump(exclude={"keywords"})
-    cache.put_json(cache.MOVERS_KEY, body, cache.MOVERS_TTL)
-    cache.put_json(cache.MOVERS_LAST_KEY, body, cache.LAST_TTL)
+    _save_reasons(_kst(now), gainers, losers, reasons)  # 원인을 먼저 — 곧이어 도는 2분 회차도 새 원인을 읽는다
+    body = _save_movers(now, gainers, losers)
     return {**body, "keywords": cache.get_json(cache.KEYWORDS_KEY) or []}
 
 

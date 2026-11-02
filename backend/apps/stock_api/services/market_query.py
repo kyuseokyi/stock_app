@@ -5,7 +5,10 @@
 """
 from __future__ import annotations
 
+import threading
 import time
+from collections import OrderedDict
+from collections.abc import Callable
 from datetime import date, datetime, timedelta
 
 from apps.collector.intraday_indices import KST, load_intraday, valid_value
@@ -33,6 +36,14 @@ SPARK_POINTS = 20
 # Redis 장중 값은 캐시하지 않는다(덧씌우기는 매번).
 CACHE_SECONDS = 30
 _CACHE: dict[str, tuple[float, object, list]] = {}  # 이름 → (만료 시각 monotonic, 키, 행)
+
+# 테마·업종 순위·트리맵·상세 결과 메모리 캐시(프로세스별) — 사용자 수만큼 CH·PG 로 가지 않게.
+# 데이터는 하루 한 번(20:30)과 관리자 테마 보정 때만 바뀌므로, 다시 계산한 값이 보이기까지 최대 60초 늦어도 괜찮다.
+# _CACHE 는 이름당 1칸이라 인자가 다양한 이 조회에 맞지 않아 따로 둔다.
+RESULT_CACHE_SECONDS = 60
+RESULT_CACHE_MAX = 256
+_RESULT_CACHE: OrderedDict[tuple, tuple[float, object]] = OrderedDict()  # 키 → (만료 시각 monotonic, 결과), 오래된 것이 앞
+_RESULT_CACHE_LOCK = threading.Lock()  # REST·GraphQL 이 여러 스레드에서 동시에 들어온다
 
 # series_id → (화면 이름, 단위)
 MACRO_NAMES = {
@@ -94,6 +105,28 @@ def _cached_query(name: str, key, sql: str, params: dict) -> list:
     rows = _query(sql, params)
     _CACHE[name] = (now + CACHE_SECONDS, key, rows)
     return rows
+
+
+def _cached_result(key: tuple, load: Callable[[], dict | None]) -> dict | None:
+    """같은 key 로 RESULT_CACHE_SECONDS 안에 다시 부르면 저장해 둔 결과. 호출자끼리 공유하므로 결과를 바꾸면 안 된다.
+
+    예외와 '데이터 없음'(None·date 없음)은 저장하지 않는다 — latest_date 가 CH 장애를 삼켜 None 이 되므로,
+    저장하면 복구 뒤에도 60초 동안 빈 화면이 나온다. 조회는 잠금 밖에서 한다(동시 미스는 각자 조회, 마지막 값이 남음).
+    """
+    now = _clock()
+    with _RESULT_CACHE_LOCK:
+        hit = _RESULT_CACHE.get(key)
+        if hit is not None and hit[0] > now:
+            return hit[1]
+    result = load()
+    if result is None or result.get("date") is None:
+        return result
+    with _RESULT_CACHE_LOCK:
+        _RESULT_CACHE[key] = (now + RESULT_CACHE_SECONDS, result)
+        _RESULT_CACHE.move_to_end(key)
+        while len(_RESULT_CACHE) > RESULT_CACHE_MAX:
+            _RESULT_CACHE.popitem(last=False)
+    return result
 
 
 def _names(tickers: list[str]) -> dict[str, str]:
@@ -273,6 +306,11 @@ def _streaks(kind: str, as_of: date, ids: list[str]) -> dict[str, int]:
 
 
 def groups(kind: str = "theme", period: str = "1d", sort: str = "chg", limit: int = 30, offset: int = 0) -> dict:
+    return _cached_result(("groups", kind, period, sort, limit, offset),
+                          lambda: _load_groups(kind, period, sort, limit, offset))
+
+
+def _load_groups(kind: str, period: str, sort: str, limit: int, offset: int) -> dict:
     d = latest_date()
     if d is None:
         return {"date": None, "total": 0, "items": []}
@@ -311,6 +349,10 @@ def _tiles(stocks: list[tuple], names: dict[str, str]) -> list[dict]:
 
 
 def treemap(kind: str = "sector", size: str = "mcap", period: str = "1d") -> dict:
+    return _cached_result(("treemap", kind, size, period), lambda: _load_treemap(kind, size, period))
+
+
+def _load_treemap(kind: str, size: str, period: str) -> dict:
     d = latest_date()
     if d is None:
         return {"date": None, "groups": []}
@@ -348,6 +390,10 @@ def treemap(kind: str = "sector", size: str = "mcap", period: str = "1d") -> dic
 
 # ---------------------------------------------------------------- 그룹 상세
 def group(kind: str, group_id: str) -> dict | None:
+    return _cached_result(("group", kind, group_id), lambda: _load_group(kind, group_id))
+
+
+def _load_group(kind: str, group_id: str) -> dict | None:
     d = latest_date()
     if d is None or kind not in KINDS:
         return None

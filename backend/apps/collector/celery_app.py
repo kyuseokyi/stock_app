@@ -138,6 +138,12 @@ celery_app.conf.beat_schedule = {
         "task": "ai.generate_morning_briefing",
         "schedule": crontab(hour=8, minute=30, day_of_week="mon-fri"),
     },
+    # 급등락 순위 — 2분 간격, KIS 만(분당 1~2건). 09:10~15:30 밖·휴장일은 태스크가 KIS 호출 없이 거른다. 밀린 실행은 버린다
+    "ai-market-movers-list": {
+        "task": "ai.refresh_market_movers_list",
+        "schedule": crontab(minute="*/2", hour="9-15", day_of_week="mon-fri"),
+        "options": {"expires": 100},
+    },
     # 급등락 원인 — 10분 간격. 09:10~15:30 밖(09:00·15:40·15:50)·휴장일은 태스크가 거른다. 밀린 실행은 버린다
     "ai-market-movers": {
         "task": "ai.analyze_market_movers",
