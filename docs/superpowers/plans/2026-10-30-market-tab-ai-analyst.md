@@ -36,6 +36,8 @@ PG: `ai_daily_briefings`, `ai_stock_evaluations`(제약 이름 `uq_ai_stock_eval
 Celery: `ai.generate_morning_briefing`(평일 08:30) · `ai.analyze_market_movers`(평일 9~15시 10분 간격, 태스크 안에서 09:10~15:30·거래일·nx 잠금 확인) ·
 `ai.collect_investor_flow`(평일 15:45, 18:10) · `ai.evaluate_screener_stocks`(평일 16:00).
 
+> 구현 메모(2026-11-02): 급등락 순위 2분 갱신 `ai.refresh_market_movers_list`(beat `ai-market-movers-list`) 추가, today TTL 300s, 원인은 `ai:market:movers:reasons` 로 분리. 시장 탭 순위·트리맵·상세에 프로세스 메모리 60초 결과 캐시(`market_query._cached_result`).
+
 ## 작업 단위
 
 ### 백엔드 (브랜치 `feature/ai-analyst`)

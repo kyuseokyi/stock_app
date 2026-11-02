@@ -22,7 +22,7 @@ log = logging.getLogger(__name__)
 market_router = APIRouter(prefix="/api/v1/market", tags=["market-ai"])
 ai_router = APIRouter(prefix="/api/v1/ai", tags=["market-ai"])
 
-CACHE_CONTROL = "public, max-age=30"  # 캐시는 서버(Redis) 주기가 10분 이상이라 30초면 충분
+CACHE_CONTROL = "public, max-age=30"  # 서버(Redis) 갱신이 가장 잦은 급등락 순위도 2분 주기라 30초면 충분
 _EMPTY_MOVERS = {"updated_at": None, "gainers": [], "losers": [], "keywords": []}
 _EMPTY_TREEMAP = {"date": None, "groups": []}  # market_query.treemap 이 데이터 없을 때 쓰는 모양과 같다
 

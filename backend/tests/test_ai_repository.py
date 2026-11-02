@@ -87,13 +87,14 @@ def test_cache_roundtrip_with_ttl():
     r = fakeredis.FakeRedis(decode_responses=True)
     assert cache.put_json(cache.MOVERS_KEY, {"gainers": [{"name": "알파"}]}, cache.MOVERS_TTL, client=r)
     assert cache.get_json(cache.MOVERS_KEY, client=r) == {"gainers": [{"name": "알파"}]}
-    assert 0 < r.ttl(cache.MOVERS_KEY) <= 600
+    assert 0 < r.ttl(cache.MOVERS_KEY) <= 300
     assert "알파" in r.get(cache.MOVERS_KEY)  # ensure_ascii=False
     assert cache.get_json("없는키", client=r) is None
 
 
 def test_cache_key_constants():
-    assert (cache.MOVERS_KEY, cache.MOVERS_TTL) == ("ai:market:movers:today", 600)
+    assert (cache.MOVERS_KEY, cache.MOVERS_TTL) == ("ai:market:movers:today", 300)
+    assert cache.MOVERS_REASONS_KEY == "ai:market:movers:reasons"
     assert (cache.KEYWORDS_KEY, cache.KEYWORDS_TTL) == ("ai:market:keywords:today", 1800)
     assert (cache.INVESTOR_FLOW_KEY, cache.INVESTOR_FLOW_TTL) == ("market:investor_flow:today", 26 * 3600)
 

@@ -3,7 +3,7 @@
 가짜 Gemini(호출 기록)·가짜 KIS·가짜 뉴스·fakeredis·sqlite 세션만 쓴다. 실제 외부 호출 0회:
 autouse 픽스처가 키 env 를 지우고 모든 외부 래퍼를 기본 가짜로 바꿔 끼운다.
 """
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 import fakeredis
@@ -264,6 +264,173 @@ def test_movers_kis_error_keeps_previous_cache(monkeypatch):
     out = mm.analyze(NOW, kis_client=FakeKis(UP, DOWN, fail=True), force=True)
     assert "skipped" in out
     assert cache.get_json(cache.MOVERS_KEY)["updated_at"] == "이전"
+
+
+# ---------------------------------------------------------------- 2분 순위 갱신 + 원인 병합
+def _gemini_reasons(monkeypatch, summaries: dict[str, str]):
+    """{ticker: 원인} 만 돌려주는 가짜 Gemini. 빈 dict 면 응답 None(실패)."""
+    def respond(_p):
+        if not summaries:
+            return None
+        return MoverReasonsResponse(items=[{"ticker": t, "stock_name": "x", "change_rate": 1.0, "reason_summary": s,
+                                            "category": "테마수급", "reliability": "중"}
+                                           for t, s in summaries.items()])
+
+    g = FakeGemini({MoverReasonsResponse: respond})
+    monkeypatch.setattr(mm, "_gemini", lambda: g)
+    return g
+
+
+def _reason_of(movers: dict) -> dict:
+    return {m["ticker"]: m["reason_summary"] for m in movers["gainers"] + movers["losers"]}
+
+
+class _UnEmptyKis(FakeKis):
+    """넥스트레이드 통합(UN)이 빈 응답 → J 로 폴백해야 값이 나오는 경우."""
+
+    def get_fluctuation_ranking(self, *, descending, market_code):
+        self.calls += 1
+        if market_code == "UN":
+            return []
+        return self.up if descending else self.down
+
+
+@pytest.fixture
+def movers_env(monkeypatch):
+    monkeypatch.setattr(mm, "_universe", lambda: {"000001", "000002", "000003", "000101"})
+
+
+def _up(*tickers):
+    return [_kis_row(t, f"이름{t}", 10.0 - i, i + 1) for i, t in enumerate(tickers)]
+
+
+def _down(*tickers):
+    return [_kis_row(t, f"이름{t}", -10.0 + i, i + 1) for i, t in enumerate(tickers)]
+
+
+def test_refresh_list_only_kis(monkeypatch):
+    monkeypatch.setattr(mm, "_universe", lambda: UNIVERSE)
+    monkeypatch.setattr(mm, "_gemini", _boom)  # 뉴스·Gemini 는 불리면 안 된다
+    monkeypatch.setattr(mm, "_news", _boom)
+    kis = FakeKis(UP, DOWN)
+    out = mm.refresh_list(NOW, kis_client=kis)
+    assert kis.calls == 2  # 상승·하락 UN 각 1건
+    assert out["updated_at"] == "2026-10-30T10:00:00+09:00" and "keywords" not in out
+    assert len(out["gainers"]) == 10 and all(m["reason_summary"] is None for m in out["gainers"])
+    assert cache.get_json(cache.MOVERS_KEY) == out
+    assert cache.get_json(cache.MOVERS_LAST_KEY) == out
+
+
+def test_refresh_list_j_fallback(monkeypatch):
+    monkeypatch.setattr(mm, "_universe", lambda: UNIVERSE)
+    monkeypatch.setattr(mm, "_gemini", _boom)
+    monkeypatch.setattr(mm, "_news", _boom)
+    kis = _UnEmptyKis(UP, DOWN)
+    out = mm.refresh_list(NOW, kis_client=kis)
+    assert kis.calls == 4 and len(out["gainers"]) == 10
+
+
+def test_today_ttl_matches_short_cycle(_isolate, monkeypatch):
+    monkeypatch.setattr(mm, "_universe", lambda: UNIVERSE)
+    mm.refresh_list(NOW, kis_client=FakeKis(UP, DOWN))
+    assert 0 < _isolate.ttl(cache.MOVERS_KEY) <= 300
+    assert _isolate.ttl(cache.MOVERS_LAST_KEY) > 300
+
+
+@pytest.mark.parametrize("kis,reason", [(FakeKis(UP, DOWN, fail=True), "kis_error"), (FakeKis([], []), "no_movers")])
+def test_refresh_list_failure_keeps_cache(monkeypatch, kis, reason):
+    monkeypatch.setattr(mm, "_universe", lambda: UNIVERSE)
+    prev = {"updated_at": "이전", "gainers": [], "losers": []}
+    cache.put_json(cache.MOVERS_KEY, prev, 60)
+    assert mm.refresh_list(NOW, kis_client=kis) == {"skipped": reason}
+    assert cache.get_json(cache.MOVERS_KEY) == prev
+
+
+def test_refresh_list_universe_problem_no_kis(monkeypatch):
+    kis = FakeKis(UP, DOWN)
+    monkeypatch.setattr(mm, "_universe", lambda: set())
+    assert mm.refresh_list(NOW, kis_client=kis) == {"skipped": "empty_universe"}
+
+    def down():
+        raise RuntimeError("PG 장애")
+
+    monkeypatch.setattr(mm, "_universe", down)
+    assert mm.refresh_list(NOW, kis_client=kis) == {"skipped": "universe_error"}
+    assert kis.calls == 0
+
+
+def test_analyze_then_refresh_keeps_reason_new_ticker_none(monkeypatch, movers_env):
+    _gemini_reasons(monkeypatch, {"000001": "원인1", "000002": "원인2"})
+    mm.analyze(NOW, kis_client=FakeKis(_up("000001", "000002"), []), force=True)
+    monkeypatch.setattr(mm, "_gemini", _boom)
+    later = NOW + timedelta(minutes=2)
+    out = mm.refresh_list(later, kis_client=FakeKis(_up("000003", "000001"), []))
+    assert [m["ticker"] for m in out["gainers"]] == ["000003", "000001"]
+    assert _reason_of(out) == {"000003": None, "000001": "원인1"}
+    assert out["gainers"][1]["category"] == "테마수급" and out["updated_at"] == later.isoformat(timespec="seconds")
+
+
+def test_refresh_then_analyze_same_rule(monkeypatch, movers_env):
+    mm.refresh_list(NOW, kis_client=FakeKis(_up("000001"), []))
+    _gemini_reasons(monkeypatch, {"000002": "원인2"})
+    later = NOW + timedelta(minutes=2)
+    out = mm.analyze(later, kis_client=FakeKis(_up("000002", "000001"), []), force=True)
+    assert _reason_of(out) == {"000002": "원인2", "000001": None}
+    assert out["updated_at"] == later.isoformat(timespec="seconds")
+
+
+def test_slow_analyze_does_not_roll_back_newer_list(monkeypatch, movers_env):
+    """Gemini 를 기다린 10분 분석의 스냅샷이 더 오래됐으면: 목록은 2분 쪽, 원인은 10분 쪽."""
+    newer = NOW + timedelta(seconds=30)
+    mm.refresh_list(newer, kis_client=FakeKis(_up("000002", "000003"), []))
+    _gemini_reasons(monkeypatch, {"000001": "원인1", "000002": "원인2"})
+    out = mm.analyze(NOW, kis_client=FakeKis(_up("000001", "000002"), []), force=True)
+    assert out["updated_at"] == newer.isoformat(timespec="seconds")
+    assert _reason_of(out) == {"000002": "원인2", "000003": None}
+    assert cache.get_json(cache.MOVERS_KEY)["updated_at"] == newer.isoformat(timespec="seconds")
+
+
+def test_refresh_overlapping_analyze_gets_new_reason(monkeypatch, movers_env):
+    """2분 회차가 KIS 를 받는 사이 10분 분석이 끝나도, 쓰기 직전에 읽으므로 새 원인을 놓치지 않는다."""
+    _gemini_reasons(monkeypatch, {"000001": "새 원인"})
+    mm.analyze(NOW, kis_client=FakeKis(_up("000001"), []), force=True)
+    _gemini_reasons(monkeypatch, {"000001": "더 새 원인"})
+
+    class Overlap(FakeKis):
+        def get_fluctuation_ranking(self, *, descending, market_code):
+            if self.calls == 0:
+                mm.analyze(NOW + timedelta(seconds=10), kis_client=FakeKis(_up("000001"), []), force=True)
+            return super().get_fluctuation_ranking(descending=descending, market_code=market_code)
+
+    out = mm.refresh_list(NOW + timedelta(seconds=20), kis_client=Overlap(_up("000001"), []))
+    assert _reason_of(out) == {"000001": "더 새 원인"}
+
+
+def test_gemini_failure_or_omission_keeps_same_day_reason(monkeypatch, movers_env):
+    _gemini_reasons(monkeypatch, {"000001": "원인1", "000002": "원인2"})
+    rows = _up("000001", "000002")
+    mm.analyze(NOW, kis_client=FakeKis(rows, []), force=True)
+    _gemini_reasons(monkeypatch, {})  # Gemini 실패 — 원인을 지우지 않는다
+    assert _reason_of(mm.analyze(NOW + timedelta(minutes=10), kis_client=FakeKis(rows, []), force=True)) == {
+        "000001": "원인1", "000002": "원인2"}
+    _gemini_reasons(monkeypatch, {"000002": "원인2 갱신"})  # 000001 은 응답에서 빠짐
+    assert _reason_of(mm.analyze(NOW + timedelta(minutes=20), kis_client=FakeKis(rows, []), force=True)) == {
+        "000001": "원인1", "000002": "원인2 갱신"}
+
+
+def test_reason_not_attached_when_direction_flips(monkeypatch, movers_env):
+    _gemini_reasons(monkeypatch, {"000001": "급등 원인"})
+    mm.analyze(NOW, kis_client=FakeKis(_up("000001"), []), force=True)
+    out = mm.refresh_list(NOW + timedelta(minutes=2), kis_client=FakeKis([], _down("000001")))
+    assert out["losers"][0]["ticker"] == "000001" and out["losers"][0]["reason_summary"] is None
+
+
+def test_yesterday_reason_not_attached(monkeypatch, movers_env):
+    _gemini_reasons(monkeypatch, {"000001": "어제 원인"})
+    mm.analyze(NOW, kis_client=FakeKis(_up("000001"), []), force=True)
+    next_day = NOW + timedelta(days=1)
+    out = mm.refresh_list(next_day, kis_client=FakeKis(_up("000001"), []))
+    assert _reason_of(out) == {"000001": None}
 
 
 def test_hot_keywords_gemini_and_cache(monkeypatch):

@@ -37,6 +37,7 @@ def ch(monkeypatch):
 def _isolate_cache_and_intraday(monkeypatch):
     """지수·거시 30초 캐시를 테스트마다 비우고, 장중 값은 기본 없음(Redis 를 읽지 않음)."""
     mq._CACHE.clear()
+    mq._RESULT_CACHE.clear()
     monkeypatch.setattr(mq, "_intraday", lambda: {})
 
 
@@ -528,3 +529,90 @@ def test_overview_macro_window_covers_lagging_yoy(ch):
     since = fake.queries[-1][1]["since"]
     assert since < date(2025, 7, 1)  # 석 달 늦은 값의 1년 전까지 덮는다
     assert [m["series_id"] for m in out["macro"]] == ["PCEPILFE"]
+
+
+# ---------------------------------------------------------------- 순위·트리맵·상세 60초 결과 캐시
+_GROUPS = [[(D,)], [(0,)], []]  # 최신 기준일, 건수, 행(행이 없으면 연속 상위 조회는 생략)
+_TREEMAP = [[(D,)], [], []]  # 최신 기준일, 그룹, 종목
+_GROUP_ROW = ("7", "반도체", 5, 1.0, 2.0, 3.0, 1e9, 1e10, 3, 1, 1, "AAA", 5.0, 1)
+_GROUP = [[(D,)], [_GROUP_ROW], [], []]  # 최신 기준일, 그룹, 추이, 구성 종목(sector 라 PG 없음)
+
+
+@pytest.fixture
+def clock(monkeypatch):
+    now = {"t": 1000.0}
+    monkeypatch.setattr(mq, "_clock", lambda: now["t"])
+    return now
+
+
+@pytest.mark.parametrize("call,results", [
+    (lambda: mq.groups(kind="sector", period="5d"), _GROUPS),
+    (lambda: mq.treemap(kind="sector", size="value"), _TREEMAP),
+    (lambda: mq.group("sector", "7"), _GROUP),
+])
+def test_result_cache_same_args_one_lookup_until_expiry(ch, clock, call, results):
+    fake = ch([list(r) for r in results] * 2)
+    first = call()
+    n = len(fake.queries)
+    assert n == len(results)
+    assert call() == first and len(fake.queries) == n  # 같은 인자 → CH 다시 안 감
+    clock["t"] += mq.RESULT_CACHE_SECONDS - 1
+    call()
+    assert len(fake.queries) == n  # 59초 — 아직 캐시
+    clock["t"] += 1
+    call()
+    assert len(fake.queries) == n * 2  # 60초 — 다시 조회
+
+
+def test_result_cache_different_args_separate(ch, clock):
+    fake = ch([list(r) for r in _GROUPS] * 3)
+    mq.groups(kind="sector", period="1d")
+    mq.groups(kind="sector", period="5d")
+    mq.groups(kind="sector", period="1d", offset=30)
+    assert len(fake.queries) == 9
+    mq.groups(kind="sector", period="5d")
+    assert len(fake.queries) == 9
+
+
+def test_result_cache_kinds_do_not_collide(ch, clock):
+    fake = ch([list(r) for r in _GROUP] + [list(r) for r in _GROUPS] + [list(r) for r in _TREEMAP])
+    a = mq.group("sector", "7")
+    b = mq.groups(kind="sector")
+    c = mq.treemap(kind="sector")
+    assert a["id"] == "7" and "items" in b and "groups" in c
+    assert len(fake.queries) == 4 + 3 + 3
+
+
+def test_result_cache_size_limit_drops_oldest(ch, clock, monkeypatch):
+    monkeypatch.setattr(mq, "RESULT_CACHE_MAX", 2)
+    fake = ch([list(r) for r in _GROUPS] * 4)
+    mq.groups(offset=0)
+    mq.groups(offset=1)
+    mq.groups(offset=2)  # 가장 오래된 offset=0 제거
+    assert len(mq._RESULT_CACHE) == 2 and len(fake.queries) == 9
+    mq.groups(offset=2)
+    mq.groups(offset=1)
+    assert len(fake.queries) == 9
+    mq.groups(offset=0)
+    assert len(fake.queries) == 12
+
+
+def test_result_cache_skips_empty_and_errors(ch, clock, monkeypatch):
+    # 기준일 없음(CH 장애를 latest_date 가 삼킨 경우 포함) — 저장하면 복구 뒤에도 60초 동안 빈 화면이 나온다
+    ch([[(date(1970, 1, 1),)], *[list(r) for r in _GROUPS]])
+    assert mq.groups(kind="sector")["date"] is None
+    assert mq.groups(kind="sector")["date"] == "2026-10-16"
+
+    # 없는 그룹(None)도 저장하지 않는다
+    ch([[(D,)], [], [(D,)], [_GROUP_ROW], [], []])
+    assert mq.group("sector", "없음") is None
+    assert mq.group("sector", "없음")["name"] == "반도체"
+
+    # 예외는 저장하지 않고 그대로 올린다
+    def boom(*a, **k):
+        raise RuntimeError("CH 장애")
+
+    monkeypatch.setattr(mq, "_load_treemap", boom)
+    with pytest.raises(RuntimeError):
+        mq.treemap(kind="theme")
+    assert not any(k[0] == "treemap" for k in mq._RESULT_CACHE)

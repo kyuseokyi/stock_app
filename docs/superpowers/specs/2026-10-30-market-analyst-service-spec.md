@@ -209,6 +209,8 @@ class ScreenerQualitativeResponse(BaseModel):
 | `task_collect_investor_flow` | 평일 **15:45 & 18:10** | `pykrx`로 코스피/코스닥 전 종목 외인/기관/연기금/개인 순매수 일괄 수집 → Top 10 순위 산출 및 Gemini 2줄 수급 해설 생성 후 Redis 캐시 |
 | `task_evaluate_screener_stocks` | 평일 **16:00** | 당일 CANSLIM 통과 종목 10~30개에 대해 DART 공시/뉴스 및 pykrx 수급 조회 → AI 정성 평가 후 DB 저장 |
 
+> 구현 메모(2026-11-02): 급등락 순위는 Gemini 와 분리해 2분마다 갱신한다(`ai.refresh_market_movers_list`, KIS 만). 뉴스·Gemini 원인 분석은 위 표대로 10분 주기 유지.
+
 ---
 
 ## 6. FastAPI REST 엔드포인트 명세 (`router.py`)
