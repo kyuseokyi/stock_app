@@ -31,6 +31,8 @@ jobs:
     env:
       # 수동 실행이면 입력값, 태그 push 면 태그 이름. 셸에서는 이 env 로만 읽는다(입력값을 스크립트에 직접 끼우지 않음).
       RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+      # 상용은 게스트 로그인 버튼을 굽지 않는다 — 셸 값이 compose.env(.env)보다 우선하므로 서버 파일로 켜지지 않는다
+      VITE_ENABLE_GUEST_LOGIN: "false"
     steps:
     - name: Validate tag format
       id: tag

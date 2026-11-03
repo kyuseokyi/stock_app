@@ -51,7 +51,7 @@ GitHub 는 `runs-on` 라벨을 모두 가진 러너 아무에게나 job 을 준�
 | `AUTH_GUEST_ENABLED` | `false` |
 | `SOCIAL_FAKE_PROVIDER` | 넣지 않는다 |
 
-**게스트 로그인 버튼** ⚠️ `docker-compose.prod.yml` 의 `web_client` 빌드 인자 `VITE_ENABLE_GUEST_LOGIN` 은 `"true"` 로 고정돼 있고 상용 배포도 이 파일을 쓴다. 상용 배포 전에 서버별로 값을 줄 수 있게 바꿔 상용만 `"false"` 로 만든다(개발 서버는 `"true"` 유지).
+**게스트 로그인 버튼** `docker-compose.prod.yml` 의 `web_client` 빌드 인자 `VITE_ENABLE_GUEST_LOGIN` 은 기본값이 `false` 다. `deploy-prod.yml` 이 `"false"` 로 고정하므로 상용에서 따로 할 일은 없고, 개발 서버만 `deploy-web.yml` 이 `"true"` 를 넘긴다. 서버 API 쪽은 위 표의 `AUTH_GUEST_ENABLED=false` 로 따로 끈다.
 
 **확인** 키가 빠져도 에러 없이 버튼만 사라지므로 첫 배포 뒤 직접 확인한다.
 - `GET https://<상용 auth 도메인>/api/v1/auth/social/providers` → `{"kakao":true,"naver":true}`
@@ -105,3 +105,4 @@ Actions → **Deploy Prod** → Run workflow → `tag` 에 이전 태그(예: `r
 3. `environment: production` — 승인자 승인 후 시작, 상용 전용 시크릿
 4. 태그 형식 `release/vX.Y.Z` 검사, 태그 커밋이 `origin/main` 에 포함되는지 검사
 5. 수동 입력값은 env 로만 읽고 형식 검사를 통과해야 쓴다(스크립트 주입 방지)
+6. 웹 빌드의 `VITE_ENABLE_GUEST_LOGIN` 을 `"false"` 로 고정(게스트 로그인 버튼 미노출)

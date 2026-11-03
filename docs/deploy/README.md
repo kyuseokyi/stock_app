@@ -438,7 +438,7 @@ kubectl -n stock-app rollout restart deploy/auth                        # 같은
 | # | 항목 | 어디서 |
 |---|------|--------|
 | 1 | `APP_ENV=production` | stack.yml 고정 / k8s base ConfigMap |
-| 2 | **게스트 로그인 끄기** `AUTH_GUEST_ENABLED=false` + 프론트 빌드 `VITE_ENABLE_GUEST_LOGIN=false` | stack.env / ConfigMap, `docker-compose.prod.yml` build args |
+| 2 | **게스트 로그인 끄기** `AUTH_GUEST_ENABLED=false` + 프론트 빌드 `VITE_ENABLE_GUEST_LOGIN=false` | stack.env / ConfigMap, 웹 빌드 환경변수(미설정 시 `false`, `deploy-prod.yml` 은 `"false"` 고정) |
 | 3 | **`KAKAO_ADMIN_KEY`** 설정(회원 탈퇴 시 카카오 연결 끊기) | secret `kakao_admin_key` |
 | 4 | `JWT_SECRET_KEY`·`SOCIAL_STATE_SECRET` 를 길고 무작위인 **새 값**으로(개발 값 재사용 금지) | secret |
 | 5 | 도메인: `SOCIAL_REDIRECT_BASE`·`SOCIAL_WEB_RETURN_URL`, 카카오/네이버 콘솔의 Redirect URI 등록 | stack.env / ConfigMap, 공급자 콘솔 |

@@ -21,6 +21,9 @@ jobs:
   deploy:
     name: Deploy Frontends
     runs-on: self-hosted
+    env:
+      # 개발 서버 전용 — 테스트용 게스트 로그인 버튼을 웹 빌드에 굽는다(compose 기본값은 숨김)
+      VITE_ENABLE_GUEST_LOGIN: "true"
     steps:
     - name: Checkout Code
       uses: actions/checkout@v4
