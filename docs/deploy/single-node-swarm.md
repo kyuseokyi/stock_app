@@ -32,7 +32,8 @@ cp /opt/stock_app/env/.env.production backend/.env.production
 cp /opt/stock_app/env/compose.env .env 2>/dev/null || true
 
 # 1) 전환 — yes 입력 후 진행. 빌드·마이그레이션까지는 중단 없음, 앱 교체 순간부터 1~2분 중단
-bash deploy/swarm/cutover.sh
+# 개발 서버는 게스트 로그인 버튼을 유지하도록 값을 넘긴다(없으면 웹 이미지에서 버튼이 빠진다)
+VITE_ENABLE_GUEST_LOGIN=true bash deploy/swarm/cutover.sh
 ```
 스크립트가 하는 일: Swarm init(127.0.0.1) → overlay 망 `stock_net` 생성 → DB 컨테이너 3개를 같은 이름(`postgres`·`clickhouse`·`redis`)으로 망에 연결(재시작 없음) → 이미지 빌드(태그 = 커밋) → 마이그레이션 → 새 망에서 DB 이름이 풀리는지 확인 → compose 앱 컨테이너 9개 삭제 → 스택 배포 → 6개 포트 응답 확인.
 

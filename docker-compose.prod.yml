@@ -196,8 +196,8 @@ services:
         VITE_AUTH_BASE_URL: /_api/auth/api/v1
         VITE_GAME_API_URL: /_api/game
         VITE_STOCK_API_URL: /_api/stock/graphql
-        # 개발 서버 테스트용 게스트 로그인 노출 — product 도입 시 "false"
-        VITE_ENABLE_GUEST_LOGIN: "true"
+        # 게스트 로그인 노출 — 값이 없으면 숨김. 개발 서버는 deploy-web.yml 이 "true", 상용은 deploy-prod.yml 이 "false" 로 넘긴다
+        VITE_ENABLE_GUEST_LOGIN: ${VITE_ENABLE_GUEST_LOGIN:-false}
     container_name: stock_web_client
     ports:
       - "3000:3000"

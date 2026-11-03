@@ -442,7 +442,7 @@ uv run pytest tests/test_universe_cooldown.py    # 특정 파일
 | `VITE_STOCK_API_URL` | admin_web | `http://localhost:8002/graphql` | 주식 API(GraphQL) — 차트 삽입 종목검색/차트 |
 | `VITE_GAME_API_URL` | admin_web | (선택) dev 미설정 시 `http://localhost:8003` | 트레이딩 게임 API — 데일리 코치. 배포 미설정 시 "미연결" 안내 |
 | `VITE_AUTH_BASE_URL` | web_client | `http://localhost:8001/api/v1` | 인증 API — 간편 로그인·개발용 게스트 로그인 |
-| `VITE_ENABLE_GUEST_LOGIN` | web_client (선택) | dev serve 만 노출 | 닉네임 게스트 로그인 노출(`true`/`false`). 개발 서버 빌드는 `"true"`(테스트용), product 는 `false` |
+| `VITE_ENABLE_GUEST_LOGIN` | web_client (선택) | dev serve 만 노출 | 닉네임 게스트 로그인 노출(`true`/`false`). `docker-compose.prod.yml` 기본값 `false`. 개발 서버는 `deploy-web.yml` 이 `"true"`(테스트용), 상용은 `deploy-prod.yml` 이 `"false"` 고정 |
 | `EXPO_PUBLIC_ENABLE_GUEST_LOGIN` | mobile (선택) | production 이 아닐 때 노출 | 닉네임 게스트 로그인 노출(`true`/`false`) |
 | `VITE_GAME_API_URL` | web_client (선택) | `http://localhost:8003` | 트레이딩 게임 API·WS(미설정 배포 빌드 → 게임 탭 준비 중) |
 | `VITE_STOCK_API_URL` | web_client (선택) | `http://localhost:8002/graphql` | 게임 차트 일봉(GraphQL) |

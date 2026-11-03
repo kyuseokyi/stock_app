@@ -32,7 +32,7 @@
 
 ### 무중단 배포 — 단일 노드 Swarm 전환(운영자 1회 작업, `docs/deploy/single-node-swarm.md`)
 - [ ] 서버 `docker version` 23 이상인지(스택 `ulimits`)
-- [ ] 접속이 적은 시간에 `bash deploy/swarm/cutover.sh` → 6개 포트 응답·`docker stack services stock` 9개 `1/1`
+- [ ] 접속이 적은 시간에 `VITE_ENABLE_GUEST_LOGIN=true bash deploy/swarm/cutover.sh` → 6개 포트 응답·`docker stack services stock` 9개 `1/1`
 - [ ] 다음 백엔드 push 때 Actions 로그 `모드: Swarm(start-first)`, 배포 중 새로고침해도 끊기지 않는지
 - [ ] 앱(Expo) 새 빌드 후 조회 재시도 적용(웹은 다음 웹 배포부터)
 - [ ] 전환 뒤 한가한 시간에 OrbStack 재시작(`orb restart docker`, 또는 메뉴 막대 OrbStack → Restart) → DB 3개 healthy·`stock_net` 연결 유지·스택 9개 `1/1`(재부팅 내성)
