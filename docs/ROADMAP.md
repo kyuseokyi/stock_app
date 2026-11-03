@@ -1,8 +1,27 @@
 # Stock App 로드맵 & 진행 현황
 
-> 최종 업데이트: 2026-10-28
+> 최종 업데이트: 2026-11-03
 
 한국투자증권 API 기반 주식 데이터 파이프라인 + 블로그/커뮤니티 + 관리자/유저 웹/모바일 풀스택 모노레포의 진행 현황과 향후 단계.
+
+---
+
+## 🧭 지금 순서 (2026-11-03)
+
+현재 배포된 서버(haezean)는 **개발 서버**다. 상용 서버는 아래 4번에서 새로 만든다.
+
+1. **스크리너 마무리** — 수급 프리셋 3종(외인 5일 연속 순매수, 연기금 10일 연속 매집, 외인·기관 쌍끌이 52주 신고가), 고배당주 프리셋, 숨긴 조건검색·패턴 탭 공개
+2. **광고 Phase 1** — `ad_configs`, 관리자 광고 스위치, 하우스 배너(외부 계정 없이 가능)
+3. **상용 전 확인** — 아래 "사용자 작업"과 [`pending_checks.md`](pending_checks.md)
+4. **상용 서버 구축** — [`deploy/prod-release.md`](deploy/prod-release.md) 순서대로, 네이버 검수 포함
+5. **광고 Phase 2·3** — AdSense·AdMob(상용 도메인·앱과 계정 필요)
+6. **애플 로그인** — iOS 출시 직전
+
+**사용자 작업(코드 변경 없음)**: 시즌 1기 정산 결과 확인, Swarm 무중단 전환, 초기 데이터 준비 첫 실행, 장중 지수 실측(Task 4), 새 글 알림 기기 확인, 게시판 추가·샘플 글 정리
+
+**결정 대기**: 회원 전용 게시판 계획 여부. 지금 `min_role_required` 는 알림 대상 선정에만 쓰여, 만들려면 글 목록·조회에 권한을 적용해야 한다.
+
+**보류**: 미국 개별 주식·CANSLIM, 지인 리그, 앱 차트 드로잉, 네이버 증권 크롤링
 
 ---
 
@@ -50,6 +69,13 @@
 - [x] **Phase 4 — 실시간 랭킹 + 시즌 정산 + Trading MBTI** : Redis ZSET Top100(라이브 ROI 매 틱 + 청산 실현 ROI) + `/leaderboard`·`/my-rank`·`/hall-of-fame` REST. Celery beat 매일 20:40 → 말일 ClickHouse 당일 종가로 전액 강제청산 → 명예의 전당 박제(+MBTI 4분류) → FINISHED+차기시즌 원자적 생성(멱등). 101 pytest green. 최종리뷰 치명결함 2건(HOF 닉네임 스키마·async 엔진 dispose) 수정
 - [x] **Phase 5a — 데일리 스마트 코치 + 스마트 넛지** : 코치 슬롯 초안/발행(`status`, 마이그레이션 `c3d4e5f6a7b8`) + 관리자 REST·유저 `/coach/today` + 발행 WS push. admin_web `/game/coach`(TS, 마크다운 미리보기 DOMPurify). 넛지 3종(과열 추격·과레버리지·원칙 손절) REST `nudges[]` + 자동청산 WS(fan-out 큐), Wilder RSI(14) 일일 캐시. 모두 best-effort. 통합 스모크(일회용 PG) 통과 · 시드 published_at 회귀 수정
 
+### 화면·배포 정리 (2026-11)
+- [x] **앱 커뮤니티 탭** — 하단 탭 분리(홈·마켓·(스크리너)·커뮤니티·게임·내정보), `전체`+게시판 칩, 숨긴 게시판 글 제외(`active_boards_only`)
+- [x] **히트맵 화면 제거(앱·웹)** — 실시간이 아니라 주말·전날 데이터가 의미 없어 제거. 코드(앱 `components/heatmap`, 웹 `Treemap`, 서버 API)는 실시간을 붙일 때를 위해 유지
+- [x] **테마·업종 순위 유지 + 기준일 표시** — 하루 1회(20:30) 갱신. 장중 5분 갱신은 만들지 않기로 결정
+- [x] **수익 히스토리 빠진 기록 문구** — "M.D 이후 기록 없음". 평일 공휴일은 구분하지 못한다
+- [x] **웹 게스트 로그인 빌드 인자 서버별 분리** — 기본 숨김, 개발은 `deploy-web.yml` 이 켜고 상용은 `deploy-prod.yml` 이 끈다
+
 ### 문서
 - [x] 기능별 설계 스펙(`docs/superpowers/specs/`)
 - [x] README 작업 재개(Resume) 가이드 & 환경 점검
@@ -93,7 +119,9 @@
 - [x] **주도주 '오늘 볼 10개' 결론 카드** — 주도주 점수 상위 + 피벗 근처 종목을 10개로 추려 탭 맨 위에 표시, 웹·앱 같은 규칙(2026-10-23)
 - [x] **조건검색·패턴 탭 관리자 스위치** — `screener_features`(행 없으면 숨김, 마이그레이션 `5c1e9a7d3b20`), 관리자 REST `/api/v1/admin/screener/features`·공개 GraphQL `screenerFeatures`, admin '시장 데이터 → 스크리너 탭', 꺼지면 웹·앱 메뉴에서 빠지고 주소 직접 진입은 주도주로. 현재 운영 두 탭 숨김(2026-10-24)
 - [ ] 숨긴 조건검색·패턴 탭 다듬은 뒤 관리자 스위치로 공개
-- [ ] 뉴스·AI 요약(주달) — 네이버 검색 Open API 키 발급 필요
+- [ ] 뉴스 화면(주달) — 네이버 검색 키는 등록 완료(2026-10-30), 급등락 원인·핫 키워드 분석에 사용 중. 뉴스 목록 화면은 아직 없음
+- [ ] 수급 프리셋 3종·고배당주 프리셋 — 기술 프리셋 4종(거래량 급증·골든크로스·과매도·신고가)만 구현됨. 스펙 `specs/2026-10-30-market-analyst-service-spec.md` [B]
+- [ ] CANSLIM I 항목 연기금 반영 — 지금은 KIS 기관+외국인 순매수로 판정(스펙은 pykrx 연기금·외인, 선택 사항)
 
 ### Phase 3 — web_client 확장
 - [x] 토스 디자인 + 2단 네비 + 게임 스켈레톤 (위 완료 섹션 참조)
@@ -145,7 +173,7 @@
 - [ ] 지인 리그(Private League) — 백엔드(리그 생성·초대코드·리그 랭킹) + UI. 서브페이즈 6 범위에서 제외 · **보류**(사용자 결정 2026-10-13)
 - [x] 이중추세선 조작 방식 재정의 — 참조 영상 방식(가운데가 커서 따라 평행 이동, 기준선·대칭선 각각 조절) (2026-10-26)
 - [ ] **네이버 증권 테마·뉴스 크롤링 — 추후 확인**(사용자 결정 2026-10-18). `finance.naver.com/robots.txt` 가 `Disallow: /`(전체 수집 거부)라 보류. 다시 검토할 때 확인: 약관·허용 경로 변경 여부, 차단 위험, 출처 표기. 그 전까지 주달 기능은 공식 경로만(테마=KIS `theme_code.mst`+관리자 보정, 업종=`.mst`/`idxcode.mst`, 뉴스=네이버 검색 Open API, 일정=KIS 예탁원 API) — 기획 `docs/joodal_curation_service_plan.md`
-- [ ] 테스트(pytest / Vitest / Playwright)
+- [ ] E2E 테스트(Playwright) 미도입 — 단위 테스트는 pytest·Vitest·Jest 로 운영 중
 - [x] 퀴즈 생성 정기 스케줄(Celery beat) — `collector.generate_chart_quiz` 매일 21:00 KST, 미시도 재고 < `QUIZ_POOL_MIN_UNSEEN`(100)이면 `QUIZ_POOL_BATCH`(50 → 2026-10-17 200)개 생성 (2026-10-13)
 - [x] **야간 퀴즈 개선 A·B1·B2** (2026-10-17)
   - A: 관리자 QUIZ on/off 를 시즌 응답 `features` 로 웹·앱에 바로 반영(꺼지면 버튼·배너 숨김)
@@ -179,12 +207,12 @@
 - [x] 명예의 전당 응답 `season_number` — 웹·모바일 그룹 헤더가 시즌 id 대신 시즌 번호 표기 (2026-10-13)
 - [x] 게스트 로그인 백엔드 게이트 `AUTH_GUEST_ENABLED` — 미설정 시 `APP_ENV=development|test` 에서만 허용, 꺼지면 404. develop 서버는 `true` (2026-10-13)
 ### AI 주식 분석 & 글로벌/국내 시황 서비스 (Gemini API 기반)
-> 상세 설계 및 로드맵: [`docs/ai_market_analyst_plan.md`](ai_market_analyst_plan.md)
-- [ ] Phase 1: Gemini 2.0 Flash + Naver 뉴스 검색 API + OpenDART API 클라이언트 구축
-- [ ] Phase 2: 스크리너 정성 분석, 실시간 급등락 원인 추출, 모닝 글로벌 브리핑 코어 엔진
-- [ ] Phase 3: Celery 주기적 스케줄링 및 Redis/DB 캐싱 파이프라인
-- [ ] Phase 4: FastAPI REST API 엔드포인트 (`/api/v1/ai/...`)
-- [ ] Phase 5: 프론트엔드(웹/앱) 시황 및 스크리너 카드 연동
+> 상세 설계 및 로드맵: [`docs/ai_market_analyst_plan.md`](ai_market_analyst_plan.md). 서버 키 등록·실호출 확인 완료(2026-10-30, `deploy/2026-10-30-2`)
+- [x] Phase 1: Gemini(기본 `gemini-3.8-flash`, `GEMINI_MODEL` 로 변경) + Naver 뉴스 검색 API + OpenDART API 클라이언트 구축
+- [x] Phase 2: 스크리너 정성 분석, 실시간 급등락 원인 추출, 모닝 글로벌 브리핑 코어 엔진
+- [x] Phase 3: Celery 주기적 스케줄링 및 Redis/DB 캐싱 파이프라인
+- [x] Phase 4: FastAPI REST API 엔드포인트 (`/api/v1/ai/...`)
+- [x] Phase 5: 프론트엔드(웹/앱) 시황 및 스크리너 카드 연동
 
 ### 광고 수익화 (웹 Google AdSense · 모바일 Google AdMob · 관리자 원격 제어)
 > 상세 설계 및 로드맵: [`docs/ad_monetization_spec_and_plan.md`](ad_monetization_spec_and_plan.md) · 사전 준비 가이드: [`docs/ad_monetization_setup_guide.md`](ad_monetization_setup_guide.md)
@@ -199,6 +227,7 @@
 - **광고 수익화 사전 준비 가이드(AdSense/AdMob): `docs/ad_monetization_setup_guide.md`**
 - **AI 시장 분석 및 글로벌 시황 기획: `docs/ai_market_analyst_plan.md`**
 - **트레이딩 게임 마스터 기획: `docs/trading_game_plan.md`**
+- 상용 배포 절차: `docs/deploy/prod-release.md`
 - 아키텍처: `docs/architecture_plan.md`
 - 스크리너 기획: `docs/screener_plan.md`
 - 기능별 프롬프트: `docs/prompts/`
