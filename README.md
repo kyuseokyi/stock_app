@@ -710,7 +710,7 @@ cd backend && uv run --with pykrx python -m apps.collector.verify.spot_check --n
 - **자동**: `dev → main` 병합 후 push → **변경 경로에 해당하는 워크플로만** 실행(각자 지정 서비스만 `up -d --build`, 나머지 컨테이너·볼륨 보존).
 - **수동**: GitHub **Actions** 탭 → `Deploy Server`/`Deploy Web` → **Run workflow**(Branch `main`), 또는 `gh workflow run deploy-server.yml --ref main`. 수집 시간(매일 20:30)을 피해 배포할 때 사용.
 - ⚠️ 최초 배포 후 **스키마 부트스트랩 1회** 필수(`server_setup.md §7`). **DB 포트(5432/8123/9000/6379)는 LAN 전용** — Cloudflare 터널에 노출 금지.
-- **간편 로그인 배포 체크**: 서버 `backend/.env.production` 에 `KAKAO_REST_API_KEY`(+`KAKAO_CLIENT_SECRET`)·`NAVER_CLIENT_ID`/`NAVER_CLIENT_SECRET`·`SOCIAL_STATE_SECRET`·`SOCIAL_REDIRECT_BASE=https://auth.haezean.com/api/v1/auth/social`·`SOCIAL_WEB_RETURN_URL=https://app.haezean.com/auth/complete` 설정(파일은 gitignore — 여기가 유일한 기록). 공급자 콘솔에 등록할 **Redirect URI**:
+- **간편 로그인 배포 체크**(상용 서버는 [`docs/deploy/prod-release.md`](docs/deploy/prod-release.md) 2-1절): 서버 `/opt/stock_app/env/.env.production`(배포 때 `backend/.env.production` 으로 복사되므로 체크아웃 안의 파일은 고치지 않는다) 에 `KAKAO_REST_API_KEY`(+`KAKAO_CLIENT_SECRET`)·`NAVER_CLIENT_ID`/`NAVER_CLIENT_SECRET`·`SOCIAL_STATE_SECRET`·`SOCIAL_REDIRECT_BASE=https://auth.haezean.com/api/v1/auth/social`·`SOCIAL_WEB_RETURN_URL=https://app.haezean.com/auth/complete` 설정(파일은 gitignore — 여기가 유일한 기록). 공급자 콘솔에 등록할 **Redirect URI**:
   - 로컬: `http://localhost:8001/api/v1/auth/social/kakao/callback`, `http://localhost:8001/api/v1/auth/social/naver/callback`
   - 개발 서버: `https://auth.haezean.com/api/v1/auth/social/kakao/callback`, `https://auth.haezean.com/api/v1/auth/social/naver/callback`
   - 카카오는 플랫폼 > Web 사이트 도메인(`http://localhost:3000`, `https://app.haezean.com`)도 등록, 동의항목에서 **닉네임** 활성화. 네이버는 서비스 URL·Callback URL 등록, 제공 정보에 **별명** 선택 — **검수 전에는 등록한 테스트 계정만** 로그인 가능.

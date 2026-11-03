@@ -29,6 +29,35 @@ GitHub 는 `runs-on` 라벨을 모두 가진 러너 아무에게나 job 을 준�
 - `/opt/stock_app/env/.env.production`, `/opt/stock_app/env/compose.env` 에 **상용 값**(상용 DB·도메인·KIS 키). 저장소에는 넣지 않는다.
 - (선택) 무중단 배포를 쓰려면 `deploy/swarm/cutover.sh` 로 Swarm 전환 — 워크플로가 스택 `stock` 이 있으면 Swarm, 없으면 compose 로 배포한다.
 
+### 2-1. 간편 로그인 — 상용 앱과 키를 따로 쓴다
+코드 변경 없이 서버별 환경변수로 나뉜다. 개발 서버의 키·콘솔 앱을 상용에 재사용하지 않는다.
+
+**공급자 콘솔** (첫 사용자가 들어오기 전에 만든다. 공급자 사용자 ID 가 앱 기준이면 나중에 앱을 바꿀 때 기존 사용자가 새 계정으로 잡힐 수 있다)
+- 네이버·카카오에 **상용 앱을 새로 등록**하고 Redirect URI `https://<상용 auth 도메인>/api/v1/auth/social/{naver,kakao}/callback` 을 넣는다.
+- 카카오: 플랫폼 Web 사이트 도메인에 상용 웹 도메인 등록, 동의항목에서 닉네임 활성화.
+- 네이버: 서비스 URL 등록, 제공 정보에 별명 선택, **상용 앱으로 검수** 신청(검수 전에는 등록한 테스트 계정만 로그인된다).
+- 앱 복귀 스킴(`stockapp://auth`)은 콘솔에 등록하지 않는다. 서버가 빌드 종류에 따라 고른다.
+
+**상용 서버 `/opt/stock_app/env/.env.production`**
+
+| 변수 | 값 |
+|---|---|
+| `NAVER_CLIENT_ID`, `NAVER_CLIENT_SECRET` | 상용 앱 키(뉴스 검색용 `NAVER_SEARCH_*` 와 별개) |
+| `KAKAO_REST_API_KEY`, `KAKAO_CLIENT_SECRET` | 상용 앱 키(Client Secret 을 켠 경우만). 탈퇴 시 연결 끊기를 쓰면 `KAKAO_ADMIN_KEY` 도 |
+| `SOCIAL_STATE_SECRET` | 개발 서버와 **다른** 값 |
+| `SOCIAL_REDIRECT_BASE` | `https://<상용 auth 도메인>/api/v1/auth/social` |
+| `SOCIAL_WEB_RETURN_URL` | `https://<상용 웹 도메인>/auth/complete` |
+| `CORS_ORIGINS` | 상용 웹·어드민 도메인 |
+| `AUTH_GUEST_ENABLED` | `false` |
+| `SOCIAL_FAKE_PROVIDER` | 넣지 않는다 |
+
+**게스트 로그인 버튼** ⚠️ `docker-compose.prod.yml` 의 `web_client` 빌드 인자 `VITE_ENABLE_GUEST_LOGIN` 은 `"true"` 로 고정돼 있고 상용 배포도 이 파일을 쓴다. 상용 배포 전에 서버별로 값을 줄 수 있게 바꿔 상용만 `"false"` 로 만든다(개발 서버는 `"true"` 유지).
+
+**확인** 키가 빠져도 에러 없이 버튼만 사라지므로 첫 배포 뒤 직접 확인한다.
+- `GET https://<상용 auth 도메인>/api/v1/auth/social/providers` → `{"kakao":true,"naver":true}`
+- `GET https://<상용 auth 도메인>/api/v1/auth/social/naver/start?client=web&cc=<43자 base64url 값>` 의 302 응답에서 `redirect_uri` 가 상용 도메인인지(`client`·`cc` 가 없으면 422)
+- 웹과 상용 앱에서 각각 실제 로그인
+
 ### 3. 상용 서버에 러너 설치 — 라벨 `prod`
 - Settings → Actions → Runners → New self-hosted runner, 설치할 때 `--labels prod`
 - 개발 러너와 **다른 서버**에 설치한다(같은 서버면 분리의 의미가 없다).
