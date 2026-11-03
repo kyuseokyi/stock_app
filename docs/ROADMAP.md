@@ -186,9 +186,17 @@
 - [ ] Phase 4: FastAPI REST API 엔드포인트 (`/api/v1/ai/...`)
 - [ ] Phase 5: 프론트엔드(웹/앱) 시황 및 스크리너 카드 연동
 
+### 광고 수익화 (웹 Google AdSense · 모바일 Google AdMob · 관리자 원격 제어)
+> 상세 설계 및 로드맵: [`docs/ad_monetization_spec_and_plan.md`](ad_monetization_spec_and_plan.md) · 사전 준비 가이드: [`docs/ad_monetization_setup_guide.md`](ad_monetization_setup_guide.md)
+- [ ] Phase 1: 백엔드(`ad_configs`) & 관리자 웹(`admin_web`) 실시간 광고 스위치(Kill Switch) 및 자체 하우스 배너(House Ad) 폴백 구축
+- [ ] Phase 2: 웹 클라이언트(`web_client`) Google AdSense 연동 (`ads.txt`, 홈 사이드바·커뮤니티 인피드·본문 하단 CLS-Zero 슬롯)
+- [ ] Phase 3: 모바일 앱(`mobile`) Google AdMob 네이티브 SDK(`react-native-google-mobile-ads`) 연동 (인피드 네이티브 카드·적응형 배너·선택형 보상형 광고, Dev 테스트 ID 자동 분기)
+
 ---
 
 ## 참고 문서
+- **광고 수익화 명세 및 플랜: `docs/ad_monetization_spec_and_plan.md`**
+- **광고 수익화 사전 준비 가이드(AdSense/AdMob): `docs/ad_monetization_setup_guide.md`**
 - **AI 시장 분석 및 글로벌 시황 기획: `docs/ai_market_analyst_plan.md`**
 - **트레이딩 게임 마스터 기획: `docs/trading_game_plan.md`**
 - 아키텍처: `docs/architecture_plan.md`
@@ -196,5 +204,6 @@
 - 기능별 프롬프트: `docs/prompts/`
 - AMS 참고 분석: `docs/ams-reference/`
 - 설계 스펙: `docs/superpowers/specs/`
+
 
 
