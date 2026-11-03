@@ -1,6 +1,6 @@
 # 확인해야 할 것 · 주의할 점
 
-> 2026-10-13 기준. 확인을 마치면 `[x]` 로 바꾸고, 문제가 있으면 옆에 메모를 남긴다.
+> 2026-10-13 작성, 2026-11-03 일부 갱신(미체크 항목 중 이미 끝난 것이 남아 있을 수 있다). 확인을 마치면 `[x]` 로 바꾸고, 문제가 있으면 옆에 메모를 남긴다.
 
 ## 1. 장중에 실제 시세로 확인 (개발 서버 `game_ws`)
 - [ ] 모의투자(`KIS_MODE=vps`)에서 통합 실시간 시세(`H0UNCNT0`) 구독이 되는지 — 로그에 `tr_id=H0UNCNT0`
@@ -39,11 +39,11 @@
 - [ ] 예전 이름 이미지(`<프로젝트>-auth_api` 류) 1회 정리
 
 ### 스크리너 탭 — 시장·테마·업종·일정(프로젝트 3 배포 후)
-- [ ] 20:30 파이프라인 끝 로그 `시장 그룹 계산: {'date': …, 'stocks': ~2,600, 'themes': …, 'sectors': ~27}` → 웹 `/screener` 가 시장 탭으로 열리고 지수 카드·주도 테마·업종 지도가 뜨는지
+- [ ] 20:30 파이프라인 끝 로그 `시장 그룹 계산: {'date': …, 'stocks': ~2,600, 'themes': …, 'sectors': ~27}` → 웹 `/market` 에 지수 카드·주도 테마가 뜨는지
 - [ ] 한 번 `collector.backfill_market_groups` 실행(60거래일) → 테마 상세 순위 추이·'n일째 상위' 배지
 - [ ] 상식 점검: 테마 순위 상위가 그날 시장과 맞는지, **오래된 KIS 테마**(2025-11 이후 갱신 없음, "2021 신규 상장주" 등)가 상위에 끼는지 — 관리자 테마 보정 UI 우선순위 판단
 - [ ] 관리자 테마 보정 API 로 테마 하나를 숨겼을 때 수 초 안에 순위에서 빠지는지(worker 로그 `시장 그룹 계산`)
-- [ ] 휴대폰 브라우저: 탭 가로 스크롤, 업종 트리맵 드릴다운(← 전체·자세히), 테마 행 펼침, 테마 종목 → 주도주 `?ticker=`
+- [ ] 휴대폰 브라우저: 탭 가로 스크롤, 테마 행 펼침, 테마 종목 → 주도주 `?ticker=`
 
 ## 2. 브라우저·기기로 아직 확인하지 않은 화면
 ### web_client (`app.haezean.com/game`)
@@ -71,7 +71,7 @@
 - [ ] admin → 데일리 코치에서 오늘 브리핑을 **실제 지지선·저항선**으로 수정·재발행(시드 값 71,000/73,500 은 예시라 차트 축척이 깨짐)
 
 - [ ] 시즌 기간·월간 랭킹 push 후: 마이그레이션 `e1f2a3b4c5d6` 자동 적용, celery beat 재시작으로 `close-trading-month` 등록, admin 게임 설정 화면 로드·저장 확인
-- [ ] 10/31(토) **20:40** 시즌 1기 정산이 10/30(금) 종가로 실행되는지(로그 `시즌 1 정산 완료 — closed=… archived=… next=2`), 11월 시즌이 admin 설정 기간으로 생성됐는지(월간 11/1 09:00~11/30 20:00, 분기 ~12/31 20:00). 흐름은 리허설 테스트로 검증됨(`tests/test_settlement_rehearsal.py`, 2026-10-18) — 서버에서는 **10/30 20:30 일봉 수집 성공**(시즌 종목 10/30 봉 존재)과 admin '다음 시즌 기간' 값만 미리 확인. 12/31 같은 휴장일 종료는 이제 당일 밤 정산(거래일 달력)
+- [ ] ⚠️ **기한 지남, 결과 미확인(2026-11-03)** 10/31(토) **20:40** 시즌 1기 정산이 10/30(금) 종가로 실행되는지(로그 `시즌 1 정산 완료 — closed=… archived=… next=2`), 11월 시즌이 admin 설정 기간으로 생성됐는지(월간 11/1 09:00~11/30 20:00, 분기 ~12/31 20:00). 흐름은 리허설 테스트로 검증됨(`tests/test_settlement_rehearsal.py`, 2026-10-18) — 서버에서는 **10/30 20:30 일봉 수집 성공**(시즌 종목 10/30 봉 존재)과 admin '다음 시즌 기간' 값만 미리 확인. 12/31 같은 휴장일 종료는 이제 당일 밤 정산(거래일 달력)
 - [ ] 게임 분봉 push 후: `game_ws` 시작 시 `stock_data.game_minute_bars` 자동 생성(`CREATE TABLE IF NOT EXISTS`) 확인 — 실패 로그가 있으면 `docker exec stock_game_ws python -m shared.clickhouse_schema` 로 수동 생성. `game_ws` 컨테이너가 ClickHouse 에 닿는지(`.env.production` 의 `CLICKHOUSE_*` 공유)
 - [ ] 분기 선택은 **web·모바일 새 버전 배포 후**(구 버전은 월간 보상 토스트를 주간 문구로 표시)
 
@@ -80,10 +80,10 @@
 - [ ] **모바일 dev build 재생성**: 개발 앱 스킴이 `stockapp-dev` 로 바뀜(`npm run prebuild:dev` 후 재설치)
 - [ ] 에뮬레이터 사용 시 `adb reverse tcp:8003 tcp:8003` 추가
 - [x] **FRED API 키 발급**(2026-10-23 로컬·운영 env 등록, 운영 Deploy Server 재배포로 적용) (미국 CPI·고용·금리 등 거시 지표) — fred.stlouisfed.org 계정 → My Account → API Keys(무료) → 서버 `.env.production` 에 `FRED_API_KEY`. 없으면 거시 지표 수집만 건너뜀 (스펙 `docs/superpowers/specs/2026-10-18-market-data-foundation-design.md` 10절)
-- [ ] **네이버 검색 Open API 키 발급**(주달 뉴스, 프로젝트 3 때) — developers.naver.com → 애플리케이션 등록 → 검색 API(무료, 일 25,000건) → `NAVER_SEARCH_CLIENT_ID`·`NAVER_SEARCH_CLIENT_SECRET`(간편 로그인 키 `NAVER_CLIENT_ID`/`NAVER_CLIENT_SECRET` 와 별개 — 이름 충돌 방지)
+- [x] **네이버 검색 키 발급**(2026-10-30 서버 등록·실호출 확인, API HUB 키)(주달 뉴스, 프로젝트 3 때) — developers.naver.com → 애플리케이션 등록 → 검색 API(무료, 일 25,000건) → `NAVER_SEARCH_CLIENT_ID`·`NAVER_SEARCH_CLIENT_SECRET`(간편 로그인 키 `NAVER_CLIENT_ID`/`NAVER_CLIENT_SECRET` 와 별개 — 이름 충돌 방지)
 
 ## 5. 주의할 점 (운영 규칙)
-- **게스트 로그인**: 개발 서버는 `AUTH_GUEST_ENABLED=true` 로 켜 둠(웹 빌드 `VITE_ENABLE_GUEST_LOGIN=true` 와 짝). **product 전환 시 둘 다 false**.
+- **게스트 로그인**: 개발 서버는 `AUTH_GUEST_ENABLED=true` 로 켜 둠(웹 빌드 `VITE_ENABLE_GUEST_LOGIN=true` 는 `deploy-web.yml` 이 넘김). **상용은 `AUTH_GUEST_ENABLED=false`** 만 넣으면 되고 웹 빌드는 `deploy-prod.yml` 이 `false` 로 고정한다.
 - **가짜 공급자 모드**(`SOCIAL_FAKE_PROVIDER`)는 `APP_ENV` 가 development/test 일 때만 켜짐 — 운영 `.env` 에 넣지 않는다.
 - **장외 테스트용 Mock 틱**(`MOCK_TICK_STREAM=true`)은 테스트 후 반드시 제거.
 - **KIS 실시간 세션은 앱키당 제한** — 서버 `game_ws` 가 도는 동안 로컬에서 같은 키로 `run_game_ws` 를 띄우지 않는다.

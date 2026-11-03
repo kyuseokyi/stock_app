@@ -93,7 +93,7 @@ KIS_APP_SECRET=<실전 시크릿>
 KIS_ACCOUNT_NO=
 
 # 닉네임 게스트 로그인 — APP_ENV=production 에서는 미설정 시 꺼짐(404).
-# 개발 서버(develop)는 테스트용으로 켠다(웹 빌드 VITE_ENABLE_GUEST_LOGIN=true 와 짝). product 전환 시 둘 다 false.
+# 개발 서버(develop)는 테스트용으로 켠다(웹 빌드 값은 deploy-web.yml 이 true 로 넘김). 상용은 이 값만 false, 웹 빌드는 deploy-prod.yml 이 고정.
 AUTH_GUEST_ENABLED=true
 ```
 ```bash
