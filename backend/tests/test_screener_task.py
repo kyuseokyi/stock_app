@@ -21,12 +21,16 @@ def fake(monkeypatch):
     monkeypatch.setattr(task.cs, "load_bars",
                         lambda as_of, days=400, client=None, tickers=None: calls["load"].append((as_of, days, tickers))
                         or {"AAA": [("bar", as_of)]})
+    monkeypatch.setattr(task.cs, "load_investor_flows",
+                        lambda as_of, days=90, client=None, tickers=None: calls.setdefault("flow_load", []).append(
+                            (as_of, days, tickers)) or {"AAA": {"frgn": {}, "orgn": {}}})
     monkeypatch.setattr(task.cs, "slice_bars", lambda bars, as_of, days=400: {"AAA": as_of})
     monkeypatch.setattr(task.cs, "load_fundamentals", lambda: {"AAA": {"eps": 1.0}})
     monkeypatch.setattr(task, "_universe", lambda: [("AAA", "에이", "KOSPI")])
     monkeypatch.setattr(task, "_profiles", lambda: {"AAA": ("KOSPI", "0013", 100, False)})
 
-    def compute_day(as_of, universe, profiles, bars, fundamentals):
+    def compute_day(as_of, universe, profiles, bars, fundamentals, flows=None):
+        calls["flows"] = flows
         calls["compute"].append((as_of, bars, fundamentals))
         if as_of == calls.get("fail_on"):
             raise RuntimeError("bad day")
@@ -46,6 +50,17 @@ def test_compute_latest_day(fake):
                    "golden_cross": 0}
     assert fake["compute"] == [(D2, {"AAA": [("bar", D2)]}, {"AAA": {"eps": 1.0}})]
     assert fake["load"] == [(D2, 400, ["AAA"])]                  # 분석 대상 종목만 읽는다
+
+
+def test_compute_passes_investor_flows(fake):
+    task.compute_screener()
+    assert fake["flow_load"] == [(D2, task.FLOW_DAYS, ["AAA"])]
+    assert fake["flows"] == {"AAA": {"frgn": {}, "orgn": {}}}
+
+
+def test_backfill_loads_flows_once_covering_earliest_day(fake):
+    task.backfill_screener(days=2)
+    assert fake["flow_load"] == [(D2, (D2 - D1).days + task.FLOW_DAYS, ["AAA"])]
 
 
 def test_compute_specific_day_and_no_data(fake, monkeypatch):

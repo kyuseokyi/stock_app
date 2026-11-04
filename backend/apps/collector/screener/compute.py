@@ -21,14 +21,17 @@ _FIN_KEYS = ("roe", "eps", "sales_growth", "op_growth", "debt_ratio")
 
 
 def stock_row(as_of: date, ticker: str, market: str, sector_m: str, bars: list[tuple],
-              listed_shares_k: int | None, fin: dict | None) -> dict:
-    """bars: [(date, high, low, close, volume)] 오름차순(마지막 = as_of). fin: 최신 연간 재무(없으면 None)."""
+              listed_shares_k: int | None, fin: dict | None, flow: dict | None = None) -> dict:
+    """bars: [(date, high, low, close, volume)] 오름차순(마지막 = as_of). fin: 최신 연간 재무(없으면 None).
+    flow: {"frgn": {date: 순매수 금액}, "orgn": {...}}(없으면 연속 일수 None)."""
     highs = [b[1] for b in bars]
     lows = [b[2] for b in bars]
     closes = [b[3] for b in bars]
     volumes = [b[4] for b in bars]
     close, volume = closes[-1], volumes[-1]
     fin = fin or {}
+    flow = flow or {}
+    dates = [b[0] for b in bars]
     prev = ind.prev_high(highs)
     liquid, _avg = is_liquid(closes, volumes)
     return {
@@ -44,6 +47,8 @@ def stock_row(as_of: date, ticker: str, market: str, sector_m: str, bars: list[t
         **{k: fin.get(k) for k in _FIN_KEYS},
         "per": ind.ratio(close, fin.get("eps")), "pbr": ind.ratio(close, fin.get("bps")),
         "liquid": int(liquid),
+        "frgn_buy_days": ind.buy_streak(dates, flow.get("frgn", {})),
+        "orgn_buy_days": ind.buy_streak(dates, flow.get("orgn", {})),
     }
 
 
@@ -54,9 +59,11 @@ class DayResult(NamedTuple):
     skipped_no_bar: int
 
 
-def compute_day(as_of: date, universe: list[tuple], profiles: dict, bars: dict, fundamentals: dict) -> DayResult:
+def compute_day(as_of: date, universe: list[tuple], profiles: dict, bars: dict, fundamentals: dict,
+                flows: dict | None = None) -> DayResult:
     """universe: [(ticker, name, market)], profiles: {ticker: (시장, 업종 그룹 코드, 상장주식수(천 주), 거래정지)}
-    (market_repo.group_profile_map), bars: {ticker: [(date, high, low, close, volume)]}, fundamentals: {ticker: dict}.
+    (market_repo.group_profile_map), bars: {ticker: [(date, high, low, close, volume)]}, fundamentals: {ticker: dict},
+    flows: {ticker: {"frgn": {date: 금액}, "orgn": {date: 금액}}}.
     기준일 봉이 없는 종목(거래정지 등)은 건너뛰고 skipped_no_bar 로 센다. 한 종목 오류는 그 종목만 빼고 failed 로 센다."""
     rows: list[dict] = []
     failed = skipped = 0
@@ -68,7 +75,8 @@ def compute_day(as_of: date, universe: list[tuple], profiles: dict, bars: dict, 
         p_market, sector, shares, _halted = profiles.get(ticker, (market, "", None, False))
         sector = "" if (sector or "").strip() in ("", NO_SECTOR) else sector.strip()
         try:
-            rows.append(stock_row(as_of, ticker, p_market or market, sector, b, shares, fundamentals.get(ticker)))
+            rows.append(stock_row(as_of, ticker, p_market or market, sector, b, shares, fundamentals.get(ticker),
+                                  (flows or {}).get(ticker)))
         except Exception:  # noqa: BLE001 — 한 종목 데이터 이상이 하루 계산 전체를 막지 않게
             failed += 1
             log.exception("스크리너 계산 실패 ticker=%s date=%s", ticker, as_of)

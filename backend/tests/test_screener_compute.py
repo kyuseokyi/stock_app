@@ -83,3 +83,23 @@ def test_compute_day_isolates_bad_ticker(monkeypatch):
     rows, failed, skipped = compute.compute_day(as_of, [("AAA", "에이", "KOSPI"), ("BBB", "비", "KOSPI")], {},
                                                 {"AAA": bars, "BBB": bars}, {})
     assert [r["ticker"] for r in rows] == ["BBB"] and (failed, skipped) == (1, 0)
+
+
+def test_stock_row_flow_streaks():
+    bars = _bars(10)
+    dates = [b[0] for b in bars]
+    flow = {"frgn": {d: 1 for d in dates[-6:]}, "orgn": {dates[-1]: -1}}
+    r = compute.stock_row(dates[-1], "AAA", "KOSPI", "", bars, None, None, flow)
+    assert r["frgn_buy_days"] == 6 and r["orgn_buy_days"] == 0
+    none = compute.stock_row(dates[-1], "AAA", "KOSPI", "", bars, None, None)
+    assert none["frgn_buy_days"] is None and none["orgn_buy_days"] is None
+
+
+def test_compute_day_passes_ticker_flow():
+    bars = _bars(10)
+    as_of = bars[-1][0]
+    flows = {"AAA": {"frgn": {as_of: 5}, "orgn": {}}}
+    rows, _failed, _skipped = compute.compute_day(as_of, [("AAA", "에이", "KOSPI"), ("BBB", "비", "KOSPI")], {},
+                                                  {"AAA": bars, "BBB": bars}, {}, flows)
+    by = {r["ticker"]: r for r in rows}
+    assert by["AAA"]["frgn_buy_days"] == 1 and by["BBB"]["frgn_buy_days"] is None

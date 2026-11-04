@@ -22,6 +22,8 @@ export const PRESETS: { key: FinderPreset; label: string; description: string }[
   { key: 'golden_cross', label: '골든크로스', description: '20일선이 60일선을 뚫고 올라선 지 3거래일 이내인 종목' },
   { key: 'oversold', label: '과매도', description: 'RSI(14)가 30 이하로 많이 떨어진 종목' },
   { key: 'new_high', label: '신고가', description: '오늘 고가가 직전 1년(52주) 최고가를 넘긴 종목' },
+  { key: 'foreign_buy_5d', label: '외국인 5일 연속', description: '외국인이 5거래일 이상 연속으로 순매수한 종목' },
+  { key: 'double_buy_new_high', label: '쌍끌이 신고가', description: '오늘 외국인과 기관이 함께 순매수하면서 52주 신고가를 넘긴 종목' },
 ];
 
 export const FINDER_SORTS: { key: FinderSort; label: string }[] = [

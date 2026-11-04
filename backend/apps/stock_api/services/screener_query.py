@@ -25,6 +25,7 @@ VOLUME_SURGE_RATIO = 2.0     # 차트 퀴즈 신호(scripts/generate_chart_quiz.
 OVERSOLD_RSI = 30.0
 BB_SIGMAS = (1.0, 1.5, 2.0, 2.5, 3.0)
 DEFAULT_BB_SIGMA = 2.0
+FOREIGN_BUY_DAYS = 5         # 외국인 연속 순매수 프리셋 기준(거래일)
 
 # 프리셋 = 서버 상수 조건 묶음(필터와 AND). 키는 웹·앱 상수와 같은 문자열
 PRESETS = {
@@ -32,6 +33,8 @@ PRESETS = {
     "golden_cross": "gc_days IS NOT NULL",
     "oversold": f"rsi14 <= {OVERSOLD_RSI}",
     "new_high": "is_new_high = 1",
+    "foreign_buy_5d": f"frgn_buy_days >= {FOREIGN_BUY_DAYS}",
+    "double_buy_new_high": "is_new_high = 1 AND frgn_buy_days >= 1 AND orgn_buy_days >= 1",
 }
 SORTS = {
     "value": "value DESC, ticker",
@@ -89,12 +92,19 @@ def _sector_names(codes: list[str]) -> dict[str, str]:
 
 
 _UNKNOWN_TABLE_CODE = 60  # ClickHouse UNKNOWN_TABLE
+_UNKNOWN_IDENTIFIER_CODE = 47  # ClickHouse UNKNOWN_IDENTIFIER
 
 
 def _is_missing_table(exc: Exception) -> bool:
     """clickhouse_connect Error 의 code(60)·name(UNKNOWN_TABLE), 없으면 메시지의 'UNKNOWN_TABLE' 로 판별."""
     return (getattr(exc, "code", None) == _UNKNOWN_TABLE_CODE or getattr(exc, "name", None) == "UNKNOWN_TABLE"
             or "UNKNOWN_TABLE" in str(exc))
+
+
+def _is_missing_column(exc: Exception) -> bool:
+    """배포 뒤 첫 계산 전 — 수집 태스크가 ALTER 하기 전이라 수급 컬럼이 아직 없다."""
+    return (getattr(exc, "code", None) == _UNKNOWN_IDENTIFIER_CODE or getattr(exc, "name", None) == "UNKNOWN_IDENTIFIER"
+            or "UNKNOWN_IDENTIFIER" in str(exc))
 
 
 def latest_date() -> date | None:
@@ -185,7 +195,12 @@ def screen(preset: str | None = None, filters: dict | None = None, sort: str = "
     params.update({"d": d, "limit": max(1, min(int(limit), MAX_LIMIT)), "offset": max(0, int(offset))})
     cond = " AND ".join(where)
     table = f"{CLICKHOUSE_DB}.screener_daily FINAL"
-    total = int(_query(f"SELECT count() FROM {table} WHERE {cond}", params)[0][0])
+    try:
+        total = int(_query(f"SELECT count() FROM {table} WHERE {cond}", params)[0][0])
+    except Exception as exc:  # noqa: BLE001
+        if _is_missing_column(exc):  # 첫 계산 전이면 오류 대신 0건
+            return {"date": d.isoformat(), "total": 0, "bb_sigma": k, "items": []}
+        raise
     rows = _query(f"SELECT {', '.join(_SCREEN_COLUMNS)} FROM {table} WHERE {cond} "
                   f"ORDER BY {SORTS.get(sort, SORTS['value'])} LIMIT %(limit)s OFFSET %(offset)s", params)
     records = [dict(zip(_SCREEN_COLUMNS, r)) for r in rows]

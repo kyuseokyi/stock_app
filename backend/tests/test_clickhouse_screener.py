@@ -34,6 +34,24 @@ def test_ensure_table_columns():
     assert "gc_days Nullable(Int16)" in ddl and "ma_order Int8" in ddl and "is_new_high UInt8" in ddl
 
 
+def test_ensure_table_adds_flow_columns_to_existing_table():
+    ch = _FakeCH()
+    cs.ensure_screener_table(ch)
+    alters = [c for c in ch.commands if c.startswith("ALTER TABLE")]
+    assert [a.split("IF NOT EXISTS ")[1] for a in alters] == ["frgn_buy_days Nullable(Int16)",
+                                                              "orgn_buy_days Nullable(Int16)"]
+    assert all(".screener_daily ADD COLUMN IF NOT EXISTS" in a for a in alters)
+
+
+def test_load_investor_flows_by_side_and_ticker_filter():
+    ch = _FakeCH([[("AAA", D1, 10, -5), ("AAA", D2, 20, 0), ("BBB", D2, -1, 3)]])
+    out = cs.load_investor_flows(D2, days=90, client=ch, tickers=["AAA", "BBB"])
+    assert out == {"AAA": {"frgn": {D1: 10, D2: 20}, "orgn": {D1: -5, D2: 0}}, "BBB": {"frgn": {D2: -1}, "orgn": {D2: 3}}}
+    sql, params = ch.queries[0]
+    assert "investor_daily FINAL" in sql and "ticker IN" in sql and params["tickers"] == ("AAA", "BBB")
+    assert cs.load_investor_flows(D2, client=_FakeCH(), tickers=[]) == {}
+
+
 def test_upsert_rows_uses_column_order():
     ch = _FakeCH()
     assert cs.upsert_rows([], ch) == 0 and ch.inserts == []

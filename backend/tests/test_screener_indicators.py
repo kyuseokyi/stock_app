@@ -1,6 +1,7 @@
 """스크리너 지표 — 값 고정과 기존 정의(게임 RSI·차트 배열/매물대·골든크로스)와 같은지."""
 import math
 import random
+from datetime import date
 
 import pytest
 
@@ -104,3 +105,23 @@ def test_ratio_per_pbr():
     assert ind.ratio(10000.0, 0.0) is None
     assert ind.ratio(10000.0, -10.0) is None   # 적자·자본잠식은 배수 의미 없음
     assert ind.ratio(10000.0, None) is None
+
+
+D_FLOW = [date(2026, 10, d) for d in (12, 13, 14, 15, 16)]
+
+
+@pytest.mark.parametrize("amounts, expected", [
+    (dict(zip(D_FLOW, [1, 2, 3, 4, 5])), 5),            # 전부 순매수
+    (dict(zip(D_FLOW, [1, -2, 3, 4, 5])), 3),           # 순매도에서 끊김
+    (dict(zip(D_FLOW, [1, 0, 3, 4, 5])), 3),            # 0 은 순매수가 아님
+    (dict(zip(D_FLOW, [1, 2, 3, 4, -5])), 0),           # 기준일 순매도
+    ({D_FLOW[0]: 1, D_FLOW[1]: 1, D_FLOW[3]: 1, D_FLOW[4]: 1}, 2),   # 행이 빠진 날을 건너뛰지 않는다
+    ({D_FLOW[0]: 1, D_FLOW[1]: 1}, None),               # 기준일 행 없음 = 모름(0 과 구분)
+    ({}, None),
+])
+def test_buy_streak(amounts, expected):
+    assert ind.buy_streak(D_FLOW, amounts) == expected
+
+
+def test_buy_streak_no_dates():
+    assert ind.buy_streak([], {D_FLOW[0]: 1}) is None

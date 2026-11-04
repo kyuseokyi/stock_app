@@ -64,6 +64,12 @@ screenerScreen(preset: String, filters: ScreenerFilterInput, sort: String = "val
 - 프리셋 칩 가로 스크롤 + [필터] 버튼(바텀시트, 웹과 같은 항목) + 정렬 칩 + FlatList 무한 스크롤. 행 → `/stock/[ticker]`(기존 종목 상세).
 - 주도주 구조(요청 게이트 `createLatest`·`inflight` 잠금·같은 값 재조회 방지·`mergeLeaderPage` 일반화)를 따른다.
 
+## 5-1. 수급 프리셋 추가 (2026-11-05)
+- `foreign_buy_5d`: 외국인 순매수 5거래일 이상 연속. `double_buy_new_high`: 당일 외국인·기관 모두 순매수 + 52주 신고가.
+- `screener_daily` 에 `frgn_buy_days`·`orgn_buy_days`(Nullable Int16) 추가. 기존 테이블은 `ensure_screener_table` 의 `ALTER … ADD COLUMN IF NOT EXISTS` 로 더한다.
+- 연속 일수는 `investor_daily` 금액의 **부호만** 보고, 그 종목 일봉 날짜를 따라 센다. 수급 행이 빠진 날에서 멈추고, 기준일 행이 없으면 NULL.
+- 첫 계산 전(컬럼 없음·값 NULL)에는 오류 없이 0건. 연기금 프리셋은 종목별 이력이 없어 제외(ROADMAP).
+
 ## 6. 테스트
 - 백엔드: 지표 계산 순수 함수(RSI·std·ma60·골든크로스 경과일·신고가 경신·매물대 위쪽 비율·PER/PBR·유동성) 값 고정, 프리셋→WHERE 조합, 화이트리스트(임의 정렬·필드 무시), 범위 검증, 페이징, date null, 파이프라인 단계 추가(실패 격리). CH 는 기존 테스트처럼 가짜 클라이언트.
 - 계약 테스트: 웹·모바일 쿼리 문자열을 실제 스키마로 실행(`test_market_query.py` 방식).

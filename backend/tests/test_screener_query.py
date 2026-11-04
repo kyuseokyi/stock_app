@@ -73,11 +73,40 @@ def test_latest_date_other_errors_raise(monkeypatch, caplog):
     ("golden_cross", "gc_days IS NOT NULL"),
     ("oversold", "rsi14 <= 30.0"),
     ("new_high", "is_new_high = 1"),
+    ("foreign_buy_5d", "frgn_buy_days >= 5"),
+    ("double_buy_new_high", "is_new_high = 1 AND frgn_buy_days >= 1 AND orgn_buy_days >= 1"),
 ])
 def test_preset_adds_condition(ch, preset, cond):
     fake = ch()
     sq.screen(preset=preset)
     assert cond in fake.queries[1][0] and cond in fake.queries[2][0]   # count·목록 둘 다
+
+
+def test_flow_preset_before_first_compute_is_empty_not_error(ch, monkeypatch):
+    fake = ch([[(D,)]])
+    query = fake.query
+
+    def boom(sql, parameters=None):
+        if "frgn_buy_days" in sql:
+            raise DatabaseError("Code: 47. DB::Exception: Unknown identifier. (UNKNOWN_IDENTIFIER)", code=47)
+        return query(sql, parameters)
+
+    fake.query = boom
+    assert sq.screen(preset="foreign_buy_5d") == {"date": D.isoformat(), "total": 0, "bb_sigma": 2.0, "items": []}
+
+
+def test_other_count_errors_still_raise(ch):
+    fake = ch([[(D,)]])
+    query = fake.query
+
+    def boom(sql, parameters=None):
+        if "count()" in sql:
+            raise DatabaseError("Code: 241. Memory limit", code=241)
+        return query(sql, parameters)
+
+    fake.query = boom
+    with pytest.raises(DatabaseError):
+        sq.screen()
 
 
 def test_unknown_preset_and_sort_ignored(ch):

@@ -7,7 +7,7 @@ RSI = trading_game rsi_service.wilder_rsi(최근 100종가), 배열 = stock_api 
 from __future__ import annotations
 
 import math
-from typing import Sequence
+from typing import Mapping, Sequence
 
 from apps.trading_game.services.rsi_service import wilder_rsi
 
@@ -124,6 +124,19 @@ def vp_above_pct(highs: Sequence[float], lows: Sequence[float], closes: Sequence
     buckets = volume_buckets(h, lo, c, v, bins)
     idx = _bucket(c[-1], p_min, (p_max - p_min) / bins, bins)
     return sum(buckets[idx + 1:]) / total * 100
+
+
+def buy_streak(dates: Sequence, amounts: Mapping) -> int | None:
+    """기준일(dates 마지막)부터 거꾸로 순매수(금액 > 0)가 이어진 거래일 수. dates 는 그 종목의 일봉 날짜(오름차순).
+    기준일 수급 행이 없으면 None(순매도 0일과 구분). 중간에 행이 빠진 날은 건너뛰지 않고 멈춘다 — 연속이 부풀지 않게."""
+    if not dates or dates[-1] not in amounts:
+        return None
+    n = 0
+    for d in reversed(dates):
+        if amounts.get(d, 0) <= 0:
+            break
+        n += 1
+    return n
 
 
 def ratio(price: float, per_share: float | None) -> float | None:

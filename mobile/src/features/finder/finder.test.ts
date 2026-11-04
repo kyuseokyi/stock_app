@@ -150,7 +150,7 @@ describe('조건검색 순수 함수', () => {
   });
 
   it('상수 — 프리셋 키는 서버와 같고 페이지 50·숫자 칸 17·σ 5개', () => {
-    expect(PRESETS.map((p) => p.key)).toEqual(['volume_surge', 'golden_cross', 'oversold', 'new_high']);
+    expect(PRESETS.map((p) => p.key)).toEqual(['volume_surge', 'golden_cross', 'oversold', 'new_high', 'foreign_buy_5d', 'double_buy_new_high']);
     expect(FINDER_PAGE).toBe(50);
     expect(NUM_KEYS).toHaveLength(17);
     expect(BB_SIGMAS).toEqual([1, 1.5, 2, 2.5, 3]);

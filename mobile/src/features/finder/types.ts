@@ -1,7 +1,7 @@
 // 조건검색(stock_api GraphQL screenerScreen) 타입 — 웹 web_client/src/types/finder.ts 와 같다.
 import type { MarketFilter } from '@/features/leaders/types';
 
-export type FinderPreset = 'volume_surge' | 'golden_cross' | 'oversold' | 'new_high';
+export type FinderPreset = 'volume_surge' | 'golden_cross' | 'oversold' | 'new_high' | 'foreign_buy_5d' | 'double_buy_new_high';
 export type FinderSort = 'value' | 'chg' | 'vol_ratio' | 'rsi' | 'mcap' | 'vp_above';
 export type MaOrderFilter = 'PERFECT' | 'REVERSE';
 export type BbPosition = 'ABOVE' | 'BELOW' | 'INSIDE';
