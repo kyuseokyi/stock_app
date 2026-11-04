@@ -28,13 +28,14 @@ def _profiles() -> dict:
 
 
 BARS_DAYS = 400            # load_bars 기본 범위(달력일)
+FLOW_DAYS = 90             # 수급 연속 일수에 읽는 범위(달력일)
 MAX_FAIL_RATIO = 0.05      # 계산 시도한 종목 중 이 비율 이상 실패하면 그 날은 실패로 기록
 
 
-def _run_day(as_of: date, universe, profiles, bars, fundamentals) -> dict:
+def _run_day(as_of: date, universe, profiles, bars, fundamentals, flows=None) -> dict:
     """하루 계산·적재. 대상이 있는데 행이 0이거나 실패 비율이 MAX_FAIL_RATIO 이상이면 결과에 error 를 붙인다
     (예외는 던지지 않는다 — 파이프라인 기록에 실패로 남기되 다음 단계는 계속)."""
-    rows, failed, skipped = compute_day(as_of, universe, profiles, bars, fundamentals)
+    rows, failed, skipped = compute_day(as_of, universe, profiles, bars, fundamentals, flows)
     n = cs.upsert_rows(rows)
     out = {"date": as_of.isoformat(), "rows": n, "failed": failed, "skipped_no_bar": skipped,
            "new_high": sum(1 for r in rows if r["is_new_high"]),
@@ -65,7 +66,8 @@ def compute_screener(as_of: str | None = None) -> dict:
     if d is None:
         return {"skipped": "일봉 없음"}
     bars = cs.load_bars(d, tickers=_tickers(universe))
-    out = _run_day(d, universe, profiles, bars, fundamentals)
+    flows = cs.load_investor_flows(d, days=FLOW_DAYS, tickers=_tickers(universe))
+    out = _run_day(d, universe, profiles, bars, fundamentals, flows)
     log.info("스크리너 계산: %s", out)
     return out
 
@@ -83,10 +85,13 @@ def backfill_screener(days: int = 60) -> dict:
     # 봉은 한 번만 읽는다 — 가장 이른 날 기준 BARS_DAYS 전부터 가장 늦은 날까지, 날짜별로 잘라 쓴다
     span = (max(dates) - min(dates)).days + BARS_DAYS
     all_bars = cs.load_bars(max(dates), days=span, tickers=_tickers(universe))
+    # 수급은 자르지 않아도 된다 — 연속 일수는 그 날까지 잘린 봉의 날짜만 따라 센다
+    flows = cs.load_investor_flows(max(dates), days=(max(dates) - min(dates)).days + FLOW_DAYS,
+                                   tickers=_tickers(universe))
     ok, failed, results = [], [], []
     for d in dates:
         try:
-            r = _run_day(d, universe, profiles, cs.slice_bars(all_bars, d, BARS_DAYS), fundamentals)
+            r = _run_day(d, universe, profiles, cs.slice_bars(all_bars, d, BARS_DAYS), fundamentals, flows)
             results.append(r)
             if "error" in r:
                 failed.append({"date": d.isoformat(), "error": r["error"]})
