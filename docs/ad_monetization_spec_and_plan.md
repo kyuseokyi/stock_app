@@ -170,11 +170,11 @@ Claude Code(`CLAUDE.md`의 **Micro-Step Development** 규칙 준수)에서 아�
 ### 📍 Phase 1: 백엔드 & 관리자 광고 제어(Kill Switch) 및 하우스 광고 기반 구축
 > Google 계정 승인 전에도 바로 배포·테스트할 수 있는 원격 제어 및 하우스 배너 시스템 구축
 
-- [ ] **Step 1-1 (Backend DB & API)**:
+- [x] **Step 1-1 (Backend DB & API)** (2026-11-05, 슬롯은 §1 배치에 맞춰 전체 스위치 2 + 웹 4 + 앱 3 = 9행. 선택 항목인 `MOB_GAME_REWARDED` 제외):
   - `backend/shared/models.py`에 `AdConfig` 모델 추가 및 Alembic 마이그레이션 생성.
   - 기본 슬롯 6종(`GLOBAL_WEB`, `GLOBAL_MOBILE`, `WEB_HOME_SIDEBAR`, `WEB_POST_LIST_INFEED`, `WEB_POST_DETAIL_BOTTOM`, `MOB_HOME_FEED_NATIVE`, `MOB_COMMUNITY_INFEED`) 멱등 시드 추가 (기본 `enabled=False`, `provider='HOUSE'`).
   - `backend/apps/blog`에 공개 조회 `GET /api/v1/ads/config` 및 관리자 수정 `GET/PUT /api/v1/admin/ads/config` 라우터·서비스 구현 및 `pytest` 단위 테스트 작성.
-- [ ] **Step 1-2 (Admin Web UI)**:
+- [x] **Step 1-2 (Admin Web UI)** (2026-11-05, `/app/ads`):
   - `admin_web/src/pages/AdSettingsPage.tsx` 생성 ([`ScreenerSettings.tsx`](../admin_web/src/pages/ScreenerSettings.tsx) UI 패턴 재사용).
   - 전체 웹/모바일 광고 마스터 스위치, 슬롯별 ON/OFF, `GOOGLE` vs `HOUSE` 모드 전환, 하우스 배너 문구/링크 편집 UI 구현 및 `tsc --noEmit` 통과 확인.
 

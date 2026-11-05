@@ -15,7 +15,7 @@ from shared.cors import build_allowed_origins
 from shared.health import add_health_routes
 
 from . import events
-from .routers import app_versions, blogs, boards, comments, notifications, push_admin, push_devices
+from .routers import ad_configs, app_versions, blogs, boards, comments, notifications, push_admin, push_devices
 
 app = FastAPI(title="Stock App - Blog Service", version="0.1.0")
 
@@ -37,6 +37,8 @@ app.include_router(push_devices.router)
 app.include_router(push_admin.router)
 app.include_router(app_versions.public_router)  # 앱 버전 체크(공개)
 app.include_router(app_versions.admin_router)  # 앱 버전·업데이트 정책(관리자)
+app.include_router(ad_configs.public_router)  # 광고 설정(공개)
+app.include_router(ad_configs.admin_router)  # 광고 스위치·슬롯(관리자)
 
 
 @app.get("/health", tags=["health"])

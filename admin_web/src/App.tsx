@@ -19,6 +19,7 @@ import MarketLeaders from './pages/MarketLeaders'
 import ScreenerSettings from './pages/ScreenerSettings'
 import FundNoticesPage from './pages/FundNoticesPage'
 import AppVersionsPage from './pages/AppVersionsPage'
+import AdSettingsPage from './pages/AdSettingsPage'
 
 export default function App() {
   return (
@@ -51,6 +52,7 @@ export default function App() {
         <Route path="market/screener" element={<ScreenerSettings />} />
         <Route path="fund-notices" element={<FundNoticesPage />} />
         <Route path="app/versions" element={<AppVersionsPage />} />
+        <Route path="app/ads" element={<AdSettingsPage />} />
         <Route path="*" element={<Navigate to="/boards" replace />} />
       </Route>
     </Routes>

@@ -292,6 +292,7 @@ npm run build:android:devapk  # → android/app/build/outputs/apk/release/app-re
   - 관리자 저장 검증: 스토어 URL 은 https 주소만, 안내 문구 2,000자 이하, 점검 모드를 켜면 점검 안내 문구 필수(서버·관리자 화면 같은 규칙).
 - **OTA 정책 의미**: `SILENT` 백그라운드 다운로드 후 다음 실행 때 적용(알림 없음) · `OPTIONAL` 다운로드 후 안내 창 [나중에 하기]/[지금 재시작] · `MANDATORY` 닫을 수 없는 창으로 즉시 재시작.
 - **관리자 웹** `/app/versions`(사이드바 "앱 관리 > 📱 앱 버전 & 업데이트"): Android/iOS 탭, 긴급 조치(점검 모드·스토어 강제 스위치·점검 문구), 스토어 버전 카드, OTA 3단계 라디오, 저장 + 토스트. 점검 켬·강제 켬·MANDATORY 가 들어간 저장은 확인 창을 띄운다.
+- **광고 원격 설정(Phase 1)**: 명세 [`docs/ad_monetization_spec_and_plan.md`](docs/ad_monetization_spec_and_plan.md). blog 서비스 `ad_configs`(마이그레이션이 전체 스위치 2 + 슬롯 7행을 모두 꺼짐으로 시드). `GET /api/v1/ads/config`(인증 없음, no-store), `GET /api/v1/admin/ads/config`·`PUT /api/v1/admin/ads/config/{slot_key}`(관리자). 관리자 웹 `/app/ads`(사이드바 "앱 관리 > 📢 광고 설정"). 하우스 배너 링크는 앱 안 경로만 허용. 웹·앱 화면 연결은 Phase 2라 지금은 켜도 사용자에게 보이지 않는다
 - ⚠️ iOS 기본 스토어 링크는 플레이스홀더(`https://apps.apple.com/app/id0000000000`) — App Store 는 숫자 앱 ID 가 있어야 열리므로 출시 후 관리자 화면에서 실제 주소로 바꾼다(**iOS 출시 전 강제 업데이트를 켜지 말 것** — 잘못된 링크로 보냄). Android 는 `https://play.google.com/store/apps/details?id=com.stockapp`.
 
 ## 🔄 작업 재개(Resume) 가이드 & 환경 점검

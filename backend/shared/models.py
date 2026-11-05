@@ -351,3 +351,22 @@ class AppVersionConfig(Base):
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
     updated_by: Mapped[str | None] = mapped_column(String(100), nullable=True)
+
+
+class AdConfig(Base):
+    """광고 원격 설정 — 전체 스위치(GLOBAL_WEB·GLOBAL_MOBILE)와 슬롯별 설정(명세 docs/ad_monetization_spec_and_plan.md §3)."""
+
+    __tablename__ = "ad_configs"
+
+    slot_key: Mapped[str] = mapped_column(String(50), primary_key=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false(), nullable=False)
+    # GOOGLE(AdSense·AdMob) | HOUSE(자체 배너)
+    provider: Mapped[str] = mapped_column(String(20), default="HOUSE", server_default="HOUSE", nullable=False)
+    infeed_interval: Mapped[int] = mapped_column(Integer, default=7, server_default="7", nullable=False)
+    house_title: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    house_description: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    house_target_path: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_by: Mapped[str | None] = mapped_column(String(100), nullable=True)
