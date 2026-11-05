@@ -11,7 +11,7 @@
 현재 배포된 서버(haezean)는 **개발 서버**다. 상용 서버는 아래 4번에서 새로 만든다.
 
 1. **스크리너 마무리** — 연기금 10일 연속 매집 프리셋(종목별 연기금 이력 수집 필요), 고배당주 프리셋, 숨긴 조건검색·패턴 탭 공개
-2. **광고 Phase 1** — `ad_configs`, 관리자 광고 스위치, 하우스 배너(외부 계정 없이 가능)
+2. **광고 웹·앱 하우스 배너** — 원격 설정(Phase 1)은 완료. 웹 `AdSlot`·`HouseAdCard` 와 화면 배치, 앱 하우스 카드(외부 계정 없이 가능)
 3. **상용 전 확인** — 아래 "사용자 작업"과 [`pending_checks.md`](pending_checks.md)
 4. **상용 서버 구축** — [`deploy/prod-release.md`](deploy/prod-release.md) 순서대로, 네이버 검수 포함
 5. **광고 Phase 2·3** — AdSense·AdMob(상용 도메인·앱과 계정 필요)
@@ -224,7 +224,7 @@
 
 ### 광고 수익화 (웹 Google AdSense · 모바일 Google AdMob · 관리자 원격 제어)
 > 상세 설계 및 로드맵: [`docs/ad_monetization_spec_and_plan.md`](ad_monetization_spec_and_plan.md) · 사전 준비 가이드: [`docs/ad_monetization_setup_guide.md`](ad_monetization_setup_guide.md)
-- [ ] Phase 1: 백엔드(`ad_configs`) & 관리자 웹(`admin_web`) 실시간 광고 스위치(Kill Switch) 및 자체 하우스 배너(House Ad) 폴백 구축
+- [x] Phase 1: 백엔드(`ad_configs`, 공개·관리자 API) & 관리자 웹 광고 설정 화면(전체 스위치·슬롯·하우스 배너 문구). 사용자 화면 연결은 Phase 2 (2026-11-05)
 - [ ] Phase 2: 웹 클라이언트(`web_client`) Google AdSense 연동 (`ads.txt`, 홈 사이드바·커뮤니티 인피드·본문 하단 CLS-Zero 슬롯)
 - [ ] Phase 3: 모바일 앱(`mobile`) Google AdMob 네이티브 SDK(`react-native-google-mobile-ads`) 연동 (인피드 네이티브 카드·적응형 배너·선택형 보상형 광고, Dev 테스트 ID 자동 분기)
 

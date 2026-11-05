@@ -45,7 +45,10 @@ const NAV_GROUPS: NavGroup[] = [
   },
   {
     title: '앱 관리',
-    items: [{ to: '/app/versions', label: '앱 버전 & 업데이트', icon: '📱' }],
+    items: [
+      { to: '/app/versions', label: '앱 버전 & 업데이트', icon: '📱' },
+      { to: '/app/ads', label: '광고 설정', icon: '📢' },
+    ],
   },
   {
     title: '회원 관리',
