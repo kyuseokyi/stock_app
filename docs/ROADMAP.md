@@ -216,6 +216,12 @@
 - [x] Phase 4: FastAPI REST API 엔드포인트 (`/api/v1/ai/...`)
 - [x] Phase 5: 프론트엔드(웹/앱) 시황 및 스크리너 카드 연동
 
+### 관리자 전용 5·20일선 정배열 스크리너 (`admin_web` 우선 → 추후 웹·앱 확장)
+> 상세 설계 및 로드맵: [`docs/admin_ma5_20_screener_spec_and_plan.md`](admin_ma5_20_screener_spec_and_plan.md)
+- [ ] Step 1: 백엔드 `screener_query.py` & GraphQL `screenerScreen` 확장 (`ma5_20` 정배열 4모드, 시가총액·거래대금·거래량·등락률·5·20 이격도 필터 및 정렬 추가, CH 마이그레이션 불필요)
+- [ ] Step 2: 관리자 웹 `StockDailyChart`에 `showMa5Ma20` 옵션 추가 (캔들 차트 위 5일선·20일선·50일선 동시 표시)
+- [ ] Step 3: 관리자 웹 `/market/ma-screener` (`MarketMaScreener.tsx`) 구현 (데이터 갱신 상태 카드 + 정배열 모드 칩 + 빠른 필터 + 좌측 목록/우측 차트 스플릿 뷰)
+
 ### 광고 수익화 (웹 Google AdSense · 모바일 Google AdMob · 관리자 원격 제어)
 > 상세 설계 및 로드맵: [`docs/ad_monetization_spec_and_plan.md`](ad_monetization_spec_and_plan.md) · 사전 준비 가이드: [`docs/ad_monetization_setup_guide.md`](ad_monetization_setup_guide.md)
 - [ ] Phase 1: 백엔드(`ad_configs`) & 관리자 웹(`admin_web`) 실시간 광고 스위치(Kill Switch) 및 자체 하우스 배너(House Ad) 폴백 구축
@@ -225,6 +231,7 @@
 ---
 
 ## 참고 문서
+- **관리자 5·20일선 정배열 스크리너 명세 및 플랜: `docs/admin_ma5_20_screener_spec_and_plan.md`**
 - **광고 수익화 명세 및 플랜: `docs/ad_monetization_spec_and_plan.md`**
 - **광고 수익화 사전 준비 가이드(AdSense/AdMob): `docs/ad_monetization_setup_guide.md`**
 - **AI 시장 분석 및 글로벌 시황 기획: `docs/ai_market_analyst_plan.md`**
@@ -235,6 +242,7 @@
 - 기능별 프롬프트: `docs/prompts/`
 - AMS 참고 분석: `docs/ams-reference/`
 - 설계 스펙: `docs/superpowers/specs/`
+
 
 
 
