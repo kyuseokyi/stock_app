@@ -206,3 +206,18 @@ Claude Code에 아래 명령어를 그대로 입력하면 Step 1부터 Step 3까
 docs/admin_ma5_20_screener_spec_and_plan.md 문서를 읽고, Step 1부터 Step 3까지 순서대로 Micro-Step 단위로 구현해줘.
 기존 기능(Regression Prevention)에 영향이 없도록 하위 호환성을 유지하고, 각 Step 완료 시 백엔드 pytest 및 admin_web의 tsc --noEmit / build 검증을 실행한 뒤 한국어로 보고해줘.
 ```
+
+---
+
+## 6. 내가(사용자/운영자) 준비할 사항 및 확인 체크리스트
+
+이 **5·20일선 정배열 스크리너** 기능은 이미 구축된 한국투자증권 일봉 데이터(`daily_prices`)와 장 마감 후 계산 테이블(`screener_daily`)을 그대로 사용하므로 **추가로 발급받아야 할 외부 API 키나 계정 설정은 전혀 없습니다.**
+
+다만, 로컬이나 서버에서 화면을 열었을 때 데이터가 바로 보이도록 아래 3가지만 확인하시면 됩니다:
+
+| 순서 | 확인 항목 | 확인 / 실행 방법 | 비고 |
+| :---: | :--- | :--- | :--- |
+| **1** | **DB 컨테이너 기동 확인** | `docker-compose -f docker-compose.dev.yml up -d` | PostgreSQL(`5432`), ClickHouse(`8123`) 실행 상태 확인 |
+| **2** | **`screener_daily` 데이터 존재 여부 확인** | 관리자 웹(`admin_web`) → **시장 데이터 → 데이터 현황(`/market/status`)** 접속 후 `조건검색(screener)` 카드 상태 확인 | 운영/개발 서버는 매일 20:30 자동 갱신됨 |
+| **3** | *(데이터가 비어 있을 때만)* **수동 1회 계산 실행** | 관리자 웹 `/market/status` 화면에서 **`[조건검색 계산 실행]`** 버튼 클릭 (또는 터미널에서 `cd backend && uv run python -c "from apps.collector.tasks.screener import compute_screener; print(compute_screener())"`) | DB 스키마 변경이 없으므로 기존 적재된 데이터가 있으면 즉시 조회됨 |
+
