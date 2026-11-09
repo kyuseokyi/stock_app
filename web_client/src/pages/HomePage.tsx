@@ -6,7 +6,8 @@ import { useMediaQuery } from '../hooks/useMediaQuery'
 
 // 홈(/) — '오늘 시장 노트'(날짜·한 줄 요약·지수·주도 테마·업종 지도) + 추천 글 2개.
 // 전체 시장은 마켓, 전체 추천 글은 커뮤니티. (앱 홈 탭은 아직 추천 글 — 웹 먼저)
-// 넓은 화면(lg+): 노트(본문) + 추천 글 옆 칸 2단, 옆 칸은 세로 공간이 넉넉해 4개. 그 아래 광고 자리(WEB_HOME_SIDEBAR, 넓은 화면만).
+// 넓은 화면(lg+): 노트(본문) + 추천 글 옆 칸 2단, 옆 칸은 세로 공간이 넉넉해 4개.
+// 추천 글 아래 광고 자리(WEB_HOME_SIDEBAR) — 넓은 화면은 옆 칸, 좁은 화면은 페이지 맨 끝(노트 읽기를 끊지 않음).
 export default function HomePage() {
   const wide = useMediaQuery('(min-width: 1024px)')
   const ads = useAdConfig()
@@ -15,7 +16,7 @@ export default function HomePage() {
       <MarketNote />
       <aside aria-label="추천 글">
         <FeaturedPosts limit={wide ? 4 : 2} />
-        {wide && <AdSlot config={ads} slotKey="WEB_HOME_SIDEBAR" className="mt-3" />}
+        <AdSlot config={ads} slotKey="WEB_HOME_SIDEBAR" className="mt-3" />
       </aside>
     </div>
   )
