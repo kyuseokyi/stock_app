@@ -20,7 +20,8 @@ const SLOT_GROUPS: { title: string; slots: Record<string, { title: string; descr
       WEB_HOME_SIDEBAR: { title: '홈 오른쪽 사이드', description: '추천 글 목록 아래, 데스크톱에서만 보여요.' },
       WEB_POST_LIST_INFEED: { title: '커뮤니티 글 목록', description: '글 목록 사이에 끼워 넣어요.', infeed: true },
       WEB_POST_DETAIL_BOTTOM: { title: '글 상세 하단', description: '본문이 끝나고 댓글이 시작되기 전이에요.' },
-      WEB_SCREENER_FOOTER: { title: '스크리너 목록 맨 아래', description: '시장·테마·업종 탭 목록 끝이에요. 차트 영역에는 나오지 않아요.' },
+      // 시장·테마·업종 목록은 마켓 화면으로 옮겨졌고 지금 스크리너는 차트 스플릿뷰(광고 금지 구역)라 자리를 연결하지 않았다
+      WEB_SCREENER_FOOTER: { title: '스크리너 목록 맨 아래', description: '아직 화면에 연결하지 않은 자리예요. 켜도 보이지 않아요.' },
     },
   },
   {
@@ -162,6 +163,10 @@ function SlotCard({ config, meta, busy, onSave, onToggle }: {
         <label className="block text-sm text-slate-700 sm:col-span-2">
           <span className="mb-1 block font-medium">눌렀을 때 이동할 경로</span>
           <input className={inputClass} maxLength={255} placeholder="/game" value={path} onChange={(e) => setPath(e.target.value)} />
+          {/* 웹 글 상세는 /posts/번호, 앱은 /blog/번호 — /game·/market·/community 는 양쪽 같다 */}
+          <span className="mt-1 block text-xs text-slate-400">
+            {config.slot_key.startsWith('MOB_') ? '앱 경로예요. 글은 /blog/번호' : '웹 경로예요. 글은 /posts/번호'} · /game·/market·/community 는 웹·앱 같아요
+          </span>
         </label>
       </div>
 
@@ -227,7 +232,7 @@ export default function AdSettingsPage() {
         전체 스위치와 슬롯이 모두 켜져야 그 자리에 광고가 나옵니다. 배포 없이 바로 저장되고, 차트와 게임 화면에는 광고를 넣지 않습니다.
       </p>
       <p className="mb-6 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-        아직 웹·앱 화면에 광고 자리가 연결되지 않아, 여기서 켜도 사용자에게는 아무것도 보이지 않습니다. Google 광고는 AdSense·AdMob 승인 후에 고르세요.
+        지금은 하우스 배너(자체 안내)만 나옵니다. Google 을 골라도 AdSense·AdMob 연동 전까지는 같은 하우스 배너 문구가 보이니, 제목과 경로를 꼭 채워 두세요. 앱은 업데이트(OTA)를 받은 뒤부터 보입니다.
       </p>
       {loading ? (
         <p className="text-sm text-slate-400">불러오는 중…</p>

@@ -3,6 +3,9 @@ import { ActivityIndicator, FlatList, Pressable, RefreshControl, ScrollView, Tex
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StyleSheet } from 'react-native-unistyles';
 
+import { infeedInterval, isInfeedAfter } from '@/features/ads/ad-config';
+import { HouseAdSlot } from '@/features/ads/house-ad-card';
+import { useAdConfig } from '@/features/ads/use-ad-config';
 import { BlogCard } from '@/features/blog/blog-card';
 import { useBlogList } from '@/features/blog/use-blog-list';
 import { boardChips, resolveBoardFilter, type BoardFilter } from '@/features/boards/filter';
@@ -20,6 +23,8 @@ export default function CommunityScreen() {
   const refreshBoards = useBoardStore((s) => s.refresh);
   const [selected, setSelected] = useState<BoardFilter>(null);
   const [page, setPage] = useState(1);
+  const ads = useAdConfig();
+  const adEvery = infeedInterval(ads, 'MOB_COMMUNITY_INFEED');
 
   useEffect(() => {
     loadBoards();
@@ -74,8 +79,14 @@ export default function CommunityScreen() {
           contentContainerStyle={[styles.listContent, data.length === 0 && styles.grow]}
           data={data}
           keyExtractor={(item) => String(item.id)}
-          renderItem={({ item }) => (
-            <BlogCard post={item} boardName={filter === null ? boardName(item.boardId) : undefined} />
+          renderItem={({ item, index }) => (
+            <>
+              <BlogCard post={item} boardName={filter === null ? boardName(item.boardId) : undefined} />
+              {/* 광고 자리(MOB_COMMUNITY_INFEED) — 목록 data 에 끼우지 않고 interval 번째 글 아래에 붙인다(key·페이지 계산 그대로) */}
+              {isInfeedAfter(index, adEvery) ? (
+                <HouseAdSlot config={ads} slotKey="MOB_COMMUNITY_INFEED" style={styles.adGap} />
+              ) : null}
+            </>
           )}
           ItemSeparatorComponent={() => <View style={styles.sep} />}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
@@ -192,6 +203,9 @@ const styles = StyleSheet.create((theme) => ({
   },
   sep: {
     height: theme.gap(1.5),
+  },
+  adGap: {
+    marginTop: theme.gap(1.5), // 글 사이 구분선과 같은 간격
   },
   pagination: {
     marginTop: theme.gap(2),

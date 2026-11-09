@@ -7,6 +7,8 @@ import { withErrorCode } from '../lib/errorCode'
 import { formatKstShort } from '../lib/format'
 import LoginModal from '../components/LoginModal'
 import Card from '../components/ui/Card'
+import AdSlot from '../components/ads/AdSlot'
+import { useAdConfig } from '../hooks/useAdConfig'
 import Button from '../components/ui/Button'
 import type { AxiosError } from 'axios'
 import type { BlogOut, CommentOut } from '../types/api'
@@ -26,6 +28,7 @@ export default function PostDetailPage() {
   const [submitting, setSubmitting] = useState(false)
   const [commentError, setCommentError] = useState('')
   const [loginOpen, setLoginOpen] = useState(false)
+  const ads = useAdConfig()
 
   useEffect(() => {
     setLoading(true)
@@ -89,6 +92,9 @@ export default function PostDetailPage() {
           dangerouslySetInnerHTML={{ __html: post.content }}
         />
       </Card>
+
+      {/* 광고 자리(WEB_POST_DETAIL_BOTTOM) — 본문이 끝나고 댓글로 넘어가기 전 */}
+      <AdSlot config={ads} slotKey="WEB_POST_DETAIL_BOTTOM" className="mt-6 min-h-[100px]" />
 
       <Card as="section" className="mt-6 sm:p-6">
         <h2 className="mb-4 text-lg font-bold text-ink">

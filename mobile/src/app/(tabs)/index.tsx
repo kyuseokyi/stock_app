@@ -3,6 +3,9 @@ import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StyleSheet } from 'react-native-unistyles';
 
+import { HOME_FEED_MIN_POSTS } from '@/features/ads/ad-config';
+import { HouseAdSlot } from '@/features/ads/house-ad-card';
+import { useAdConfig } from '@/features/ads/use-ad-config';
 import { BlogCard } from '@/features/blog/blog-card';
 import type { BlogPost } from '@/features/blog/types';
 import { useFeaturedPosts } from '@/features/blog/use-featured-posts';
@@ -21,6 +24,7 @@ export default function HomeScreen() {
   const router = useRouter();
   const { data, loading, error, reload, refresh } = useFeaturedPosts();
   const summary = useHomeSummary();
+  const ads = useAdConfig();
 
   // 요약은 실패해도 조용히 숨기고 받아 둔 값을 유지한다 — 토스트는 지금까지처럼 추천 글이 실패했을 때만
   const refreshAll = async () => {
@@ -61,6 +65,12 @@ export default function HomeScreen() {
         }
         renderItem={renderPost}
         ItemSeparatorComponent={PostSeparator}
+        // 광고 자리(MOB_HOME_FEED_NATIVE) — 추천 글이 3개 이상일 때 목록 끝에 하나. 요소로 넘겨 다시 마운트되지 않게
+        ListFooterComponent={
+          data.length >= HOME_FEED_MIN_POSTS ? (
+            <HouseAdSlot config={ads} slotKey="MOB_HOME_FEED_NATIVE" style={styles.adGap} />
+          ) : null
+        }
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
         ListEmptyComponent={
           loading ? (
@@ -144,6 +154,9 @@ const styles = StyleSheet.create((theme) => ({
   },
   sep: {
     height: theme.gap(1.5),
+  },
+  adGap: {
+    marginTop: theme.gap(1.5), // 글 사이 구분선과 같은 간격
   },
   grow: {
     flexGrow: 1,
