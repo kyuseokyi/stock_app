@@ -36,7 +36,7 @@
 
 | 슬롯 식별자 (`slotKey`) | 노출 화면 및 파일 경로 | 위치 및 노출 조건 | 광고 포맷 | 고정 크기 / CLS 방지 |
 | :--- | :--- | :--- | :--- | :--- |
-| `WEB_HOME_SIDEBAR` | 홈 [`HomePage.tsx`](../web_client/src/pages/HomePage.tsx) | 우측 `<aside>` 추천 글 목록 하단 (`lg` 1024px 이상 데스크톱 전용) | 디스플레이 / 멀티플렉스 카드 | `w-full min-h-[250px] rounded-card` |
+| `WEB_HOME_SIDEBAR` | 홈 [`HomePage.tsx`](../web_client/src/pages/HomePage.tsx) | `<aside>` 추천 글 목록 하단 (`lg` 1024px 이상은 우측 칸, 좁은 화면은 페이지 맨 끝 — 2026-11-10 좁은 화면도 노출) | 디스플레이 / 멀티플렉스 카드 | `w-full min-h-[250px] rounded-card` |
 | `WEB_POST_LIST_INFEED` | 커뮤니티 목록 [`PostListPage.tsx`](../web_client/src/pages/PostListPage.tsx) | 게시글 목록(`PAGE_SIZE = 10`) 중 **5번째 게시글 아래에 1회** 삽입 (게시글이 4개 이하일 때는 미노출) | 인피드(In-feed) 네이티브형 | 게시글 카드와 동일 (`min-h-[124px] rounded-card`) |
 | `WEB_POST_DETAIL_BOTTOM` | 게시글 상세 [`PostDetailPage.tsx`](../web_client/src/pages/PostDetailPage.tsx) | 본문(`content`)이 끝나고 댓글 영역(`Comments`)으로 넘어가기 전 하단 여백 | 본문 내(In-article) / 가로형 배너 | `w-full min-h-[100px] rounded-card` |
 | `WEB_SCREENER_FOOTER` | 스크리너 [`ScreenerPage.tsx`](../web_client/src/pages/ScreenerPage.tsx) | 시장/테마/업종 탭의 **전체 리스트 최하단** (차트 스플릿뷰 내부 제외) | 가로형 반응형 배너 | `w-full min-h-[90px] rounded-card` |
