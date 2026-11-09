@@ -188,6 +188,41 @@ def test_brief_with_news_includes_section(session, monkeypatch):
     assert news.queries == [("뉴욕증시", 5, "date")] and "미국 증시 관련 뉴스" in g.calls[0][1]
 
 
+def test_week_change():
+    assert mb.week_change([100, 101, 102, 103, 104, 110]) == 10.0  # 끝에서 5거래일 전(100) 대비
+    assert mb.week_change([1, 100, 101, 102, 103, 104, 90]) == -10.0
+    assert mb.week_change([100, 101, 102, 103, 104]) is None  # 6점 미만
+    assert mb.week_change(None) is None
+    assert mb.week_change([0, 1, 1, 1, 1, 1]) is None  # 기준값 0
+    assert mb.week_change(["x", 1, 1, 1, 1, 1]) is None
+
+
+def test_weekly_brief_uses_weekly_prompt_and_saturday_row(session, monkeypatch):
+    g = FakeGemini({MorningBriefingResponse: _brief_resp})
+    monkeypatch.setattr(mb, "_gemini", lambda: g)
+    ov = {"indices": [{**OVERVIEW["indices"][0], "spark": [5000.0, 5100.0, 5200.0, 5300.0, 5400.0, 5500.0]},
+                      OVERVIEW["indices"][2]],  # KOSPI 는 추세선 없음 → 5거래일 생략
+          "macro": OVERVIEW["macro"]}
+    monkeypatch.setattr(mb, "_overview", lambda: ov)
+    sat = date(2026, 10, 31)
+    got = mb.generate(sat, session=session, weekly=True)
+    assert got["date"] == "2026-10-31"
+    prompt = g.calls[0][1]
+    assert "주간 마감 브리핑" in prompt and "모닝 브리핑" not in prompt
+    assert "S&P500 [2026-10-29]: 6,000.00 (마지막 거래일 +1.20%, 5거래일 +10.00%)" in prompt
+    assert "KOSPI [2026-10-29]: 2,600.00 (마지막 거래일 +0.30%)" in prompt
+    # 주말 동안 API(최근 1건)는 토요일 행을 준다
+    assert mb.get_latest(date(2026, 11, 1), session=session)["date"] == "2026-10-31"
+
+
+def test_morning_brief_prompt_unchanged_by_weekly_flag_default(session, monkeypatch):
+    g = FakeGemini({MorningBriefingResponse: _brief_resp})
+    monkeypatch.setattr(mb, "_gemini", lambda: g)
+    monkeypatch.setattr(mb, "_overview", lambda: OVERVIEW)
+    mb.generate(DAY, session=session)
+    assert "모닝 브리핑" in g.calls[0][1] and "5거래일" not in g.calls[0][1]
+
+
 # ---------------------------------------------------------------- 급등락
 UP = [_kis_row(f"{i:06d}", f"상승{i}", 30 - i, i) for i in range(1, 13)] + [_kis_row("069500", "KODEX 200", 29.5, 0)]
 DOWN = [_kis_row(f"{100 + i:06d}", f"하락{i}", -(30 - i), i) for i in range(1, 13)]

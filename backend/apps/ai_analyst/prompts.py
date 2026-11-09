@@ -86,6 +86,30 @@ def morning_brief_prompt(indices: Iterable[Mapping], macro: Iterable[Mapping], u
     return "\n".join(out)
 
 
+def weekly_brief_prompt(indices: Iterable[Mapping], macro: Iterable[Mapping], us_news: Iterable | None = None) -> str:
+    """토요일 아침 주간 마감 브리핑. indices: [{name, close, change_rate, week_change_rate?}], macro 는 모닝과 같다.
+    응답 스키마는 모닝 브리핑과 같고 각 필드를 주간 관점(금요일 마감·한 주 흐름·다음 주)으로 채우게 한다."""
+    out = ["[이번 주 마지막 거래일 해외·국내 지수]"]
+    for i in indices or []:
+        line = f"- {_get(i, 'name')}: {_num(_get(i, 'close'))} (마지막 거래일 {_pct(_get(i, 'change_rate'))}"
+        if _get(i, "week_change_rate") is not None:
+            line += f", 5거래일 {_pct(_get(i, 'week_change_rate'))}"
+        out.append(line + ")")
+    out.append("[거시 지표]")
+    for m in macro or []:
+        out.append(f"- {_get(m, 'name')}: {_num(_get(m, 'value'))}")
+    if us_news is not None:
+        out.append("[미국 증시 관련 뉴스]")
+        out.extend(_news_lines(us_news, indent=""))
+    out.append(
+        "오늘은 토요일이다. 위 데이터만 근거로 한국 투자자용 주간 마감 브리핑을 작성하라. "
+        "headline 은 '주간 마감: ' 으로 시작해 한 주를 요약하는 1줄(앱 배지가 '장전 브리핑' 으로 고정이라 주간판임을 드러낸다), us_market_summary 는 금요일 뉴욕증시 마감과 이번 주 흐름, "
+        "kr_impact_summary 는 다음 주 월요일 한국 증시에 미칠 영향, 수혜 섹터·주의 섹터(각 이유 1문장), "
+        "macro_checkpoints 는 다음 주에 확인할 거시 체크포인트로 채워라. 각 지수 이름의 [날짜] 가 그 값의 기준일이다."
+    )
+    return "\n".join(out)
+
+
 def _mover_block(title: str, movers: Iterable[Mapping], news_by_ticker: Mapping) -> list[str]:
     out = [f"[{title}]"]
     for m in movers or []:

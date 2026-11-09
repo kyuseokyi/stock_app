@@ -22,6 +22,7 @@ BRIEF_INDEX_CODES = ("US:SPX", "US:COMP", "US:NDX", "US:DJI", "US:SOX", "US:VIX"
 US_NEWS_QUERY = "뉴욕증시"
 US_NEWS_COUNT = 5
 HEADLINE_MAX = 255  # ai_daily_briefings.headline String(255)
+WEEK_POINTS = 5  # 주간 브리핑의 '5거래일' 등락률
 
 
 # ---------------------------------------------------------------- 외부 의존(테스트에서 바꿔 끼운다)
@@ -53,6 +54,26 @@ def brief_indices(indices: list[dict]) -> list[dict]:
     return out
 
 
+def week_change(spark: list | None) -> float | None:
+    """추세선(일별 종가, 오래된 것 → 최근) 끝에서 5거래일 전 대비 등락률(%). 6점 미만이거나 기준값이 0 이하면 None."""
+    pts = list(spark or [])
+    if len(pts) < WEEK_POINTS + 1:
+        return None
+    try:
+        base, last = float(pts[-WEEK_POINTS - 1]), float(pts[-1])
+    except (TypeError, ValueError):
+        return None
+    if base <= 0:
+        return None
+    return round((last / base - 1) * 100, 2)
+
+
+def weekly_indices(indices: list[dict]) -> list[dict]:
+    """brief_indices + 5거래일 등락률(week_change_rate). 휴장이 낀 주도 '5거래일' 그대로라 프롬프트에 그렇게 적는다."""
+    spark_by_name = {f"{i.get('name')} [{i.get('date')}]": i.get("spark") for i in indices or []}
+    return [{**row, "week_change_rate": week_change(spark_by_name.get(row["name"]))} for row in brief_indices(indices)]
+
+
 def brief_macro(macro: list[dict]) -> list[dict]:
     """market_query._macro() 행 → [{name, value}]. prev 는 직전 '값'이지 등락률이 아니므로 change_rate 는 넣지 않고
     단위·기준일·직전 값을 이름에 붙여 모델이 비교하게 한다."""
@@ -80,8 +101,11 @@ def _us_news():
 
 
 # ---------------------------------------------------------------- 진입점
-def generate(day: date, *, session: Session, force: bool = False) -> dict | None:
-    """day 의 브리핑을 만들어 PG 에 저장하고 API 모양 dict 로 반환. 이미 있으면(force 아님) Gemini 없이 그대로."""
+def generate(day: date, *, session: Session, force: bool = False, weekly: bool = False) -> dict | None:
+    """day 의 브리핑을 만들어 PG 에 저장하고 API 모양 dict 로 반환. 이미 있으면(force 아님) Gemini 없이 그대로.
+
+    weekly=True 는 토요일 주간 마감 브리핑 — 같은 표·같은 스키마에 day(토요일) 행으로 저장하고, 프롬프트만
+    5거래일 등락률을 더한 주간용으로 바꾼다. API 는 '오늘 것, 없으면 최근 1건'이라 주말 내내 이 행이 보인다."""
     if not force:
         got = get_latest(day, session=session)
         # get_briefing 은 그날 것이 없으면 이전 최근 1건을 주므로 날짜가 같을 때만 적중
@@ -98,14 +122,14 @@ def generate(day: date, *, session: Session, force: bool = False) -> dict | None
     except Exception as exc:  # noqa: BLE001 — CH 장애
         log.warning("시장 개요 조회 실패(%s) — 모닝 브리핑 생략", type(exc).__name__)
         return None
-    indices = brief_indices(ov.get("indices") or [])
+    indices = (weekly_indices if weekly else brief_indices)(ov.get("indices") or [])
     if not indices:
         # 근거 데이터 없이 생성하면 지어내게 된다(프롬프트 원칙 1)
         log.warning("지수 데이터 없음 — 모닝 브리핑 생략")
         return None
     macro = brief_macro(ov.get("macro") or [])
 
-    prompt = prompts.morning_brief_prompt(indices, macro, _us_news())
+    prompt = (prompts.weekly_brief_prompt if weekly else prompts.morning_brief_prompt)(indices, macro, _us_news())
     resp = gemini.generate_json(prompt, MorningBriefingResponse, system=prompts.SYSTEM_PROMPT)
     if resp is None:
         return None

@@ -65,12 +65,15 @@ def test_include_and_beat_schedule():
     assert "apps.ai_analyst.tasks" in celery_app.conf.include
     beat = celery_app.conf.beat_schedule
     ai = {k: v for k, v in beat.items() if v["task"].startswith("ai.")}
-    assert len(ai) == 7
-    assert {v["task"] for v in ai.values()} == {"ai.generate_morning_briefing", "ai.analyze_market_movers",
+    assert len(ai) == 8
+    assert {v["task"] for v in ai.values()} == {"ai.generate_morning_briefing", "ai.generate_weekly_briefing",
+                                                 "ai.analyze_market_movers",
                                                  "ai.refresh_market_movers_list", "ai.collect_investor_flow",
                                                  "ai.evaluate_screener_stocks"}
     brief = beat["ai-morning-briefing"]["schedule"]
     assert brief.hour == {8} and brief.minute == {30} and brief.day_of_week == {1, 2, 3, 4, 5}
+    weekly = beat["ai-weekly-briefing"]["schedule"]
+    assert weekly.hour == {8} and weekly.minute == {30} and weekly.day_of_week == {6}
     movers = beat["ai-market-movers"]["schedule"]
     assert movers.minute == set(range(0, 60, 10)) and movers.hour == set(range(9, 16))
     assert movers.day_of_week == {1, 2, 3, 4, 5}
@@ -84,7 +87,7 @@ def test_include_and_beat_schedule():
     assert flows == [(15, 45), (18, 10), (22, 0)]
     ev = beat["ai-screener-evaluation"]["schedule"]
     assert ev.hour == {16} and ev.minute == {0}
-    for name in ("ai.generate_morning_briefing", "ai.analyze_market_movers", "ai.refresh_market_movers_list",
+    for name in ("ai.generate_morning_briefing", "ai.generate_weekly_briefing", "ai.analyze_market_movers", "ai.refresh_market_movers_list",
                  "ai.collect_investor_flow",
                  "ai.evaluate_screener_stocks"):
         assert name in celery_app.tasks
@@ -128,6 +131,39 @@ def test_morning_briefing_error(monkeypatch):
     monkeypatch.setattr(morning_brief, "generate", fail)
     out = tasks.generate_morning_briefing()
     assert out["error"].startswith("RuntimeError")
+
+
+# ---------------------------------------------------------------- 주간 마감 브리핑
+def test_weekly_briefing_only_on_saturday(monkeypatch):
+    called = []
+    monkeypatch.setattr(morning_brief, "generate", lambda *a, **k: called.append(k) or None)
+    assert tasks.generate_weekly_briefing() == {"skipped": "not_saturday"}  # 기본 시각은 금요일
+    assert called == []  # 평일 모닝 브리핑 행을 덮어쓰지 않는다
+
+
+def test_weekly_briefing_runs_on_saturday_with_weekly_flag(monkeypatch):
+    seen = {}
+
+    def gen(day, *, session, force=False, weekly=False):
+        seen.update(day=day, weekly=weekly)
+        return {"date": day.isoformat(), "headline": "W"}
+
+    _at(monkeypatch, SAT_1000)
+    monkeypatch.setattr(morning_brief, "generate", gen)
+    assert tasks.generate_weekly_briefing() == {"date": "2026-10-31", "headline": "W"}
+    assert seen == {"day": SAT_1000.date(), "weekly": True}
+
+
+def test_weekly_briefing_no_key_and_error(monkeypatch):
+    _at(monkeypatch, SAT_1000)
+    monkeypatch.setattr(morning_brief, "generate", lambda day, **k: None)
+    assert tasks.generate_weekly_briefing() == {"skipped": "no_briefing"}
+
+    def fail(day, **k):
+        raise RuntimeError("터짐")
+
+    monkeypatch.setattr(morning_brief, "generate", fail)
+    assert tasks.generate_weekly_briefing()["error"].startswith("RuntimeError")
 
 
 # ---------------------------------------------------------------- 급등락
