@@ -18,7 +18,7 @@ const SLOT_GROUPS: { title: string; slots: Record<string, { title: string; descr
     title: '웹',
     slots: {
       WEB_HOME_SIDEBAR: { title: '홈 오른쪽 사이드', description: '추천 글 목록 아래, 데스크톱에서만 보여요.' },
-      WEB_POST_LIST_INFEED: { title: '커뮤니티 글 목록', description: '글 목록 사이에 끼워 넣어요.', infeed: true },
+      WEB_POST_LIST_INFEED: { title: '커뮤니티 글 목록', description: '글 목록 사이에 끼워 넣어요. 한 페이지가 10개라 간격은 10 이하여야 보여요.', infeed: true },
       WEB_POST_DETAIL_BOTTOM: { title: '글 상세 하단', description: '본문이 끝나고 댓글이 시작되기 전이에요.' },
       // 시장·테마·업종 목록은 마켓 화면으로 옮겨졌고 지금 스크리너는 차트 스플릿뷰(광고 금지 구역)라 자리를 연결하지 않았다
       WEB_SCREENER_FOOTER: { title: '스크리너 목록 맨 아래', description: '아직 화면에 연결하지 않은 자리예요. 켜도 보이지 않아요.' },
@@ -28,7 +28,7 @@ const SLOT_GROUPS: { title: string; slots: Record<string, { title: string; descr
     title: '앱',
     slots: {
       MOB_HOME_FEED_NATIVE: { title: '홈 추천 글', description: '추천 글 목록 사이에 카드로 보여요.' },
-      MOB_COMMUNITY_INFEED: { title: '커뮤니티 글 목록', description: '글 목록 사이에 끼워 넣어요.', infeed: true },
+      MOB_COMMUNITY_INFEED: { title: '커뮤니티 글 목록', description: '글 목록 사이에 끼워 넣어요. 한 페이지가 10개라 간격은 10 이하여야 보여요.', infeed: true },
       MOB_POST_DETAIL_BOTTOM: { title: '글 상세 하단', description: '본문 아래, 댓글 위예요.' },
     },
   },
