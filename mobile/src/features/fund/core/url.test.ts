@@ -8,8 +8,14 @@ describe('normalizeFundUrl', () => {
     expect(normalizeFundUrl(`  ${OK}\n`)).toBe(OK);
   });
 
+  it('http 주소는 https 로 바꿔 통과시킨다(원본 사이트가 http 링크를 준다)', () => {
+    expect(normalizeFundUrl(OK.replace('https://', 'http://'))).toBe(OK);
+    expect(normalizeFundUrl(` ${OK.replace('https://', 'HTTP://')} `)).toBe(OK);
+  });
+
   it.each([
-    ['http', 'http://fund.ivyro.net/dataroom/om_data/a.htm'],
+    ['http 유사 호스트', 'http://fund.ivyro.net.evil.com/dataroom/om_data/a.htm'],
+    ['http 다른 경로', 'http://fund.ivyro.net/dataroom/other/a.htm'],
     ['유사 호스트(접미)', 'https://fund.ivyro.net.evil.com/dataroom/om_data/a.htm'],
     ['다른 호스트', 'https://evil.com/fund.ivyro.net/dataroom/om_data/a.htm'],
     ['사용자 정보', 'https://user@fund.ivyro.net/dataroom/om_data/a.htm'],
@@ -35,6 +41,8 @@ describe('isFundUrl', () => {
     expect(isFundUrl(OK)).toBe(true);
     expect(isFundUrl('javascript:alert(1)')).toBe(false);
     expect(isFundUrl('https://evil.com/x.htm')).toBe(false);
+    // 저장 값은 https 만 — http 는 normalizeFundUrl 이 바꿔서 넣는다
+    expect(isFundUrl(OK.replace('https://', 'http://'))).toBe(false);
     expect(isFundUrl(`https://fund.ivyro.net/dataroom/om_data/${'a'.repeat(200)}.htm`)).toBe(false);
   });
 });
