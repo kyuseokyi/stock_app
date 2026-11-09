@@ -8,6 +8,9 @@ import PageHeader from '../components/ui/PageHeader'
 import Button from '../components/ui/Button'
 import { Skeleton } from '../components/ui/Skeleton'
 import FeaturedPosts from '../components/home/FeaturedPosts'
+import AdSlot from '../components/ads/AdSlot'
+import { useAdConfig } from '../hooks/useAdConfig'
+import { infeedInterval, isInfeedAfter } from '../lib/ads'
 import { useMediaQuery } from '../hooks/useMediaQuery'
 
 const PAGE_SIZE = 10
@@ -25,6 +28,8 @@ export default function PostListPage() {
   const [page, setPage] = useState(1)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const ads = useAdConfig()
+  const adEvery = infeedInterval(ads, 'WEB_POST_LIST_INFEED')
 
   useEffect(() => {
     setPage(1)
@@ -60,7 +65,7 @@ export default function PostListPage() {
           <p className="py-10 text-center text-ink-muted">아직 게시글이 없어요.</p>
         ) : (
           <ul className="space-y-3">
-            {data.items.map((p) => (
+            {data.items.map((p, i) => (
               <li key={p.id}>
                 <Link
                   to={`/posts/${p.id}`}
@@ -74,6 +79,10 @@ export default function PostListPage() {
                     {new Date(p.created_at).toLocaleDateString('ko-KR')} · 조회 {p.view_count}
                   </p>
                 </Link>
+                {/* 광고 자리(WEB_POST_LIST_INFEED) — interval 번째 글 뒤에 한 번, 글 카드와 같은 높이 */}
+                {isInfeedAfter(i, data.items.length, adEvery) && (
+                  <AdSlot config={ads} slotKey="WEB_POST_LIST_INFEED" className="mt-3 min-h-[124px]" />
+                )}
               </li>
             ))}
           </ul>

@@ -15,6 +15,8 @@ import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import { WebView, type WebViewMessageEvent } from 'react-native-webview';
 
 import { useAuthStore } from '@/features/auth/store';
+import { HouseAdSlot } from '@/features/ads/house-ad-card';
+import { useAdConfig } from '@/features/ads/use-ad-config';
 import { useBlogDetail } from '@/features/blog/use-blog-detail';
 import { useComments } from '@/features/blog/use-comments';
 import { useBoardStore } from '@/features/boards/store';
@@ -98,6 +100,7 @@ export default function BlogDetailScreen() {
   const { refreshing, onRefresh } = usePullRefresh(() => Promise.all([refresh(), refreshComments()]));
   const token = useAuthStore((s) => s.token);
   const user = useAuthStore((s) => s.user);
+  const ads = useAdConfig(); // 이른 return 보다 위 — 훅 순서 고정
 
   const [webviewHeight, setWebviewHeight] = useState(MIN_WEBVIEW_HEIGHT);
   const [draft, setDraft] = useState('');
@@ -177,6 +180,9 @@ export default function BlogDetailScreen() {
             }
           }}
         />
+
+        {/* 광고 자리(MOB_POST_DETAIL_BOTTOM) — 본문 WebView 밖, 댓글 위(WebView 안에는 넣지 않는다) */}
+        <HouseAdSlot config={ads} slotKey="MOB_POST_DETAIL_BOTTOM" style={styles.adGap} />
 
         <View style={styles.commentsSection}>
           <Text style={styles.commentsTitle}>
@@ -305,6 +311,10 @@ const styles = StyleSheet.create((theme) => ({
   },
   webview: {
     backgroundColor: theme.colors.background,
+  },
+  adGap: {
+    marginTop: theme.gap(1),
+    marginHorizontal: theme.gap(2), // 댓글 영역 안쪽 여백과 맞춤
   },
   commentsSection: {
     marginTop: theme.gap(1),

@@ -179,11 +179,11 @@ Claude Code(`CLAUDE.md`의 **Micro-Step Development** 규칙 준수)에서 아�
   - 전체 웹/모바일 광고 마스터 스위치, 슬롯별 ON/OFF, `GOOGLE` vs `HOUSE` 모드 전환, 하우스 배너 문구/링크 편집 UI 구현 및 `tsc --noEmit` 통과 확인.
 
 ### 📍 Phase 2: 웹 클라이언트 (`web_client`) AdSense & 하우스 배너 연동
-- [ ] **Step 2-1 (Web Ad 컴포넌트 & 로더)**:
+- [ ] **Step 2-1 (Web Ad 컴포넌트 & 로더)** — 하우스 배너 부분 완료(2026-11-09): `api/ads.ts`, 전역 스토어 대신 `hooks/useAdConfig.ts`(화면 진입마다 조회), `lib/ads.ts`(판정), `components/ads/AdSlot.tsx`(`HouseAdCard` 포함). 남은 것: `adsense.ts` 로더, GOOGLE 렌더링, `ads.txt`(상용 도메인 필요):
   - `web_client/src/api/ads.ts`, `web_client/src/store/adConfig.ts` 작성.
   - `web_client/src/lib/adsense.ts` (동적 스크립트 로더) 및 `HouseAdCard.tsx`, `AdSlot.tsx` 구현.
   - `web_client/public/ads.txt` 플레이스홀더 생성 (환경변수/운영 도메인 안내 주석 포함).
-- [ ] **Step 2-2 (Web 화면 3곳 자연스러운 배치)**:
+- [x] **Step 2-2 (Web 화면 3곳 자연스러운 배치)** (2026-11-09, 하우스 배너로. `WEB_SCREENER_FOOTER` 는 시장·테마·업종 목록이 마켓으로 옮겨졌고 지금 스크리너는 차트 스플릿뷰라 연결하지 않음):
   - [`HomePage.tsx`](../web_client/src/pages/HomePage.tsx): 우측 `<aside>` 추천 글 아래에 `WEB_HOME_SIDEBAR` 배치.
   - [`PostListPage.tsx`](../web_client/src/pages/PostListPage.tsx): 게시글 목록 5번째 아이템 뒤에 `WEB_POST_LIST_INFEED` 배치.
   - [`PostDetailPage.tsx`](../web_client/src/pages/PostDetailPage.tsx): 본문 하단·댓글 위에 `WEB_POST_DETAIL_BOTTOM` 배치.
@@ -194,7 +194,7 @@ Claude Code(`CLAUDE.md`의 **Micro-Step Development** 규칙 준수)에서 아�
   - `mobile/package.json`에 `react-native-google-mobile-ads`, `expo-tracking-transparency` 설치.
   - `mobile/app.config.js`에 AdMob 플러그인 및 iOS ATT 권한 문구, 테스트 App ID 폴백 추가.
   - `mobile/.env.example`, `.env.development`, `.env.production`에 `EXPO_PUBLIC_ADMOB_*` 환경변수 정의.
-- [ ] **Step 3-2 (Mobile 광고 컴포넌트 & 화면 연동)**:
+- [ ] **Step 3-2 (Mobile 광고 컴포넌트 & 화면 연동)** — 하우스 배너 부분 완료(2026-11-09): `features/ads/{api,ad-config,use-ad-config,house-ad-card}`, 홈·커뮤니티·글 상세 연결(OTA 로 반영). 남은 것: `ad-unit-ids.ts`, `in-feed-ad-card.tsx`(AdMob, 네이티브 재빌드 필요):
   - `mobile/src/features/ads/` 하위에 `ad-unit-ids.ts`, `use-ad-config.ts`, `house-ad-card.tsx`, `in-feed-ad-card.tsx` 구현 (Unistyles 라이트/다크 테마 완벽 대응).
   - 홈 탭([`index.tsx`](../mobile/src/app/(tabs)/index.tsx)), 커뮤니티 탭([`community.tsx`](../mobile/src/app/(tabs)/community.tsx)), 블로그 상세([`blog/[id].tsx`](../mobile/src/app/blog))에 슬롯 연결.
   - `npm run typecheck`, `npm test` 통과 및 `npm run prebuild:dev:android`로 네이티브 빌드 설정 검증.
