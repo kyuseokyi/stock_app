@@ -110,6 +110,17 @@ def test_morning_brief_prompt():
     assert "미국 증시 관련 뉴스" in p.morning_brief_prompt([], [], [])
 
 
+def test_weekly_brief_prompt():
+    text = p.weekly_brief_prompt([{"name": "S&P500", "close": 5000, "change_rate": 1.2, "week_change_rate": -2.5},
+                                  {"name": "KOSPI", "close": 2600, "change_rate": 0.3}],
+                                 [{"name": "미국10년물", "value": 4.25}], None)
+    assert "S&P500: 5,000.00 (마지막 거래일 +1.20%, 5거래일 -2.50%)" in text
+    assert "KOSPI: 2,600.00 (마지막 거래일 +0.30%)" in text and "미국10년물: 4.25" in text
+    assert "토요일" in text and "다음 주" in text and "미국 증시 관련 뉴스" not in text
+    assert "'주간 마감: ' 으로 시작" in text
+    assert "미국 증시 관련 뉴스" in p.weekly_brief_prompt([], [], [])
+
+
 def test_investor_flow_prompt_amounts_in_eok():
     text = p.investor_flow_prompt([{"ticker": "005930", "name": "삼성전자", "net_amount": 123_000_000_000}],
                                   [], [], [{"ticker": "005930", "name": "삼성전자", "foreign_amount": 1e10,

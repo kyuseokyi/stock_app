@@ -654,6 +654,7 @@ cd backend && uv run --with pykrx python -m apps.collector.verify.spot_check --n
   | beat 키 | 태스크 | 시각 | 동작 |
   |---|---|---|---|
   | `ai-morning-briefing` | `ai.generate_morning_briefing` | 평일 08:30 | 미국 지수·거시·뉴스 → Gemini → PG `ai_daily_briefings`. 거래일만, 같은 날 이미 있으면 재사용 |
+  | `ai-weekly-briefing` | `ai.generate_weekly_briefing` | 토 08:30 | 주간 마감 브리핑 — 금요일 미국 마감(토 06:30·07:30 수집)·5거래일 등락률·거시·뉴스 → Gemini → 같은 표에 토요일 행. 응답 모양은 모닝과 같아 주말 내내 API 가 이 행을 준다. 토요일이 아니면 `skipped: not_saturday`(평일 모닝 행 덮어쓰기 방지) |
   | `ai-market-movers-list` | `ai.refresh_market_movers_list` | 평일 9~15시 2분 간격 | 거래일 09:10~15:30 만 KIS 호출(그 밖·휴장일은 호출 0). 별도 잠금(100초) → KIS 등락률 순위만(회당 2건, UN 이 비면 J 폴백으로 4건) → `ai:market:movers:today`·`:last` 갱신. 뉴스·Gemini 호출 없음. 원인은 `ai:market:movers:reasons` 에서 ticker·방향이 같을 때만 붙이고 새 종목은 `null`. KIS 실패면 이전 캐시 유지. 두 태스크가 겹치면 목록은 `updated_at` 이 더 새로운 쪽 |
   | `ai-market-movers` | `ai.analyze_market_movers` | 평일 9~15시 10분 간격 | 거래일 09:10~15:30 만 실행(09:00·15:40·15:50 은 skipped). Redis 잠금(9분) → KIS 등락률 순위 → 뉴스 → Gemini → 원인 `ai:market:movers:reasons`(같은 날만 사용) → Redis `ai:market:movers:today`(5분)·`ai:market:keywords:today`(30분) + 마지막 결과 `ai:market:*:last`(4일, 장 마감 뒤 화면용) |
   | `ai-investor-flow-close` / `ai-investor-flow-final` / `ai-investor-flow-after-pipeline` | `ai.collect_investor_flow` | 평일 15:45 / 18:10 / 22:00 | pykrx(→ KIS 폴백) 외국인·기관·연기금 Top 10·쌍끌이 + Gemini 2줄 해설 → Redis `market:investor_flow:today`(26시간). 18:10 은 확정치 갱신, 같은 기준일·출처면 해설 재사용. 22:00 은 KIS 폴백(KRX 로그인 없음)일 때 20:30 파이프라인이 적재한 당일 숫자로 갱신 |

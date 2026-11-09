@@ -75,6 +75,25 @@ def generate_morning_briefing() -> dict:
         return {"error": repr(e)[:300]}
 
 
+# ---------------------------------------------------------------- 주간 마감 브리핑(토 08:30)
+# 금요일 미국장(토 새벽 마감)을 월요일까지 기다리지 않고 정리한다. 한국 거래일 검사 대신 '토요일만' 검사 —
+# 평일에 손으로 부르면 그날 모닝 브리핑 행을 주간 내용으로 덮어쓰게 되므로 막는다.
+@celery_app.task(name="ai.generate_weekly_briefing", soft_time_limit=300, time_limit=360)
+def generate_weekly_briefing() -> dict:
+    try:
+        today = _today()
+        if today.weekday() != 5:
+            return {"skipped": "not_saturday"}
+        with SyncSessionLocal() as db:
+            got = morning_brief.generate(today, session=db, weekly=True)
+        if got is None:
+            return {"skipped": "no_briefing"}
+        return {"date": got.get("date"), "headline": got.get("headline")}
+    except Exception as e:  # noqa: BLE001
+        log.exception("주간 마감 브리핑 태스크 실패")
+        return {"error": repr(e)[:300]}
+
+
 # ---------------------------------------------------------------- 급등락 순위(평일 9~15시 2분 간격)
 # 회당 KIS 2건(UN), UN 이 비면 4건(J 폴백) — 분당 1~2건. 뉴스·Gemini 는 부르지 않는다.
 @celery_app.task(name="ai.refresh_market_movers_list", ignore_result=True, soft_time_limit=60, time_limit=90)
