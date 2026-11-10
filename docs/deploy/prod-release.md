@@ -3,6 +3,9 @@
 > 현재(2026-10-30) 배포된 서버는 **개발 서버**다. 상용 서버는 아직 없고, 이 문서는 상용 서버를 만들 때 따를 절차다.
 > 워크플로 `.github/workflows/deploy-prod.yml` 은 미리 들어가 있지만 저장소 변수 `PROD_DEPLOY_ENABLED` 가 `true` 가 아니면
 > job 이 건너뛰어져 아무 일도 하지 않는다.
+>
+> **상용 도메인: `funnotedaily.com`**(2026-11-10 구매, 서비스 이름 FunNote Daily). 서브도메인 구성은 미정 —
+> 개발 서버와 같은 구성이면 `app.` `auth.` `blog.` `stock.` `game.funnotedaily.com`. 아래 `<상용 … 도메인>` 자리에 이 값을 쓴다.
 
 ## 한눈에
 
