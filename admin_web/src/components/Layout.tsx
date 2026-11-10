@@ -35,7 +35,7 @@ export default function Layout() {
               ☰
             </button>
             <h1 className="text-lg font-bold text-slate-900">
-              📈 StockApp <span className="text-indigo-600">Admin</span>
+              <img src="/favicon.svg" alt="" aria-hidden className="mr-1 inline-block h-6 w-6 align-[-5px]" />FunNote <span className="text-indigo-600">Admin</span>
             </h1>
           </div>
           <div className="flex items-center gap-3">

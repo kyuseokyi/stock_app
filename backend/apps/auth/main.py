@@ -24,7 +24,7 @@ from .social.config import load_social_settings, startup_warnings
 
 logger = logging.getLogger("auth")
 
-app = FastAPI(title="Stock App - Auth Service", version="0.1.0")
+app = FastAPI(title="FunNote - Auth Service", version="0.1.0")
 
 app.add_middleware(
     CORSMiddleware,

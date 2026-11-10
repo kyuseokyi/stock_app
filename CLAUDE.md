@@ -84,7 +84,7 @@ docker-compose -f docker-compose.dev.yml up -d  # Postgres, ClickHouse, Redis �
    - 모바일: Expo의 `EXPO_PUBLIC_` 접두사를 사용하여 `.env.development`, `.env.production`을 분리 적용합니다.
 2. **모바일 앱 분리 빌드 (React Native / EAS)**
    - 기기에 개발용 앱과 상용 앱이 동시에 설치될 수 있도록 패키지명(Bundle ID)을 분리합니다.
-   - `eas.json`에 `development`와 `production` 빌드 프로필을 구성하고, `app.config.js`에서 `APP_ENV`에 따라 앱 이름(예: 'StockApp Dev', 'StockApp')과 `bundleIdentifier`(`com.stockapp.dev`, `com.stockapp`)를 동적으로 변경하도록 설정하세요.
+   - `eas.json`에 `development`와 `production` 빌드 프로필을 구성하고, `app.config.js`에서 `APP_ENV`에 따라 앱 이름(예: 'FunNote Dev', 'FunNote' — 브랜드, docs/brand/logo)과 `bundleIdentifier`(`com.stockapp.dev`, `com.stockapp`)를 동적으로 변경하도록 설정하세요.
 
 ## 🛠️ Claude Code Rules
 1. **자율적 실행**: 명령어(의존성 설치, 서버 재시작 등)는 묻지 말고 즉시 실행하세요.

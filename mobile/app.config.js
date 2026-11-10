@@ -25,7 +25,8 @@ const GOOGLE_SERVICES_JSON =
 
 export default {
   expo: {
-    name: isDev ? 'StockApp Dev' : 'StockApp',
+    // 앱 표시 이름 = 브랜드 FunNote(docs/brand/logo). slug·scheme·패키지 ID 의 stockapp 은 EAS 프로젝트·딥링크·스토어 식별자라 그대로 둔다.
+    name: isDev ? 'FunNote Dev' : 'FunNote',
     slug: 'stockapp',
     version: '1.0.0',
     orientation: 'portrait',
@@ -34,14 +35,14 @@ export default {
     scheme: isDev ? 'stockapp-dev' : 'stockapp',
     userInterfaceStyle: 'automatic',
     ios: {
-      icon: './assets/expo.icon',
+      icon: './assets/images/icon.png', // FunNote 앱 아이콘(라벤더 바탕 + 웃는 수익률 기호)
       supportsTablet: true,
       bundleIdentifier: isDev ? 'com.stockapp.dev' : 'com.stockapp',
     },
     android: {
       package: isDev ? 'com.stockapp.dev' : 'com.stockapp',
       adaptiveIcon: {
-        backgroundColor: '#E6F4FE',
+        backgroundColor: '#F7F5FF',
         foregroundImage: './assets/images/android-icon-foreground.png',
         backgroundImage: './assets/images/android-icon-background.png',
         monochromeImage: './assets/images/android-icon-monochrome.png',
@@ -75,9 +76,10 @@ export default {
       [
         'expo-splash-screen',
         {
-          backgroundColor: '#208AEF',
+          backgroundColor: '#F7F5FF',
           image: './assets/images/splash-icon.png',
-          imageWidth: 76,
+          imageWidth: 120,
+          dark: { backgroundColor: '#1A1826', image: './assets/images/splash-icon-dark.png' },
         },
       ],
       'react-native-edge-to-edge',

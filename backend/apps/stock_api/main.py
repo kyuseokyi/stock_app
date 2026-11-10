@@ -20,7 +20,7 @@ from apps.stock_api.routers import market_admin, screener_admin, themes_admin
 from shared.cors import build_allowed_origins
 from shared.health import add_health_routes
 
-app = FastAPI(title="Stock App - Stock API Service", version="0.1.0")
+app = FastAPI(title="FunNote - Stock API Service", version="0.1.0")
 
 # --- CORS --- (local/develop/product 공통 정책은 shared.cors 참조)
 app.add_middleware(

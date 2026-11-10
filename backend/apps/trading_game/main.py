@@ -79,7 +79,7 @@ async def lifespan(app: FastAPI):
             await deps.get_redis().aclose()
 
 
-app = FastAPI(title="Stock App - Trading Game", version="0.1.0", lifespan=lifespan)
+app = FastAPI(title="FunNote - Trading Game", version="0.1.0", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=build_allowed_origins(),

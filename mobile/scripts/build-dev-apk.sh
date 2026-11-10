@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 개발 앱(StockApp Dev, com.stockapp.dev) 독립실행형 APK — Metro 없이 혼자 실행, 다른 테스트 기기에 설치용.
+# 개발 앱(FunNote Dev, com.stockapp.dev) 독립실행형 APK — Metro 없이 혼자 실행, 다른 테스트 기기에 설치용.
 #
 # 왜 스크립트인가: release 번들(export:embed)은 Expo 가 NODE_ENV=production 으로 고정해 .env.production* 만 읽는다.
 #   그대로 빌드하면 패키지는 dev 인데 JS 는 운영 env(게임 주소 없음·게스트 로그인 숨김)가 된다.
