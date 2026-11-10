@@ -29,7 +29,7 @@ describe('history-page', () => {
   it('주입 스크립트는 JSON 그대로 전달하고 true 로 끝난다', () => {
     const s = toHistoryScript({
       type: 'render',
-      view: { accounts: [], account: '', range: 'all', chart: null, rows: [], total: 0 },
+      view: { accounts: [], account: '', range: 'all', chart: null, chartNeed: 5, rows: [], total: 0 },
       colors: {} as ReportColors,
     });
     expect(s.startsWith('window.__history&&window.__history({"type":"render","view":{')).toBe(true);

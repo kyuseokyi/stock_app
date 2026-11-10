@@ -36,22 +36,58 @@ describe('toHistoryView', () => {
     expect(toHistoryView(h({ A: pts }), 'A', 'all').rows).toHaveLength(4);
   });
 
-  it('차트 — 2건 이상일 때 0..1 좌표, 최고·최저·시작·끝', () => {
-    const v = toHistoryView(h({ A: [p('2026-10-01', 100), p('2026-10-02', 300), p('2026-10-03', 200)] }), 'A', 'all');
-    expect(v.chart?.points).toEqual([[0, 0], [0.5, 1], [1, 0.5]]);
-    expect(v.chart?.max.text).toBe('300');
-    expect(v.chart?.min.text).toBe('100');
-    expect(v.chart?.start).toBe('2026.10.01');
-    expect(v.chart?.end).toBe('2026.10.03');
+  // 당일 손익 막대 — p(date, value, day). 좌표는 0..1(1=위), 0원 기준선 zero
+  const days = (...ds: (number | null)[]) => ds.map((d, i) => p(`2026-10-${String(i + 1).padStart(2, '0')}`, 1000, d));
+
+  it('차트 — 당일 손익금 막대(누적 평가금이 아니라), 0원 기준선 위아래', () => {
+    const v = toHistoryView(h({ A: days(100, -100, 300, 0, -200) }), 'A', 'all');
+    const c = v.chart!;
+    expect(c.zero).toBeCloseTo(0.4); // 범위 -200..300 → 0원은 아래에서 40%
+    expect(c.bars.map((b) => b.tone)).toEqual(['up', 'down', 'up', 'zero', 'down']);
+    expect(c.bars[2]).toMatchObject({ from: c.zero, to: 1 }); // 최고 +300 은 맨 위까지
+    expect(c.bars[4].to).toBeCloseTo(0); // 최저 −200 은 맨 아래까지
+    expect(c.bars[0].x).toBeCloseTo(0.1); // 5칸의 가운데
+    expect(c.bars[4].x).toBeCloseTo(0.9);
+    expect(c.max).toMatchObject({ text: '+300', tone: 'up' });
+    expect(c.min).toMatchObject({ text: '−200', tone: 'down' });
+    expect(c.start).toBe('2026.10.01');
+    expect(c.end).toBe('2026.10.05');
+    expect(v.chartNeed).toBe(0);
   });
 
-  it('값이 모두 같으면 가운데 선', () => {
-    const v = toHistoryView(h({ A: [p('2026-10-01', 5), p('2026-10-02', 5)] }), 'A', 'all');
-    expect(v.chart?.points).toEqual([[0, 0.5], [1, 0.5]]);
+  it('모두 수익이어도 0원 기준선은 맨 아래(막대가 바닥에서 시작)', () => {
+    const c = toHistoryView(h({ A: days(10, 20, 30, 40, 50) }), 'A', 'all').chart!;
+    expect(c.zero).toBe(0);
+    expect(c.bars[4]).toMatchObject({ from: 0, to: 1 });
+  });
+
+  it('모두 0원이면 가운데 기준선', () => {
+    const c = toHistoryView(h({ A: days(0, 0, 0, 0, 0) }), 'A', 'all').chart!;
+    expect(c.zero).toBe(0.5);
+    expect(c.bars.every((b) => b.from === 0.5 && b.to === 0.5)).toBe(true);
+  });
+
+  it('당일 손익 기록이 5건 미만이면 차트 없음 + 더 필요한 건수', () => {
+    const v = toHistoryView(h({ A: days(100, -100, 300) }), 'A', 'all');
+    expect(v.chart).toBeNull();
+    expect(v.chartNeed).toBe(2);
+  });
+
+  it('당일 손익이 빈 기록은 세지 않는다', () => {
+    const v = toHistoryView(h({ A: days(100, null, 300, null, 5, 6) }), 'A', 'all');
+    expect(v.chart).toBeNull();
+    expect(v.chartNeed).toBe(1);
+  });
+
+  it('전체로는 충분한데 고른 기간에 적으면 차트 없음, 더 기다릴 건수는 0', () => {
+    const pts = [...['06-01', '06-02', '06-03', '06-04'].map((d) => p(`2026-${d}`, 1, 10)), p('2026-10-19', 1, 10)];
+    const v = toHistoryView(h({ A: pts }), 'A', '1m');
+    expect(v.chart).toBeNull();
+    expect(v.chartNeed).toBe(0);
   });
 
   it('기록이 없으면 빈 화면 모델', () => {
-    expect(toHistoryView(h({}), '', '3m')).toMatchObject({ accounts: [], account: '', rows: [], chart: null, total: 0 });
+    expect(toHistoryView(h({}), '', '3m')).toMatchObject({ accounts: [], account: '', rows: [], chart: null, chartNeed: 5, total: 0 });
   });
 });
 
