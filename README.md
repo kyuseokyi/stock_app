@@ -267,7 +267,7 @@ npm run build:android:devapk  # → android/app/build/outputs/apk/release/app-re
 
 ### 펀드 히스토리 · Google Drive 백업 (앱)
 - 리포트를 새로 가져올 때마다 계좌별 현재평가금·당일 손익금·월 손익금을 날짜(원본 최종평가일)별로 기기에 저장(`fund-history-<id>.json`). 서버 저장 없음.
-- 리포트 헤더의 차트 아이콘 → 수익 히스토리(차트+목록). 펀드 목록 헤더의 구름 아이콘 → 기록 백업.
+- 리포트 헤더의 차트 아이콘 → 수익 히스토리(당일 손익 막대 차트 — 기록 5건부터 + 목록). 펀드 목록 헤더의 구름 아이콘 → 기록 백업.
 - 백업은 사용자 본인 Google Drive 의 앱 전용 폴더(`appDataFolder`, Drive 목록에 안 보임)에 `fund-backup-v1.json` 하나.
   업로드는 항상 Drive 와 합친 뒤 올리고(재설치 직후 덮어쓰기 보호), 읽을 수 없는 Drive 파일은 덮어쓰지 않는다. 복원도 합치기(멱등). 기기에서 지운 펀드도 Drive 백업에는 남는다.
 - **설정(최초 1회, Google Cloud Console)**
