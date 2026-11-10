@@ -84,7 +84,15 @@ export default {
       ],
       'react-native-edge-to-edge',
       'expo-secure-store',
-      ['expo-notifications', { enableBackgroundRemoteNotifications: true }], // 무음 push 로 앱 깨우기(iOS remote-notification)
+      [
+        'expo-notifications',
+        {
+          enableBackgroundRemoteNotifications: true, // 무음 push 로 앱 깨우기(iOS remote-notification)
+          // Android 상태 표시줄·알림 아이콘: 흰색+투명만(색은 OS 가 무시하고 모양만 씀), 강조색은 브랜드 블루 — docs/brand/logo
+          icon: './assets/images/notification-icon.png',
+          color: '#5B7BE9',
+        },
+      ],
       'expo-background-task', // 정기 백그라운드 기록(Android WorkManager · iOS BGTaskScheduler)
       ['./plugins/with-apk-name', { env: APP_ENV }], // APK 이름 stockapp-<dev|prod>-<브랜치>-<일시>.apk(build.gradle outputFileName)
       // iOS 출시(애플 로그인과 함께) 전에 실제 값으로

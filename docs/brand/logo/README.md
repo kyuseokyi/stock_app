@@ -61,9 +61,33 @@
 SVG 에는 글꼴이 아니라 도형만 들어 있다. 다시 만들 때: `python -I source/make_kit.py <Manrope 가변 폰트 경로> <출력 폴더>`
 (폰트: google/fonts 저장소 `ofl/manrope/Manrope[wght].ttf`).
 
+## 적용 위치
+
+| 무엇 | 파일 |
+|---|---|
+| 앱 아이콘(iOS·기본) | `mobile/assets/images/icon.png` — 꽉 찬 정사각(모서리는 OS 가 깎음) |
+| Android 적응형 아이콘 | `android-icon-foreground/background/monochrome.png` — 기호는 지름 66/108 안전 영역 안 |
+| 스플래시 | `splash-icon.png`(라벤더 바탕) · `splash-icon-dark.png`(다크 바탕) |
+| Android 푸시 알림 아이콘 | `notification-icon.png` — 96px, **흰색+투명만**(OS 가 색을 버리고 모양만 씀), 강조색 `#5B7BE9` |
+| 웹·관리자 파비콘 | `web_client/public`, `admin_web/public` 의 `favicon.ico`·`favicon.svg`·`apple-touch-icon.png` |
+
+앱 쪽은 모두 네이티브 설정이라 **새 빌드(APK/스토어)부터** 보인다. OTA 로는 바뀌지 않는다.
+
+## 이름과 식별자 — 결정(2026-11-10)
+
+사용자에게 보이는 이름만 **FunNote**(개발 앱 **FunNote Dev**)로 바꾸고, 내부 식별자는 **바꾸지 않기로 했다**.
+
+| 식별자 | 값 | 그대로 두는 이유 |
+|---|---|---|
+| 패키지 ID / 번들 ID | `com.stockapp` · `com.stockapp.dev` | 사용자에게 안 보인다. 바꾸면 다른 앱이 되어 네이버·카카오 콘솔, Firebase(google-services.json), 스토어 등록을 다 새로 해야 한다 |
+| Expo slug · EAS 프로젝트 | `stockapp` · `@kyuseokyi/stockapp` | OTA 업데이트 주소가 프로젝트에 묶여 있다 |
+| 딥링크 스킴 | `stockapp://` · `stockapp-dev://` | 간편 로그인 복귀 주소. 바꾸면 소셜 로그인 설정도 함께 바꿔야 한다 |
+| APK 파일 이름 | `stockapp-<dev\|prod>-…apk` | 빌드 산출물 이름일 뿐 |
+
+- 스토어 화면·홈 화면·알림에는 FunNote 만 보이므로 문제없다(패키지 ID 는 Play 스토어 주소 `?id=com.stockapp` 에만 보인다).
+- **바꾸고 싶어지면 첫 스토어 출시 전에만 가능**하다. 출시 후에는 패키지 ID 를 바꿀 수 없다(바꾸면 새 앱으로 다시 출시).
+- 블로그 개발 샘플 글 제목 "해전(StockApp) 둘러보기"도 그대로 — 시드가 제목으로 중복을 판단해 바꾸면 글이 하나 더 생긴다.
+
 ## 남은 일
 
-- ~~앱 아이콘·웹 파비콘 교체~~ 완료(2026-11-10). 앱 아이콘은 **새 빌드(APK/스토어)부터** 보인다 — OTA 로는 바뀌지 않는다
-- 상표 검색은 하지 않았다. 출시 전 KIPRIS 에서 "펀노트/FunNote"(9류 앱·36류 금융) 검색·역이미지 검색 권장
-- 앱 표시 이름은 FunNote(개발 FunNote Dev)로 바꿨다. 패키지 ID(`com.stockapp`)·slug·딥링크 스킴은 그대로 — 바꿀지 결정 필요(패키지 ID 는 스토어 출시 후 변경 불가)
-- 스플래시는 적용(라벤더/다크 바탕 + 기호). 푸시 알림 아이콘(Android 단색) 은 아직
+- 상표 검색은 하지 않았다. 출시 전 KIPRIS(특허청 무료 검색)에서 "펀노트"·"FunNote" 를 9류(앱)·36류(금융 정보) 로 검색 권장
