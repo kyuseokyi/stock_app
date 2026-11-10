@@ -1,7 +1,8 @@
 # FunNote 로고 — 사용 안내
 
 > 앱 이름 **FunNote**(펀노트), 상용 주소 `funnotedaily.com`(개발은 `haezean.com` — [`../../deploy/environments.md`](../../deploy/environments.md)).
-> 2026-11-10 방향: **웃는 수익률**. 아직 앱·웹 아이콘에는 적용하지 않았다(적용 여부는 따로 결정).
+> 2026-11-10 **확정: 웃는 수익률(시안 D)**. 아직 앱·웹 아이콘에는 적용하지 않았다(적용 여부는 따로 결정).
+> 비교했던 다른 시안(F 노트, 웃는 노트, 섞은 안 등)은 [`concepts/`](concepts/README.md)에 남겨 두었다.
 
 ## 아이디어
 
