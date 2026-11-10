@@ -3,9 +3,31 @@
 > 현재(2026-10-30) 배포된 서버는 **개발 서버**다. 상용 서버는 아직 없고, 이 문서는 상용 서버를 만들 때 따를 절차다.
 > 워크플로 `.github/workflows/deploy-prod.yml` 은 미리 들어가 있지만 저장소 변수 `PROD_DEPLOY_ENABLED` 가 `true` 가 아니면
 > job 이 건너뛰어져 아무 일도 하지 않는다.
->
-> **상용 도메인: `funnotedaily.com`**(2026-11-10 구매, 앱 이름 FunNote). 서브도메인 구성은 미정 —
-> 개발 서버와 같은 구성이면 `app.` `auth.` `blog.` `stock.` `game.funnotedaily.com`. 아래 `<상용 … 도메인>` 자리에 이 값을 쓴다.
+
+## 개발 / 상용 구분 (2026-11-10 확정)
+
+앱 이름은 **FunNote**. 개발은 지금의 `haezean.com` 을 **계속** 쓰고, 실제 서비스(상용)만 `funnotedaily.com` 을 쓴다. 둘을 섞지 않는다.
+
+| 구분 | 개발 | 상용 |
+|---|---|---|
+| 도메인 | `haezean.com` (그대로 유지) | `funnotedaily.com` (2026-11-10 구매) |
+| 서버 | 지금 배포된 서버(미니PC) | 새 상용 서버(아직 없음) |
+| 배포 | main push → `deploy-server.yml`·`deploy-web.yml` | `release/vX.Y.Z` 태그 → `deploy-prod.yml` |
+| 서브도메인 | `app.` `admin.` `auth.` `blog.` `api.`(stock GraphQL) `game.haezean.com` | 같은 구성이면 `app.` `admin.` `auth.` `blog.` `api.` `game.funnotedaily.com`(확정 전) |
+| 모바일 앱 | 개발 앱 `com.stockapp.dev`, 스킴 `stockapp-dev://`, OTA 채널 `development` | 상용 앱(표시 이름 FunNote), 스킴 `stockapp://`, OTA 채널 `production` |
+| 앱 API 주소 | `mobile/.env.development(.local)` → haezean | `mobile/.env.production` → funnotedaily (**지금은 haezean — 상용 전환 때 교체**) |
+| 간편 로그인 콘솔 앱 | 카카오 `stockapp-dev`·지금 네이버 앱 | 상용 앱을 새로 등록(2-1절) |
+| DB·사용자 | 개발 DB(개발 사용자는 상용으로 넘기지 않음) | 상용 DB |
+| 게스트 로그인 | 켜짐 | 꺼짐 |
+
+**상용 전환 때 haezean → funnotedaily 로 바꿀 곳** (지금 바꾸면 없는 서버를 가리키므로 상용 서버가 생길 때 한 번에):
+- `mobile/.env.production` 의 `EXPO_PUBLIC_*_URL` (preview 빌드도 이 파일을 쓴다)
+- `docker-compose.prod.yml` 의 `admin_web` 빌드 인자 `VITE_*` (haezean 고정 — 서버별 값으로 바꿔야 개발 서버가 그대로 유지된다. 웹 게스트 버튼은 이미 워크플로별로 분리됨)
+- `backend/shared/cors.py` 기본 허용 목록은 haezean 만 있다 → 상용 서버는 `CORS_ORIGINS` 에 funnotedaily 주소를 넣는다
+- 상용 서버 `/opt/stock_app/env/.env.production` 의 `SOCIAL_REDIRECT_BASE`·`SOCIAL_WEB_RETURN_URL` (2-1절)
+- Cloudflare 터널: 상용 서버에 별도 터널을 만들고 funnotedaily 서브도메인만 연결(개발 터널·haezean 은 손대지 않는다)
+
+아래 `<상용 … 도메인>` 자리에는 `funnotedaily.com` 서브도메인을 쓴다. 변수별 개발·상용 값 비교는 [`environments.md`](environments.md).
 
 ## 한눈에
 
