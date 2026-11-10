@@ -42,7 +42,7 @@ export default function LoginPage() {
     <div className="flex min-h-screen items-center justify-center px-4">
       <div className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
         <h1 className="mb-1 text-center text-xl font-bold text-slate-900">
-          📈 StockApp <span className="text-indigo-600">Admin</span>
+          <img src="/favicon.svg" alt="" aria-hidden className="mr-1 inline-block h-6 w-6 align-[-5px]" />FunNote <span className="text-indigo-600">Admin</span>
         </h1>
         <p className="mb-6 text-center text-sm text-slate-400">관리자 로그인</p>
 

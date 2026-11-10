@@ -42,7 +42,7 @@ web
 
 ## Brand Commitments
 
-- 앱 이름: 운영 `StockApp`, 개발 `StockApp Dev`(패키지 `com.stockapp` / `com.stockapp.dev`). 개발 서버 도메인 `haezean.com`.
+- 앱 이름: 운영 `FunNote`, 개발 `FunNote Dev`(패키지 `com.stockapp` / `com.stockapp.dev`). 개발 서버 도메인 `haezean.com`.
 - 말투: 토스식 친근한 존댓말("~해요 / ~했어요 / ~할까요?"). 짧고 쉬운 문장, 숫자·금액은 또렷하게.
 - 상승=핑크레드, 하락=블루(한국 시장 관례).
 - 카카오·네이버 로그인 버튼은 각 공급자 공식 가이드를 따른다(공식 로고 파일은 사용자 제공 대기 — `docs/assets/social/`).

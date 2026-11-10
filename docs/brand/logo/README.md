@@ -1,7 +1,7 @@
 # FunNote 로고 — 사용 안내
 
 > 앱 이름 **FunNote**(펀노트), 상용 주소 `funnotedaily.com`(개발은 `haezean.com` — [`../../deploy/environments.md`](../../deploy/environments.md)).
-> 2026-11-10 **확정: 웃는 수익률(시안 D)**. 아직 앱·웹 아이콘에는 적용하지 않았다(적용 여부는 따로 결정).
+> 2026-11-10 **확정: 웃는 수익률(시안 D)**. 앱 아이콘·스플래시(`mobile/assets/images/`)와 웹·관리자 파비콘(`*/public/favicon.*`)에 적용했다.
 > 비교했던 다른 시안(F 노트, 웃는 노트, 섞은 안 등)은 [`concepts/`](concepts/README.md)에 남겨 두었다.
 
 ## 아이디어
@@ -63,7 +63,7 @@ SVG 에는 글꼴이 아니라 도형만 들어 있다. 다시 만들 때: `pyth
 
 ## 남은 일
 
-- 앱 아이콘(`mobile/assets/images/*`)·웹 파비콘 교체 여부 결정
+- ~~앱 아이콘·웹 파비콘 교체~~ 완료(2026-11-10). 앱 아이콘은 **새 빌드(APK/스토어)부터** 보인다 — OTA 로는 바뀌지 않는다
 - 상표 검색은 하지 않았다. 출시 전 KIPRIS 에서 "펀노트/FunNote"(9류 앱·36류 금융) 검색·역이미지 검색 권장
-- 앱 표시 이름(`mobile/app.config.js` 의 'StockApp')·패키지 ID(`com.stockapp`) 를 FunNote 로 바꿀지 결정(패키지 ID 는 스토어 출시 후 변경 불가)
-- 스플래시·푸시 알림 아이콘(Android 단색) 적용
+- 앱 표시 이름은 FunNote(개발 FunNote Dev)로 바꿨다. 패키지 ID(`com.stockapp`)·slug·딥링크 스킴은 그대로 — 바꿀지 결정 필요(패키지 ID 는 스토어 출시 후 변경 불가)
+- 스플래시는 적용(라벤더/다크 바탕 + 기호). 푸시 알림 아이콘(Android 단색) 은 아직

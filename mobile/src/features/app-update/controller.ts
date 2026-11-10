@@ -34,7 +34,7 @@ import { hideStoreForADay, readStoreHiddenUntil } from './storage';
 export const RELOAD_GIVE_UP_AFTER = 2;
 export const RELOAD_RETRY_MESSAGE = '다시 시작하지 못했어요. 다시 시도해 주세요.';
 export const RELOAD_GAVE_UP_MESSAGE = '지금은 다시 시작할 수 없어요. 다음에 앱을 열 때 적용돼요.';
-export const IOS_STORE_HINT = 'App Store 에서 StockApp 을 검색해 업데이트해 주세요.';
+export const IOS_STORE_HINT = 'App Store 에서 FunNote 를 검색해 업데이트해 주세요.';
 
 export type AppUpdateState = {
   check: VersionCheck | null;
@@ -183,7 +183,7 @@ export async function openStore(): Promise<void> {
       // 다음 후보로
     }
   }
-  const hint = platform === 'ios' ? IOS_STORE_HINT : '스토어를 열지 못했어요. Play 스토어에서 StockApp 을 검색해 주세요.';
+  const hint = platform === 'ios' ? IOS_STORE_HINT : '스토어를 열지 못했어요. Play 스토어에서 FunNote 를 검색해 주세요.';
   useAppUpdateStore.setState({ notice: hint });
   showToast(hint);
 }

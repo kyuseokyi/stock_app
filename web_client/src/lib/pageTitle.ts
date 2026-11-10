@@ -1,5 +1,5 @@
 // 경로별 브라우저 탭 제목(WCAG 2.4.2) — Layout 이 경로가 바뀔 때 넣고, 글·종목 상세는 데이터가 오면 useDocumentTitle 로 구체화한다.
-const BRAND = 'StockApp'
+const BRAND = 'FunNote'
 
 const MARKET: Record<string, string> = {
   themes: '테마',
