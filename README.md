@@ -723,7 +723,7 @@ cd backend && uv run --with pykrx python -m apps.collector.verify.spot_check --n
 - **일상 실행·배포 빠른 참조: `docs/run_and_deploy.md`**
 - **DB 접속(DataGrip/DBeaver, 개발서버 터널 포함): `docs/db_access.md`**
 - 아키텍처: `docs/architecture_plan.md`
-- 로고·브랜드 색(키트·아이콘·사용 안내): `docs/brand/logo/`
+- FunNote 로고·브랜드 색(키트·아이콘·사용 안내): `docs/brand/logo/`
 - AMS 참고 분석: `docs/ams-reference/`
 - 기능별 프롬프트: `docs/prompts/`
 - **배포(미니PC + Cloudflare Tunnel + GitHub Actions)**:

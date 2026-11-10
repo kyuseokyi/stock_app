@@ -35,18 +35,18 @@ def svg(w, h, body, title, bg=None):
     return f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {w:.0f} {h:.0f}"><title>{title}</title>{b}{body}</svg>\n'
 def save(name, s): open(os.path.join(out, name), 'w').write(s)
 
-save('symbol-black.svg', svg(256, 256, sym(U, DOT, '#000', '#000'), 'StockApp'))
-save('symbol-color.svg', svg(256, 256, sym(U, DOT, C['blue'], C['pink']), 'StockApp'))
-save('symbol-reversed.svg', svg(256, 256, sym(U, DOT, C['blue_d'], C['pink_d']), 'StockApp', C['dark']))
-save('symbol-small-black.svg', svg(256, 256, sym(U_S, DOT_S, '#000', '#000'), 'StockApp'))
-save('symbol-small-color.svg', svg(256, 256, sym(U_S, DOT_S, C['blue'], C['pink']), 'StockApp'))
+save('symbol-black.svg', svg(256, 256, sym(U, DOT, '#000', '#000'), 'FunNote'))
+save('symbol-color.svg', svg(256, 256, sym(U, DOT, C['blue'], C['pink']), 'FunNote'))
+save('symbol-reversed.svg', svg(256, 256, sym(U, DOT, C['blue_d'], C['pink_d']), 'FunNote', C['dark']))
+save('symbol-small-black.svg', svg(256, 256, sym(U_S, DOT_S, '#000', '#000'), 'FunNote'))
+save('symbol-small-color.svg', svg(256, 256, sym(U_S, DOT_S, C['blue'], C['pink']), 'FunNote'))
 
 # ---- 글자 로고(Manrope 800 → 외곽선) ----
 f = TTFont(font_path)
 f = instantiateVariableFont(f, {'wght': 800})
 gs, cmap, hmtx = f.getGlyphSet(), f.getBestCmap(), f['hmtx']
 cap = f['OS/2'].sCapHeight
-TEXT, TRACK = 'StockApp', -0.01 * f['head'].unitsPerEm
+TEXT, TRACK = 'FunNote', -0.01 * f['head'].unitsPerEm
 def word(text, cap_px, color, x0, baseline):
     s = cap_px / cap; x = 0; parts = []
     for ch in text:
@@ -64,7 +64,7 @@ _, w, xm, ymn, ymx = word(TEXT, 100, '#000', 0, 0)
 pad = 4; H = ymx - ymn + 2*pad
 for nm, col, bg in [('black', '#000', None), ('color', C['ink'], None), ('reversed', '#F3F1FA', C['dark'])]:
     p, *_ = word(TEXT, 100, col, pad - xm, pad + ymx)
-    save(f'wordmark-{nm}.svg', svg(w + 2*pad, H, p, 'StockApp', bg))
+    save(f'wordmark-{nm}.svg', svg(w + 2*pad, H, p, 'FunNote', bg))
 
 # 기호 실제 범위(256 캔버스): x 32~224, y 32~214
 SX0, SX1, SY0, SY1 = 32, 224, 32, 214
@@ -77,7 +77,7 @@ def horiz(cu, cd, cw, bg, name):
     tx = gap + sym_w; baseline = 128 + capx / 2   # 대문자 높이를 기호 중심에 맞춤
     p, *_ = word(TEXT, capx, cw, tx - xm2, baseline)
     W = tx + ww
-    save(name, svg(W, 256, sym(U, DOT, cu, cd, -SX0*s, -SY0*s, s) + p, 'StockApp', bg))
+    save(name, svg(W, 256, sym(U, DOT, cu, cd, -SX0*s, -SY0*s, s) + p, 'FunNote', bg))
 def stacked(cu, cd, cw, bg, name):
     s = 256 / (SY1 - SY0); sym_w = (SX1 - SX0) * s
     capx = 0.27 * 256
@@ -87,7 +87,7 @@ def stacked(cu, cd, cw, bg, name):
     p, *_ = word(TEXT, capx, cw, (W - ww)/2 - xm2, baseline)
     H = baseline - y0 if y0 < 0 else baseline
     H = baseline + max(0, -(y0)) + 4
-    save(name, svg(W, H, sym(U, DOT, cu, cd, (W - sym_w)/2 - SX0*s, -SY0*s, s) + p, 'StockApp', bg))
+    save(name, svg(W, H, sym(U, DOT, cu, cd, (W - sym_w)/2 - SX0*s, -SY0*s, s) + p, 'FunNote', bg))
 horiz('#000', '#000', '#000', None, 'lockup-horizontal-black.svg')
 horiz(C['blue'], C['pink'], C['ink'], None, 'lockup-horizontal-color.svg')
 horiz(C['blue_d'], C['pink_d'], '#F3F1FA', C['dark'], 'lockup-horizontal-reversed.svg')

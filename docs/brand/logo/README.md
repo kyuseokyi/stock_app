@@ -1,12 +1,14 @@
-# StockApp 로고 — 사용 안내
+# FunNote 로고 — 사용 안내
 
-> 2026-11-09 확정 방향: **B · 베이스 돌파**. 아직 앱·웹 아이콘에는 적용하지 않았다(적용 여부는 따로 결정).
+> 앱 이름 **FunNote**(펀노트), 상용 주소 `funnotedaily.com`(개발은 `haezean.com` — [`../../deploy/environments.md`](../../deploy/environments.md)).
+> 2026-11-10 방향: **웃는 수익률**. 아직 앱·웹 아이콘에는 적용하지 않았다(적용 여부는 따로 결정).
 
 ## 아이디어
 
-컵 모양으로 바닥(베이스)을 다진 뒤, 점 하나가 위로 튀어 오르는 **돌파의 순간**.
-앱이 계산하는 오닐식 베이스 단계·피벗 돌파(`backend/apps/collector/patterns/base_count.py`)를 그대로 그렸다.
-웃는 얼굴로도 읽혀 토스식 친근한 앱 분위기와 맞는다.
+바닥(U) 위로 오늘의 점 하나가 올라온 **웃는 얼굴 — 오늘 내 수익률의 표정**.
+매일 보는 시황과 펀드 수익률이 중심인 앱이라, "오늘"을 점 하나로 담았다.
+기호의 U 가 글자 **Fun** 의 u 와 같은 모양이라 이름과 기호가 하나로 읽힌다.
+(처음엔 "베이스 돌파"로 만들었다가 앱 성격에 맞춰 해석만 바꿨다 — 도형은 같다.)
 
 ## 색
 
@@ -35,7 +37,7 @@
 | `wordmark-*.svg` | 기호 없이 글자만 필요할 때 |
 
 - `icons/`: `favicon.ico`·`favicon.svg`·`apple-touch-icon.png`·`icon-192/512.png`·`maskable-512.png`·`site.webmanifest`·`head-snippet.html`,
-  한 색·흰색·블루 단색 PNG, 앱 아이콘 2종 — `stockapp-app-icon-color.*`(라벤더 타일 + 색 기호, **권장**), `stockapp-symbol-app-icon.*`(블루 타일 + 흰 기호).
+  한 색·흰색·블루 단색 PNG, 앱 아이콘 2종 — `funnote-app-icon-color.*`(라벤더 타일 + 색 기호, **권장**), `funnote-symbol-app-icon.*`(블루 타일 + 흰 기호).
 - `board/`: 발표 슬라이드(앱 아이콘·웹·탭·카드 목업)와 크기·배경 테스트 시트.
 
 ## 여백과 최소 크기
@@ -61,5 +63,6 @@ SVG 에는 글꼴이 아니라 도형만 들어 있다. 다시 만들 때: `pyth
 ## 남은 일
 
 - 앱 아이콘(`mobile/assets/images/*`)·웹 파비콘 교체 여부 결정
-- 상표 검색은 하지 않았다. 출시 전 KIPRIS 검색·역이미지 검색 권장
+- 상표 검색은 하지 않았다. 출시 전 KIPRIS 에서 "펀노트/FunNote"(9류 앱·36류 금융) 검색·역이미지 검색 권장
+- 앱 표시 이름(`mobile/app.config.js` 의 'StockApp')·패키지 ID(`com.stockapp`) 를 FunNote 로 바꿀지 결정(패키지 ID 는 스토어 출시 후 변경 불가)
 - 스플래시·푸시 알림 아이콘(Android 단색) 적용
