@@ -40,7 +40,7 @@ tar xzf actions-runner-*.tar.gz
 sudo ./svc.sh install
 sudo ./svc.sh start
 ```
-확인: 저장소 Settings → Runners 에 러너가 **Idle(초록)** 으로 보이면 성공. `runs-on: self-hosted` 작업을 이 러너가 잡는다.
+확인: 저장소 Settings → Runners 에 러너가 **Idle(초록)** 으로 보이면 성공. 개발 워크플로는 `runs-on: [ self-hosted, dev ]` 라서 **러너 Labels 에 `dev` 를 추가해야** 작업을 잡는다(상용 러너는 `prod` — `docs/deploy/prod-release.md` §1).
 > ⚠️ 러너 실행 사용자가 **§1의 docker 그룹**에 있어야 한다.
 
 ---

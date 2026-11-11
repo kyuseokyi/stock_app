@@ -20,7 +20,7 @@ concurrency:
 jobs:
   deploy:
     name: Deploy Frontends
-    runs-on: self-hosted
+    runs-on: [ self-hosted, dev ]  # 개발 러너만(상용 러너는 prod 라벨) — docs/deploy/prod-release.md §1
     env:
       # 개발 서버 전용 — 테스트용 게스트 로그인 버튼을 웹 빌드에 굽는다(compose 기본값은 숨김)
       VITE_ENABLE_GUEST_LOGIN: "true"

@@ -20,7 +20,7 @@ concurrency:
 jobs:
   deploy:
     name: Deploy APIs & Celery
-    runs-on: self-hosted
+    runs-on: [ self-hosted, dev ]  # 개발 러너만(상용 러너는 prod 라벨) — docs/deploy/prod-release.md §1
     steps:
     - name: Checkout Code
       uses: actions/checkout@v4
