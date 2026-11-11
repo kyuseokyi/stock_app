@@ -38,7 +38,7 @@ jest.mock('./drive-backup', () => {
 
 import { resetFakeStorage, secureMem } from './__fixtures__/fake-storage';
 import { backupNow, hasRemoteBackup, maybeAutoBackup, restoreFromDrive } from './backup-service';
-import { loadBackupState, saveBackupState } from './backup-state';
+import { loadBackupState, parseBackupState, resetBackupState, saveBackupState } from './backup-state';
 import { isDriveError } from './drive-backup';
 import { loadFunds, saveFunds } from './fund-store';
 import { isNoOwnerError } from './owner';
@@ -167,5 +167,42 @@ describe('자동 백업', () => {
     await saveFunds([{ id: 'a', name: 'A', url: url(1) }]);
     await maybeAutoBackup(NOW);
     expect(mockDrive.has('fund-backup-v1-u7.json')).toBe(true);
+  });
+});
+
+describe('백업 요약', () => {
+  it('옛 상태(요약 없음)·잘못된 요약은 null 로 읽는다', () => {
+    expect(parseBackupState(JSON.stringify({ connected: true, email: 'a' })).summary).toBeNull();
+    expect(parseBackupState(JSON.stringify({ summary: { funds: 'x', points: 1 } })).summary).toBeNull();
+    expect(parseBackupState(JSON.stringify({ summary: { funds: 2, points: 5, lastDate: '2026-11-10' } })).summary).toEqual({
+      funds: 2,
+      points: 5,
+      lastDate: '2026-11-10',
+    });
+    expect(parseBackupState(JSON.stringify({ summary: { funds: 2, points: 5, lastDate: 3 } })).summary).toEqual({
+      funds: 2,
+      points: 5,
+      lastDate: null,
+    });
+  });
+
+  it('백업 성공 때 올린 합본의 요약을 저장한다(Drive 에만 있는 펀드 포함)', async () => {
+    mockDrive.set('fund-backup-v1-u7.json', backupOf(2));
+    await saveFunds([{ id: 'a', name: 'A', url: url(1) }]);
+    await backupNow(NOW);
+    expect((await loadBackupState()).summary).toEqual({ funds: 2, points: 0, lastDate: null });
+  });
+
+  it('복원 성공 때 받은 백업의 요약을 저장한다', async () => {
+    mockDrive.set('fund-backup-v1-u7.json', backupOf(1, 2, 3));
+    await saveFunds([]);
+    await restoreFromDrive();
+    expect((await loadBackupState()).summary).toEqual({ funds: 3, points: 0, lastDate: null });
+  });
+
+  it('연결 해제(reset)하면 요약도 지운다', async () => {
+    await saveBackupState({ summary: { funds: 1, points: 1, lastDate: '2026-11-10' } });
+    await resetBackupState();
+    expect((await loadBackupState()).summary).toBeNull();
   });
 });
