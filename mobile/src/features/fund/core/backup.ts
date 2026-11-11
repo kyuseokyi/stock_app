@@ -17,6 +17,21 @@ export type Backup = {
 export type LocalData = { funds: FundEntry[]; histories: Record<string, HistoryAccounts> };
 export type MergeResult = LocalData & { addedFunds: number; skippedFunds: number; mergedPoints: number };
 
+/** 백업 화면 요약 — 펀드 수, 모든 계좌 기록 수, 가장 늦은 기록 날짜(YYYY-MM-DD, 없으면 null) */
+export type BackupSummary = { funds: number; points: number; lastDate: string | null };
+
+export function summarizeBackup(b: Backup): BackupSummary {
+  let points = 0;
+  let lastDate: string | null = null;
+  for (const accounts of Object.values(b.history)) {
+    for (const pts of Object.values(accounts)) {
+      points += pts.length;
+      for (const p of pts) if (lastDate === null || p.date > lastDate) lastDate = p.date;
+    }
+  }
+  return { funds: b.funds.length, points, lastDate };
+}
+
 /** 올릴 백업 = 로컬 + Drive(remote). Drive 에만 있는 펀드·기록도 남겨 재설치 직후 덮어쓰기를 막는다. */
 export function buildBackup(local: LocalData, remote: Backup | null, now: number): Backup {
   const funds = local.funds.map(({ name, url }) => ({ name, url }));
