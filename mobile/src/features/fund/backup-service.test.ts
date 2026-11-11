@@ -2,9 +2,15 @@ jest.mock('expo-secure-store', () => require('./__fixtures__/fake-storage').secu
 jest.mock('expo-file-system', () => require('./__fixtures__/fake-storage').fileSystemMock);
 const mockAuth: { user: { id: number } | null; hydrated: boolean } = { user: null, hydrated: true };
 jest.mock('@/features/auth/store', () => ({ useAuthStore: { getState: () => mockAuth } }));
-const mockGoogle = { email: 'me@gmail.com' as string | null, tokenCalls: 0 };
+const mockGoogle = {
+  email: 'me@gmail.com' as string | null,
+  tokenCalls: 0,
+  connectEmail: 'me@gmail.com' as string | null, // connect() 결과(null = 사용자가 취소)
+  failUpload: false,
+};
 jest.mock('./google-auth', () => ({
   isBackupConfigured: () => true,
+  connect: async () => mockGoogle.connectEmail,
   accessToken: async () => {
     mockGoogle.tokenCalls++;
     return 'TOKEN';
@@ -30,6 +36,7 @@ jest.mock('./drive-backup', () => {
     },
     uploadBackup: async (deps: { getAccessToken: () => Promise<string> }, json: string, name: string) => {
       await deps.getAccessToken();
+      if (mockGoogle.failUpload) throw actual.driveError('network', '업로드 실패(테스트)');
       mockDriveCalls.push(`put:${name}`);
       mockDrive.set(name, json);
     },
@@ -37,7 +44,7 @@ jest.mock('./drive-backup', () => {
 });
 
 import { resetFakeStorage, secureMem } from './__fixtures__/fake-storage';
-import { backupNow, hasRemoteBackup, maybeAutoBackup, restoreFromDrive } from './backup-service';
+import { backupNow, connectAndRestore, hasRemoteBackup, maybeAutoBackup, restoreFromDrive } from './backup-service';
 import { loadBackupState, parseBackupState, resetBackupState, saveBackupState } from './backup-state';
 import { isDriveError } from './drive-backup';
 import { loadFunds, saveFunds } from './fund-store';
@@ -54,6 +61,8 @@ beforeEach(async () => {
   mockDriveCalls.length = 0;
   mockGoogle.email = 'me@gmail.com';
   mockGoogle.tokenCalls = 0;
+  mockGoogle.connectEmail = 'me@gmail.com';
+  mockGoogle.failUpload = false;
   mockAuth.user = { id: 7 };
   mockAuth.hydrated = true;
   await saveBackupState({ connected: true, email: 'me@gmail.com' });
@@ -204,5 +213,56 @@ describe('백업 요약', () => {
     await saveBackupState({ summary: { funds: 1, points: 1, lastDate: '2026-11-10' } });
     await resetBackupState();
     expect((await loadBackupState()).summary).toBeNull();
+  });
+});
+
+describe('connectAndRestore(연결 → 바로 복원)', () => {
+  beforeEach(async () => {
+    await resetBackupState(); // 새 폰 = 연결 안 됨
+  });
+
+  it('취소하면 아무것도 바꾸지 않는다', async () => {
+    mockGoogle.connectEmail = null;
+    expect(await connectAndRestore(NOW)).toEqual({ status: 'cancelled' });
+    expect((await loadBackupState()).connected).toBe(false);
+    expect(mockDriveCalls).toEqual([]);
+  });
+
+  it('백업이 있으면 확인 없이 합치고 내 파일로 다시 올린다', async () => {
+    mockDrive.set('fund-backup-v1.json', backupOf(1, 2)); // 옛 파일만 있음
+    await saveFunds([]);
+    expect(await connectAndRestore(NOW)).toEqual({ status: 'restored', addedFunds: 2, skippedFunds: 0, mergedPoints: 0 });
+    expect((await loadFunds()).map((f) => f.url)).toEqual([url(1), url(2)]);
+    expect(mockDrive.has('fund-backup-v1-u7.json')).toBe(true);
+    const s = await loadBackupState();
+    expect(s).toMatchObject({ connected: true, email: 'me@gmail.com', lastBackupAt: NOW, lastError: '' });
+  });
+
+  it('백업이 없으면 첫 백업만 한다', async () => {
+    await saveFunds([{ id: 'a', name: 'A', url: url(1) }]);
+    expect(await connectAndRestore(NOW)).toEqual({ status: 'fresh' });
+    expect(JSON.parse(mockDrive.get('fund-backup-v1-u7.json')!).funds).toHaveLength(1);
+  });
+
+  it('Drive 파일을 읽을 수 없으면 연결만 유지하고 올리지 않는다', async () => {
+    mockDrive.set('fund-backup-v1-u7.json', '깨진 파일');
+    await saveFunds([]);
+    expect(await connectAndRestore(NOW)).toEqual({ status: 'invalid' });
+    expect(mockDriveCalls.some((c) => c.startsWith('put:'))).toBe(false);
+    expect((await loadBackupState()).connected).toBe(true);
+  });
+
+  it('복원 뒤 백업이 실패해도 복원 결과를 돌려주고 오류는 상태에 남긴다', async () => {
+    mockDrive.set('fund-backup-v1-u7.json', backupOf(1));
+    await saveFunds([]);
+    mockGoogle.failUpload = true;
+    expect(await connectAndRestore(NOW)).toMatchObject({ status: 'restored', addedFunds: 1 });
+    expect((await loadBackupState()).lastError).toBe('네트워크 문제로 백업하지 못했어요');
+  });
+
+  it('백업이 없는데 첫 백업이 실패하면 오류를 던진다', async () => {
+    await saveFunds([{ id: 'a', name: 'A', url: url(1) }]);
+    mockGoogle.failUpload = true;
+    await expect(connectAndRestore(NOW)).rejects.toThrow('업로드 실패(테스트)');
   });
 });
