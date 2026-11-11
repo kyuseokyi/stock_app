@@ -11,7 +11,9 @@ import { connectAndRestore } from '@/features/fund/backup-service';
 import { loadBackupState, type BackupState } from '@/features/fund/backup-state';
 import { backupRisk } from '@/features/fund/backup-risk';
 import { connectResultText, errorText } from '@/features/fund/backup-text';
+import { markBackupNoticeSeen, wasBackupNoticeSeen } from '@/features/fund/backup-notice';
 import { BackupRiskBanner } from '@/features/fund/components/backup-risk-banner';
+import { BackupNoticeSheet } from '@/features/fund/components/backup-notice-sheet';
 import { syncBackgroundTasks } from '@/features/fund/background/tasks';
 import { usePullRefresh } from '@/hooks/use-pull-refresh';
 import {
@@ -58,6 +60,8 @@ export default function FundListScreen() {
   // 배너용 백업 상태 — 백업 화면에서 돌아오면 바로 반영되게 포커스마다 다시 읽는다(계정별)
   const [backup, setBackup] = useState<{ uid: number; state: BackupState; now: number } | null>(null);
   const [restoring, setRestoring] = useState(false);
+  // 첫 펀드 등록 뒤 안내 — 그 계정일 때만. 푸시·가져오기 시트가 닫힌 뒤에 연다(겹치지 않게)
+  const [noticeUid, setNoticeUid] = useState<number | null>(null);
   const [legacy, setLegacy] = useState<{ uid: number; preview: LegacyImportPreview } | null>(null); // 옛 기기 펀드 가져오기 시트(그 계정일 때만)
   const legacyPreview = legacy !== null && legacy.uid === ownerId ? legacy.preview : null;
   const promptOpenRef = useRef(false); // 진입 경로와 첫 추가(0→1) 경로가 같은 시트를 두 번 열지 않게
@@ -167,6 +171,12 @@ export default function FundListScreen() {
         prompted: await wasPrompted(),
       });
       if (offer) setPromptOpen(true);
+      if (funds.length === 0 && next.length === 1 && isBackupConfigured()) {
+        const state = await loadBackupState(uid);
+        if (backupRisk(state, true, next.length, Date.now()) === 'disconnected' && !(await wasBackupNoticeSeen(uid))) {
+          setNoticeUid(uid);
+        }
+      }
     } catch (e) {
       if (isOwnerChangedError(e)) return; // 계정이 바뀜 — 새 계정 목록을 다시 읽는다
       setError(isFundError(e, 'input') ? e.message : '저장하지 못했어요. 다시 시도해 주세요.');
@@ -331,6 +341,19 @@ export default function FundListScreen() {
         </View>
       )}
       {promptOpen ? <PushPromptSheet onClose={() => setPromptOpen(false)} /> : null}
+      {noticeUid !== null && noticeUid === ownerId && !promptOpen && legacyPreview === null ? (
+        <BackupNoticeSheet
+          onClose={() => {
+            void markBackupNoticeSeen(noticeUid);
+            setNoticeUid(null);
+          }}
+          onConnect={() => {
+            void markBackupNoticeSeen(noticeUid);
+            setNoticeUid(null);
+            void handleRestore();
+          }}
+        />
+      ) : null}
       {legacyPreview !== null && !promptOpen ? (
         <LegacyImportSheet preview={legacyPreview} onClose={() => setLegacy(null)} onDone={handleLegacyDone} />
       ) : null}
