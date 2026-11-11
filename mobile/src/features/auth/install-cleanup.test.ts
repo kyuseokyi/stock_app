@@ -30,6 +30,7 @@ function seedLeftovers(): void {
   secureMem.set('fund_owners_v1', '[7,8]');
   secureMem.set('fund_list_v1_u7', '[]');
   secureMem.set('fund_backup_state_v1_u7', '{}');
+  secureMem.set('fund_backup_notice_seen_v1_u7', '1');
   secureMem.set('fund_list_v1_u8', '[]');
   secureMem.set('fund_backup_state_v1_u8', '{}');
 }

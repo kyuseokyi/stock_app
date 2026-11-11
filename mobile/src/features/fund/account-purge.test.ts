@@ -28,6 +28,7 @@ describe('purgeFundAccount(회원 탈퇴 성공 후)', () => {
   it('그 계정의 목록·캐시·기록·백업 상태·대기 파일을 지우고 Google 로그아웃 — 다른 계정은 그대로', async () => {
     await saveFunds([{ id: 'a', name: 'A', url: url(1) }]);
     secureMem.set('fund_backup_state_v1_u7', JSON.stringify({ connected: true, email: 'a@gmail.com' }));
+    secureMem.set('fund_backup_notice_seen_v1_u7', '1');
     fileMem.set('fund-cache-a.json', '{}');
     fileMem.set('fund-history-a.json', '{}');
     fileMem.set('fund-backup-pending-u7.json', '1');
