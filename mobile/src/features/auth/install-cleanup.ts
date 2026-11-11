@@ -10,6 +10,7 @@ import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
 
 import {
+  backupNoticeKey,
   backupStateKey,
   FUND_OWNERS_KEY,
   fundListKey,
@@ -122,7 +123,10 @@ export async function runInstallCleanup(over: Partial<InstallCleanupDeps> = {}):
     ok = false; // 계정별 키를 못 찾았다 — 고정 키는 지우되 다음 실행에 다시 시도
     d.log('소유자 목록 읽기 실패', e);
   }
-  const keys = [...FIXED_SECURE_KEYS, ...owners.flatMap((id) => [fundListKey(id), backupStateKey(id)])];
+  const keys = [
+    ...FIXED_SECURE_KEYS,
+    ...owners.flatMap((id) => [fundListKey(id), backupStateKey(id), backupNoticeKey(id)]),
+  ];
   const results = await Promise.allSettled(keys.map((k) => d.deleteKey(k)));
   const failed = results.filter((r) => r.status === 'rejected').length;
   if (failed > 0) {

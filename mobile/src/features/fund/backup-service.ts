@@ -3,7 +3,7 @@
 // 앱 계정 경계(2026-10-23): 작업 시작 때 소유자(uid)를 한 번 잡아 목록·상태·Drive 파일 이름을 끝까지 그 계정으로 쓴다.
 // Drive 호출 직전마다 지금 Google 로그인 이메일 = 이 계정 백업 상태 email 인지 확인 — 다르면 호출하지 않고 연결 안 됨.
 // 이메일을 확인할 수 없으면(null, 일시 상태) 연결은 그대로 두고 이번 작업만 건너뛴다('unverified').
-import { buildBackup, mergeBackup, newFundId, parseBackup, shouldAutoBackup } from './core';
+import { buildBackup, mergeBackup, newFundId, parseBackup, shouldAutoBackup, summarizeBackup } from './core';
 import { loadBackupState, saveBackupState } from './backup-state';
 import {
   accountBackupFile,
@@ -16,7 +16,7 @@ import {
   type DriveDeps,
 } from './drive-backup';
 import { loadFunds, saveFunds } from './fund-store';
-import { accessToken, currentGoogleEmail, isBackupConfigured } from './google-auth';
+import { accessToken, connect, currentGoogleEmail, isBackupConfigured } from './google-auth';
 import { loadAllHistories, writeHistories } from './history-store';
 import { currentOwnerId, currentOwnerIdOrNull } from './owner';
 
@@ -81,17 +81,19 @@ async function doBackup(uid: number, now: number): Promise<void> {
   const funds = await loadFunds(uid);
   const histories = await loadAllHistories(funds); // 못 읽으면 던진다 — 빈 기록으로 올리지 않는다
   const deps = await driveDepsFor(uid);
+  let uploaded: ReturnType<typeof buildBackup>;
   try {
     // 내 파일이 아직 없으면 옛 파일을 합치기 기준으로(옛 백업에만 있는 펀드·기록이 내 파일로 이어지게). 올리기는 항상 내 파일.
     const raw = await downloadMineOrLegacy(deps, uid);
     const remote = raw === null ? null : parseBackup(raw);
     // 파일은 있는데 읽을 수 없으면(깨짐·새 버전) 덮어쓰지 않는다
     if (raw !== null && remote === null) throw driveError('invalid', 'Drive 백업 파일을 읽을 수 없어요');
-    await uploadBackup(deps, JSON.stringify(buildBackup({ funds, histories }, remote, now)), accountBackupFile(uid));
+    uploaded = buildBackup({ funds, histories }, remote, now);
+    await uploadBackup(deps, JSON.stringify(uploaded), accountBackupFile(uid));
   } catch (e) {
     return recordFailure(uid, e);
   }
-  await saveBackupState({ lastBackupAt: now, lastError: '' }, uid);
+  await saveBackupState({ lastBackupAt: now, lastError: '', summary: summarizeBackup(uploaded) }, uid);
 }
 
 export type RestoreResult =
@@ -120,7 +122,34 @@ async function doRestore(uid: number): Promise<RestoreResult> {
   const r = mergeBackup({ funds, histories }, backup, newFundId);
   writeHistories(r.funds, r.histories); // 기록 먼저, 목록은 한 번에 저장
   await saveFunds(r.funds, uid);
+  await saveBackupState({ summary: summarizeBackup(backup) }, uid); // 지금 Drive 에 있는 내용
   return { status: 'ok', addedFunds: r.addedFunds, skippedFunds: r.skippedFunds, mergedPoints: r.mergedPoints };
+}
+
+export type ConnectResult =
+  | { status: 'cancelled' }
+  | { status: 'fresh' }
+  | { status: 'invalid' }
+  | { status: 'restored'; addedFunds: number; skippedFunds: number; mergedPoints: number };
+
+/**
+ * Google 연결 → Drive 에 백업이 있으면 묻지 않고 바로 합친다(합치기라 기기 기록이 사라지지 않는다 — 2026-11-11 설계).
+ * 합친 뒤 내 파일로 다시 올린다(옛 파일에서 복원해도 내 파일이 생긴다). 백업이 없으면 첫 백업.
+ * 복원 뒤 백업 실패는 상태(lastError)에만 남기고 복원 결과를 돌려준다. 첫 백업 실패는 던진다.
+ */
+export async function connectAndRestore(now = Date.now()): Promise<ConnectResult> {
+  const uid = currentOwnerId();
+  const email = await connect();
+  if (!email) return { status: 'cancelled' };
+  await saveBackupState({ connected: true, email, lastError: '' }, uid);
+  const r: RestoreResult = (await hasRemoteBackup()) ? await restoreFromDrive() : { status: 'none' };
+  if (r.status === 'invalid') return { status: 'invalid' };
+  if (r.status === 'none') {
+    await backupNow(now);
+    return { status: 'fresh' };
+  }
+  await backupNow(now).catch(() => {}); // recordFailure 가 lastError 에 남겼다
+  return { status: 'restored', addedFunds: r.addedFunds, skippedFunds: r.skippedFunds, mergedPoints: r.mergedPoints };
 }
 
 let running = false;

@@ -1,7 +1,8 @@
-// 회원 탈퇴 성공 뒤 그 계정의 펀드 데이터를 기기에서 지운다(2026-10-23 설계) — 목록·캐시·기록·백업 상태·대기 파일 + Google 로그아웃.
+// 회원 탈퇴 성공 뒤 그 계정의 펀드 데이터를 기기에서 지운다(2026-10-23 설계) — 목록·캐시·기록·백업 상태·안내 표시·대기 파일 + Google 로그아웃.
 // Google 로그아웃은 이 계정이 Google 을 연결한 적 있을 때만 — 연결 안 한 계정의 탈퇴가 다른 계정의 Drive 연결을 끊지 않게.
 // 탈퇴가 실패하면 부르지 않는다(호출부 delete-account-sheet 가 성공 뒤에만). 탈퇴 직후엔 이미 로그아웃이라 uid 를 받아 쓴다.
 import { pendingFileName, removeFile } from './background/backup-pending';
+import { deleteBackupNotice } from './backup-notice';
 import { deleteBackupState, loadBackupState } from './backup-state';
 import { deleteCache, deleteFundList, loadFunds } from './fund-store';
 import { disconnect } from './google-auth';
@@ -23,6 +24,7 @@ export async function purgeFundAccount(uid: number, deps = { disconnect }): Prom
     await deleteFundList(uid).catch(() => {});
   }
   await deleteBackupState(uid).catch(() => {});
+  await deleteBackupNotice(uid).catch(() => {});
   removeFile(pendingFileName(uid));
   if (funds) await forgetFundOwner(uid); // 키를 지운 뒤 소유자 목록에서 뺀다(iOS 재설치 정리 대상에서 제외)
   if (!email) return;

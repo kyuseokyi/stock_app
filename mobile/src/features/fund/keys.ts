@@ -6,6 +6,8 @@ import * as SecureStore from 'expo-secure-store';
 // SecureStore 키 허용 문자 [A-Za-z0-9._-] — 숫자 id 라 안전
 export const fundListKey = (uid: number): string => `fund_list_v1_u${uid}`;
 export const backupStateKey = (uid: number): string => `fund_backup_state_v1_u${uid}`;
+/** 첫 펀드 등록 뒤 "기록은 이 폰에만" 안내 시트를 본 적 있는지(값 '1') */
+export const backupNoticeKey = (uid: number): string => `fund_backup_notice_seen_v1_u${uid}`;
 /** 계정별 저장 전 옛 키(기기 공용) — 가져오기·버리기에서만 쓴다 */
 export const LEGACY_FUND_LIST_KEY = 'fund_list_v1';
 export const LEGACY_BACKUP_STATE_KEY = 'fund_backup_state_v1';

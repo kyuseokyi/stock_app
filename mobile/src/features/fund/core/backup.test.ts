@@ -1,4 +1,4 @@
-import { buildBackup, mergeBackup, parseBackup, shouldAutoBackup, type Backup, type LocalData } from './backup';
+import { buildBackup, mergeBackup, parseBackup, shouldAutoBackup, summarizeBackup, type Backup, type LocalData } from './backup';
 import { MAX_FUNDS } from './funds';
 import type { HistoryPoint } from './history';
 
@@ -92,5 +92,39 @@ describe('기본 속성 이름 계좌', () => {
       history: { [u(1)]: { hasOwnProperty: [pt('2026-10-01', 1)] } },
     });
     expect(parseBackup(raw)?.history[u(1)].hasOwnProperty).toEqual([pt('2026-10-01', 1)]);
+  });
+});
+
+describe('summarizeBackup', () => {
+  const sp = (date: string) => ({ date, value: 1, day: 1, month: 1, recordedAt: 1 });
+  const U1 = 'https://fund.ivyro.net/dataroom/om_data/s1.htm';
+  const U2 = 'https://fund.ivyro.net/dataroom/om_data/s2.htm';
+
+  it('빈 백업은 0건, 날짜 없음', () => {
+    expect(summarizeBackup({ v: 1, exportedAt: 0, funds: [], history: {} })).toEqual({ funds: 0, points: 0, lastDate: null });
+  });
+
+  it('모든 펀드·계좌의 기록 수를 더하고 가장 늦은 날짜를 고른다', () => {
+    const b = {
+      v: 1 as const,
+      exportedAt: 0,
+      funds: [
+        { name: 'A', url: U1 },
+        { name: 'B', url: U2 },
+      ],
+      history: {
+        [U1]: { 계좌1: [sp('2026-11-01'), sp('2026-11-03')], 계좌2: [sp('2026-11-02')] },
+        [U2]: { 계좌1: [sp('2026-11-10')] },
+      },
+    };
+    expect(summarizeBackup(b)).toEqual({ funds: 2, points: 4, lastDate: '2026-11-10' });
+  });
+
+  it('기록 없는 펀드도 펀드 수에는 센다', () => {
+    expect(summarizeBackup({ v: 1, exportedAt: 0, funds: [{ name: 'A', url: U1 }], history: {} })).toEqual({
+      funds: 1,
+      points: 0,
+      lastDate: null,
+    });
   });
 });
