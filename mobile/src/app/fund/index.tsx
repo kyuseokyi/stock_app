@@ -7,6 +7,13 @@ import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
 import { useAuthStore } from '@/features/auth/store';
 import { fundRefresher } from '@/features/fund/auto-refresh';
+import { connectAndRestore } from '@/features/fund/backup-service';
+import { loadBackupState, type BackupState } from '@/features/fund/backup-state';
+import { backupRisk } from '@/features/fund/backup-risk';
+import { connectResultText, errorText } from '@/features/fund/backup-text';
+import { markBackupNoticeSeen, wasBackupNoticeSeen } from '@/features/fund/backup-notice';
+import { BackupRiskBanner } from '@/features/fund/components/backup-risk-banner';
+import { BackupNoticeSheet } from '@/features/fund/components/backup-notice-sheet';
 import { syncBackgroundTasks } from '@/features/fund/background/tasks';
 import { usePullRefresh } from '@/hooks/use-pull-refresh';
 import {
@@ -50,6 +57,11 @@ export default function FundListScreen() {
   const status = useAutoRefreshStatus(fundRefresher);
   const [lines, setLines] = useState<Record<string, string>>({});
   const [promptOpen, setPromptOpen] = useState(false);
+  // 배너용 백업 상태 — 백업 화면에서 돌아오면 바로 반영되게 포커스마다 다시 읽는다(계정별)
+  const [backup, setBackup] = useState<{ uid: number; state: BackupState; now: number } | null>(null);
+  const [restoring, setRestoring] = useState(false);
+  // 첫 펀드 등록 뒤 안내 — 그 계정일 때만. 푸시·가져오기 시트가 닫힌 뒤에 연다(겹치지 않게)
+  const [noticeUid, setNoticeUid] = useState<number | null>(null);
   const [legacy, setLegacy] = useState<{ uid: number; preview: LegacyImportPreview } | null>(null); // 옛 기기 펀드 가져오기 시트(그 계정일 때만)
   const legacyPreview = legacy !== null && legacy.uid === ownerId ? legacy.preview : null;
   const promptOpenRef = useRef(false); // 진입 경로와 첫 추가(0→1) 경로가 같은 시트를 두 번 열지 않게
@@ -118,7 +130,26 @@ export default function FundListScreen() {
     }, [ownerId]),
   );
 
+  useFocusEffect(
+    useCallback(() => {
+      if (ownerId === null) return;
+      let alive = true;
+      const uid = ownerId;
+      void loadBackupState(uid).then((state) => {
+        if (alive) setBackup({ uid, state, now: Date.now() });
+      });
+      return () => {
+        alive = false;
+      };
+    }, [ownerId]),
+  );
+
   if (!user) return <Redirect href="/profile" />;
+
+  const risk =
+    backup !== null && backup.uid === ownerId && funds !== null
+      ? backupRisk(backup.state, isBackupConfigured(), funds.length, backup.now)
+      : 'none';
 
   const handleAdd = async () => {
     if (funds === null || data === null) return; // 저장된 목록을 읽기 전에 추가하면 목록을 덮어쓴다
@@ -140,15 +171,20 @@ export default function FundListScreen() {
         prompted: await wasPrompted(),
       });
       if (offer) setPromptOpen(true);
+      if (funds.length === 0 && next.length === 1 && isBackupConfigured()) {
+        const state = await loadBackupState(uid);
+        if (backupRisk(state, true, next.length, Date.now()) === 'disconnected' && !(await wasBackupNoticeSeen(uid))) {
+          setNoticeUid(uid);
+        }
+      }
     } catch (e) {
       if (isOwnerChangedError(e)) return; // 계정이 바뀜 — 새 계정 목록을 다시 읽는다
       setError(isFundError(e, 'input') ? e.message : '저장하지 못했어요. 다시 시도해 주세요.');
     }
   };
 
-  // 가져오기·버리기 후 — 목록 다시 읽기, 펀드 수가 바뀌었으니 정기 작업·푸시 등록 동기화
-  const handleLegacyDone = () => {
-    setLegacy(null);
+  // 목록이 바뀐 뒤(가져오기·버리기·복원) — 목록·백업 상태 다시 읽기, 펀드 수가 바뀌었으니 정기 작업·푸시 등록 동기화
+  const reloadAfterChange = () => {
     const uid = user.id;
     loadFunds(uid)
       .then((l) => {
@@ -156,8 +192,29 @@ export default function FundListScreen() {
         setLoadError('');
       })
       .catch(() => setLoadError('저장된 목록을 읽지 못했어요.'));
+    void loadBackupState(uid).then((state) => setBackup({ uid, state, now: Date.now() }));
     void syncBackgroundTasks();
     void syncPushRegistration();
+  };
+
+  const handleLegacyDone = () => {
+    setLegacy(null);
+    reloadAfterChange();
+  };
+
+  // 새 폰·재설치: Google 계정 선택 한 번으로 바로 복원(확인 창 없음 — 2026-11-11 설계)
+  const handleRestore = async () => {
+    if (restoring) return;
+    setRestoring(true);
+    try {
+      const text = connectResultText(await connectAndRestore());
+      if (text) showToast(text);
+    } catch (e) {
+      showToast(errorText(e));
+    } finally {
+      setRestoring(false);
+      reloadAfterChange();
+    }
   };
 
   const handleRemove = (f: FundEntry) => {
@@ -236,6 +293,13 @@ export default function FundListScreen() {
         <Button label="추가" onPress={handleAdd} disabled={funds === null || !url.trim()} />
       </Card>
 
+      <BackupRiskBanner
+        risk={risk}
+        lastBackupAt={backup?.state.lastBackupAt ?? null}
+        now={backup?.now ?? 0}
+        onPress={() => router.push('/fund/backup')}
+      />
+
       {funds === null && loadError ? (
         <Text style={styles.error}>{loadError}</Text>
       ) : funds === null ? (
@@ -249,7 +313,13 @@ export default function FundListScreen() {
             hint="fund.ivyro.net 에서 받은 내 펀드 현황 주소를 붙여 넣어 주세요."
           />
           {isBackupConfigured() ? (
-            <Button label="Google Drive에서 복원" variant="secondary" onPress={() => router.push('/fund/backup')} />
+            <Button
+              label="Google Drive에서 복원"
+              variant="secondary"
+              onPress={() => void handleRestore()}
+              loading={restoring}
+              disabled={restoring}
+            />
           ) : null}
         </View>
       ) : (
@@ -271,6 +341,19 @@ export default function FundListScreen() {
         </View>
       )}
       {promptOpen ? <PushPromptSheet onClose={() => setPromptOpen(false)} /> : null}
+      {noticeUid !== null && noticeUid === ownerId && !promptOpen && legacyPreview === null ? (
+        <BackupNoticeSheet
+          onClose={() => {
+            void markBackupNoticeSeen(noticeUid);
+            setNoticeUid(null);
+          }}
+          onConnect={() => {
+            void markBackupNoticeSeen(noticeUid);
+            setNoticeUid(null);
+            void handleRestore();
+          }}
+        />
+      ) : null}
       {legacyPreview !== null && !promptOpen ? (
         <LegacyImportSheet preview={legacyPreview} onClose={() => setLegacy(null)} onDone={handleLegacyDone} />
       ) : null}

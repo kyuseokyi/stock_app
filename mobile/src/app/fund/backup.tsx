@@ -4,22 +4,14 @@ import { Alert, ScrollView, Text, View } from 'react-native';
 import { StyleSheet } from 'react-native-unistyles';
 
 import { useAuthStore } from '@/features/auth/store';
-import { backupNow, hasRemoteBackup, restoreFromDrive, type RestoreResult } from '@/features/fund/backup-service';
-import { loadBackupState, resetBackupState, saveBackupState, type BackupState } from '@/features/fund/backup-state';
+import { backupNow, connectAndRestore, restoreFromDrive, type RestoreResult } from '@/features/fund/backup-service';
+import { loadBackupState, resetBackupState, type BackupState } from '@/features/fund/backup-state';
+import { connectResultText, errorText, summaryText } from '@/features/fund/backup-text';
 import { formatChecked } from '@/features/fund/core';
-import { isDriveError } from '@/features/fund/drive-backup';
-import { connect, disconnect, isBackupConfigured } from '@/features/fund/google-auth';
+import { disconnect, isBackupConfigured } from '@/features/fund/google-auth';
 import { Button, Card, ListState } from '@/ui';
 
 type Busy = '' | 'connect' | 'backup' | 'restore' | 'disconnect';
-
-function errorText(e: unknown): string {
-  if (isDriveError(e, 'auth')) return 'Google 연결이 끊겼어요. 다시 연결해 주세요.';
-  if (isDriveError(e, 'invalid')) return 'Drive 백업 파일을 읽을 수 없어요. 덮어쓰지 않았어요.';
-  if (isDriveError(e, 'network')) return '연결을 확인하고 다시 시도해 주세요.';
-  if (isDriveError(e, 'unverified')) return 'Google 계정을 확인하지 못했어요. 잠시 후 다시 시도해 주세요.';
-  return '처리하지 못했어요. 다시 시도해 주세요.';
-}
 
 function restoreText(r: RestoreResult): string {
   if (r.status === 'none') return '아직 백업이 없어요.';
@@ -88,21 +80,8 @@ export default function FundBackupScreen() {
 
   const onRestore = () => run('restore', async () => restoreText(await restoreFromDrive()));
 
-  const onConnect = () =>
-    run('connect', async () => {
-      const email = await connect();
-      if (!email) return '';
-      await saveBackupState({ connected: true, email, lastError: '' });
-      if (await hasRemoteBackup()) {
-        Alert.alert('이전 백업이 있어요', 'Drive 에 저장된 기록을 이 기기로 합칠까요?', [
-          { text: '나중에', style: 'cancel' },
-          { text: '복원', onPress: () => void onRestore() },
-        ]);
-        return '연결했어요.';
-      }
-      await backupNow();
-      return '연결했어요. 첫 백업을 마쳤어요.';
-    });
+  // 백업이 있으면 묻지 않고 바로 합친다(합치기라 기기 기록이 사라지지 않는다), 없으면 첫 백업
+  const onConnect = () => run('connect', async () => connectResultText(await connectAndRestore()));
 
   const onBackup = () =>
     run('backup', async () => {
@@ -131,12 +110,16 @@ export default function FundBackupScreen() {
       <Card>
         <Text style={styles.title}>Google Drive 백업</Text>
         <Text style={styles.line}>{state.connected ? state.email : '연결 안 됨'}</Text>
+        {state.summary ? <Text style={styles.sub}>{summaryText(state.summary)}</Text> : null}
         {state.lastBackupAt ? (
           <Text style={styles.sub}>마지막 백업 {formatChecked(state.lastBackupAt, now)}</Text>
         ) : null}
         {state.lastError ? <Text style={styles.error}>{state.lastError}</Text> : null}
         <Text style={styles.hint}>
-          기록은 내 Google Drive 의 앱 전용 공간에 저장돼요. Drive 목록에는 보이지 않고, 새 기록이 생기면 하루 한 번
+          기록은 이 폰에만 저장돼요. 백업하지 않고 앱을 지우거나 폰을 바꾸면 기록을 되살릴 수 없어요.
+        </Text>
+        <Text style={styles.hint}>
+          백업은 내 Google Drive 의 앱 전용 공간에 저장돼요. Drive 목록에는 보이지 않고, 새 기록이 생기면 하루 한 번
           자동으로 백업해요.
         </Text>
       </Card>
