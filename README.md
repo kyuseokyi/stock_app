@@ -270,6 +270,10 @@ npm run build:android:devapk  # → android/app/build/outputs/apk/release/app-re
 - 리포트 헤더의 차트 아이콘 → 수익 히스토리(당일 손익 막대 차트 — 기록 5건부터 + 목록). 펀드 목록 헤더의 구름 아이콘 → 기록 백업.
 - 백업은 사용자 본인 Google Drive 의 앱 전용 폴더(`appDataFolder`, Drive 목록에 안 보임)에 `fund-backup-v1.json` 하나.
   업로드는 항상 Drive 와 합친 뒤 올리고(재설치 직후 덮어쓰기 보호), 읽을 수 없는 Drive 파일은 덮어쓰지 않는다. 복원도 합치기(멱등). 기기에서 지운 펀드도 Drive 백업에는 남는다.
+- **사라짐 안내·1탭 복원(2026-11-11)**: 기록은 기기에만 있고 `allowBackup: false` 라 백업 없이 앱을 지우면 되살릴 수 없다.
+  펀드 목록에 백업 미연결·마지막 백업 7일 초과 배너, 첫 펀드 등록 뒤 계정마다 한 번 안내 시트(`fund_backup_notice_seen_v1_u<id>`).
+  빈 목록의 "Google Drive에서 복원"·백업 화면 [연결]은 계정 선택 뒤 확인 없이 바로 합치고 다시 올린다(`connectAndRestore`).
+  백업 화면에 Drive 백업 요약(펀드 수·기록 수·마지막 기록 날짜). 설계 `docs/superpowers/specs/2026-11-11-fund-backup-restore-ux-design.md`
 - **설정(최초 1회, Google Cloud Console)**
   1. 프로젝트 생성 → API 및 서비스 → **Google Drive API** 사용 설정
   2. OAuth 동의 화면: 외부 · 테스트 모드 · 테스트 사용자에 본인 계정 · 범위 `.../auth/drive.appdata`
