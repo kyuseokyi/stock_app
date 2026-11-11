@@ -65,7 +65,9 @@ export default function FundListScreen() {
   const [legacy, setLegacy] = useState<{ uid: number; preview: LegacyImportPreview } | null>(null); // 옛 기기 펀드 가져오기 시트(그 계정일 때만)
   const legacyPreview = legacy !== null && legacy.uid === ownerId ? legacy.preview : null;
   const promptOpenRef = useRef(false); // 진입 경로와 첫 추가(0→1) 경로가 같은 시트를 두 번 열지 않게
-  promptOpenRef.current = promptOpen;
+  useEffect(() => {
+    promptOpenRef.current = promptOpen; // 렌더 중 ref 대입 금지(react-hooks/refs) — 비동기 콜백에서만 읽는다
+  }, [promptOpen]);
   // 당겨서 새로고침: 등록된 펀드 리포트를 지금 바로 모두 다시 받는다(끝나면 status.version 이 바뀌어 목록 줄 갱신)
   const { refreshing, onRefresh } = usePullRefresh(() => fundRefresher.run({ force: true }));
 
