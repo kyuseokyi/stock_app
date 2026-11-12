@@ -22,7 +22,7 @@
 |---|---|---|---|
 | 백엔드 env | `backend/.env.development` | 호스트 `/opt/stock_app/env/.env.production` → 배포 때 `backend/.env.production` 으로 복사 | 상용 호스트의 같은 경로(파일 이름도 같다) |
 | compose 치환값(DB 비번·저장 경로) | — | `/opt/stock_app/env/compose.env` → 루트 `.env` 로 복사 | 상용 호스트의 같은 경로 |
-| 웹·어드민 주소 | `web_client/.env.development`, `admin_web/.env.development`(없으면 localhost) | `docker-compose.prod.yml` 빌드 인자 | 같은 파일 — **어드민 주소는 haezean 고정이라 상용 전에 분리 필요**(§4) |
+| 웹·어드민 주소 | `web_client/.env.development`, `admin_web/.env.development`(없으면 localhost) | `docker-compose.prod.yml` 빌드 인자 | 같은 파일 — 어드민 주소는 `ADMIN_*_URL` 치환(기본 haezean, 상용은 `deploy-prod.yml` 이 funnotedaily 로 넘김, §4) |
 | 웹 게스트 버튼 | vite dev 면 노출 | `deploy-web.yml` 이 `VITE_ENABLE_GUEST_LOGIN="true"` | `deploy-prod.yml` 이 `"false"` |
 | 모바일 env | `mobile/.env.development` (+`.local`) | 같은 파일 + `.env.development.local` 에 haezean 주소 | `mobile/.env.production` |
 | 모바일 빌드·OTA | `npm run start` | `build:android:devapk`, `ota:dev`(채널 `development`) | `build:android:prod`, `ota:prod`(채널 `production`) |
@@ -61,7 +61,7 @@
 | 위치 | 지금 | 할 일 |
 |---|---|---|
 | `mobile/.env.production` `EXPO_PUBLIC_*_URL` | haezean | funnotedaily 로 교체(preview 빌드도 이 파일을 쓴다) |
-| `docker-compose.prod.yml` `admin_web` 빌드 인자 `VITE_*` | haezean 고정 | `${…}` 로 바꾸고 개발은 `deploy-web.yml`, 상용은 `deploy-prod.yml` 이 값을 넘기게(게스트 버튼과 같은 방식) |
+| `docker-compose.prod.yml` `admin_web` 빌드 인자 `VITE_*` | `${ADMIN_*_URL:-haezean}` (2026-11-12) | ✅ 완료 — `deploy-prod.yml` 이 `ADMIN_API_BASE_URL`·`ADMIN_AUTH_BASE_URL`·`ADMIN_STOCK_API_URL`·`ADMIN_GAME_API_URL` 을 funnotedaily 로 넘긴다. 서버에서 손으로 빌드할 때는 같은 4개를 `compose.env` 에 넣는다 |
 | `web_client` 빌드 인자 | 같은 도메인 프록시(`/_api/…`) | 바꿀 것 없음 — 웹은 자기 도메인으로만 요청 |
 | 상용 `.env.production` | — | §3 의 상용 값 |
 | `backend/shared/cors.py` 기본 목록 | haezean 만 | 코드 변경 없이 상용 서버 `CORS_ORIGINS` 로 추가 |
