@@ -60,23 +60,31 @@ export default function PrivacyPage() {
       </PolicySection>
 
       <PolicySection title="5. 처리 위탁과 국외 이전">
-        <p>서비스 운영을 위해 아래 업체의 서비스를 이용합니다.</p>
+        <p>
+          서비스 운영을 위해 아래 업체에 개인정보 처리를 맡기며, 서버가 해외에 있어 개인정보가 국외로 이전됩니다. 이전은 서비스
+          이용 중 네트워크를 통해 수시로 이루어지고, 보유 기간은 회원 탈퇴 또는 위탁 계약 종료 시까지입니다.
+        </p>
         <ul>
           <li>
-            <strong>Oracle Cloud</strong> — 서버 운영과 데이터 보관
+            <strong>Oracle Corporation — 일본(도쿄 리전)</strong>: 서버 운영과 데이터 보관. 이전 항목은 1번의 회원 정보와 서비스
+            이용 중 생기는 정보 전부입니다. 연락처 oracle.com/legal/privacy
           </li>
           <li>
-            <strong>Cloudflare, Inc.(미국)</strong> — 접속 경로 보호와 트래픽 중계
+            <strong>Cloudflare, Inc. — 미국 등 전 세계 네트워크</strong>: 접속 경로 보호와 트래픽 중계(통신 내용이 지나가며
+            저장하지 않음). 연락처 cloudflare.com/privacypolicy
           </li>
           <li>
-            <strong>Expo(650 Industries, Inc., 미국)·Google Firebase Cloud Messaging(미국)</strong> — 푸시 알림 발송(푸시 알림
-            토큰, 알림 내용). 알림을 켠 경우에만 해당하며, 알림 발송 시 네트워크로 전송됩니다.
+            <strong>650 Industries, Inc.(Expo)·Google LLC(Firebase Cloud Messaging) — 미국</strong>: 푸시 알림 발송. 이전 항목은
+            푸시 알림 토큰과 알림 내용이며, 알림을 켠 경우에만 해당합니다. 연락처 expo.dev/privacy, policies.google.com/privacy
           </li>
           <li>
-            <strong>카카오·네이버</strong> — 간편 로그인 인증
+            <strong>카카오·네이버 — 대한민국</strong>: 간편 로그인 인증
           </li>
         </ul>
-        <p>국외 이전을 원하지 않으면 앱에서 알림을 끄거나 회원 탈퇴를 할 수 있습니다.</p>
+        <p>
+          국외 이전을 원하지 않으면 회원 탈퇴로 이전을 멈출 수 있습니다. 다만 서버가 해외에 있어 회원 서비스(로그인, 댓글, 게임)는
+          이용할 수 없게 됩니다. 알림 관련 이전은 앱에서 알림을 끄면 멈춥니다.
+        </p>
       </PolicySection>
 
       <PolicySection title="6. 이용자의 권리와 행사 방법">
