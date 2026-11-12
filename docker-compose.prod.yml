@@ -208,10 +208,11 @@ services:
     build:
       context: ./admin_web
       args:
-        VITE_API_BASE_URL: https://blog.haezean.com/api/v1
-        VITE_AUTH_BASE_URL: https://auth.haezean.com/api/v1
-        VITE_STOCK_API_URL: https://api.haezean.com/graphql
-        VITE_GAME_API_URL: https://game.haezean.com
+        # 서버별 주소 — 값이 없으면 개발 서버(haezean). 상용은 deploy-prod.yml 이 funnotedaily 로 넘긴다(docs/deploy/environments.md §4)
+        VITE_API_BASE_URL: ${ADMIN_API_BASE_URL:-https://blog.haezean.com/api/v1}
+        VITE_AUTH_BASE_URL: ${ADMIN_AUTH_BASE_URL:-https://auth.haezean.com/api/v1}
+        VITE_STOCK_API_URL: ${ADMIN_STOCK_API_URL:-https://api.haezean.com/graphql}
+        VITE_GAME_API_URL: ${ADMIN_GAME_API_URL:-https://game.haezean.com}
     container_name: stock_admin_web
     ports:
       - "3001:3000"
