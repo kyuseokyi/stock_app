@@ -35,6 +35,7 @@ export default function MyPage() {
           </Button>
         </Card>
         <LoginModal open={loginOpen} onClose={() => setLoginOpen(false)} />
+        <PolicyLinks />
       </div>
     )
   }
@@ -67,6 +68,17 @@ export default function MyPage() {
         </Button>
       </div>
       {deleteOpen && <DeleteAccountModal onClose={() => setDeleteOpen(false)} onDeleted={handleDeleted} />}
+      <PolicyLinks />
     </div>
+  )
+}
+
+// 공개 정책 문서 — 로그인 여부와 상관없이 내정보 맨 아래에서 찾을 수 있게(스토어 심사가 위치를 본다)
+function PolicyLinks() {
+  return (
+    <nav aria-label="정책" className="mt-8 flex justify-center gap-4 text-xs text-ink-muted">
+      <Link to="/privacy" className="inline-flex min-h-11 items-center hover:text-ink">개인정보처리방침</Link>
+      <Link to="/account-deletion" className="inline-flex min-h-11 items-center hover:text-ink">계정 삭제 안내</Link>
+    </nav>
   )
 }

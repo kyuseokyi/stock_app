@@ -23,6 +23,8 @@ const PatternsTab = lazy(() => import('./pages/screener/PatternsTab'))
 const StockDetailPage = lazy(() => import('./pages/StockDetailPage'))
 const FundListPage = lazy(() => import('./pages/FundListPage'))
 const FundReportPage = lazy(() => import('./pages/FundReportPage'))
+const PrivacyPage = lazy(() => import('./pages/PrivacyPage'))
+const AccountDeletionPage = lazy(() => import('./pages/AccountDeletionPage'))
 
 export default function App() {
   return (
@@ -86,6 +88,17 @@ export default function App() {
           </Suspense>
         } />
         <Route path="auth/complete" element={<AuthCompletePage />} />
+        {/* 공개 정책 문서 — 로그인 없이 열리고, 스토어·소셜 검수와 앱 내정보 링크가 이 주소를 쓴다 */}
+        <Route path="privacy" element={
+          <Suspense fallback={<p className="py-16 text-center text-ink-muted">불러오는 중…</p>}>
+            <PrivacyPage />
+          </Suspense>
+        } />
+        <Route path="account-deletion" element={
+          <Suspense fallback={<p className="py-16 text-center text-ink-muted">불러오는 중…</p>}>
+            <AccountDeletionPage />
+          </Suspense>
+        } />
         <Route path="*" element={<NotFoundPage />} />
       </Route>
     </Routes>
