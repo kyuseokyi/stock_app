@@ -10,6 +10,7 @@ import { socialErrorMessage } from '@/features/auth/return-url';
 import { startSocialLogin } from '@/features/auth/social';
 import { SocialButton } from '@/features/auth/social-button';
 import { useAuthStore } from '@/features/auth/store';
+import { PolicyLinks } from '@/features/legal/policy-links';
 import { PostNoticeRow } from '@/features/push/post-notice-row';
 import { usePullRefresh } from '@/hooks/use-pull-refresh';
 import { ENV } from '@/lib/env';
@@ -146,6 +147,7 @@ export default function ProfileScreen() {
         {deleteOpen ? (
           <DeleteAccountSheet onClose={() => setDeleteOpen(false)} onDeleted={handleDeleted} />
         ) : null}
+        <PolicyLinks />
       </ScrollView>
     );
   }
@@ -190,6 +192,7 @@ export default function ProfileScreen() {
           <Button label="시작하기" loading={submitting} onPress={handleLogin} />
         </View>
       ) : null}
+      <PolicyLinks />
     </ScrollView>
   );
 }
