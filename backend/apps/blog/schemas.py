@@ -16,7 +16,7 @@ class BoardBase(BaseModel):
     name: str = Field(..., max_length=100, description="게시판 이름")
     order_index: int = Field(0, description="정렬 순서")
     is_active: bool = Field(True, description="활성 여부")
-    comments_enabled: bool = Field(True, description="댓글 허용 여부")
+    comments_enabled: bool = Field(False, description="댓글 허용 여부(새 게시판은 꺼짐)")
     min_role_required: UserRole = Field(
         UserRole.FREE, description="접근 최소 권한"
     )
@@ -107,3 +107,7 @@ class CommentOut(BaseModel):
     content: str
     created_at: datetime
     updated_at: datetime
+    # 신고 누적으로 가려진 댓글이면 true(관리자 외에는 content="", author_name=null 로 내려간다)
+    hidden: bool = False
+    # 요청자의 댓글이면 true(익명이면 항상 false)
+    is_mine: bool = False
