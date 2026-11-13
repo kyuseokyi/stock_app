@@ -4,9 +4,11 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from shared.models import UserRole
+
+from .terms import terms_required as _terms_required
 
 
 class LoginRequest(BaseModel):
@@ -34,6 +36,36 @@ class UserOut(BaseModel):
     email: str | None
     nickname: str | None
     role: UserRole
+    # 약관 (재)동의 필요 여부 — 기본값 없이 항상 계산(누락 시 조용히 false 가 되어 게이트가 무력화되지 않게)
+    terms_required: bool
+
+    @model_validator(mode="before")
+    @classmethod
+    def _fill_terms_required(cls, data):
+        """ORM User 등 속성 객체가 오면 terms_required 를 계산해 채운다(dict 입력은 그대로)."""
+        if isinstance(data, dict) or not hasattr(data, "terms_version"):
+            return data
+        return {
+            "id": data.id,
+            "email": data.email,
+            "nickname": data.nickname,
+            "role": data.role,
+            "terms_required": _terms_required(data),
+        }
+
+
+class TermsAgreeRequest(BaseModel):
+    """약관 동의 — 클라이언트가 보여 준 약관 버전. 서버 현재 버전과 다르면 409 TERMS_VERSION_MISMATCH."""
+
+    version: str = Field(..., max_length=20, description="동의한 약관 버전(예 2026-11-13)")
+
+
+class ReviewLoginRequest(BaseModel):
+    """심사 전용 로그인 — REVIEW_LOGIN_EMAILS 에 있는 이메일만. admin 플랫폼은 받지 않는다."""
+
+    email: str = Field(..., max_length=255)
+    password: str = Field(..., max_length=200)
+    platform: Literal["app", "web"] = Field("app", description="로그인 플랫폼")
 
 
 class TokenResponse(BaseModel):

@@ -16,7 +16,8 @@ from shared.security import verify_password
 from .. import schemas
 from ..deps import get_redis
 from ..guest_gate import require_guest_enabled
-from ..services import account_deletion, refresh_tokens
+from ..review_gate import require_review_login_enabled
+from ..services import account_deletion, refresh_tokens, review_login, terms_consent
 from ..services.session_login import issue_login_token
 from ..social.config import SocialSettings, get_social_settings
 from ..social.providers import get_http_transport
@@ -103,6 +104,28 @@ async def guest_login(
     return schemas.token_response(tokens, user)
 
 
+@router.post(
+    "/review-login",
+    response_model=schemas.TokenResponse,
+    dependencies=[Depends(require_review_login_enabled)],  # REVIEW_LOGIN_EMAILS 게이트(비면 404)
+)
+async def review_login_route(
+    payload: schemas.ReviewLoginRequest,
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+    redis=Depends(get_redis),
+):
+    """스토어 심사 전용 로그인 — 허용 목록 이메일 + 비밀번호. 관리자 계정은 받지 않는다(401)."""
+    no_store(response)
+    try:
+        tokens, user = await review_login.review_login(
+            db, redis, payload.email, payload.password, payload.platform
+        )
+    except review_login.ReviewLoginError as e:
+        raise HTTPException(e.status_code, e.message, headers=NO_STORE) from e
+    return schemas.token_response(tokens, user)
+
+
 @router.post("/refresh", response_model=schemas.TokenResponse)
 async def refresh(
     payload: schemas.RefreshRequest,
@@ -139,6 +162,21 @@ async def logout(
 @router.get("/me", response_model=schemas.UserOut)
 async def me(user: User = Depends(get_current_user)):
     return user
+
+
+@router.post("/me/terms", response_model=schemas.UserOut)
+async def agree_terms(
+    payload: schemas.TermsAgreeRequest,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """이용약관 동의 — body {"version": 현재 버전}. 다르면 409 TERMS_VERSION_MISMATCH(오래된 클라이언트). 멱등."""
+    try:
+        return await terms_consent.agree_terms(db, user, payload.version)
+    except terms_consent.TermsError as e:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, detail={"code": e.code, "message": e.message}
+        ) from e
 
 
 @router.delete("/me", status_code=status.HTTP_204_NO_CONTENT)
