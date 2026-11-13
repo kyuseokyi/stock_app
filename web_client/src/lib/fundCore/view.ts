@@ -1,6 +1,7 @@
 // 리포트 화면 모델(B안 정렬 그리드 카드) — 표시 포맷을 여기서 한 번만 적용하고 웹·앱은 그리기만 한다.
 // 원본 값은 raw 로 남겨 title(툴팁)에 쓴다. web_client/src/lib/fundCore 와 동일.
 // 규칙: docs/superpowers/specs/fund-report-design/README.md "표시 포맷 규칙"
+import { isoOfEvalDate, type DisclosureDay } from './disclosure';
 import type { Account, FundReport, Link, Pair } from './types';
 
 export type Tone = 'up' | 'down' | 'zero' | '';
@@ -14,6 +15,8 @@ export type AccountView = {
   rows: ViewRow[];
   details: ViewRow[]; // CODE·그룹 구분코드 — 접어서
   memo: { title: string; lines: string[] } | null;
+  // 펀드공시에서 리포트 기준일과 같은 날의 값 — 첫 섹션 '총 계' 카드에만(core/disclosure.ts)
+  disclosure: { rows: ViewRow[]; note: { label: string; text: string } | null } | null;
 };
 export type NoticeView = { label: string; message: string; signals: string; links: Link[] };
 export type AccountsView = {
@@ -34,6 +37,8 @@ const DAY_KEYS = ['경과일수'];
 const HERO_KEYS = ['현재평가금', '수익측정가치'];
 const SUMMARY_KEYS = ['총 손익금', '누적수익율'];
 const SINCE_KEY = '초기화/시작일';
+const TOTAL_NAME = '총계'; // 공백을 빼고 비교
+const DISCLOSURE_ANNUAL = '당일 연환산 수익율'; // '율' — isSigned/isToned 가 +부호·색을 붙인다
 const MINUS = '−';
 
 const RE_INT = /^₩?-?[\d,]+$/;
@@ -102,13 +107,24 @@ function accountView(a: Account): AccountView {
       .map(row),
     details: pairs.filter(([k]) => CODE_KEYS.includes(k)).map(row),
     memo: a.remarkText,
+    disclosure: null,
   };
 }
 
-/** 파싱된 리포트 → 화면 모델(포맷 적용·링크 필터 완료) */
-export function toReportView(report: FundReport): ReportView {
+function disclosureView(d: DisclosureDay): NonNullable<AccountView['disclosure']> {
+  return {
+    rows: [row([DISCLOSURE_ANNUAL, d.annual])],
+    note: d.note ? { label: '장중 거래내용', text: d.note } : null,
+  };
+}
+
+/** 파싱된 리포트 → 화면 모델(포맷 적용·링크 필터 완료). day: 같은 날짜의 펀드공시(없으면 생략) */
+export function toReportView(report: FundReport, day?: DisclosureDay | null): ReportView {
   const n = report.notice;
   const firstEval = report.sections.find((s) => s.kind === 'accounts' && s.evalDate);
+  const firstAccounts = report.sections.find((s) => s.kind === 'accounts');
+  // 기준일이 공시 날짜와 같을 때만(늦게 갱신된 공시·다른 날 값은 안 붙인다)
+  const dayOk = !!day && firstEval?.kind === 'accounts' && isoOfEvalDate(firstEval.evalDate) === day.date;
   return {
     title: report.title,
     evalDate: firstEval?.kind === 'accounts' ? fmtDate(firstEval.evalDate) : '',
@@ -128,7 +144,11 @@ export function toReportView(report: FundReport): ReportView {
             title: s.title,
             group: s.group,
             evalDate: fmtDate(s.evalDate),
-            accounts: s.accounts.map(accountView),
+            accounts: s.accounts.map((a) => {
+              const v = accountView(a);
+              if (dayOk && day && s === firstAccounts && a.name.replace(/\s/g, '') === TOTAL_NAME) v.disclosure = disclosureView(day);
+              return v;
+            }),
             notes: s.notes.map((nb) => ({
               title: nb.title,
               items: nb.items.map((segs) => segs.map(([t]) => t).join('')),

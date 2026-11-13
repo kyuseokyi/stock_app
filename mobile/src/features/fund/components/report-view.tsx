@@ -2,18 +2,18 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Linking } from 'react-native';
 import { WebView, type WebViewMessageEvent } from 'react-native-webview';
 
-import { toReportView, type FundReport } from '../core';
+import { toReportView, type DisclosureDay, type FundReport } from '../core';
 import { REPORT_HTML, toReportScript, type PageMessage, type ReportColors } from '../report-web/report-page';
 
 const SOURCE = { html: REPORT_HTML }; // 모듈 상수 — 렌더마다 새 객체면 WebView 가 다시 로드된다
 
-type Props = { report: FundReport; colors: ReportColors };
+type Props = { report: FundReport; day?: DisclosureDay | null; colors: ReportColors };
 
 /** 리포트 페이지(WebView). 준비 신호를 받으면 화면 모델(toReportView)을 넣고, 이후 데이터·색이 바뀔 때마다 다시 넣는다. */
-export function ReportView({ report, colors }: Props) {
+export function ReportView({ report, day = null, colors }: Props) {
   const ref = useRef<WebView>(null);
   const [ready, setReady] = useState(false);
-  const view = useMemo(() => toReportView(report), [report]); // 표시 포맷은 core 에서 한 번만
+  const view = useMemo(() => toReportView(report, day), [report, day]); // 표시 포맷은 core 에서 한 번만
   const latest = useRef({ view, colors });
   latest.current = { view, colors };
 

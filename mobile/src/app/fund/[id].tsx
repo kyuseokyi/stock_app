@@ -13,9 +13,11 @@ import {
   evalDateOf,
   formatChecked,
   formatValue,
+  useDisclosureDay,
   useFundReport,
   type FundEntry,
 } from '@/features/fund/core';
+import { disclosureSource } from '@/features/fund/disclosure-source';
 import { fileCache, loadFunds, renameFundAs } from '@/features/fund/fund-store';
 import { recordFetched } from '@/features/fund/record';
 import { reportColors } from '@/features/fund/report-colors';
@@ -49,6 +51,7 @@ export default function FundReportScreen() {
   }, [id, ownerId]);
 
   const { entry, refreshing, error, refresh, reload } = useFundReport(fund ?? null, fileCache);
+  const day = useDisclosureDay(entry?.report ?? null, disclosureSource); // 같은 날짜의 펀드공시(총 계 카드)
   const colors = useMemo(() => reportColors(theme.colors), [theme.colors]);
 
   // 새로 가져오기에 성공한 회차만 기록(캐시만 보일 때·실패했을 때는 기록하지 않음). 같은 날짜는 덮어쓴다.
@@ -170,7 +173,7 @@ export default function FundReportScreen() {
       {entry.missing.length > 0 ? (
         <Banner text="일부 항목이 빠졌을 수 있어요." action="원본 열기" onAction={openSource} />
       ) : null}
-      <ReportView report={entry.report} colors={colors} />
+      <ReportView report={entry.report} day={day} colors={colors} />
     </View>
   );
 }

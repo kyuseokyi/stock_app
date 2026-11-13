@@ -69,6 +69,9 @@ a.link { color:var(--accent); font-weight:600; font-size:14px; text-decoration:n
 .b-name { display:flex; justify-content:space-between; align-items:baseline; gap:8px; margin-bottom:10px; }
 .b-name b { font-size:16px; }
 .b-name span { color:var(--text-2); font-size:12px; white-space:nowrap; }
+.dnote { padding:9px 0; border-top:1px solid var(--line); }
+.dnote .k { color:var(--text-2); font-size:14px; }
+.dnote p { margin:4px 0 0; font-size:14px; white-space:normal; }
 .step-title { font-weight:700; font-size:14px; padding:14px 0 9px; border-top:1px solid var(--line); color:var(--accent); }
 `;
 /** 히스토리 페이지가 같은 토큰·줄 스타일을 쓴다 */
@@ -134,6 +137,11 @@ const PAGE_SCRIPT = String.raw`
       }
     }
     a.rows.forEach(function (r) { g.appendChild(kvRow(r)); });
+    // 펀드공시(같은 날짜) — 거래내용은 긴 문장이라 값 칸(오른쪽 정렬·줄바꿈 없음)이 아닌 아래 줄에 펼친다
+    if (a.disclosure) {
+      a.disclosure.rows.forEach(function (r) { g.appendChild(kvRow(r)); });
+      if (a.disclosure.note) g.appendChild(h('div', 'dnote', [h('div', 'k', [a.disclosure.note.label]), h('p', '', [a.disclosure.note.text])]));
+    }
     return h('div', 'card', [
       h('div', 'b-name', [h('b', '', [a.name]), a.since ? h('span', 'num', [a.since + ' 시작']) : null]),
       g,

@@ -171,6 +171,40 @@ describe('toReportView — 링크·대표값 없음', () => {
   });
 });
 
+describe('toReportView — 펀드공시(총 계 카드)', () => {
+  const base = fixture('current');
+  const acc = (name: string) => ({ name, values: [['현재평가금', '100'] as [string, string]], remarks: [], remarkText: null });
+  const sec = (title: string, names: string[]) => ({
+    kind: 'accounts' as const, title, evalDate: '2026년 11월 12일', group: '', accounts: names.map(acc), notes: [],
+  });
+  const report = { ...base, sections: [sec('펀드 현황', ['총 계', '나']), sec('지원', ['총 계'])] };
+  const day = { date: '2026-11-12', annual: '52.7599%', note: '반등신호 건드림' };
+  const discl = (v: ReturnType<typeof toReportView>) =>
+    v.sections.flatMap((s) => (s.kind === 'accounts' ? s.accounts.map((a) => a.disclosure) : []));
+
+  it('첫 섹션의 총 계 카드에만 당일 연환산(+부호·색)과 장중 거래내용을 붙인다', () => {
+    const [first, ...rest] = discl(toReportView(report, day));
+    expect(first).toEqual({
+      rows: [{ label: '당일 연환산 수익율', value: { text: '+52.76', unit: '%', tone: 'up', raw: '52.7599%' } }],
+      note: { label: '장중 거래내용', text: '반등신호 건드림' },
+    });
+    expect(rest).toEqual([null, null]);
+  });
+
+  it('공시가 없으면(실패·날짜 없음) 붙이지 않는다', () => {
+    expect(discl(toReportView(report))).toEqual([null, null, null]);
+    expect(discl(toReportView(report, null))).toEqual([null, null, null]);
+  });
+
+  it('장중 거래내용이 비면 연환산 줄만', () => {
+    expect(discl(toReportView(report, { ...day, note: '' }))[0]).toMatchObject({ note: null });
+  });
+
+  it('공시 날짜가 리포트 기준일과 다르면 붙이지 않는다', () => {
+    expect(discl(toReportView(report, { ...day, date: '2026-11-11' }))[0]).toBeNull();
+  });
+});
+
 describe('parseAmount', () => {
   it('원본 금액 문자열 → 숫자', () => {
     expect(parseAmount('₩12,345,000')).toBe(12345000);
