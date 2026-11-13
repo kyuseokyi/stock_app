@@ -58,6 +58,10 @@ export default function MyPage() {
           <span>💰 내 펀드 수익</span>
           <span className="text-ink-muted">›</span>
         </Link>
+        <Link to="/me/blocks" className="flex items-center justify-between border-t border-line px-5 py-4 text-ink hover:bg-line">
+          <span>🚫 차단한 사용자</span>
+          <span className="text-ink-muted">›</span>
+        </Link>
       </Card>
 
       <div className="mt-6 flex gap-2">

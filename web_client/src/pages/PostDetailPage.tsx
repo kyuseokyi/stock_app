@@ -1,6 +1,8 @@
-import { type FormEvent, useEffect, useState } from 'react'
+import { type FormEvent, useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { createComment, getBlog, listComments } from '../api/blog'
+import CommentMenuModal from '../components/CommentMenuModal'
+import { commentErrorMessage, commentMenu, commentView, errorParts } from '../lib/commentActions'
 import { useBoardStore } from '../store/boards'
 import { useAuthStore } from '../store/auth'
 import { withErrorCode } from '../lib/errorCode'
@@ -10,7 +12,6 @@ import Card from '../components/ui/Card'
 import AdSlot from '../components/ads/AdSlot'
 import { useAdConfig } from '../hooks/useAdConfig'
 import Button from '../components/ui/Button'
-import type { AxiosError } from 'axios'
 import type { BlogOut, CommentOut } from '../types/api'
 import { useDocumentTitle } from '../hooks/useDocumentTitle'
 
@@ -28,6 +29,7 @@ export default function PostDetailPage() {
   const [submitting, setSubmitting] = useState(false)
   const [commentError, setCommentError] = useState('')
   const [loginOpen, setLoginOpen] = useState(false)
+  const [menuFor, setMenuFor] = useState<CommentOut | null>(null) // ⋯ 메뉴를 연 댓글
   const ads = useAdConfig()
 
   useEffect(() => {
@@ -41,6 +43,22 @@ export default function PostDetailPage() {
       .finally(() => setLoading(false))
   }, [id])
 
+  // 신고·차단·삭제 뒤 목록 새로고침(서버가 신고·차단한 댓글을 빼고 준다) — 실패는 조용히(기존 목록 유지)
+  const reloadComments = useCallback(() => {
+    listComments(id)
+      .then(setComments)
+      .catch(() => {})
+  }, [id])
+
+  // 로그인·로그아웃으로 사용자가 바뀌면 댓글을 다시 받는다(is_mine·차단 반영이 사용자마다 다름). 첫 렌더는 위 effect 가 받음.
+  const userId = user?.id ?? null
+  const prevUserId = useRef(userId)
+  useEffect(() => {
+    if (prevUserId.current === userId) return
+    prevUserId.current = userId
+    reloadComments()
+  }, [userId, reloadComments])
+
   const submitComment = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     const text = content.trim()
@@ -49,17 +67,12 @@ export default function PostDetailPage() {
     setCommentError('')
     try {
       const created = await createComment(id, text)
-      setComments((prev) => [...prev, created])
+      setComments((prev) => [...prev, { ...created, is_mine: true }]) // 방금 내가 쓴 댓글
       setContent('')
     } catch (err) {
-      const status = (err as AxiosError).response?.status
-      if (status === 401) {
-        setCommentError('로그인이 만료됐어요. 다시 로그인해 주세요.')
-      } else if (status === 403) {
-        setCommentError('이 게시판은 댓글을 받지 않아요.')
-      } else {
-        setCommentError('댓글을 등록하지 못했어요. 잠시 후 다시 시도해 주세요.')
-      }
+      // 403 은 코드별(COMMENT_BANNED·TERMS_REQUIRED), 코드 없으면 기존 "댓글을 받지 않아요"
+      const { status, body } = errorParts(err)
+      setCommentError(commentErrorMessage('submit', status, body))
     } finally {
       setSubmitting(false)
     }
@@ -70,6 +83,8 @@ export default function PostDetailPage() {
 
   const board = boards.find((b) => b.id === post.board_id)
   const commentsEnabled = board?.comments_enabled ?? true
+  // 열린 ⋯ 메뉴의 항목(로그아웃되면 'login' 이 돼 모달이 닫힌다)
+  const openMenu = menuFor ? commentMenu(menuFor, Boolean(user)) : null
 
   return (
     <div>
@@ -105,17 +120,41 @@ export default function PostDetailPage() {
           {comments.length === 0 ? (
             <li className="py-4 text-center text-sm text-ink-muted">아직 댓글이 없어요.</li>
           ) : (
-            comments.map((c) => (
-              <li key={c.id} className="rounded-field bg-canvas px-4 py-3">
-                <p className="text-sm font-medium text-ink">
-                  {c.author_name || '익명'}
-                  <span className="ml-2 text-xs font-normal text-ink-muted">
-                    {formatKstShort(c.created_at)}
-                  </span>
-                </p>
-                <p className="mt-1 text-sm text-ink">{c.content}</p>
-              </li>
-            ))
+            comments.map((c) => {
+              const view = commentView(c, '익명')
+              if (view.hidden) {
+                return (
+                  <li key={c.id} className="rounded-field bg-canvas px-4 py-3 text-sm text-ink-muted">
+                    {view.text}
+                  </li>
+                )
+              }
+              const menu = commentMenu(c, Boolean(user))
+              return (
+                <li key={c.id} className="rounded-field bg-canvas px-4 py-3">
+                  <div className="flex items-start gap-2">
+                    <p className="min-w-0 flex-1 text-sm font-medium text-ink">
+                      {view.author}
+                      <span className="ml-2 text-xs font-normal text-ink-muted">
+                        {formatKstShort(c.created_at)}
+                      </span>
+                    </p>
+                    {menu.kind !== 'none' && (
+                      <button
+                        type="button"
+                        onClick={() => (menu.kind === 'login' ? setLoginOpen(true) : setMenuFor(c))}
+                        aria-label="댓글 메뉴"
+                        aria-haspopup="dialog"
+                        className="-my-2 -mr-2 flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-ink-muted hover:bg-fill hover:text-ink"
+                      >
+                        <span aria-hidden className="text-base font-bold leading-none">⋯</span>
+                      </button>
+                    )}
+                  </div>
+                  <p className="mt-1 text-sm text-ink">{view.text}</p>
+                </li>
+              )
+            })
           )}
         </ul>
 
@@ -157,6 +196,14 @@ export default function PostDetailPage() {
       </Card>
 
       <LoginModal open={loginOpen} onClose={() => setLoginOpen(false)} />
+      {menuFor && openMenu?.kind === 'actions' && (
+        <CommentMenuModal
+          comment={menuFor}
+          actions={openMenu.actions}
+          onClose={() => setMenuFor(null)}
+          onChanged={reloadComments}
+        />
+      )}
     </div>
   )
 }

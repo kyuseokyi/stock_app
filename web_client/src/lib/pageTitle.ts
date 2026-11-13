@@ -35,7 +35,7 @@ export function titleFor(pathname: string, boardName: (id: number) => string): s
     case 'stock':
       return withBrand('종목 상세')
     case 'me':
-      return withBrand(sub === 'funds' ? '내 펀드' : '내 정보')
+      return withBrand(sub === 'funds' ? '내 펀드' : sub === 'blocks' ? '차단한 사용자' : '내 정보')
     case 'auth':
       return BRAND
     case 'privacy':

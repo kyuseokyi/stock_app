@@ -1,3 +1,4 @@
+import { normalizeSources } from './newsSources'
 import type {
   DoubleBuyItem,
   FlowItem,
@@ -63,6 +64,7 @@ export function normalizeMorningBrief(raw: unknown): MorningBrief | null {
     bearishSectors: list(b.bearish_sectors, sectorNote),
     macroCheckpoints: arr(b.macro_checkpoints).map(str).filter(Boolean),
     createdAt: strOrNull(b.created_at),
+    sources: normalizeSources(b.sources),
   }
 }
 
@@ -81,6 +83,7 @@ const mover = (x: Obj): Mover | null => {
     category: strOrNull(x.category),
     reliability: (RELIABILITY as string[]).includes(rel) ? (rel as Reliability) : null,
     riskWarning: strOrNull(x.risk_warning),
+    sources: normalizeSources(x.sources),
   }
 }
 

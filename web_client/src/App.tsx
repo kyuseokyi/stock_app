@@ -23,6 +23,7 @@ const PatternsTab = lazy(() => import('./pages/screener/PatternsTab'))
 const StockDetailPage = lazy(() => import('./pages/StockDetailPage'))
 const FundListPage = lazy(() => import('./pages/FundListPage'))
 const FundReportPage = lazy(() => import('./pages/FundReportPage'))
+const BlockedUsersPage = lazy(() => import('./pages/BlockedUsersPage'))
 const PrivacyPage = lazy(() => import('./pages/PrivacyPage'))
 const AccountDeletionPage = lazy(() => import('./pages/AccountDeletionPage'))
 const TermsPage = lazy(() => import('./pages/TermsPage'))
@@ -44,6 +45,11 @@ export default function App() {
         <Route path="me/funds/:id" element={
           <Suspense fallback={<p className="py-16 text-center text-ink-muted">불러오는 중…</p>}>
             <FundReportPage />
+          </Suspense>
+        } />
+        <Route path="me/blocks" element={
+          <Suspense fallback={<p className="py-16 text-center text-ink-muted">불러오는 중…</p>}>
+            <BlockedUsersPage />
           </Suspense>
         } />
         <Route path="boards/:boardId" element={<PostListPage />} />
