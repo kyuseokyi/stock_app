@@ -1,6 +1,6 @@
 import axios from 'axios'
 import { create } from 'zustand'
-import { deleteAccount as deleteAccountApi, fetchMe, guestLogin } from '../api/auth'
+import { agreeTerms as agreeTermsApi, deleteAccount as deleteAccountApi, fetchMe, guestLogin } from '../api/auth'
 import type { TokenResponse, UserOut } from '../types/api'
 import { showToast } from './toast'
 
@@ -56,6 +56,8 @@ interface AuthState {
   validateSession: (force?: boolean) => Promise<void>
   /** 회원 탈퇴(DELETE /auth/me) 성공 시 로그아웃. 실패는 그대로 throw(401 이면 로그아웃 후 throw) */
   deleteAccount: () => Promise<void>
+  /** 현재 약관 동의(POST /auth/me/terms) → user 갱신. 실패는 throw(401 이면 세션 종료 후 throw) */
+  agreeTerms: () => Promise<void>
 }
 
 // 로그인 전역 상태. 게스트(닉네임)·간편 로그인(카카오·네이버) 모두 같은 키에 토큰+유저를 저장한다.
@@ -104,6 +106,22 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
         get().expireSession(token, reasonFromBody(e.response.data))
       }
       // 네트워크 오류·5xx 는 무시(오프라인에서 로그아웃시키지 않음)
+    }
+  },
+
+  agreeTerms: async () => {
+    const { token } = get()
+    if (!token) return
+    try {
+      const user = await agreeTermsApi(token)
+      if (get().token !== token) return // 요청 중 로그아웃·재로그인됨
+      localStorage.setItem(USER_KEY, JSON.stringify(user))
+      set({ user })
+    } catch (e) {
+      if (axios.isAxiosError(e) && e.response?.status === 401) {
+        get().expireSession(token, reasonFromBody(e.response.data))
+      }
+      throw e
     }
   },
 
