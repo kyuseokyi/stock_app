@@ -1,25 +1,26 @@
 # Stock App 로드맵 & 진행 현황
 
-> 최종 업데이트: 2026-11-09
+> 최종 업데이트: 2026-11-13
 
 한국투자증권 API 기반 주식 데이터 파이프라인 + 블로그/커뮤니티 + 관리자/유저 웹/모바일 풀스택 모노레포의 진행 현황과 향후 단계.
 
 ---
 
-## 🧭 지금 순서 (2026-11-09)
+## 🧭 지금 순서 (2026-11-13)
 
-현재 배포된 서버(haezean)는 **개발 서버**다. 상용 서버는 아래 4번에서 새로 만든다.
+배포된 서버(haezean)는 **개발 서버**, 상용 서버(funnotedaily, 오라클 도쿄)는 구축·설정 완료(2026-11-10~12). 다음 목표는 **스토어 출시** — 전체 목록은 [`deploy/store-release.md`](deploy/store-release.md).
 
-1. **스크리너 마무리** — 연기금 10일 연속 매집 프리셋(종목별 연기금 이력 수집 필요), 고배당주 프리셋, 숨긴 조건검색·패턴 탭 공개
-2. ~~**광고 웹·앱 하우스 배너**~~ — 완료(2026-11-09). 웹 홈·글 목록·글 상세, 앱 홈·커뮤니티·글 상세. 스크리너 하단 슬롯은 미연결
-3. **상용 전 확인** — 아래 "사용자 작업"과 [`pending_checks.md`](pending_checks.md)
-4. **상용 서버 구축** — [`deploy/prod-release.md`](deploy/prod-release.md) 순서대로, 네이버 검수 포함
-5. **광고 Phase 2·3** — AdSense·AdMob(상용 도메인·앱과 계정 필요)
-6. **애플 로그인** — iOS 출시 직전
+1. **지금(사용자)** — Google Play 개인 개발자 계정 → `com.stockapp` 앱 생성(이름 확보) → 테스터 15~20명 모집. 개인 계정은 **테스터 12명·14일 연속 비공개 테스트**를 거쳐야 프로덕션 신청 가능 — 가장 오래 걸리므로 먼저 시작
+2. **코드 1차(Android 비공개 테스트용)** — 권한 정리(`SYSTEM_ALERT_WINDOW` 차단) → 고객지원 `/support` → `funnotedaily.com` 루트 리다이렉트 → 이용약관 `/terms`·첫 로그인 동의 → 심사 전용 로그인 → 앱 내 "정보 제공 전용" 고지. 이후 상용 웹 배포(처리방침·계정 삭제 안내 포함)
+3. **상용 데이터** — KIS 상용 키 → 관리자 '초기 데이터 준비' → `PROD_DEPLOY_ENABLED=true` + 첫 `release/v1.0.0`
+4. **Android 비공개 테스트** — EAS production 정식 빌드(서명 키 백업) → Play 앱 서명 키 SHA-1을 Google OAuth(Drive 백업)에 등록 → 콘텐츠 선언·스토어 자산 → 비공개 트랙 업로드
+5. **코드 2차** — 댓글 신고·차단·어드민 신고 처리·댓글 기본값 끄기(댓글은 이 기능 배포 후에만 켬), 닉네임 금칙어, AI 요약 원 기사 출처
+6. **iOS** — Apple Developer 가입 → **애플 로그인**(4.8, 확정 반려 사유) → Privacy Manifest·암호화 선언·iPad 여부·Google iOS 스킴 → TestFlight
+7. **출시 직전** — 네이버 로그인 검수(회원이름 체크 해제), 광고 Phase 2·3(AdSense·AdMob)
+
+**결정 대기**: iPad 지원(끄기 추천), 약관 동의 시점(첫 로그인 추천), 회원 전용 게시판 계획 여부(`min_role_required` 는 지금 알림 대상 선정에만 쓰임)
 
 **사용자 작업(코드 변경 없음)**: 시즌 1기 정산 결과 확인, Swarm 무중단 전환, 초기 데이터 준비 첫 실행, 장중 지수 실측(Task 4), 새 글 알림 기기 확인, 게시판 추가·샘플 글 정리
-
-**결정 대기**: 회원 전용 게시판 계획 여부. 지금 `min_role_required` 는 알림 대상 선정에만 쓰여, 만들려면 글 목록·조회에 권한을 적용해야 한다.
 
 **보류**: 미국 개별 주식·CANSLIM, 지인 리그, 앱 차트 드로잉, 네이버 증권 크롤링
 
@@ -75,6 +76,17 @@
 - [x] **테마·업종 순위 유지 + 기준일 표시** — 하루 1회(20:30) 갱신. 장중 5분 갱신은 만들지 않기로 결정
 - [x] **수익 히스토리 빠진 기록 문구** — "M.D 이후 기록 없음". 평일 공휴일은 구분하지 못한다
 - [x] **웹 게스트 로그인 빌드 인자 서버별 분리** — 기본 숨김, 개발은 `deploy-web.yml` 이 켜고 상용은 `deploy-prod.yml` 이 끈다
+
+### 상용 서버·출시 준비 (2026-11-10~13)
+- [x] **상용 서버 구축** — 오라클 Always Free(도쿄), Cloudflare 터널 `funnotedaily.com` 6개 서브도메인, 컨테이너 12개
+- [x] **GitHub 배포 분리** — 개발 러너 `dev` 라벨·상용 러너 `prod`, 외부 PR 워크플로 승인 필수, 토큰 읽기 전용, Environment `production`(승인자·`release/v*`+`main`)
+- [x] **상용 비밀값 교체** — JWT·관리자·PostgreSQL/ClickHouse 비밀번호, `compose.env` 신설, DB 포트 외부 차단 확인
+- [x] **상용 어드민 API 주소 분리** — `ADMIN_*_URL` 치환(기본 haezean), 상용 어드민 로그인 확인
+- [x] **카카오·네이버 상용 로그인** — 상용 앱 새로 등록, 실로그인 확인(네이버 검수는 출시 직전)
+- [x] **상용 외부 키** — 네이버 검색(별도 앱), Gemini(별도 프로젝트), KRX
+- [x] **개인정보처리방침·계정 삭제 안내** — 웹 `/privacy`·`/account-deletion`, 웹·앱 내정보 링크, 국외 이전(도쿄) 명시. 문의 `support@funnotedaily.com`(Cloudflare 메일 라우팅)
+- [x] **상용 앱 env** — `mobile/.env.production` funnotedaily 주소, 상용 APK(테스트 서명) 빌드 검증
+- [x] **스토어 출시 요건 조사** — Google Play·Apple 원문 대조 → [`deploy/store-release.md`](deploy/store-release.md)
 
 ### 문서
 - [x] 기능별 설계 스펙(`docs/superpowers/specs/`)
@@ -239,6 +251,7 @@
 - **AI 시장 분석 및 글로벌 시황 기획: `docs/ai_market_analyst_plan.md`**
 - **트레이딩 게임 마스터 기획: `docs/trading_game_plan.md`**
 - 상용 배포 절차: `docs/deploy/prod-release.md`
+- **스토어 출시 체크리스트(Google Play·Apple): `docs/deploy/store-release.md`**
 - 아키텍처: `docs/architecture_plan.md`
 - 스크리너 기획: `docs/screener_plan.md`
 - 기능별 프롬프트: `docs/prompts/`
