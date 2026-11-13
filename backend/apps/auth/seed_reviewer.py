@@ -20,6 +20,7 @@ import sys
 from sqlalchemy import select
 
 from shared.models import User, UserRole
+from shared.nickname_filter import safe_nickname
 from shared.security import hash_password
 
 NICKNAME = "App Review"
@@ -57,7 +58,7 @@ async def seed(email: str, password: str, session_factory=None) -> str:
         if user is None:
             user = User(
                 email=email,
-                nickname=NICKNAME,
+                nickname=safe_nickname(NICKNAME),  # 금칙어 검사(R2) — 상수라 그대로 통과
                 role=UserRole.FREE,
                 is_active=True,
                 password_hash=hash_password(password),

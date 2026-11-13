@@ -6,13 +6,13 @@
 from __future__ import annotations
 
 import logging
-import secrets
 
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from shared.models import AuthProvider, User, UserRole
+from shared.nickname_filter import safe_nickname
 
 from .pkce import verifier_matches
 from .providers import Provider, ProviderError, ProviderProfile
@@ -43,9 +43,8 @@ class ExchangeError(Exception):
 
 
 def normalize_nickname(raw: str | None) -> str:
-    """공급자 닉네임 → 앞뒤 공백 제거·최대 100자, 없으면 '유저' + 4자리 난수."""
-    nickname = (raw or "").strip()[:NICKNAME_MAX]
-    return nickname or f"유저{secrets.randbelow(10000):04d}"
+    """공급자 닉네임 → 앞뒤 공백 제거·최대 100자, 없거나 금칙어(shared.nickname_filter)면 '유저' + 4자리 난수."""
+    return safe_nickname(raw, max_len=NICKNAME_MAX)
 
 
 async def find_or_create_user(
