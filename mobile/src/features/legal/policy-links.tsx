@@ -4,12 +4,17 @@ import { StyleSheet } from 'react-native-unistyles';
 
 // 정책 문서는 상용 웹 한 곳에만 둔다(web_client /privacy·/account-deletion) — 개발 앱도 같은 공식 문서를 연다.
 // 스토어·소셜 검수에 낸 주소와 같아야 하므로 바꿀 때 함께 바꾼다.
-export const PRIVACY_URL = 'https://app.funnotedaily.com/privacy';
-export const ACCOUNT_DELETION_URL = 'https://app.funnotedaily.com/account-deletion';
+const WEB = 'https://app.funnotedaily.com';
+export const TERMS_URL = `${WEB}/terms`;
+export const PRIVACY_URL = `${WEB}/privacy`;
+export const ACCOUNT_DELETION_URL = `${WEB}/account-deletion`;
+export const SUPPORT_URL = `${WEB}/support`;
 
 const LINKS = [
+  { label: '이용약관', url: TERMS_URL },
   { label: '개인정보처리방침', url: PRIVACY_URL },
   { label: '계정 삭제 안내', url: ACCOUNT_DELETION_URL },
+  { label: '고객지원', url: SUPPORT_URL },
 ] as const;
 
 export function PolicyLinks() {
@@ -30,7 +35,13 @@ export function PolicyLinks() {
 }
 
 const styles = StyleSheet.create((theme) => ({
-  row: { flexDirection: 'row', justifyContent: 'center', gap: theme.gap(2), marginTop: theme.gap(2) },
+  row: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    columnGap: theme.gap(2),
+    marginTop: theme.gap(2),
+  },
   link: { minHeight: 44, justifyContent: 'center' },
   label: { fontSize: 12, color: theme.colors.textSecondary },
 }));

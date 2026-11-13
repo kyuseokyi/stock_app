@@ -42,6 +42,10 @@ export function titleFor(pathname: string, boardName: (id: number) => string): s
       return withBrand('개인정보처리방침')
     case 'account-deletion':
       return withBrand('계정 삭제 안내')
+    case 'terms':
+      return withBrand('이용약관')
+    case 'support':
+      return withBrand('고객지원')
     default:
       return withBrand('페이지를 찾을 수 없어요') // App 의 404(NotFoundPage)와 같은 경로
   }
