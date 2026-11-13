@@ -731,6 +731,7 @@ cd backend && uv run --with pykrx python -m apps.collector.verify.spot_check --n
 - **DB 접속(DataGrip/DBeaver, 개발서버 터널 포함): `docs/db_access.md`**
 - 아키텍처: `docs/architecture_plan.md`
 - FunNote 로고·브랜드 색(키트·아이콘·사용 안내): `docs/brand/logo/`
+- 주식·시장 데이터 수집 전체 정리(원천·일정·파이프라인·저장소·운영 주의): `docs/data-collection.md`
 - AMS 참고 분석: `docs/ams-reference/`
 - 기능별 프롬프트: `docs/prompts/`
 - **배포(미니PC + Cloudflare Tunnel + GitHub Actions)**:
