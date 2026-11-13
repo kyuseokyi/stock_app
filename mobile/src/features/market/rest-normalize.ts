@@ -1,5 +1,7 @@
 // REST 응답 정규화 — 순수 함수(네트워크·RN 의존 없음, 테스트 대상).
 // 필드 누락·null·잘못된 타입을 막아 화면이 항상 같은 모양을 받게 한다. 숫자는 유한한 값만 통과.
+import { normalizeSources } from '@/features/ai-sources/sources';
+
 import type {
   DoubleBuyItem,
   FlowItem,
@@ -66,6 +68,7 @@ export function normalizeMorningBrief(raw: unknown): MorningBrief | null {
     bearishSectors: list(b.bearish_sectors, sectorNote),
     macroCheckpoints: arr(b.macro_checkpoints).map(str).filter(Boolean),
     createdAt: strOrNull(b.created_at),
+    sources: normalizeSources(b.sources),
   };
 }
 
@@ -84,6 +87,7 @@ const mover = (x: Obj): Mover | null => {
     category: strOrNull(x.category),
     reliability: (RELIABILITY as string[]).includes(rel) ? (rel as Reliability) : null,
     riskWarning: strOrNull(x.risk_warning),
+    sources: normalizeSources(x.sources),
   };
 };
 

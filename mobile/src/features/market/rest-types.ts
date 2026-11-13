@@ -1,5 +1,6 @@
 // stock_api REST(/api/v1/market/*) 응답 타입 — 정규화(rest-normalize.ts)를 거친 뒤의 모양.
 // 서버는 장애·키 없음에도 200 + 빈 값을 주므로 화면은 "비었음"만 처리하면 된다.
+import type { NewsSource } from '@/features/ai-sources/sources';
 
 export interface SectorNote {
   sector: string;
@@ -16,6 +17,8 @@ export interface MorningBrief {
   bearishSectors: SectorNote[];
   macroCheckpoints: string[];
   createdAt: string | null;
+  /** 근거 기사(최대 3, 없으면 []) */
+  sources: NewsSource[];
 }
 
 export type Reliability = '상' | '중' | '하';
@@ -30,6 +33,8 @@ export interface Mover {
   category: string | null;
   reliability: Reliability | null;
   riskWarning: string | null;
+  /** 근거 기사(최대 3, 없으면 []) */
+  sources: NewsSource[];
 }
 
 export interface HotKeyword {

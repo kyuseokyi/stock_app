@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { StyleSheet } from 'react-native-unistyles';
 
+import { NewsSources } from '@/features/ai-sources/news-sources';
 import { formatPrice } from '@/features/game/lib/format';
 import { Chip } from '@/ui';
 
@@ -49,29 +50,33 @@ function MoverRow({ rank, item, onPress }: { rank: number; item: Mover; onPress:
     item.riskWarning ? `주의 ${item.riskWarning}` : '',
   ].filter(Boolean).join(', ');
   return (
-    <Pressable style={styles.row} onPress={onPress} accessibilityRole="button" accessibilityLabel={label} accessibilityHint="종목 상세 보기">
-      <View style={styles.line}>
-        <Text style={styles.rank}>{rank}</Text>
-        <Text style={styles.name} numberOfLines={1}>{item.stockName}</Text>
-        {item.price != null ? <Text style={styles.price}>{formatPrice(item.price)}원</Text> : null}
-        <Text style={[styles.chg, styles[toneOf(item.changeRate)]]}>{formatChg(item.changeRate)}</Text>
-      </View>
-      {item.reasonSummary ? (
-        <View style={[styles.indent, weak && styles.weak]}>
-          <Text style={styles.reason}>
-            <Text style={styles.ai}>AI </Text>
-            {item.reasonSummary}
-          </Text>
+    <View>
+      <Pressable style={styles.row} onPress={onPress} accessibilityRole="button" accessibilityLabel={label} accessibilityHint="종목 상세 보기">
+        <View style={styles.line}>
+          <Text style={styles.rank}>{rank}</Text>
+          <Text style={styles.name} numberOfLines={1}>{item.stockName}</Text>
+          {item.price != null ? <Text style={styles.price}>{formatPrice(item.price)}원</Text> : null}
+          <Text style={[styles.chg, styles[toneOf(item.changeRate)]]}>{formatChg(item.changeRate)}</Text>
         </View>
-      ) : null}
-      {item.category || weak || item.riskWarning ? (
-        <View style={[styles.indent, styles.tags]}>
-          {item.category ? <Text style={styles.tag}>{item.category}</Text> : null}
-          {weak ? <Text style={styles.check}>확인 필요</Text> : null}
-          {item.riskWarning ? <Text style={styles.warn} numberOfLines={2}>⚠ {item.riskWarning}</Text> : null}
-        </View>
-      ) : null}
-    </Pressable>
+        {item.reasonSummary ? (
+          <View style={[styles.indent, weak && styles.weak]}>
+            <Text style={styles.reason}>
+              <Text style={styles.ai}>AI </Text>
+              {item.reasonSummary}
+            </Text>
+          </View>
+        ) : null}
+        {item.category || weak || item.riskWarning ? (
+          <View style={[styles.indent, styles.tags]}>
+            {item.category ? <Text style={styles.tag}>{item.category}</Text> : null}
+            {weak ? <Text style={styles.check}>확인 필요</Text> : null}
+            {item.riskWarning ? <Text style={styles.warn} numberOfLines={2}>⚠ {item.riskWarning}</Text> : null}
+          </View>
+        ) : null}
+      </Pressable>
+      {/* 근거 기사 — 행(Pressable) 밖 형제(종목 상세 이동과 겹치지 않게) */}
+      <NewsSources sources={item.sources} style={[styles.indent, styles.sources]} />
+    </View>
   );
 }
 
@@ -89,6 +94,7 @@ const styles = StyleSheet.create((theme) => ({
   down: { color: theme.colors.down },
   flat: { color: theme.colors.text },
   indent: { marginLeft: 28 },
+  sources: { marginTop: -theme.gap(0.5), marginBottom: theme.gap(0.5) },
   weak: { opacity: 0.55 },
   reason: {
     alignSelf: 'flex-start', fontSize: 13, lineHeight: 19, color: theme.colors.text, backgroundColor: theme.colors.fill,

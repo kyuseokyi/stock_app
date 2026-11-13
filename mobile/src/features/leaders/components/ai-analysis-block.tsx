@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
+import { NewsSources } from '@/features/ai-sources/news-sources';
 import { BottomSheet } from '@/ui';
 
 import { redFlagBadge, type BadgeTone, type ScreenerAnalysis } from '../ai-analysis';
@@ -77,6 +78,8 @@ export function AiAnalysisBlock({ analysis }: { analysis: ScreenerAnalysis }) {
               )}
             </View>
           ) : null}
+          {/* 근거 기사 — 시트 안이라 열기 전에 시트를 닫는다(iOS 에서 Modal 위로 브라우저가 안 뜨는 문제 방지) */}
+          <NewsSources sources={analysis.sources} onBeforeOpen={() => setOpen(false)} />
           <Text style={styles.caption}>
             {analysis.date ? `${analysis.date} 기준 · ` : ''}AI 분석은 참고용이에요. 투자 권유가 아니에요.
           </Text>
