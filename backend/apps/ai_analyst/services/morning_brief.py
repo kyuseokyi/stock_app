@@ -14,6 +14,7 @@ from apps.ai_analyst import prompts, repository
 from apps.ai_analyst.clients.gemini_client import get_gemini_client
 from apps.ai_analyst.clients.naver_news import get_naver_news_client
 from apps.ai_analyst.schemas import MorningBriefingResponse
+from apps.ai_analyst.sources import news_sources
 
 log = logging.getLogger(__name__)
 
@@ -129,13 +130,15 @@ def generate(day: date, *, session: Session, force: bool = False, weekly: bool =
         return None
     macro = brief_macro(ov.get("macro") or [])
 
-    prompt = (prompts.weekly_brief_prompt if weekly else prompts.morning_brief_prompt)(indices, macro, _us_news())
+    us_news = _us_news()
+    prompt = (prompts.weekly_brief_prompt if weekly else prompts.morning_brief_prompt)(indices, macro, us_news)
     resp = gemini.generate_json(prompt, MorningBriefingResponse, system=prompts.SYSTEM_PROMPT)
     if resp is None:
         return None
     resp = resp.model_copy(update={"headline": resp.headline[:HEADLINE_MAX]})
     try:
-        repository.upsert_briefing(session, day, resp)
+        # 근거 기사는 LLM 이 아니라 프롬프트에 넣은 뉴스로 채운다(R3)
+        repository.upsert_briefing(session, day, resp, sources=news_sources(us_news))
     except Exception as exc:  # noqa: BLE001 — PG 저장 실패는 결과 없음으로
         log.warning("모닝 브리핑 저장 실패(%s)", type(exc).__name__)
         session.rollback()

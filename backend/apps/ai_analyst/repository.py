@@ -40,8 +40,10 @@ def _row_dict(row, fields: tuple[str, ...]) -> dict:
     return out
 
 
-def upsert_briefing(session: Session, day: date, data: MorningBriefingResponse) -> None:
-    values = {"date": day, **data.model_dump(include=set(_BRIEF_FIELDS))}
+def upsert_briefing(session: Session, day: date, data: MorningBriefingResponse,
+                    sources: list[dict] | None = None) -> None:
+    """sources 는 LLM 응답이 아니라 서비스가 넣은 뉴스로 만든 근거 기사 목록(없으면 [])."""
+    values = {"date": day, **data.model_dump(include=set(_BRIEF_FIELDS)), "sources": list(sources or [])}
     _upsert(session, AiDailyBriefing, values, ["date"])
 
 
@@ -50,11 +52,16 @@ def get_briefing(session: Session, day: date) -> dict | None:
     row = session.scalars(
         select(AiDailyBriefing).where(AiDailyBriefing.date <= day).order_by(AiDailyBriefing.date.desc()).limit(1)
     ).first()
-    return _row_dict(row, _BRIEF_FIELDS) if row else None
+    if row is None:
+        return None
+    out = _row_dict(row, _BRIEF_FIELDS)
+    out["sources"] = row.sources or []  # 옛 행(NULL) 호환
+    return out
 
 
-def upsert_evaluation(session: Session, day: date, data: ScreenerQualitativeResponse) -> None:
-    values = {"date": day, **data.model_dump(include=set(_EVAL_FIELDS))}
+def upsert_evaluation(session: Session, day: date, data: ScreenerQualitativeResponse,
+                      sources: list[dict] | None = None) -> None:
+    values = {"date": day, **data.model_dump(include=set(_EVAL_FIELDS)), "sources": list(sources or [])}
     _upsert(session, AiStockEvaluation, values, ["ticker", "date"])
 
 
@@ -67,6 +74,7 @@ def get_latest_evaluation(session: Session, ticker: str) -> dict | None:
         return None
     out = _row_dict(row, _EVAL_FIELDS)
     out["red_flags"] = out["red_flags"] or []
+    out["sources"] = row.sources or []  # 옛 행(NULL) 호환
     return out
 
 

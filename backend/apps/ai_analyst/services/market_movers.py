@@ -19,6 +19,7 @@ from apps.ai_analyst import cache, prompts
 from apps.ai_analyst.clients.gemini_client import get_gemini_client
 from apps.ai_analyst.clients.naver_news import get_naver_news_client, mover_query, theme_query
 from apps.ai_analyst.schemas import HotKeywordsResponse, MarketMoversResponse, Mover, MoverReasonsResponse
+from apps.ai_analyst.sources import news_sources
 from apps.collector.intraday_indices import KST
 from apps.collector.kis.ranking import fetch_fluctuation
 from shared import market_calendar
@@ -121,7 +122,10 @@ def _to_mover(r: dict, reason: dict | None) -> dict:
               change_rate=r["change_rate"])
     if reason is not None:
         m = m.model_copy(update={f: reason.get(f) for f in REASON_FIELDS})
-    return m.model_dump()
+    out = m.model_dump()
+    if reason is not None:
+        out["sources"] = list(reason.get("sources") or [])  # 옛 원인 캐시(sources 없음)는 []
+    return out
 
 
 def _reasons(gemini, gainers, losers, news_by_ticker) -> dict:
@@ -148,8 +152,11 @@ def _load_reasons(day: str) -> dict:
     return raw["items"]
 
 
-def _save_reasons(now_kst: datetime, gainers: list[dict], losers: list[dict], reasons: dict) -> None:
-    """새 원인을 같은 날 원인에 덮어 합친다. Gemini 가 빠뜨린 종목은 직전 원인 유지, 실패({})면 아무것도 바꾸지 않는다."""
+def _save_reasons(now_kst: datetime, gainers: list[dict], losers: list[dict], reasons: dict,
+                  news_by_ticker: dict | None = None) -> None:
+    """새 원인을 같은 날 원인에 덮어 합친다. Gemini 가 빠뜨린 종목은 직전 원인 유지, 실패({})면 아무것도 바꾸지 않는다.
+
+    원인마다 그 종목 프롬프트에 넣은 뉴스로 근거 기사(sources, 최대 3)를 함께 저장한다(R3 — LLM 출력 아님)."""
     if not reasons:
         return
     day = now_kst.date().isoformat()
@@ -158,7 +165,8 @@ def _save_reasons(now_kst: datetime, gainers: list[dict], losers: list[dict], re
         for r in rows:
             it = reasons.get(r["ticker"])
             if it is not None:
-                items[r["ticker"]] = {"side": side, **{f: getattr(it, f) for f in REASON_FIELDS}}
+                items[r["ticker"]] = {"side": side, **{f: getattr(it, f) for f in REASON_FIELDS},
+                                      "sources": news_sources((news_by_ticker or {}).get(r["ticker"]))}
     cache.put_json(cache.MOVERS_REASONS_KEY, {"date": day, "items": items}, cache.MOVERS_REASONS_TTL)
 
 
@@ -258,7 +266,7 @@ def analyze(now: datetime, *, kis_client, session=None, force: bool = False) -> 
     news = _stock_news(_news(), gainers + losers) if gemini is not None else {}
     reasons = _reasons(gemini, gainers, losers, news)
 
-    _save_reasons(_kst(now), gainers, losers, reasons)  # 원인을 먼저 — 곧이어 도는 2분 회차도 새 원인을 읽는다
+    _save_reasons(_kst(now), gainers, losers, reasons, news)  # 원인을 먼저 — 곧이어 도는 2분 회차도 새 원인을 읽는다
     body = _save_movers(now, gainers, losers)
     return {**body, "keywords": cache.get_json(cache.KEYWORDS_KEY) or []}
 
@@ -305,6 +313,11 @@ def hot_keywords(movers: dict, *, force: bool = False) -> list[dict]:
     return out
 
 
+def _with_sources(movers) -> list[dict]:
+    """옛 캐시(sources 필드 없음) 호환 — 없으면 []."""
+    return [{**m, "sources": m.get("sources") or []} if isinstance(m, dict) else m for m in movers or []]
+
+
 def get_cached() -> dict:
     """API 용 — movers 캐시 + keywords 캐시를 계약 모양으로. 없으면 빈 모양.
 
@@ -317,7 +330,7 @@ def get_cached() -> dict:
         keywords = cache.get_json(cache.KEYWORDS_LAST_KEY)
     return {
         "updated_at": movers.get("updated_at"),
-        "gainers": movers.get("gainers") or [],
-        "losers": movers.get("losers") or [],
+        "gainers": _with_sources(movers.get("gainers")),
+        "losers": _with_sources(movers.get("losers")),
         "keywords": keywords or [],
     }

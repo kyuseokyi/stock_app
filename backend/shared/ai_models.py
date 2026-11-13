@@ -28,6 +28,8 @@ class AiDailyBriefing(Base):
     bullish_sectors: Mapped[list] = mapped_column(_JSON, nullable=False)
     bearish_sectors: Mapped[list] = mapped_column(_JSON, nullable=False)
     macro_checkpoints: Mapped[list] = mapped_column(_JSON, nullable=False)
+    # 근거 기사 [{title, url, pub_date}] — 서비스가 채운다(LLM 출력 아님). 옛 행은 NULL → API 에서 []
+    sources: Mapped[list | None] = mapped_column(_JSON, nullable=True)
     created_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
@@ -46,4 +48,6 @@ class AiStockEvaluation(Base):
     financial_quality_note: Mapped[str] = mapped_column(Text, nullable=False)
     red_flag_level: Mapped[str] = mapped_column(String(20), nullable=False)
     red_flags: Mapped[list | None] = mapped_column(_JSON, default=list)
+    # 근거 기사 [{title, url, pub_date}] — 서비스가 채운다(LLM 출력 아님). 옛 행은 NULL → API 에서 []
+    sources: Mapped[list | None] = mapped_column(_JSON, nullable=True)
     created_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True), server_default=func.now())

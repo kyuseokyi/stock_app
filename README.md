@@ -676,6 +676,7 @@ cd backend && uv run --with pykrx python -m apps.collector.verify.spot_check --n
   - `GET /api/v1/market/investor-flow` → `{"date", "source", "foreign_top", "institution_top", "pension_top", "double_buy", "ai_comment", "updated_at"}`
   - `GET /api/v1/market/heatmap?kind=sector|theme&size=mcap|value&period=1d|5d|20d` → GraphQL `marketTreemap` 과 같은 결과 `{"date", "groups": [{"id","name","chg","size","stocks":[{"ticker","name","chg","size"}]}]}`. 잘못된 값은 422 `{"detail": {"code", "message"}}`
   - `GET /api/v1/ai/screener-analysis/{ticker}` → `{"analysis": {...} | null}` (ticker 는 영문·숫자 6자리, 아니면 422)
+  - **근거 기사 `sources`(2026-11-13, R3)**: `brief.sources`·`gainers[]/losers[].sources`·`analysis.sources` = `[{"title","url","pub_date"}]`(최대 3, `url` 은 `originallink` 우선·없으면 `link`, `pub_date` 는 ISO 8601 또는 null). LLM 응답이 아니라 프롬프트에 넣은 네이버 뉴스로 서비스가 채운다. 뉴스가 없거나 옛 행·옛 캐시면 `[]`. 핫 키워드는 키워드별 기사를 매칭할 수 없어 제외. 마이그레이션 `d5e7f9a1b3c5`(두 표에 `sources` JSONB nullable).
 - **DB 마이그레이션**: 리비전 `8e2b4c6d1f30`(`ai_daily_briefings`·`ai_stock_evaluations`) — 배포 워크플로(`deploy-server.yml`)의 `alembic upgrade head` 로 적용된다. 배포 후 Celery **beat·워커 재시작**(새 태스크 모듈·beat 엔트리)과 stock_api 재시작(새 라우터).
 - **미검증 항목(실호출 확인 필요)**
   - KIS 등락률 순위(`FHPST01700000`)의 하락률 정렬 코드 `"1"` — 공식 예제에 없음. 서비스가 등락 방향을 다시 걸러서 틀려도 상승 종목이 하락 목록에 섞이지는 않지만, 하락 목록이 비어 있으면 이 값을 의심.
