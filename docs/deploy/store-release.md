@@ -16,7 +16,7 @@
 
 ## 1. 앱 개발 작업
 
-> ✅ = 코드 완료(2026-11-13, dev 머지 — 배포 전). 설계: [`2026-11-13-terms-consent-review-login-design.md`](../superpowers/specs/2026-11-13-terms-consent-review-login-design.md).
+> ✅ = 코드 완료(2026-11-13, dev 머지 — 배포 전). D8·R2·R3 설계: [`2026-11-13-comment-report-block-design.md`](../superpowers/specs/2026-11-13-comment-report-block-design.md) — 댓글은 여전히 게시판별로 꺼 둔 채 출시하고, 켤 때는 새 버전 심사로. 설계: [`2026-11-13-terms-consent-review-login-design.md`](../superpowers/specs/2026-11-13-terms-consent-review-login-design.md).
 > 심사 계정 운영: 상용 서버 `.env.production` 에 `REVIEW_LOGIN_EMAILS=<심사 이메일>` → 재기동 → `REVIEW_EMAIL=… REVIEW_PASSWORD=…(12자 이상) python -m apps.auth.seed_reviewer`(auth_api 컨테이너) → 앱 비로그인 내정보에서 버전 7번 탭. 심사가 끝나면 목록에서 빼거나 비밀번호를 바꾼다.
 
 ### 🔴 출시를 막는 것
@@ -30,15 +30,15 @@
 | D5 | **`funnotedaily.com` 루트가 응답 없음** → `app.funnotedaily.com`으로 리다이렉트 | 공통 | Cloudflare | 소 | 깨진 링크는 Apple 2.1 반려 사유 |
 | D6 ✅ | **권한 정리**: `android.blockedPermissions`에 `SYSTEM_ALERT_WINDOW`(Expo 템플릿이 넣지만 쓰지 않음), 쓰지 않는 `READ/WRITE_EXTERNAL_STORAGE` | Android | `mobile/app.config.js` | 소 | Play 민감 권한 정책 |
 | D7 | **iOS 설정**: `ios.privacyManifests`(Required Reason API — UserDefaults·FileTimestamp·SystemBootTime·DiskSpace), 암호화 선언(`ITSAppUsesNonExemptEncryption=false`), `supportsTablet` 결정, Google 로그인 `iosUrlScheme` 실제 값(지금 `com.googleusercontent.apps.unset`이라 iOS Drive 백업이 동작하지 않음) | iOS | `mobile/app.config.js` | 소 | Apple Privacy Manifest(2024-05~), 수출 규정, 2.1 |
-| D8 | **댓글 신고·차단 + 어드민 신고 처리 + 댓글 기본값 끄기**(`boards.comments_enabled` 기본 `true` → `false`, 기존 값은 유지). 댓글은 **이 기능을 배포한 뒤에만** 켠다 | 공통 | blog 서버, 앱, 웹, 어드민 | 대 | Play UGC, Apple 1.2(필터·신고·차단·연락처) |
+| D8 ✅ | **댓글 신고·차단 + 어드민 신고 처리 + 댓글 기본값 끄기**(`boards.comments_enabled` 기본 `true` → `false`, 기존 값은 유지). 댓글은 **이 기능을 배포한 뒤에만** 켠다 | 공통 | blog 서버, 앱, 웹, 어드민 | 대 | Play UGC, Apple 1.2(필터·신고·차단·연락처) |
 
 ### 🟡 반려 위험을 줄이는 것
 
 | # | 작업 | 이유 |
 |---|---|---|
 | R1 ✅ | 앱 안에 **"정보 제공 전용 · 매매·투자 자문 아님 · 모의투자는 가상 자금"** 고지(내정보 또는 첫 실행) | Apple 3.2.1(viii)·5.1.1(ix): 투자·자산 관리 앱은 금융기관·법인이 제출해야 한다는 조항이 개인에게 걸릴 수 있음 |
-| R2 | **닉네임 금칙어 필터** 또는 관리자가 닉네임을 바꿀 수 있는 수단 | 랭킹에 공개되는 닉네임도 사용자 콘텐츠로 볼 여지(추측) |
-| R3 | AI 시황 요약에 **원 기사 출처** 표시 | Play가 "AI 뉴스 모음 앱"으로 보고 뉴스 선언을 요구할 경우 대비 |
+| R2 ✅ | **닉네임 금칙어 필터** 또는 관리자가 닉네임을 바꿀 수 있는 수단 | 랭킹에 공개되는 닉네임도 사용자 콘텐츠로 볼 여지(추측) |
+| R3 ✅ | AI 시황 요약에 **원 기사 출처** 표시 | Play가 "AI 뉴스 모음 앱"으로 보고 뉴스 선언을 요구할 경우 대비 |
 | R4 | 쓰지 않으면 iOS **무음 푸시 백그라운드 모드**(`enableBackgroundRemoteNotifications`) 제거, 광고성 푸시는 별도 동의 | Apple 2.5.4, 4.5.4 |
 
 ### 🟢 나중에
