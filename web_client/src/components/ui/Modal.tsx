@@ -10,19 +10,31 @@ interface ModalProps {
   narrow?: boolean
   /** 제목 아래 짧은 안내(aria-describedby 로 연결) */
   description?: ReactNode
+  /** false 면 닫을 수 없는 모달 — ✕ 숨김·ESC·바깥 클릭 무시(필수 동의용). 기본 true(기존 동작) */
+  dismissible?: boolean
 }
+
+const noop = () => {}
 
 const FOCUSABLE = 'a[href],button:not([disabled]),input:not([disabled]),select,textarea,[tabindex]:not([tabindex="-1"])'
 
 // 공용 모달 — 부모가 열 때만 마운트한다(닫으면 언마운트 → 내부 state·타이머 자동 정리).
 // 모바일: 하단 시트 / sm 이상: 중앙. ESC·바깥 클릭으로 닫힘. 열린 동안 body 스크롤 잠금.
 // z-40: 로그인 모달(z-50)보다 아래, 게임 토스트(z-40)는 DOM 상 뒤에 렌더돼 모달 위에 보인다.
-export default function Modal({ title, onClose, children, layer = 'default', narrow = false, description }: ModalProps) {
+export default function Modal({
+  title,
+  onClose,
+  children,
+  layer = 'default',
+  narrow = false,
+  description,
+  dismissible = true,
+}: ModalProps) {
   const titleId = useId()
   const descId = useId()
   const panelRef = useRef<HTMLDivElement>(null)
   const onCloseRef = useRef(onClose)
-  onCloseRef.current = onClose
+  onCloseRef.current = dismissible ? onClose : noop // 닫을 수 없는 모달은 ESC 도 무시
 
   const backdropRef = useRef<HTMLDivElement>(null)
   const downTargetRef = useRef<EventTarget | null>(null) // 드래그 오닫힘 방지: mousedown 시작 지점
@@ -75,7 +87,7 @@ export default function Modal({ title, onClose, children, layer = 'default', nar
       }}
       onClick={(e) => {
         // 누른 곳과 뗀 곳이 모두 바깥(백드롭)일 때만 닫는다
-        if (downTargetRef.current === backdropRef.current && e.target === backdropRef.current) onClose()
+        if (dismissible && downTargetRef.current === backdropRef.current && e.target === backdropRef.current) onClose()
         downTargetRef.current = null
       }}
     >
@@ -97,6 +109,7 @@ export default function Modal({ title, onClose, children, layer = 'default', nar
               {title}
             </h2>
             {/* 닫기 — 44px 터치 영역, 오른쪽 끝을 제목 줄에 맞춘다 */}
+            {dismissible && (
             <button
               type="button"
               onClick={onClose}
@@ -107,6 +120,7 @@ export default function Modal({ title, onClose, children, layer = 'default', nar
                 <path d="M6 6l12 12M18 6L6 18" />
               </svg>
             </button>
+            )}
           </div>
           {description && (
             <p id={descId} className="mt-0.5 text-sm text-ink-muted">

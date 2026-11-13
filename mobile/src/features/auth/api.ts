@@ -1,6 +1,8 @@
 import { authApi } from '@/lib/api';
 import { ENV } from '@/lib/env';
 
+import { TERMS_VERSION } from './terms';
+
 import type { User } from './types';
 
 // 서버(FastAPI) 원응답 형태(snake_case) — backend/apps/auth/schemas.py TokenResponse/UserOut
@@ -9,6 +11,8 @@ type RawUser = {
   email: string | null;
   nickname: string | null;
   role: string;
+  /** 약관 동의 필요 여부 — 구 서버는 없음 */
+  terms_required?: boolean;
 };
 
 type RawTokenResponse = {
@@ -27,6 +31,8 @@ function toUser(r: RawUser): User {
     email: r.email,
     nickname: r.nickname,
     role: r.role,
+    // 서버가 줄 때만 담는다(구 서버 응답·기존 비교 결과가 그대로 유지되게)
+    ...(typeof r.terms_required === 'boolean' ? { termsRequired: r.terms_required } : {}),
   };
 }
 
@@ -50,7 +56,13 @@ export function toUserOrNull(raw: unknown): User | null {
   if (typeof raw !== 'object' || raw === null) return null;
   const r = raw as Partial<RawUser>;
   if (typeof r.id !== 'number' || typeof r.role !== 'string') return null;
-  return toUser({ id: r.id, email: r.email ?? null, nickname: r.nickname ?? null, role: r.role });
+  return toUser({
+    id: r.id,
+    email: r.email ?? null,
+    nickname: r.nickname ?? null,
+    role: r.role,
+    terms_required: r.terms_required,
+  });
 }
 
 /** 게스트·간편 로그인 공통 결과(서비스 JWT + 사용자) */
@@ -100,4 +112,15 @@ export const DELETE_CONFIRM_TEXT = '탈퇴';
 /** 회원 탈퇴 — DELETE /api/v1/auth/me (204). 실패는 ApiError(status, body.detail.code) */
 export async function deleteAccount(): Promise<void> {
   await authApi.del<void>('/api/v1/auth/me', { confirm: DELETE_CONFIRM_TEXT });
+}
+
+/** 현재 약관 동의 — POST /api/v1/auth/me/terms (멱등). 실패는 ApiError(409 TERMS_VERSION_MISMATCH·401) */
+export async function agreeTerms(): Promise<User> {
+  return toUser(await authApi.post<RawUser>('/api/v1/auth/me/terms', { version: TERMS_VERSION }));
+}
+
+/** 심사 전용 로그인 — POST /api/v1/auth/review-login(앱이면 리프레시 포함). 404 꺼짐·401 불일치·403 비활성 */
+export async function reviewLogin(email: string, password: string): Promise<LoginResult> {
+  const raw = await authApi.post<RawTokenResponse>('/api/v1/auth/review-login', { email, password, platform: 'app' });
+  return toLoginResult(raw);
 }

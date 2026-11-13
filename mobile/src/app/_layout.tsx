@@ -5,6 +5,7 @@ import { AppState } from 'react-native';
 
 import { AppUpdateGate } from '@/features/app-update/components/update-modal'; // 점검·스토어/OTA 업데이트 안내(실패는 조용히)
 import { useAuthStore } from '@/features/auth/store';
+import { TermsGate } from '@/features/auth/terms-gate'; // 약관 미동의 로그인 사용자 — 닫을 수 없는 동의 시트
 import { useBackgroundTasks } from '@/features/fund/background/tasks';
 import { useFundAutoRefresh } from '@/features/fund/auto-refresh';
 import { useFundSignal } from '@/features/fund/fund-signal';
@@ -60,6 +61,7 @@ export default function RootLayout() {
       <AppToaster />
       <ApiProgressBar />
       <AppUpdateGate />
+      <TermsGate />
     </ThemeProvider>
   );
 }

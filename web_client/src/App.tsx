@@ -25,6 +25,8 @@ const FundListPage = lazy(() => import('./pages/FundListPage'))
 const FundReportPage = lazy(() => import('./pages/FundReportPage'))
 const PrivacyPage = lazy(() => import('./pages/PrivacyPage'))
 const AccountDeletionPage = lazy(() => import('./pages/AccountDeletionPage'))
+const TermsPage = lazy(() => import('./pages/TermsPage'))
+const SupportPage = lazy(() => import('./pages/SupportPage'))
 
 export default function App() {
   return (
@@ -97,6 +99,16 @@ export default function App() {
         <Route path="account-deletion" element={
           <Suspense fallback={<p className="py-16 text-center text-ink-muted">불러오는 중…</p>}>
             <AccountDeletionPage />
+          </Suspense>
+        } />
+        <Route path="terms" element={
+          <Suspense fallback={<p className="py-16 text-center text-ink-muted">불러오는 중…</p>}>
+            <TermsPage />
+          </Suspense>
+        } />
+        <Route path="support" element={
+          <Suspense fallback={<p className="py-16 text-center text-ink-muted">불러오는 중…</p>}>
+            <SupportPage />
           </Suspense>
         } />
         <Route path="*" element={<NotFoundPage />} />

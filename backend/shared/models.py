@@ -117,6 +117,10 @@ class User(Base, TimestampMixin):
     )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
+    # 이용약관 동의 — 마지막으로 동의한 약관 버전과 시각(미동의·기존 회원은 NULL). 판정은 apps/auth/terms.py
+    terms_version: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    terms_agreed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
     # 관계
     # author_id 가 nullable(SET NULL)이므로 delete-orphan 대신 연결만 관리.
     posts: Mapped[list["BlogPost"]] = relationship(back_populates="author")

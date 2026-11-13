@@ -7,6 +7,7 @@ import { useAuthStore } from '../store/auth'
 import { showToast } from '../store/toast'
 import PageHeader from '../components/ui/PageHeader'
 import Card from '../components/ui/Card'
+import { INFO_NOTICE } from '../lib/terms'
 
 // 내정보(/me) — 앱 내정보 탭과 같은 자리. 비로그인: 간편 로그인 / 로그인: 닉네임·게임 바로가기·로그아웃·탈퇴.
 // 헤더의 닉네임 메뉴(UserMenu)도 그대로 둔다(데스크톱 동선).
@@ -76,9 +77,15 @@ export default function MyPage() {
 // 공개 정책 문서 — 로그인 여부와 상관없이 내정보 맨 아래에서 찾을 수 있게(스토어 심사가 위치를 본다)
 function PolicyLinks() {
   return (
-    <nav aria-label="정책" className="mt-8 flex justify-center gap-4 text-xs text-ink-muted">
+    <>
+    {/* 정보 제공 고지(앱 내정보와 같은 문구) */}
+    <p className="mt-8 text-center text-xs leading-relaxed text-ink-muted">{INFO_NOTICE}</p>
+    <nav aria-label="정책" className="mt-2 flex flex-wrap justify-center gap-x-4 text-xs text-ink-muted">
+      <Link to="/terms" className="inline-flex min-h-11 items-center hover:text-ink">이용약관</Link>
       <Link to="/privacy" className="inline-flex min-h-11 items-center hover:text-ink">개인정보처리방침</Link>
       <Link to="/account-deletion" className="inline-flex min-h-11 items-center hover:text-ink">계정 삭제 안내</Link>
+      <Link to="/support" className="inline-flex min-h-11 items-center hover:text-ink">고객지원</Link>
     </nav>
+    </>
   )
 }

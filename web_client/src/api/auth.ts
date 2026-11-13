@@ -2,6 +2,7 @@ import axios from 'axios'
 import { AUTH_BASE_URL as authURL } from '../config'
 import { installRetry } from '../lib/retry'
 import { installApiActivity } from '../lib/apiActivity'
+import { TERMS_VERSION } from '../lib/terms'
 import type { SocialProvider, SocialProviders, TokenResponse, UserOut } from '../types/api'
 
 // 인증 서비스 base URL (auth 8001) — 빌드 타임 주입, 폴백/fail-fast 는 ../config
@@ -56,4 +57,14 @@ export const deleteAccount = async (token: string): Promise<void> => {
     data: { confirm: DELETE_CONFIRM_TEXT },
     headers: { Authorization: `Bearer ${token}` },
   })
+}
+
+/** 현재 약관 동의 — POST /auth/me/terms (멱등). 409 TERMS_VERSION_MISMATCH(옛 화면)·401 */
+export const agreeTerms = async (token: string): Promise<UserOut> => {
+  const { data } = await authClient.post<UserOut>(
+    '/auth/me/terms',
+    { version: TERMS_VERSION },
+    { headers: { Authorization: `Bearer ${token}` } },
+  )
+  return data
 }

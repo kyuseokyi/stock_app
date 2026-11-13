@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from shared.auth import get_current_user
 from shared.database import get_db
+from apps.auth.terms import terms_required
 from shared.models import BlogComment, User, UserRole
 
 from .. import crud, schemas
@@ -51,6 +52,12 @@ async def create_comment(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
+    # UGC 요건 — 약관 미동의 회원은 댓글 작성 불가(클라이언트 게이트 우회 방지). 관리자는 terms_required=False
+    if terms_required(user):
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            detail={"code": "TERMS_REQUIRED", "message": "이용약관에 동의해야 댓글을 쓸 수 있어요."},
+        )
     post = await crud.get_blog(db, blog_id)
     if post is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "게시글을 찾을 수 없습니다.")

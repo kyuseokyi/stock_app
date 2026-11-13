@@ -9,6 +9,8 @@ import LoginModal from './LoginModal'
 import NotificationToaster from './NotificationToaster'
 import UserMenu from './UserMenu'
 import DeleteAccountModal from './DeleteAccountModal'
+import TermsModal from './TermsModal'
+import { shouldShowTermsModal } from '../lib/terms'
 import AppToaster from './AppToaster'
 import { showToast } from '../store/toast'
 import { useFundAutoRefresh } from '../lib/fundAutoRefresh'
@@ -18,7 +20,7 @@ import { titleFor } from '../lib/pageTitle'
 
 export default function Layout() {
   const { boards, fetchBoards, boardName } = useBoardStore()
-  const { user, logout } = useAuthStore()
+  const { user, token, logout } = useAuthStore()
   const [loginOpen, setLoginOpen] = useState(false)
   const [deleteOpen, setDeleteOpen] = useState(false)
   const location = useLocation()
@@ -110,6 +112,8 @@ export default function Layout() {
       <NotificationToaster />
       <LoginModal open={loginOpen} onClose={() => setLoginOpen(false)} />
       {deleteOpen && <DeleteAccountModal onClose={() => setDeleteOpen(false)} onDeleted={handleDeleted} />}
+      {/* 약관 미동의 로그인 사용자 — 닫기 없는 동의 모달(z-50). /terms·/privacy 에서는 읽을 수 있게 숨긴다 */}
+      {shouldShowTermsModal(token, user, location.pathname) && <TermsModal />}
       <AppToaster />
     </div>
   )
