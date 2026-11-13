@@ -20,6 +20,7 @@ pykrx(KRX 로그인, 선택)          → 투자자 수급 확정치            
 ```
 
 - 펀드 리포트는 서버가 수집하지 않는다. 앱이 사용자가 저장한 펀드 리포트 페이지(`fund.ivyro.net/dataroom/…`)를 **기기에서 직접** 받아 해석한다(`mobile/src/features/fund`).
+  - 펀드공시(`operating_margin(v3.0).files/sheet001.htm`, 모든 펀드 공통, **EUC-KR**)도 기기에서 받아, 리포트 기준일과 같은 날의 **당일 연환산 수익률·장중 거래내용**을 첫 섹션 `총 계` 카드에 붙인다(`core/disclosure.ts`). 앱은 Hermes 가 euc-kr 을 몰라 CP949 표(`euc-kr-table.ts`, `scripts/gen-euc-kr-table.py`)로 해독, 웹은 `TextDecoder('euc-kr')`. 못 받거나 같은 날짜가 없으면 표시만 생략.
 
 ## 2. 외부 원천과 키
 

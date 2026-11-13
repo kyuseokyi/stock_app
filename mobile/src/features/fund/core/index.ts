@@ -12,5 +12,7 @@ export * from './history';
 export * from './backup';
 export * from './history-view';
 export * from './refresh-all';
+export * from './disclosure';
 export { useAutoRefreshStatus } from './use-auto-refresh';
 export { useFundReport, type ReportState } from './use-fund-report';
+export { useDisclosureDay } from './use-disclosure';

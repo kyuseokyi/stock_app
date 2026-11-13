@@ -9,10 +9,12 @@ import {
   formatChecked,
   formatValue,
   renameFund,
+  useDisclosureDay,
   useFundReport,
   type FundEntry,
 } from '../lib/fundCore'
 import { loadFunds, localCache, saveFunds } from '../lib/fundStore'
+import { disclosureSource } from '../lib/fundDisclosure'
 import { useAuthStore } from '../store/auth'
 import { fundRefresher } from '../lib/fundAutoRefresh'
 import Card from '../components/ui/Card'
@@ -29,6 +31,7 @@ export default function FundReportPage() {
 function FundReportBody({ id, uid }: { id: string | undefined; uid: number }) {
   const [fund, setFund] = useState<FundEntry | null>(() => loadFunds(uid).find((f) => f.id === id) ?? null)
   const { entry, refreshing, error, refresh, reload } = useFundReport(fund, localCache)
+  const day = useDisclosureDay(entry?.report ?? null, disclosureSource) // 같은 날짜의 펀드공시(총 계 카드)
 
   // 이름 없이 등록한 펀드는 첫 리포트로 기본 이름을 붙여 저장
   useEffect(() => {
@@ -84,7 +87,7 @@ function FundReportBody({ id, uid }: { id: string | undefined; uid: number }) {
       {entry && entry.missing.length > 0 && <Banner sourceUrl={fund.url}>일부 항목이 빠졌을 수 있어요.</Banner>}
 
       {entry ? (
-        <FundReportView report={entry.report} />
+        <FundReportView report={entry.report} day={day} />
       ) : error === 'fetch' ? (
         <Card className="py-6 text-center">
           <p className="font-semibold text-ink">펀드 현황을 가져오지 못했어요</p>

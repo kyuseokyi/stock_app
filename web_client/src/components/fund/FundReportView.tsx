@@ -4,6 +4,7 @@ import {
   type AccountView,
   type AccountsView,
   type CertView,
+  type DisclosureDay,
   type FundReport,
   type Link as FundLink,
   type NoticeView,
@@ -126,6 +127,16 @@ function AccountCard({ a }: { a: AccountView }) {
         {a.rows.map((r, i) => (
           <Row key={i} r={r} />
         ))}
+        {/* 펀드공시(같은 날짜) — 거래내용은 긴 문장이라 값 칸이 아닌 아래 줄에 펼친다 */}
+        {a.disclosure?.rows.map((r, i) => (
+          <Row key={`d${i}`} r={r} />
+        ))}
+        {a.disclosure?.note && (
+          <div className="border-t border-line py-2">
+            <div className={K}>{a.disclosure.note.label}</div>
+            <p className="mt-1 text-sm text-ink">{a.disclosure.note.text}</p>
+          </div>
+        )}
       </div>
       {a.memo && (
         <Fold title={a.memo.title || '메모'}>
@@ -215,8 +226,8 @@ function CertBlock({ s }: { s: CertView }) {
   )
 }
 
-export default function FundReportView({ report }: { report: FundReport }) {
-  const view = useMemo(() => toReportView(report), [report])
+export default function FundReportView({ report, day = null }: { report: FundReport; day?: DisclosureDay | null }) {
+  const view = useMemo(() => toReportView(report, day), [report, day])
   return (
     <div className="text-base leading-normal tracking-[-0.01em] [word-break:keep-all]">
       {view.notice && <Notice n={view.notice} />}
