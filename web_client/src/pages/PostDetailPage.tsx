@@ -1,4 +1,5 @@
 import { type FormEvent, useCallback, useEffect, useRef, useState } from 'react'
+import axios from 'axios'
 import { Link, useParams } from 'react-router-dom'
 import { createComment, getBlog, listComments } from '../api/blog'
 import CommentMenuModal from '../components/CommentMenuModal'
@@ -14,6 +15,14 @@ import { useAdConfig } from '../hooks/useAdConfig'
 import Button from '../components/ui/Button'
 import type { BlogOut, CommentOut } from '../types/api'
 import { useDocumentTitle } from '../hooks/useDocumentTitle'
+
+// 댓글 목록은 토큰 선택이지만 잘못된·만료 토큰이면 401 — 인터셉터가 로그아웃(저장 토큰 삭제)한 뒤 한 번만 익명으로 다시 받는다
+// (글 본문과 Promise.all 로 묶여 있어 그대로 두면 글 화면 전체가 "불러오지 못했어요"가 된다)
+const loadComments = (blogId: string): Promise<CommentOut[]> =>
+  listComments(blogId).catch((err: unknown) => {
+    if (axios.isAxiosError(err) && err.response?.status === 401) return listComments(blogId)
+    throw err
+  })
 
 export default function PostDetailPage() {
   // posts/:id 라우트 전용 → id 는 항상 존재(타입상 string | undefined). `!` 는 타입 표기용.
@@ -34,7 +43,7 @@ export default function PostDetailPage() {
 
   useEffect(() => {
     setLoading(true)
-    Promise.all([getBlog(id), listComments(id)])
+    Promise.all([getBlog(id), loadComments(id)])
       .then(([p, c]) => {
         setPost(p)
         setComments(c)
@@ -45,7 +54,7 @@ export default function PostDetailPage() {
 
   // 신고·차단·삭제 뒤 목록 새로고침(서버가 신고·차단한 댓글을 빼고 준다) — 실패는 조용히(기존 목록 유지)
   const reloadComments = useCallback(() => {
-    listComments(id)
+    loadComments(id)
       .then(setComments)
       .catch(() => {})
   }, [id])
