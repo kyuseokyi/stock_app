@@ -31,7 +31,7 @@ export default function FundReportPage() {
 function FundReportBody({ id, uid }: { id: string | undefined; uid: number }) {
   const [fund, setFund] = useState<FundEntry | null>(() => loadFunds(uid).find((f) => f.id === id) ?? null)
   const { entry, refreshing, error, refresh, reload } = useFundReport(fund, localCache)
-  const day = useDisclosureDay(entry?.report ?? null, disclosureSource) // 같은 날짜의 펀드공시(총 계 카드)
+  const day = useDisclosureDay(entry?.report ?? null, disclosureSource, entry?.fetchedAt) // 같은 날짜의 펀드공시(총 계 카드)
 
   // 이름 없이 등록한 펀드는 첫 리포트로 기본 이름을 붙여 저장
   useEffect(() => {

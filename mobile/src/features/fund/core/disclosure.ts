@@ -53,9 +53,10 @@ export async function fetchDisclosureHtml(
   }
 }
 
-export type DisclosureSource = { get: () => Promise<string> };
+export type DisclosureSource = { get: () => Promise<string>; invalidate: () => void };
 
-/** 모든 펀드가 같은 페이지를 쓴다 — 받은 결과(진행 중 요청 포함)를 ttl 동안 나눠 쓰고, 실패는 기억하지 않는다 */
+/** 모든 펀드가 같은 페이지를 쓴다 — 받은 결과(진행 중 요청 포함)를 ttl 동안 나눠 쓰고, 실패는 기억하지 않는다.
+ *  invalidate: 받은 시트에 원하는 날짜가 없을 때(공시가 리포트보다 늦게 갱신) 다음 get 이 다시 받게 한다 */
 export function createDisclosureSource(load: () => Promise<string>, now: () => number, ttlMs = 10 * 60_000): DisclosureSource {
   let cached: { at: number; p: Promise<string> } | null = null;
   return {
@@ -68,6 +69,9 @@ export function createDisclosureSource(load: () => Promise<string>, now: () => n
         if (cached === mine) cached = null;
       });
       return p;
+    },
+    invalidate() {
+      cached = null;
     },
   };
 }
