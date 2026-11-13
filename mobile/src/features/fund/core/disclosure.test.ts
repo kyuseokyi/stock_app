@@ -75,6 +75,14 @@ describe('createDisclosureSource', () => {
     expect(load).toHaveBeenCalledTimes(2);
   });
 
+  it('invalidate 하면 ttl 안이라도 다시 받는다', async () => {
+    let calls = 0;
+    const src = createDisclosureSource(async () => `v${++calls}`, () => 0);
+    await expect(src.get()).resolves.toBe('v1');
+    src.invalidate();
+    await expect(src.get()).resolves.toBe('v2');
+  });
+
   it('실패는 기억하지 않는다', async () => {
     let n = 0;
     const src = createDisclosureSource(async () => (n++ === 0 ? Promise.reject(new Error('x')) : 'ok'), () => 0);

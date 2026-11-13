@@ -6,7 +6,12 @@ import { findDisclosureDay, isoOfEvalDate, type DisclosureDay, type DisclosureSo
 import { evalDateOf } from './display';
 import type { FundReport } from './types';
 
-export function useDisclosureDay(report: FundReport | null, source: DisclosureSource): DisclosureDay | null {
+/** refreshKey: 리포트를 새로 받은 시각(entry.fetchedAt) — 새로고침 때 못 찾았던 날짜를 다시 시도한다 */
+export function useDisclosureDay(
+  report: FundReport | null,
+  source: DisclosureSource,
+  refreshKey?: number,
+): DisclosureDay | null {
   const iso = report ? isoOfEvalDate(evalDateOf(report)) : '';
   const [found, setFound] = useState<DisclosureDay | null>(null);
 
@@ -16,13 +21,15 @@ export function useDisclosureDay(report: FundReport | null, source: DisclosureSo
     source
       .get()
       .then((html) => {
-        if (alive) setFound(findDisclosureDay(html, iso));
+        const d = findDisclosureDay(html, iso);
+        if (!d) source.invalidate(); // 아직 공시가 안 올라온 날짜 — 이 시트를 계속 쓰지 않는다
+        if (alive) setFound(d);
       })
       .catch(() => {}); // 공시는 덧붙이는 정보 — 못 받으면 안 보일 뿐
     return () => {
       alive = false;
     };
-  }, [iso, source]);
+  }, [iso, source, refreshKey]);
 
   return found && found.date === iso ? found : null; // 기준일이 바뀐 직후 옛 날짜 값은 쓰지 않는다
 }
