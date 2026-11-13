@@ -75,3 +75,17 @@ async def require_admin(user: User = Depends(get_current_user)) -> User:
     if user.role != UserRole.ADMIN:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "관리자 권한이 필요합니다.")
     return user
+
+
+async def get_optional_user(
+    creds: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
+    db: AsyncSession = Depends(get_db),
+) -> User | None:
+    """선택 인증 — Authorization 헤더가 없으면 None(익명).
+
+    헤더가 있으면 get_current_user 와 똑같이 검증하고 401 도 그대로 올린다. 잘못된·만료 토큰을 익명으로 흘리면
+    로그인 사용자에게 차단·신고한 댓글이 다시 보이고, 앱의 TOKEN_EXPIRED 리프레시도 발동하지 않는다.
+    """
+    if creds is None:
+        return None
+    return await get_current_user(creds, db)

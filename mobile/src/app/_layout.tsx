@@ -51,6 +51,7 @@ export default function RootLayout() {
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="blog/[id]" options={detail('글 상세', '/community')} />
+        <Stack.Screen name="blocked-users" options={detail('차단한 사용자', '/profile')} />
         <Stack.Screen name="fund/index" options={detail('내 펀드 수익', '/profile')} />
         <Stack.Screen name="fund/[id]" options={detail('펀드 리포트', '/fund')} />
         <Stack.Screen name="fund/history/[id]" options={detail('수익 히스토리', '/fund')} />

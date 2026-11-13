@@ -110,19 +110,21 @@ MOVERS = {"updated_at": "2026-10-30T10:00:00+09:00",
                        "reason_summary": "수주", "category": "수주계약", "reliability": "상", "risk_warning": None}],
           "losers": []}
 KEYWORDS = [{"keyword": "HBM", "background": "b", "tickers": ["005930"]}]
+# 옛 캐시(sources 없음)도 API 는 sources: [] 를 붙여 내려준다(R3 호환)
+MOVERS_OUT = {**MOVERS, "gainers": [{**MOVERS["gainers"][0], "sources": []}]}
 
 
 async def test_movers_today_cache(client, fake_redis):
     cache.put_json(cache.MOVERS_KEY, MOVERS, 600)
     cache.put_json(cache.KEYWORDS_KEY, KEYWORDS, 1800)
     cache.put_json(cache.MOVERS_LAST_KEY, {**MOVERS, "updated_at": "옛날"}, 100)
-    assert (await client.get("/api/v1/market/movers")).json() == {**MOVERS, "keywords": KEYWORDS}
+    assert (await client.get("/api/v1/market/movers")).json() == {**MOVERS_OUT, "keywords": KEYWORDS}
 
 
 async def test_movers_falls_back_to_last(client, fake_redis):
     cache.put_json(cache.MOVERS_LAST_KEY, MOVERS, cache.LAST_TTL)
     cache.put_json(cache.KEYWORDS_LAST_KEY, KEYWORDS, cache.LAST_TTL)
-    assert (await client.get("/api/v1/market/movers")).json() == {**MOVERS, "keywords": KEYWORDS}
+    assert (await client.get("/api/v1/market/movers")).json() == {**MOVERS_OUT, "keywords": KEYWORDS}
 
 
 async def test_investor_flow_cache(client, fake_redis):

@@ -87,6 +87,14 @@ class ScreenerQualitativeResponse(BaseModel):
 
 
 # --- API 응답용 --------------------------------------------------------------- #
+class NewsSource(BaseModel):
+    """AI 요약의 근거 기사 — 서비스가 LLM 입력 뉴스로 채운다(LLM 출력 스키마에는 없음)."""
+
+    title: str
+    url: str
+    pub_date: str | None = None  # ISO 8601(해석 실패면 None)
+
+
 class Mover(BaseModel):
     """급등락 종목 — AI 원인이 없으면 원인 필드는 None."""
 
@@ -98,6 +106,7 @@ class Mover(BaseModel):
     category: str | None = None
     reliability: str | None = None
     risk_warning: str | None = None
+    sources: list[NewsSource] = []  # 원인 분석의 근거 기사(최대 3). 원인이 없거나 옛 캐시면 []
 
 
 class MarketMoversResponse(BaseModel):

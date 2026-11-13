@@ -10,7 +10,7 @@
 from __future__ import annotations
 
 import enum
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 
 from sqlalchemy import (
     Boolean,
@@ -120,6 +120,8 @@ class User(Base, TimestampMixin):
     # 이용약관 동의 — 마지막으로 동의한 약관 버전과 시각(미동의·기존 회원은 NULL). 판정은 apps/auth/terms.py
     terms_version: Mapped[str | None] = mapped_column(String(20), nullable=True)
     terms_agreed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # 댓글 작성 금지 시각(관리자 조치). NULL=정상. 설정되면 댓글 작성·수정 403 COMMENT_BANNED
+    comment_banned_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # 관계
     # author_id 가 nullable(SET NULL)이므로 delete-orphan 대신 연결만 관리.
@@ -184,9 +186,9 @@ class Board(Base, TimestampMixin):
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     order_index: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
-    # 게시판별 댓글 허용 여부 (관리자 토글)
+    # 게시판별 댓글 허용 여부 (관리자 토글). 새 게시판은 꺼진 상태로 만든다(신고·차단 운영 준비 후 켠다)
     comments_enabled: Mapped[bool] = mapped_column(
-        Boolean, default=True, server_default="true", nullable=False
+        Boolean, default=False, server_default="false", nullable=False
     )
     min_role_required: Mapped[UserRole] = mapped_column(
         role_enum, default=UserRole.FREE, server_default=UserRole.FREE.value, nullable=False
@@ -240,9 +242,67 @@ class BlogComment(Base, TimestampMixin):
         ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
     )
     content: Mapped[str] = mapped_column(Text, nullable=False)
+    # 신고 누적으로 가려진 시각. NULL=공개. 관리자 기각(dismiss) 시 다시 NULL
+    hidden_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     post: Mapped["BlogPost"] = relationship(back_populates="comments")
     author: Mapped["User"] = relationship(back_populates="comments")
+
+
+def _utcnow() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+COMMENT_REPORT_REASONS = ("abuse", "spam", "sexual", "privacy", "scam", "other")
+COMMENT_REPORT_STATUSES = ("pending", "dismissed", "actioned")
+
+
+class CommentReport(Base):
+    """댓글 신고. 같은 사람이 같은 댓글을 두 번 신고할 수 없다(UNIQUE)."""
+
+    __tablename__ = "comment_reports"
+    __table_args__ = (
+        UniqueConstraint("comment_id", "reporter_id", name="uq_comment_reports_comment_reporter"),
+        CheckConstraint(
+            "reason IN ('abuse','spam','sexual','privacy','scam','other')", name="ck_comment_reports_reason"
+        ),
+        CheckConstraint("status IN ('pending','dismissed','actioned')", name="ck_comment_reports_status"),
+        Index("ix_comment_reports_reporter_id", "reporter_id"),
+        Index("ix_comment_reports_status", "status"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    comment_id: Mapped[int] = mapped_column(
+        ForeignKey("blog_comments.id", ondelete="CASCADE"), nullable=False
+    )
+    reporter_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    reason: Mapped[str] = mapped_column(String(20), nullable=False)
+    detail: Mapped[str | None] = mapped_column(Text, nullable=True)  # 최대 200자(스키마에서 검사)
+    status: Mapped[str] = mapped_column(
+        String(20), default="pending", server_default="pending", nullable=False
+    )
+    # 파이썬 기본값도 둔다 — 같은 초에 생긴 행끼리도 최신순 정렬이 흔들리지 않게(마이크로초)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, server_default=func.now(), nullable=False
+    )
+
+
+class UserBlock(Base):
+    """사용자 차단. blocker 에게 blocked 의 댓글이 보이지 않는다(복합 PK — 같은 쌍은 한 행)."""
+
+    __tablename__ = "user_blocks"
+    __table_args__ = (Index("ix_user_blocks_blocked_id", "blocked_id"),)
+
+    blocker_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    blocked_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    # 파이썬 기본값도 둔다 — 같은 초에 생긴 행끼리도 최신순 정렬이 흔들리지 않게(마이크로초)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, server_default=func.now(), nullable=False
+    )
 
 
 class PushTemplate(Base, TimestampMixin):

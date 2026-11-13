@@ -7,6 +7,7 @@ import BlogListPage from './pages/BlogListPage'
 import BlogEditorPage from './pages/BlogEditorPage'
 import BlogDetailPage from './pages/BlogDetailPage'
 import MembersPage from './pages/MembersPage'
+import CommentReportsPage from './pages/CommentReportsPage'
 import StatsPage from './pages/StatsPage'
 import TradingGameCoach from './pages/TradingGameCoach'
 import TradingGameSettings from './pages/TradingGameSettings'
@@ -40,6 +41,7 @@ export default function App() {
         <Route path="blogs/:id" element={<BlogDetailPage />} />
         <Route path="blogs/:id/edit" element={<BlogEditorPage />} />
         <Route path="members" element={<MembersPage />} />
+        <Route path="reports" element={<CommentReportsPage />} />
         <Route path="stats" element={<StatsPage />} />
         <Route path="game/coach" element={<TradingGameCoach />} />
         <Route path="game/settings" element={<TradingGameSettings />} />

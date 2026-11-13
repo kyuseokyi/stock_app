@@ -70,6 +70,20 @@ export interface CommentOut {
   content: string
   created_at: string
   updated_at: string
+  /** 신고 누적으로 가려짐(content '' · author_name null). 옛 서버엔 없을 수 있어 선택 */
+  hidden?: boolean
+  /** 로그인 사용자가 쓴 댓글(⋯ 메뉴: 삭제). 옛 서버엔 없을 수 있어 선택 */
+  is_mine?: boolean
+}
+
+/** 신고 사유(서버 값) */
+export type ReportReason = 'abuse' | 'spam' | 'sexual' | 'privacy' | 'scam' | 'other'
+
+/** 내 차단 목록 항목. 출처: backend/apps/blog/routers/blocks.py */
+export interface BlockOut {
+  user_id: number
+  nickname: string | null
+  blocked_at: string
 }
 
 // ---- SSE ----

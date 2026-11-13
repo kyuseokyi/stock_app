@@ -42,6 +42,7 @@ describe('normalizeMorningBrief', () => {
       bearishSectors: [],
       macroCheckpoints: ['환율 1,380원'],
       createdAt: '2026-10-30T08:30:00+09:00',
+      sources: [],
     });
   });
 });
@@ -66,10 +67,20 @@ describe('normalizeMovers', () => {
     expect(m.gainers).toHaveLength(2);
     expect(m.gainers[0]).toEqual({
       ticker: '005930', stockName: '삼성전자', price: 71200, changeRate: 29.9,
-      reasonSummary: 'HBM 승인', category: '수주계약', reliability: '상', riskWarning: null,
+      reasonSummary: 'HBM 승인', category: '수주계약', reliability: '상', riskWarning: null, sources: [],
     });
     expect(m.gainers[1]).toMatchObject({ ticker: '000660', stockName: '000660', price: null, changeRate: 12.5, reliability: null });
     expect(m.keywords).toEqual([{ keyword: 'HBM', background: '수요 급증', tickers: ['000660'] }]);
+  });
+  it('sources 를 정규화해 붙인다(옛 응답은 [])', () => {
+    const m = normalizeMovers({
+      gainers: [{ ticker: '005930', sources: [{ title: '기사', url: 'https://e.com/a', pub_date: null }] }],
+      losers: [{ ticker: '000660' }],
+    });
+    expect(m.gainers[0].sources).toEqual([{ title: '기사', url: 'https://e.com/a', pubDate: null }]);
+    expect(m.losers[0].sources).toEqual([]);
+    const b = normalizeMorningBrief({ brief: { headline: 'h', sources: [{ title: 't', url: 'https://e.com/b' }] } });
+    expect(b?.sources).toEqual([{ title: 't', url: 'https://e.com/b', pubDate: null }]);
   });
   it('각 목록은 최대 10개', () => {
     const many = Array.from({ length: 15 }, (_, i) => ({ ticker: String(i), change_rate: i }));

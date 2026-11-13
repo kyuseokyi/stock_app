@@ -15,7 +15,18 @@ from shared.cors import build_allowed_origins
 from shared.health import add_health_routes
 
 from . import events
-from .routers import ad_configs, app_versions, blogs, boards, comments, notifications, push_admin, push_devices
+from .routers import (
+    ad_configs,
+    admin_moderation,
+    app_versions,
+    blocks,
+    blogs,
+    boards,
+    comments,
+    notifications,
+    push_admin,
+    push_devices,
+)
 
 app = FastAPI(title="FunNote - Blog Service", version="0.1.0")
 
@@ -32,6 +43,8 @@ app.add_middleware(
 app.include_router(boards.router)
 app.include_router(blogs.router)
 app.include_router(comments.router)
+app.include_router(blocks.router)  # 내 차단 목록(/me/blocks)
+app.include_router(admin_moderation.router)  # 신고 관리·회원 관리(관리자)
 app.include_router(notifications.router)
 app.include_router(push_devices.router)
 app.include_router(push_admin.router)

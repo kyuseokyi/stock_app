@@ -11,6 +11,7 @@ const mover = (ticker: string): Mover => ({
   category: null,
   reliability: null,
   riskWarning: null,
+  sources: [],
 });
 const movers = (...tickers: string[]) => tickers.map(mover);
 

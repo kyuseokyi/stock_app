@@ -1,5 +1,6 @@
 // 주도주 AI 정성 분석(포착 사유·지뢰 감지) — 순수 함수(네트워크·RN 의존 없음, 테스트 대상).
 // 응답 정규화 · 뱃지 문구 · 세션 캐시(만료) · 동시 요청 수 제한 로더.
+import { normalizeSources, type NewsSource } from '@/features/ai-sources/sources';
 
 export type GrowthQuality = '본업성장' | '일회성이익' | '불확실';
 export type RedFlagLevel = 'CLEAN' | 'WARNING' | 'DANGER';
@@ -12,6 +13,8 @@ export type ScreenerAnalysis = {
   redFlagLevel: RedFlagLevel | null;
   redFlags: string[];
   date: string;
+  /** 근거 기사(최대 3, 없으면 []) */
+  sources: NewsSource[];
 };
 
 type Obj = Record<string, unknown>;
@@ -46,6 +49,7 @@ export function normalizeScreenerAnalysis(raw: unknown): ScreenerAnalysis | null
     redFlagLevel,
     redFlags: (Array.isArray(a.red_flags) ? a.red_flags : []).map(str).filter(Boolean),
     date: str(a.date),
+    sources: normalizeSources(a.sources),
   };
 }
 

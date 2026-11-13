@@ -18,10 +18,14 @@ import { useAuthStore } from '@/features/auth/store';
 import { HouseAdSlot } from '@/features/ads/house-ad-card';
 import { useAdConfig } from '@/features/ads/use-ad-config';
 import { useBlogDetail } from '@/features/blog/use-blog-detail';
+import { commentMenu, commentView } from '@/features/blog/comment-actions';
+import { CommentMenuSheet } from '@/features/blog/comment-menu-sheet';
+import type { Comment } from '@/features/blog/types';
 import { useComments } from '@/features/blog/use-comments';
 import { useBoardStore } from '@/features/boards/store';
 import { formatKstShort } from '@/features/game/lib/weekly';
 import { usePullRefresh } from '@/hooks/use-pull-refresh';
+import { showToast } from '@/ui';
 
 function fmtDateTime(iso: string): string {
   const d = new Date(iso);
@@ -104,6 +108,7 @@ export default function BlogDetailScreen() {
 
   const [webviewHeight, setWebviewHeight] = useState(MIN_WEBVIEW_HEIGHT);
   const [draft, setDraft] = useState('');
+  const [menuFor, setMenuFor] = useState<Comment | null>(null); // ⋯ 메뉴 시트를 연 댓글
 
   useEffect(() => {
     loadBoards();
@@ -137,6 +142,22 @@ export default function BlogDetailScreen() {
 
   const board = boards.find((b) => b.id === post.boardId);
   const commentsEnabled = board?.commentsEnabled ?? true;
+
+  // ⋯ 메뉴 — 비로그인은 로그인 안내(내정보 탭으로), 로그인은 시트
+  const openMenu = (c: Comment) => {
+    const menu = commentMenu(c, Boolean(token));
+    if (menu.kind === 'login') {
+      showToast('로그인하면 신고·차단할 수 있어요');
+      router.push('/profile');
+      return;
+    }
+    if (menu.kind === 'actions') setMenuFor(c);
+  };
+  const menuActions = menuFor ? commentMenu(menuFor, Boolean(token)) : null;
+  // 신고·차단·삭제 뒤 목록 새로고침(서버가 신고·차단한 댓글을 빼고 준다) — 스피너 없이, 실패는 조용히
+  const refreshAfterAction = () => {
+    void refreshComments().catch(() => {});
+  };
 
   const handleSubmit = async () => {
     const ok = await submit(draft);
@@ -201,15 +222,36 @@ export default function BlogDetailScreen() {
           ) : comments.length === 0 ? (
             <Text style={styles.emptyComments}>첫 댓글을 남겨보세요</Text>
           ) : (
-            comments.map((c) => (
-              <View key={c.id} style={styles.commentItem}>
-                <View style={styles.commentMetaRow}>
-                  <Text style={styles.commentAuthor}>{c.authorName || '게스트'}</Text>
-                  <Text style={styles.commentDate}>{fmtDateTime(c.createdAt)}</Text>
+            comments.map((c) => {
+              const view = commentView(c, '게스트');
+              if (view.hidden) {
+                return (
+                  <View key={c.id} style={styles.commentItem}>
+                    <Text style={styles.commentHidden}>{view.text}</Text>
+                  </View>
+                );
+              }
+              const hasMenu = commentMenu(c, Boolean(token)).kind !== 'none';
+              return (
+                <View key={c.id} style={styles.commentItem}>
+                  <View style={styles.commentMetaRow}>
+                    <Text style={styles.commentAuthor}>{view.author}</Text>
+                    <Text style={styles.commentDate}>{fmtDateTime(c.createdAt)}</Text>
+                    {hasMenu ? (
+                      <Pressable
+                        onPress={() => openMenu(c)}
+                        hitSlop={12}
+                        accessibilityRole="button"
+                        accessibilityLabel="댓글 메뉴"
+                        style={styles.commentMenu}>
+                        <Text style={styles.commentMenuText}>⋯</Text>
+                      </Pressable>
+                    ) : null}
+                  </View>
+                  <Text style={styles.commentContent}>{view.text}</Text>
                 </View>
-                <Text style={styles.commentContent}>{c.content}</Text>
-              </View>
-            ))
+              );
+            })
           )}
 
           {/* 401로 인한 자동 로그아웃 시 아래 분기가 compose→loginPrompt로 즉시 전환되므로,
@@ -247,6 +289,14 @@ export default function BlogDetailScreen() {
           )}
         </View>
       </ScrollView>
+      {menuFor && menuActions?.kind === 'actions' ? (
+        <CommentMenuSheet
+          comment={menuFor}
+          actions={menuActions.actions}
+          onClose={() => setMenuFor(null)}
+          onChanged={refreshAfterAction}
+        />
+      ) : null}
     </KeyboardAvoidingView>
   );
 }
@@ -366,6 +416,19 @@ const styles = StyleSheet.create((theme) => ({
   commentContent: {
     fontSize: 14,
     color: theme.colors.text,
+  },
+  commentHidden: {
+    fontSize: 13,
+    color: theme.colors.textSecondary,
+  },
+  commentMenu: {
+    marginLeft: 'auto',
+    paddingHorizontal: theme.gap(0.5),
+  },
+  commentMenuText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: theme.colors.textSecondary,
   },
   disabledNotice: {
     marginTop: theme.gap(1),

@@ -16,6 +16,7 @@ from apps.ai_analyst.clients.gemini_client import get_gemini_client
 from apps.ai_analyst.clients.naver_news import get_naver_news_client
 from apps.ai_analyst.clients.opendart import get_opendart_client, red_flag_hints
 from apps.ai_analyst.schemas import ScreenerQualitativeResponse
+from apps.ai_analyst.sources import news_sources
 
 log = logging.getLogger(__name__)
 
@@ -159,8 +160,9 @@ def evaluate(day: date, ticker: str, name: str, canslim_summary, *, session: Ses
     # ticker 는 모델 값을 믿지 않고 인자로 덮는다. hook_summary 는 PG String(255) 에 맞춘다
     resp = resp.model_copy(update={"ticker": ticker, "hook_summary": resp.hook_summary[:HOOK_MAX]})
     resp = _apply_dart_floor(resp, hints)
-    repository.upsert_evaluation(session, day, resp)
-    return {**resp.model_dump(), "date": day.isoformat()}
+    sources = news_sources(articles)  # 근거 기사 — 프롬프트에 넣은 뉴스로 채운다(R3)
+    repository.upsert_evaluation(session, day, resp, sources=sources)
+    return {**resp.model_dump(), "date": day.isoformat(), "sources": sources}
 
 
 def evaluate_batch(day: date, *, session: Session, limit: int = CANDIDATE_LIMIT, force: bool = False) -> dict:

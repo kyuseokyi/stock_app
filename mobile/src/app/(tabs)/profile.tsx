@@ -130,6 +130,12 @@ export default function ProfileScreen() {
             onPress={() => router.push('/fund')}
           />
           <PostNoticeRow />
+          <ListRow
+            title="차단한 사용자"
+            subtitle="댓글을 숨긴 사용자 관리"
+            left={<Text style={styles.emoji}>🚫</Text>}
+            onPress={() => router.push('/blocked-users')}
+          />
         </View>
 
         <View style={styles.group}>

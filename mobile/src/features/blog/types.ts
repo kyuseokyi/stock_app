@@ -28,4 +28,15 @@ export type Comment = {
   content: string;
   createdAt: string; // ISO
   updatedAt: string;
+  /** 신고 누적으로 가려짐(내용·작성자 이름 비어 옴) */
+  hidden: boolean;
+  /** 로그인 사용자가 쓴 댓글(⋯ 메뉴: 삭제) */
+  isMine: boolean;
+};
+
+/** 내가 차단한 사용자 */
+export type BlockedUser = {
+  userId: number;
+  nickname: string | null;
+  blockedAt: string;
 };

@@ -27,6 +27,7 @@ const sample = (over: Partial<ScreenerAnalysis> = {}): ScreenerAnalysis => ({
   redFlagLevel: 'CLEAN',
   redFlags: [],
   date: '2026-10-30',
+  sources: [],
   ...over,
 });
 
@@ -59,7 +60,12 @@ describe('normalizeScreenerAnalysis', () => {
       redFlagLevel: 'WARNING',
       redFlags: ['CB 전환물량 12% 대기', '대주주 지분 매각'],
       date: '2026-10-30',
+      sources: [],
     });
+  });
+  it('sources 를 정규화해 붙인다', () => {
+    const a = normalizeScreenerAnalysis({ analysis: { ...raw, sources: [{ title: '기사', url: 'https://e.com/a', pub_date: '2026-10-30' }] } });
+    expect(a?.sources).toEqual([{ title: '기사', url: 'https://e.com/a', pubDate: '2026-10-30' }]);
   });
   it('허용값 밖의 실적 품질·지뢰 단계는 null, red_flags 가 배열이 아니면 빈 배열', () => {
     const a = normalizeScreenerAnalysis({

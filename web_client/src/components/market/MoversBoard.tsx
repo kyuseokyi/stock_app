@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { AI_NOTICE, TabChips } from './SectionHead'
+import NewsSources from '../ai/NewsSources'
 import { formatPct, formatPrice, pnlClass } from '../../lib/format'
 import type { Mover } from '../../types/marketRest'
 
@@ -35,6 +36,8 @@ function MoverRow({ rank, item }: { rank: number; item: Mover }) {
           </div>
         )}
       </Link>
+      {/* 근거 기사 — Link(<a>) 밖 형제(링크 중첩 금지) */}
+      <NewsSources sources={item.sources} className="mb-1.5 ml-8 mr-1" />
     </li>
   )
 }

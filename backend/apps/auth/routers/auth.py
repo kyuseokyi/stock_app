@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from shared.auth import get_current_user
 from shared.database import get_db
 from shared.models import User, UserRole
+from shared.nickname_filter import is_blocked_nickname, safe_nickname
 from shared.security import verify_password
 
 from .. import schemas
@@ -87,12 +88,14 @@ async def guest_login(
 
     result = await db.execute(select(User).where(User.email == email))
     user = result.scalar_one_or_none()
+    # 계정 식별(이메일)은 요청 원문으로 — 저장 닉네임만 금칙어 검사(R2)
+    blocked = is_blocked_nickname(nickname)
     if user is None:
-        user = User(email=email, nickname=nickname, role=UserRole.FREE, is_active=True)
+        user = User(email=email, nickname=safe_nickname(nickname), role=UserRole.FREE, is_active=True)
         db.add(user)
         await db.commit()
         await db.refresh(user)
-    elif user.nickname != nickname:
+    elif not blocked and user.nickname != nickname:  # 금칙어면 기존 닉네임 유지(매 로그인 새 기본값 방지)
         user.nickname = nickname
         await db.commit()
         await db.refresh(user)

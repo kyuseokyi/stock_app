@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { StyleSheet } from 'react-native-unistyles';
 
+import { NewsSources } from '@/features/ai-sources/news-sources';
 import { BottomSheet } from '@/ui';
 
 import { formatShortDate } from '../dashboard';
@@ -26,6 +27,8 @@ export function BriefCard({ brief }: { brief: MorningBrief }) {
         <Text style={styles.headline}>{brief.headline}</Text>
         <Text style={styles.more}>수혜·주의 섹터 보기 ›</Text>
       </Pressable>
+      {/* 근거 기사 — 카드(Pressable) 밖 형제로 둬서 카드 탭과 겹치지 않게 */}
+      <NewsSources sources={brief.sources} style={styles.sources} />
       {open ? (
         <BottomSheet title="AI 장전 브리핑" onClose={() => setOpen(false)}>
           <ScrollView style={styles.sheet} contentContainerStyle={styles.sheetBody}>
@@ -85,6 +88,7 @@ const styles = StyleSheet.create((theme) => ({
   date: { fontSize: 12, color: theme.colors.textSecondary },
   headline: { fontSize: 17, fontWeight: '700', lineHeight: 24, color: theme.colors.text },
   more: { fontSize: 13, fontWeight: '600', color: theme.colors.primary },
+  sources: { marginTop: theme.gap(1), paddingHorizontal: theme.gap(1) },
   sheet: { maxHeight: 480 },
   sheetBody: { gap: theme.gap(2.5), paddingBottom: theme.gap(1) },
   sheetHeadline: { fontSize: 17, fontWeight: '700', lineHeight: 24, color: theme.colors.text },

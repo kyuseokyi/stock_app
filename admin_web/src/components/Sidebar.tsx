@@ -18,6 +18,7 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { to: '/boards', label: '게시판 관리', icon: '🗂️' },
       { to: '/blogs', label: '게시글 관리', icon: '📝' },
+      { to: '/reports', label: '신고 관리', icon: '🚩' },
     ],
   },
   {

@@ -2,6 +2,7 @@ import { useState } from 'react'
 import Card from '../ui/Card'
 import Modal from '../ui/Modal'
 import { AI_NOTICE } from './SectionHead'
+import NewsSources from '../ai/NewsSources'
 import { formatShortDate } from '../../lib/marketDashboard'
 import type { MorningBrief, SectorNote } from '../../types/marketRest'
 
@@ -44,6 +45,8 @@ export default function BriefCard({ brief }: { brief: MorningBrief }) {
           <span className="mt-2 block text-pretty text-base font-bold text-ink">{brief.headline}</span>
           <span className="mt-1 block text-sm font-semibold text-brand-strong">수혜·주의 섹터 보기 ›</span>
         </button>
+        {/* 근거 기사 — 버튼 밖 형제(버튼 안에 링크 금지) */}
+        <NewsSources sources={brief.sources} className="-mt-1 px-4 pb-4" />
       </Card>
       {open && (
         <Modal title="AI 장전 브리핑" onClose={() => setOpen(false)}>

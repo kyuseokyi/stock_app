@@ -176,7 +176,7 @@ async def test_agree_terms_unauthenticated_401(auth_client):
 
 async def _seed_post(maker) -> BlogPost:
     async with maker() as db:
-        board = Board(name="자유", order_index=0)
+        board = Board(name="자유", order_index=0, comments_enabled=True)  # 기본값 false(D8) — 작성 경로 검증용으로 켠다
         db.add(board)
         await db.commit()
         await db.refresh(board)
