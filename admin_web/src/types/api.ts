@@ -156,3 +156,47 @@ export interface PushTemplateIn {
   title: string
   body: string
 }
+
+// ── 댓글 신고 관리·회원 관리(blog /api/v1/admin) — backend/apps/blog/moderation_schemas.py ──
+export type ReportReason = 'abuse' | 'spam' | 'sexual' | 'privacy' | 'scam' | 'other'
+/** 목록 필터 — 처리(actioned)된 신고는 댓글이 지워져 목록에 남지 않으므로 대기/전체만 쓴다 */
+export type ReportStatusFilter = 'pending' | 'all'
+export type ResolveAction = 'delete' | 'dismiss' | 'ban_author'
+
+export interface ReportedCommentOut {
+  comment_id: number
+  content: string
+  post_id: number
+  post_title: string
+  author_id: number
+  author_nickname: string | null
+  author_comment_banned: boolean
+  report_count: number
+  reason_counts: Partial<Record<ReportReason, number>> & Record<string, number>
+  last_reported_at: string
+  hidden: boolean
+}
+
+export interface ResolveResult {
+  ok: boolean
+  action: ResolveAction
+}
+
+export interface AdminUserOut {
+  id: number
+  email: string | null
+  nickname: string | null
+  role: UserRole
+  provider: string | null
+  is_active: boolean
+  comment_banned: boolean
+  comment_banned_at: string | null
+  created_at: string
+}
+
+export interface AdminUserListOut {
+  total: number
+  page: number
+  size: number
+  items: AdminUserOut[]
+}

@@ -53,6 +53,14 @@ export default function BoardsPage() {
   }
 
   const onToggleComments = async (board: BoardOut) => {
+    // 켤 때만 확인(끌 때는 기존대로 바로). 사용자 글 공개 → 신고 처리 책임 안내
+    if (
+      !board.comments_enabled &&
+      !window.confirm(
+        "댓글을 켜면 사용자가 쓴 글이 공개됩니다. 신고가 들어오면 '신고 관리'에서 처리해 주세요. 켤까요?",
+      )
+    )
+      return
     try {
       await updateBoard(board.id, { comments_enabled: !board.comments_enabled })
       load()
