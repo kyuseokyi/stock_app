@@ -27,7 +27,7 @@
 | D2 | **애플 로그인**: 앱 버튼 + auth 서버 공급자. 탈퇴할 때 Apple REST API로 토큰 철회 | iOS | auth 서버, 앱 | 대 | Apple 4.8, 5.1.1(v) |
 | D3 ✅ | **이용약관** 공개 페이지(`/terms`: 금지 행위·신고와 조치·투자 권유 아님·모의투자는 가상 자금·책임 범위) + **첫 로그인 때 동의** 기록 | 공통 | 웹, 앱, auth 서버 | 중 | Play UGC(콘텐츠 작성 전 약관 동의) |
 | D4 ✅ | **고객지원 페이지** `/support`: 문의 메일(`support@funnotedaily.com`), 자주 묻는 질문, 정책 링크 | 공통 | 웹 | 소 | Apple 지원 URL 필수(실제 연락처로 이어져야 함) |
-| D5 | **`funnotedaily.com` 루트가 응답 없음** → `app.funnotedaily.com`으로 리다이렉트 | 공통 | Cloudflare | 소 | 깨진 링크는 Apple 2.1 반려 사유 |
+| D5 ✅ | **`funnotedaily.com` 루트가 응답 없음** → `app.funnotedaily.com`으로 리다이렉트(2026-11-13 완료: 루트·www A `192.0.2.1` Proxied + Redirect Rules 301 경로·쿼리 유지, Always Use HTTPS 켬) | 공통 | Cloudflare | 소 | 깨진 링크는 Apple 2.1 반려 사유 |
 | D6 ✅ | **권한 정리**: `android.blockedPermissions`에 `SYSTEM_ALERT_WINDOW`(Expo 템플릿이 넣지만 쓰지 않음), 쓰지 않는 `READ/WRITE_EXTERNAL_STORAGE` | Android | `mobile/app.config.js` | 소 | Play 민감 권한 정책 |
 | D7 | **iOS 설정**: `ios.privacyManifests`(Required Reason API — UserDefaults·FileTimestamp·SystemBootTime·DiskSpace), 암호화 선언(`ITSAppUsesNonExemptEncryption=false`), `supportsTablet` 결정, Google 로그인 `iosUrlScheme` 실제 값(지금 `com.googleusercontent.apps.unset`이라 iOS Drive 백업이 동작하지 않음) | iOS | `mobile/app.config.js` | 소 | Apple Privacy Manifest(2024-05~), 수출 규정, 2.1 |
 | D8 ✅ | **댓글 신고·차단 + 어드민 신고 처리 + 댓글 기본값 끄기**(`boards.comments_enabled` 기본 `true` → `false`, 기존 값은 유지). 댓글은 **이 기능을 배포한 뒤에만** 켠다 | 공통 | blog 서버, 앱, 웹, 어드민 | 대 | Play UGC, Apple 1.2(필터·신고·차단·연락처) |
