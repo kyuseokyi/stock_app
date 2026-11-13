@@ -20,7 +20,7 @@ export type AccountsView = {
   kind: 'accounts';
   title: string;
   group: string;
-  evalDate: string; // 포맷된 섹션 최종평가일
+  evalDate: string; // 포맷된 섹션 최종평가일 — 리포트 기준일(ReportView.evalDate)과 같으면 ''
   accounts: AccountView[];
   notes: { title: string; items: string[]; links: Link[] }[];
 };
@@ -109,9 +109,12 @@ function accountView(a: Account): AccountView {
 export function toReportView(report: FundReport): ReportView {
   const n = report.notice;
   const firstEval = report.sections.find((s) => s.kind === 'accounts' && s.evalDate);
+  const evalDate = firstEval?.kind === 'accounts' ? fmtDate(firstEval.evalDate) : '';
+  // 화면 위쪽에 이미 "기준일"로 보이므로, 같은 날짜는 섹션 제목에서 뺀다(다른 날짜인 섹션만 남김)
+  const sectionDate = (raw: string) => (fmtDate(raw) === evalDate ? '' : fmtDate(raw));
   return {
     title: report.title,
-    evalDate: firstEval?.kind === 'accounts' ? fmtDate(firstEval.evalDate) : '',
+    evalDate,
     notice: n && {
       label: n.label,
       message: n.message,
@@ -127,7 +130,7 @@ export function toReportView(report: FundReport): ReportView {
             kind: 'accounts',
             title: s.title,
             group: s.group,
-            evalDate: fmtDate(s.evalDate),
+            evalDate: sectionDate(s.evalDate),
             accounts: s.accounts.map(accountView),
             notes: s.notes.map((nb) => ({
               title: nb.title,
