@@ -1,15 +1,18 @@
 import { useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Pressable, RefreshControl, ScrollView, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
 import { getSocialProviders, type SocialProvider, type SocialProviders } from '@/features/auth/api';
+import { currentAppVersion } from '@/features/app-update/app-info';
 import { DeleteAccountSheet } from '@/features/auth/delete-account-sheet';
+import { ReviewLoginForm } from '@/features/auth/review-login-form';
 import { socialErrorMessage } from '@/features/auth/return-url';
 import { startSocialLogin } from '@/features/auth/social';
 import { SocialButton } from '@/features/auth/social-button';
 import { useAuthStore } from '@/features/auth/store';
+import { INFO_NOTICE, registerReviewTap } from '@/features/auth/terms';
 import { PolicyLinks } from '@/features/legal/policy-links';
 import { PostNoticeRow } from '@/features/push/post-notice-row';
 import { usePullRefresh } from '@/hooks/use-pull-refresh';
@@ -147,7 +150,7 @@ export default function ProfileScreen() {
         {deleteOpen ? (
           <DeleteAccountSheet onClose={() => setDeleteOpen(false)} onDeleted={handleDeleted} />
         ) : null}
-        <PolicyLinks />
+        <ProfileFooter loggedIn />
       </ScrollView>
     );
   }
@@ -192,8 +195,33 @@ export default function ProfileScreen() {
           <Button label="시작하기" loading={submitting} onPress={handleLogin} />
         </View>
       ) : null}
-      <PolicyLinks />
+      <ProfileFooter loggedIn={false} />
     </ScrollView>
+  );
+}
+
+/**
+ * 내정보 맨 아래 — 정보 제공 고지 · 정책 링크 · 앱 버전.
+ * 비로그인일 때만 버전을 3초 안에 7번 누르면 심사용 로그인 폼이 열린다(로그인 분기와 다른 인스턴스라 로그인·로그아웃 시 초기화).
+ */
+function ProfileFooter({ loggedIn }: { loggedIn: boolean }) {
+  const taps = useRef<number[]>([]);
+  const [reviewOpen, setReviewOpen] = useState(false);
+  const onVersionPress = () => {
+    if (loggedIn || reviewOpen) return;
+    const r = registerReviewTap(taps.current, Date.now());
+    taps.current = r.times;
+    if (r.open) setReviewOpen(true);
+  };
+  return (
+    <View style={styles.footer}>
+      <Text style={styles.notice}>{INFO_NOTICE}</Text>
+      <PolicyLinks />
+      <Pressable onPress={onVersionPress} style={styles.versionHit} accessibilityRole="text">
+        <Text style={styles.version}>버전 {currentAppVersion()}</Text>
+      </Pressable>
+      {!loggedIn && reviewOpen ? <ReviewLoginForm /> : null}
+    </View>
   );
 }
 
@@ -229,5 +257,9 @@ const styles = StyleSheet.create((theme) => ({
   },
   guestLabel: { fontSize: 13, color: theme.colors.textSecondary },
   withdraw: { alignSelf: 'center', paddingVertical: theme.gap(1) },
+  footer: { marginTop: theme.gap(2), gap: theme.gap(0.5) },
+  notice: { fontSize: 12, lineHeight: 18, color: theme.colors.textSecondary, textAlign: 'center' },
+  versionHit: { alignSelf: 'center', minHeight: 44, justifyContent: 'center', paddingHorizontal: theme.gap(2) },
+  version: { fontSize: 12, color: theme.colors.textSecondary },
   withdrawLabel: { fontSize: 13, color: theme.colors.textSecondary, textDecorationLine: 'underline' },
 }));

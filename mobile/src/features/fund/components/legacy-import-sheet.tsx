@@ -2,6 +2,7 @@ import { useRef, useState } from 'react';
 import { Alert, Text } from 'react-native';
 import { StyleSheet } from 'react-native-unistyles';
 
+import { useTermsGateOpen } from '@/features/auth/use-terms-gate';
 import { BottomSheet, Button, showToast } from '@/ui';
 
 import { MAX_FUNDS } from '../core';
@@ -21,6 +22,7 @@ export function LegacyImportSheet({ preview, onClose, onDone }: Props) {
   const { count, importable, dropped } = preview;
   const [busy, setBusy] = useState<'' | 'import' | 'discard'>('');
   const busyRef = useRef(false); // 연속 탭으로 두 번 실행되지 않게
+  const termsGateOpen = useTermsGateOpen(); // 약관 동의 게이트가 우선(시트 두 장 겹침 방지)
 
   const runOnce = async (kind: 'import' | 'discard', fn: () => Promise<void>) => {
     if (busyRef.current) return;
@@ -60,6 +62,7 @@ export function LegacyImportSheet({ preview, onClose, onDone }: Props) {
       },
     ]);
 
+  if (termsGateOpen) return null;
   return (
     <BottomSheet title="저장된 펀드를 가져올까요?" onClose={busy ? () => {} : onClose}>
       <Text style={styles.text}>

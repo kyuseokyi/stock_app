@@ -11,7 +11,15 @@ import { sessionEndMessage, shouldValidate, type SessionEndReason } from '@/lib/
 import { callRefresh, isAccessTokenStale, registerTokensRefreshed, serverLogout } from '@/lib/api/token-refresh';
 import { showToast } from '@/ui';
 
-import { deleteAccount as deleteAccountApi, fetchMe, guestLogin, toUserOrNull, type LoginResult } from './api';
+import {
+  agreeTerms as agreeTermsApi,
+  deleteAccount as deleteAccountApi,
+  fetchMe,
+  guestLogin,
+  reviewLogin as reviewLoginApi,
+  toUserOrNull,
+  type LoginResult,
+} from './api';
 import { ensureInstallCleanup } from './install-cleanup';
 import { runBeforeLogout } from './logout-hooks';
 import type { User } from './types';
@@ -40,6 +48,10 @@ type AuthState = {
   /** 회원 탈퇴(DELETE /auth/me) 성공 시 로그아웃. 실패는 그대로 throw(ApiError) — 로그인 상태 유지 */
   deleteAccount: () => Promise<void>;
   hydrate: () => Promise<void>;
+  /** 현재 약관 동의(POST /auth/me/terms) → user 갱신·저장. 실패는 그대로 throw(ApiError) — 시트가 문구 표시 */
+  agreeTerms: () => Promise<void>;
+  /** 심사 전용 로그인 — 성공하면 loginWithToken 과 같은 저장 경로(리프레시 포함). 실패는 throw(ApiError) */
+  reviewLogin: (email: string, password: string) => Promise<User>;
   /** 서버가 토큰을 거부(401·WS 4401) — 거부된 토큰이 현재 토큰일 때만 로그아웃 + 안내 1회 */
   expireSession: (rejectedToken: string | null, reason: SessionEndReason) => void;
   /** 실행·포그라운드 복귀 시 GET /auth/me 로 세션 확인(force=false 면 60초 이내 생략, 네트워크 오류 무시) */
@@ -139,6 +151,22 @@ export const useAuthStore = create<AuthState>((set, get) => {
       // 저장 실패는 무시(메모리 상태가 우선) — logout()과 동일하게 fire-and-forget.
       persist(accessToken, refreshToken, user).catch(() => {});
       return user;
+    },
+
+    reviewLogin: async (email, password) => {
+      const result = await reviewLoginApi(email, password);
+      return get().loginWithToken(result);
+    },
+
+    agreeTerms: async () => {
+      const { token } = get();
+      if (!token) return;
+      const user = await agreeTermsApi();
+      // 요청 중 로그아웃·다른 사용자 재로그인이면 반영하지 않는다(validateSession 과 같은 규칙)
+      const cur = get();
+      if (!cur.token || (cur.token !== token && cur.user?.id !== user.id)) return;
+      set({ user });
+      persist(cur.token, cur.refreshToken, user).catch(() => {});
     },
 
     applyRefreshed: ({ accessToken, refreshToken, user }) => {

@@ -231,3 +231,58 @@ describe('세션 만료', () => {
     expect(mockToasts).toEqual([]);
   });
 });
+
+describe('약관 동의·심사 로그인(2026-11-13)', () => {
+  it('agreeTerms → POST /me/terms {version} 후 termsRequired=false 로 갱신·저장', async () => {
+    useAuthStore.getState().loginWithToken({ accessToken: fresh(), refreshToken: 'R1', user: { ...user, termsRequired: true } });
+    mockFetch((url) =>
+      url.endsWith('/api/v1/auth/me/terms') ? res(200, { ...user, terms_required: false }) : res(204),
+    );
+    await useAuthStore.getState().agreeTerms();
+    await flush();
+    const termsCall = calls.find((c) => c.url.endsWith('/api/v1/auth/me/terms'));
+    expect(termsCall?.body).toEqual({ version: '2026-11-13' });
+    expect(useAuthStore.getState().user?.termsRequired).toBe(false);
+    expect(JSON.parse(mockMem.get('auth_user') ?? '{}').termsRequired).toBe(false);
+  });
+
+  it('agreeTerms 409 → ApiError 를 던지고 동의 필요 상태 유지', async () => {
+    useAuthStore.getState().loginWithToken({ accessToken: fresh(), user: { ...user, termsRequired: true } });
+    mockFetch(() => res(409, { detail: { code: 'TERMS_VERSION_MISMATCH', message: 'x' } }));
+    await expect(useAuthStore.getState().agreeTerms()).rejects.toMatchObject({ status: 409 });
+    expect(useAuthStore.getState().user?.termsRequired).toBe(true);
+  });
+
+  it('갱신 응답의 user 도 terms_required 를 잃지 않는다', () => {
+    useAuthStore.getState().loginWithToken({ accessToken: fresh(), refreshToken: 'R1', user });
+    useAuthStore.getState().applyRefreshed({
+      accessToken: fresh('b'),
+      refreshToken: 'R2',
+      user: { ...user, terms_required: true },
+    });
+    expect(useAuthStore.getState().user?.termsRequired).toBe(true);
+  });
+
+  it('reviewLogin 성공 → 리프레시 포함 저장(간편 로그인과 같은 경로)', async () => {
+    const a = fresh();
+    mockFetch((url) =>
+      url.endsWith('/api/v1/auth/review-login')
+        ? res(200, { access_token: a, token_type: 'bearer', refresh_token: 'RV', expires_in: 900, user: { ...user, terms_required: true } })
+        : res(204),
+    );
+    await useAuthStore.getState().reviewLogin('review@funnote.app', 'pw-123456789');
+    await flush();
+    const call = calls.find((c) => c.url.endsWith('/api/v1/auth/review-login'));
+    expect(call?.body).toEqual({ email: 'review@funnote.app', password: 'pw-123456789', platform: 'app' });
+    expect(useAuthStore.getState().token).toBe(a);
+    expect(mockMem.get(REFRESH_KEY)).toBe('RV');
+    expect(useAuthStore.getState().user?.termsRequired).toBe(true);
+  });
+
+  it('reviewLogin 401 → ApiError, 로그인되지 않음·세션 만료 안내 없음', async () => {
+    mockFetch(() => res(401, { detail: '이메일 또는 비밀번호가 올바르지 않습니다.' }));
+    await expect(useAuthStore.getState().reviewLogin('a@b.c', 'x')).rejects.toMatchObject({ status: 401 });
+    expect(useAuthStore.getState().token).toBeNull();
+    expect(mockToasts).toEqual([]);
+  });
+});

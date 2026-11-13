@@ -6,6 +6,7 @@
 import { Platform, Text, View } from 'react-native';
 import { StyleSheet } from 'react-native-unistyles';
 
+import { useTermsGateOpen } from '@/features/auth/use-terms-gate';
 import { BottomSheet, Button } from '@/ui';
 
 import { isBlockingMode } from '../decide';
@@ -37,6 +38,7 @@ const DEFAULTS = {
 /** 루트 레이아웃에 한 번 둔다. 띄울 안내가 없으면 아무것도 그리지 않는다 */
 export function AppUpdateGate() {
   const { mode, check, restarting, notice, dismissStore, openStore, dismissOta, restart, exitApp } = useAppUpdate();
+  const termsGateOpen = useTermsGateOpen();
   if (!mode) return null;
 
   const d = DEFAULTS[mode];
@@ -53,6 +55,9 @@ export function AppUpdateGate() {
   }
 
   const blocking = isBlockingMode(mode);
+  // 닫을 수 있는 안내(권장 업데이트·선택 OTA)는 약관 동의 게이트 뒤로 — dismiss 를 부르지 않아 동의 뒤 다시 뜬다.
+  // 차단 모드(점검·강제)는 반대로 게이트보다 우선(TermsGate 가 그동안 숨는다)
+  if (!blocking && termsGateOpen) return null;
   // 닫기 가능한 모드에서 ✕·배경·뒤로가기 = "나중에 하기"
   const onClose = mode === 'STORE_RECOMMENDED' ? () => void dismissStore() : mode === 'OTA_OPTIONAL' ? dismissOta : noop;
 
