@@ -81,7 +81,7 @@ describe.each(['current', 'legacy'])('toReportView — %s 픽스처', (name) => 
   it('모든 계좌에 대표값(hero)이 있고 시작일은 포맷된다', () => {
     for (const s of view.sections) {
       if (s.kind !== 'accounts') continue;
-      expect(s.evalDate).toMatch(/^(\d{4}\.\d{2}\.\d{2})?$/); // 위쪽 기준일과 같으면 비운다
+      expect(s.evalDate).toMatch(/^\d{4}\.\d{2}\.\d{2}$/);
       for (const a of s.accounts) {
         expect(['현재평가금', '수익측정가치']).toContain(a.hero?.label);
         expect(a.since).toMatch(/^\d{4}\.\d{2}\.\d{2}$/);
@@ -168,18 +168,6 @@ describe('toReportView — 링크·대표값 없음', () => {
       rows: [{ label: '총 손익금' }, { label: '누적수익율' }],
     });
     expect(v.evalDate).toBe('2026.10.17');
-  });
-
-  it('섹션 기준일이 화면 위쪽 기준일과 같으면 섹션 제목에서 뺀다(다른 날짜는 남긴다)', () => {
-    const sec = (title: string, evalDate: string) => ({
-      kind: 'accounts' as const, title, evalDate, group: '', accounts: [], notes: [],
-    });
-    const v = toReportView({
-      ...base,
-      sections: [sec('a', '2026년 10월 17일'), sec('b', '2026년 10월 17일'), sec('c', '2026년 10월 16일')],
-    });
-    expect(v.evalDate).toBe('2026.10.17');
-    expect(v.sections.map((s) => s.kind === 'accounts' && s.evalDate)).toEqual(['', '', '2026.10.16']);
   });
 });
 
