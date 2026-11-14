@@ -89,7 +89,7 @@ export default function BlogDetailScreen() {
   // boards 배열을 구독해야 로드 완료 시 재렌더된다(boardName 함수 참조 자체는 불변).
   const boards = useBoardStore((s) => s.boards);
   const boardName = useBoardStore((s) => s.boardName);
-  const { data: post, loading, error, reload, refresh } = useBlogDetail(blogId);
+  const { data: post, loading, error, notFound, reload, refresh } = useBlogDetail(blogId);
   const {
     data: comments,
     loading: commentsLoading,
@@ -124,6 +124,19 @@ export default function BlogDetailScreen() {
       <View style={styles.center}>
         <ActivityIndicator />
         <Text style={styles.hint}>불러오는 중…</Text>
+      </View>
+    );
+  }
+
+  // 없는 글(삭제·잘못된 주소)은 오류가 아니다 — 안내와 커뮤니티로 돌아가는 버튼만
+  if (notFound) {
+    return (
+      <View style={styles.center}>
+        <Text style={styles.errorTitle}>글을 찾을 수 없어요</Text>
+        <Text style={styles.hint}>삭제됐거나 주소가 바뀐 글이에요</Text>
+        <Pressable style={styles.retry} onPress={() => router.replace('/community')}>
+          <Text style={styles.retryText}>커뮤니티로</Text>
+        </Pressable>
       </View>
     );
   }

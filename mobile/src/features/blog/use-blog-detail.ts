@@ -9,27 +9,32 @@ type State = {
   data: BlogPost | null;
   loading: boolean;
   error: string | null;
+  /** 없는 글(404)·잘못된 번호 — 오류가 아니라 "글이 없음" 안내를 띄운다 */
+  notFound: boolean;
 };
+
+/** 글 상세 실패 → 화면 상태. 404 는 오류가 아니라 '없는 글'(삭제됐거나 상용·개발 서버가 달라 번호가 없는 경우). */
+export function blogDetailFailure(e: unknown): Pick<State, 'error' | 'notFound'> {
+  if (e instanceof ApiError && e.status === 404) return { error: null, notFound: true };
+  if (e instanceof ApiError) return { error: `잠시 후 다시 시도해 주세요 (오류 ${e.status})`, notFound: false };
+  return { error: '서버에 연결할 수 없어요. 잠시 후 다시 시도해 주세요.', notFound: false };
+}
 
 /** 글 상세(id)를 불러오고 로딩/에러/재시도 상태를 제공한다. */
 export function useBlogDetail(id: number) {
-  const [state, setState] = useState<State>({ data: null, loading: true, error: null });
+  const [state, setState] = useState<State>({ data: null, loading: true, error: null, notFound: false });
 
   const load = useCallback(async () => {
     if (!Number.isFinite(id)) {
-      setState({ data: null, loading: false, error: '잘못된 글 번호입니다' });
+      setState({ data: null, loading: false, error: null, notFound: true });
       return;
     }
-    setState((s) => ({ ...s, loading: true, error: null }));
+    setState((s) => ({ ...s, loading: true, error: null, notFound: false }));
     try {
       const post = await fetchBlog(id);
-      setState({ data: post, loading: false, error: null });
+      setState({ data: post, loading: false, error: null, notFound: false });
     } catch (e) {
-      const msg =
-        e instanceof ApiError
-          ? `서버 오류 (${e.status})`
-          : '네트워크 오류 — blog 서비스(:8000)가 실행 중인지 확인하세요';
-      setState({ data: null, loading: false, error: msg });
+      setState({ data: null, loading: false, ...blogDetailFailure(e) });
     }
   }, [id]);
 
@@ -37,7 +42,7 @@ export function useBlogDetail(id: number) {
   const refresh = useCallback(async () => {
     if (!Number.isFinite(id)) return;
     const post = await fetchBlog(id);
-    setState({ data: post, loading: false, error: null });
+    setState({ data: post, loading: false, error: null, notFound: false });
   }, [id]);
 
   useEffect(() => {

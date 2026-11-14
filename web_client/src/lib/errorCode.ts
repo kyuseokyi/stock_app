@@ -39,3 +39,8 @@ function requestHost(baseURL?: string, url?: string): string {
     return ''
   }
 }
+
+/** 서버가 "없음"(404)으로 답했는지 — 없는 글·게시판은 오류가 아니라 안내로 보여 준다 */
+export function isNotFound(err: unknown): boolean {
+  return axios.isAxiosError(err) && err.response?.status === 404
+}
