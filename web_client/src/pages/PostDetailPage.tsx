@@ -1,18 +1,19 @@
 import { type FormEvent, useCallback, useEffect, useRef, useState } from 'react'
 import axios from 'axios'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import { createComment, getBlog, listComments } from '../api/blog'
 import CommentMenuModal from '../components/CommentMenuModal'
 import { commentErrorMessage, commentMenu, commentView, errorParts } from '../lib/commentActions'
 import { useBoardStore } from '../store/boards'
 import { useAuthStore } from '../store/auth'
-import { withErrorCode } from '../lib/errorCode'
+import { isNotFound, withErrorCode } from '../lib/errorCode'
 import { formatKstShort } from '../lib/format'
 import LoginModal from '../components/LoginModal'
 import Card from '../components/ui/Card'
 import AdSlot from '../components/ads/AdSlot'
 import { useAdConfig } from '../hooks/useAdConfig'
 import Button from '../components/ui/Button'
+import EmptyState from '../components/ui/EmptyState'
 import type { BlogOut, CommentOut } from '../types/api'
 import { useDocumentTitle } from '../hooks/useDocumentTitle'
 
@@ -34,6 +35,8 @@ export default function PostDetailPage() {
   const [comments, setComments] = useState<CommentOut[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const navigate = useNavigate()
+  const [notFound, setNotFound] = useState(false) // 없는 글(404) — 오류가 아니라 안내
   const [content, setContent] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [commentError, setCommentError] = useState('')
@@ -43,12 +46,17 @@ export default function PostDetailPage() {
 
   useEffect(() => {
     setLoading(true)
+    setNotFound(false)
+    setError('')
     Promise.all([getBlog(id), loadComments(id)])
       .then(([p, c]) => {
         setPost(p)
         setComments(c)
       })
-      .catch((err) => setError(withErrorCode('게시글을 불러오지 못했어요.', err)))
+      .catch((err) => {
+        if (isNotFound(err)) setNotFound(true)
+        else setError(withErrorCode('게시글을 불러오지 못했어요.', err))
+      })
       .finally(() => setLoading(false))
   }, [id])
 
@@ -88,6 +96,15 @@ export default function PostDetailPage() {
   }
 
   if (loading) return <p className="py-10 text-center text-ink-muted">불러오는 중…</p>
+  if (notFound)
+    return (
+      <EmptyState
+        emoji="📭"
+        title="글을 찾을 수 없어요"
+        description="삭제됐거나 주소가 바뀐 글이에요."
+        action={<Button onClick={() => navigate('/community')}>커뮤니티로</Button>}
+      />
+    )
   if (!post) return <p className="py-10 text-center text-danger">{error}</p>
 
   const board = boards.find((b) => b.id === post.board_id)
