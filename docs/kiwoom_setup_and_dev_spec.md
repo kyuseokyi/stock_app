@@ -2,6 +2,15 @@
 
 > **문서 목적**: 한국투자증권(KIS) API와 키움증권 REST API를 병행하여 안정적인 멀티 브로커 시세 수집 파이프라인을 구축하기 위한 **사용자 준비 사항(Checklist)** 및 **클로드코드(Claude Code) 개발 구현 명세서**입니다.
 
+> **정정 (2026-11-16, 공식 명세 기준)** — 키움 공식 명세(GitHub `Kiwoom-Securities/Kiwoom-REST-API` `kiwoom/_data/kiwoom_api_spec.json`, 커밋 c7a3d25)와 결정 사항에 맞춰 아래를 고쳤다. 설계: [`docs/superpowers/specs/2026-11-16-kiwoom-client-probe-design.md`](superpowers/specs/2026-11-16-kiwoom-client-probe-design.md)
+> - **실전 키만** 쓴다(KIS·키움 모두) → `KIWOOM_MODE`·모의(mock) 도메인 분기 없음. 계좌번호도 시세 조회에는 필요 없다(`KIWOOM_ACCOUNT_NO` 삭제).
+> - 한도: **TR 마다 초당 5회**(그 밖에 전체·그룹 한도 — 오류 1700·1701·1702, 수치 미공개). 기본 `KIWOOM_RATE_PER_SEC=4`(1~5로 자름).
+> - 토큰: `au10001` `POST /oauth2/token`, body `grant_type=client_credentials`·`appkey`·**`secretkey`**(KIS 의 `appsecret` 과 이름이 다름) → `token`·`expires_dt`(YYYYMMDDHHmmss, KST). 유효 24시간.
+> - 모든 조회는 `POST` + JSON body, TR 은 헤더 `api-id`. 연속조회는 응답 **헤더** `cont-yn`·`next-key` 를 다음 요청 헤더에 그대로.
+> - IP 불일치는 HTTP 403 이 아니라 **오류 8010**(토큰 발급 IP ≠ 요청 IP)으로 온다. 8005 = 토큰 무효.
+> - 거래소 구분은 종목코드 접미사: 없음=KRX, `_NX`=NXT, `_AL`=SOR(통합). `_AL` 거래량이 KIS UN(KRX+NXT 합산)과 같은지는 **실측 대상**(아래 [Step 3]).
+> - 진행 순서: ① 클라이언트·실측 도구(완료) → ② 연기금 프리셋 → ③ 일봉 폴백(실측이 "같음"일 때만) → ④ 대차잔고·테마 등 키움 데이터. **종목 분할 수집은 하지 않는다**(출처마다 기준이 달라짐).
+
 ---
 
 ## 1. 개요 및 병행 수집(Hybrid) 전략
@@ -39,37 +48,30 @@
 
 ### [체크리스트 1] 키움 개발자 센터 계정 및 권한
 - [ ] **App Key 및 App Secret 발급**: 발급 완료 (안전한 곳에 보관)
-- [ ] **실전투자 vs 모의투자 구분**:
-  - 발급받은 키가 **실전계좌**용인지 **모의투자**용인지 확인
-  - 키움 REST API는 도메인과 포트(또는 엔드포인트 URL)가 모드별로 다를 수 있습니다.
-- [ ] **계좌번호 확인**: 시세 조회는 계좌번호가 필수가 아닐 수 있으나, 계좌 연동 TR이 필요할 경우 계좌번호(8자리+2자리) 확인
+- [x] **실전 키만 사용** (정정): 모의투자 키·도메인은 쓰지 않는다. 운영 도메인 `https://api.kiwoom.com` 고정.
+- ~~**계좌번호 확인**~~ (정정): 시세 조회 TR 에는 계좌번호가 필요 없다.
 - [x] **허용 IP 등록 (완료)**:
   - **상용 오라클 서버 인스턴스 공인 IP 등록 완료**.
-  - ⚠️ 키움 REST API는 등록된 IP에서만 호출 가능하므로, **실제 API 통신은 상용 오라클 서버에서만 발생**합니다. (로컬 PC 직접 호출 시 403 차단됨)
+  - ⚠️ 키움 REST API는 등록된 IP에서만 호출 가능하므로, **실제 API 통신은 상용 오라클 서버에서만 발생**합니다. (등록 밖 IP 는 오류 8010 등으로 거부 — 로컬·개발 서버에서는 호출하지 않는다)
 
 ### [체크리스트 2] 환경 변수(.env) 설정
-`backend/.env.development` 및 상용 서버의 `.env.production` 파일에 아래 환경변수를 추가합니다. (Git 커밋 금지)
+(정정) **상용 서버의 `/opt/stock_app/env/.env.production` 에만** 아래 환경변수를 추가합니다. 로컬·개발 서버는 키를 넣지 않습니다(넣어도 IP 밖이라 호출 불가 — 비워 두면 키움 기능은 꺼짐). Git 커밋 금지, 이름 목록은 `backend/.env.example`.
 
 ```env
-# ==========================================
-# 키움증권 Open API (REST)
-# ==========================================
+# 키움증권 REST API (실전 키만)
 KIWOOM_APP_KEY=발급받은_키움_APP_KEY
 KIWOOM_APP_SECRET=발급받은_키움_APP_SECRET
-KIWOOM_ACCOUNT_NO=  # 시세 전용이면 공란 가능
-KIWOOM_MODE=prod    # prod(실서버) 또는 mock(모의투자)
-KIWOOM_RATE_PER_SEC=5  # 초당 안전 호출 제한 (기본 권장 5)
-
-# 수집 제공자 모드 선택 (kis | kiwoom | hybrid)
-DATA_COLLECTOR_PROVIDER=hybrid
+KIWOOM_RATE_PER_SEC=4  # 초당 호출 상한(기본 4, 1~5로 자름 — 키움 한도 TR 마다 초당 5회)
 ```
+- ~~`KIWOOM_ACCOUNT_NO`·`KIWOOM_MODE`~~ 는 쓰지 않는다(정정).
+- `DATA_COLLECTOR_PROVIDER` 는 ③단계(일봉 폴백)에서 정한다 — 지금은 넣지 않는다. `hybrid`(분할 수집)는 하지 않기로 했다.
 
 ### [체크리스트 3] 키움 REST API 명세서/자료 준비
-- [ ] 키움증권 개발자 포털(OpenAPI+ REST 가이드)의 **API 엔드포인트 URL 목록** 및 **TR ID 명세서** (PDF 또는 웹 링크)
-  - OAuth 토큰 발급 엔드포인트 (예: `/oauth2/token` 등)
-  - 주식 기본정보/현재가 조회 TR
-  - 국내주식 기간별 일봉/분봉 조회 TR
-  - 투자자별 매매동향 조회 TR
+- [x] (정정) 공식 명세 확보: GitHub `Kiwoom-Securities/Kiwoom-REST-API` `kiwoom/_data/kiwoom_api_spec.json`(c7a3d25)
+  - 토큰 `au10001` `POST /oauth2/token`
+  - 일봉 `ka10081` `POST /api/dostk/chart` — body `stk_cd`·`base_dt`(YYYYMMDD)·`upd_stkpc_tp`("1"=수정주가), 응답 배열 `stk_dt_pole_chart_qry`, 행 `dt`·`open_pric`·`high_pric`·`low_pric`·`cur_prc`·`trde_qty`(주)·`trde_prica`(백만원) — 값에 부호(+/-)가 붙는다. `base_dt` 부터 과거로 연속조회
+  - 종목 리스트 `ka10099` `POST /api/dostk/stkinfo` — body `mrkt_tp`(0 코스피, 10 코스닥), 응답 배열 `list`, 행 `code`·`name`·…·`nxtEnable`(Y/N)
+  - 오류 코드: 명세 `error_codes`(8005 토큰 무효, 8010 IP 불일치, 1700~1702 한도, 1902·1903 종목코드·거래소 구분)
 
 ---
 
@@ -80,8 +82,8 @@ DATA_COLLECTOR_PROVIDER=hybrid
 ### Phase 1: 환경 설정 모듈 구현
 - **파일**: `backend/shared/kiwoom_config.py`
 - **내용**:
-  - `KISConfig`와 대칭되는 `KiwoomConfig` 데이터클래스 구현
-  - 모드(`prod`/`mock`)에 따른 BASE_URL 및 WebSocket URL 분기
+  - `KISConfig`와 대칭되는 `KiwoomConfig` 데이터클래스 구현 — **(완료)**
+  - (정정) 모드 분기 없음: `https://api.kiwoom.com`·`wss://api.kiwoom.com:10000` 고정, `rate_per_sec`(기본 4, 1~5)
   - `get_kiwoom_config()` 팩토리 함수 제공
 
 ### Phase 2: 저수준 REST 클라이언트 구현
@@ -89,19 +91,17 @@ DATA_COLLECTOR_PROVIDER=hybrid
 - **내용**:
   - `requests.Session` 기반 Keep-Alive 풀링 구현
   - **OAuth 2.0 토큰 발급 및 Redis 공유 캐싱**:
-    - Redis 키: `kiwoom:token:{mode}` (워커 간 토큰 공유로 중복 발급 및 1일 발급 횟수 제한 방지)
-  - **Rate Limiter (속도 제어)**:
-    - 초당 요청 제한(`KIWOOM_RATE_PER_SEC`, 기본 5건) 준수하는 토큰 버킷 또는 슬립 제어
-  - **지수 백오프 재시도(Exponential Backoff)**:
-    - 5xx, 타임아웃, ConnectionError 발생 시 지수 백오프 재시도
-    - 4xx 인증 에러는 즉시 실패 처리
+    - (정정) Redis 키: `kiwoom:token:prod:{app_key 앞 10자}`, 값 `{token, expires_dt}`, TTL = 만료(KST) − 지금 − 10분(최소 60초)
+  - **Rate Limiter (속도 제어)**: 공유 `RateLimiter`(`apps/collector/rate_limit.py`), 초당 `KIWOOM_RATE_PER_SEC`(기본 4) — 토큰·재시도 포함 요청마다
+  - **재시도**: 5xx·타임아웃·연결 오류·한도(1700~1702)만 백오프(최대 3회, `1.5**n` 초). 8005 는 토큰 재발급 후 1회, 8010 과 그 밖의 오류는 즉시 실패
+  - **(완료)** `KiwoomClient.post`·`paginate`·`get_daily_chart`(ka10081)·`list_stocks`(ka10099)
 
 ### Phase 3: 데이터 수집기(Fetcher) 및 정규화
-- **파일**: `backend/apps/collector/kiwoom/fetcher.py`
+- (정정) 정규화는 `backend/apps/collector/kiwoom/normalize.py`(완료, 순수 함수 `to_int`·`to_price`·`daily_row`·`stock_suffix`). `fetcher.py` 는 ③단계(일봉 폴백)에서 실측 결과를 보고 만든다.
 - **내용**:
-  - `fetch_daily_ohlcv(ticker, start_date, end_date)`: 일봉 조회
+  - `fetch_daily_ohlcv(ticker, start_date, end_date)`: 일봉 조회 — ③단계
   - **데이터 정규화(Normalize)**:
-    - 키움의 응답 필드명을 시스템 공통 필드(`date`, `open`, `high`, `low`, `close`, `volume`, `trading_value`)로 매핑
+    - 키움의 응답 필드명을 시스템 공통 필드(`date`, `open`, `high`, `low`, `close`, `volume`, `trading_value`)로 매핑 — KIS `fetcher._to_ohlcv` 와 같은 타입(`date`=날짜 객체, 가격 float, 거래량 int), `trading_value` 는 백만원×1,000,000(원). CH `daily_prices` 에는 거래대금 컬럼이 아직 없다
     - 기존 ClickHouse `daily_prices` 적재 규격과 100% 일치시킴 (ReplacingMergeTree 멱등 적재)
   - `fetch_investor_flow(ticker)`: 투자자별 수급 조회 (개인/외국인/기관)
 
@@ -111,12 +111,11 @@ DATA_COLLECTOR_PROVIDER=hybrid
   - `DATA_COLLECTOR_PROVIDER` 설정에 따라 분기:
     - `kis`: 기존 KIS 단독 수집 (Regression 100% 방지)
     - `kiwoom`: 키움 단독 수집
-    - `hybrid`:
-      - **분할 수집**: 코스피는 KIS, 코스닥은 키움 (또는 짝수/홀수 종목 분할)으로 전체 수집 시간 반감
-      - **장애 폴백**: KIS 요청 실패(한도 초과, 5xx) 시 자동으로 Kiwoom Fetcher 호출
+    - ~~`hybrid` 분할 수집~~ (정정: **하지 않음** — 출처마다 기준이 달라짐)
+    - **장애 폴백**: KIS 요청 실패(한도 초과, 5xx) 시 키움으로 — ③단계, **실측에서 `_AL` 이 KIS UN 과 같을 때만**
 
 ### Phase 5: 단위 테스트 및 검증
-- **파일**: `backend/tests/collector/test_kiwoom_client.py`
+- (정정) **파일**: `backend/tests/test_kiwoom_config.py`·`test_kiwoom_client.py`·`test_kiwoom_normalize.py`·`test_kiwoom_probe.py`(완료, HTTP 전부 가짜)
 - **내용**:
   - Mock HTTP 응답을 이용한 토큰 발급, Redis 캐싱, 일봉 파싱 단위 테스트
   - Rate Limiter 동작 검증
@@ -125,6 +124,8 @@ DATA_COLLECTOR_PROVIDER=hybrid
 ---
 
 ## 4. 상용 수집 + 개발서버(맥미니) 데이터 공유 아키텍처 (IP 제한 최적화)
+
+> ⏸️ **보류 (2026-11-16)** — 이 절(상용 전용 수집·개발 서버가 상용 DB 를 읽기 전용으로 공유)은 **상용 서버 정상화 후 별도 설계로 다룬다.** 그 전까지 개발 서버는 지금처럼 자체 수집을 유지하고, 키움 호출만 상용 서버에서 한다(키 없는 서버는 키움 기능이 꺼짐).
 
 사용자 환경의 서버 구성:
 - **상용 서버**: **오라클 클라우드 인스턴스** (`funnotedaily.com`, 공인 IP 등록)
@@ -179,7 +180,7 @@ DATA_COLLECTOR_PROVIDER=hybrid
 3. **Redis 키 네임스페이스 격리**:
    - 토큰 및 상태 캐시: `kis:*` 와 `kiwoom:*` 로 철저히 분리.
 4. **NXT(대체거래소) 시세 차이 주의**:
-   - KIS는 `UN`(KRX+NXT 통합) 시세를 지원합니다. 키움 REST API의 시세 제공 기준(KRX 단독인지 NXT 통합인지)을 명세서에서 확인하고 수집 로그에 출처(`source='kiwoom'`)를 남기도록 설계합니다.
+   - KIS는 `UN`(KRX+NXT 통합) 시세를 지원합니다. (정정) 키움은 종목코드 접미사로 거래소를 고른다 — 없음=KRX, `_NX`=NXT, `_AL`=SOR(통합). `_AL` 이 KIS UN 과 같은지는 실측 도구로 확인한다([Step 3]). 수집 로그에 출처(`source='kiwoom'`)를 남기는 건 ③단계.
 
 ---
 
@@ -205,30 +206,35 @@ claude
 ### [Step 2] 상용 오라클 서버 배포 및 키움 키 설정
 클로드코드가 로컬에서 단위 테스트를 통과하고 작업을 마치면 오라클 상용 서버에 반영합니다.
 
+(정정) 상용 서버는 사용자 `ubuntu`, 저장소 `~/stock_app`, 브랜치 `main` 이다. 코드가 `main` 에 머지된 뒤 진행한다.
+
 ```bash
-# 1. 로컬에서 코드 푸시
-git push origin dev
+# 1. 상용 오라클 서버 접속 (Termius 또는 SSH)
+ssh ubuntu@<상용 서버 IP>
 
-# 2. 상용 오라클 서버 접속 (Termius 또는 SSH)
-ssh opc@<상용 서버 IP>  # 상용 오라클 서버
+# 2. 코드 풀
+cd ~/stock_app
+git pull origin main
 
-# 3. 상용 서버에서 코드 풀
-cd /opt/stock_app/repo (또는 프로젝트 경로)
-git pull origin dev
-
-# 4. 상용 서버의 /opt/stock_app/env/.env.production 파일에 키움 키 등록
+# 3. 상용 env 에 키움 키 등록
 nano /opt/stock_app/env/.env.production
 # 아래 내용 추가 후 저장 (Ctrl+O, Enter, Ctrl+X):
 # KIWOOM_APP_KEY=실제_키움_APP_KEY
 # KIWOOM_APP_SECRET=실제_키움_APP_SECRET
-# KIWOOM_MODE=prod
-# KIWOOM_RATE_PER_SEC=5
-# DATA_COLLECTOR_PROVIDER=hybrid
+# KIWOOM_RATE_PER_SEC=4
+
+# 4. 반영 — env 복사 → 빌드 → 교체 (docs/deploy/owner-todo.md 의 서버 반영 순서)
+cp /opt/stock_app/env/.env.production backend/.env.production
+docker compose -f docker-compose.prod.yml build celery_worker
+docker compose -f docker-compose.prod.yml up -d
 ```
 
 ---
 
 ### [Step 2-1] 개발 서버(맥미니) 설정 — 상용 DB 참조
+
+> ⏸️ **보류** — 4절과 함께 상용 정상화 후 별도 설계로 다룬다. 지금은 하지 않는다(개발 서버는 자체 수집 유지).
+
 개발 서버(맥미니, `haezean.com`)에서는 데이터 수집기를 돌리지 않고, 오라클 상용 서버의 ClickHouse/PostgreSQL을 바라보도록 설정합니다.
 
 - 맥미니의 백엔드 env (`/opt/stock_app/env/.env.production` on Mac mini)에서:
@@ -239,19 +245,24 @@ nano /opt/stock_app/env/.env.production
 ---
 
 ### [Step 3] 상용 오라클 서버에서 실서버 1종목 E2E 연동 테스트
-상용 서버(등록된 IP)에서 실제 키움 REST API가 정상 응답하는지 단건 테스트 스크립트를 실행합니다.
+(정정) 실측 도구 `apps.collector.kiwoom.probe` 를 상용 서버의 `celery_worker` 컨테이너에서 실행합니다(키·토큰 값은 출력하지 않음).
 
 ```bash
-# 상용 서버 환경에서 실행
-cd backend
-source .venv/bin/activate  # 또는 conda activate stock_app
-
-# 키움 단건 조회 테스트 (클로드코드가 작성한 테스트 CLI 실행)
-python -m apps.collector.kiwoom.test_run --ticker 005930
+cd ~/stock_app
+docker compose -f docker-compose.prod.yml run --rm celery_worker python -m apps.collector.kiwoom.probe
+# 옵션: --ticker 005930 --date 20260805 --non-nxt 293490 (기본값)
 ```
-- **확인 포인트**:
-  - `[OK] OAuth Token 발급 성공 (Redis 캐시 저장 완료)`
-  - `[OK] 005930(삼성전자) 일봉 데이터 30건 수신 완료`
+- **출력**:
+  1. `[OK] 토큰 발급(또는 캐시) — 만료 YYYY-MM-DD HH:MM` — `[FAIL] … 8010` 이면 등록 IP 밖(상용 서버에서 실행했는지 확인)
+  2. 표: KRX / `_NX` / `_AL` / CH `daily_prices` FINAL 의 시·고·저·종·거래량·거래대금, `_AL vs CH(KIS UN)` 종가·거래량 ✅/❌, `KRX+NXT 거래량 합 = _AL` ✅/❌
+  3. NXT 미상장 종목(`293490`)의 `_AL`·접미사 없음 결과(값 또는 오류코드)
+  4. `ka10099` 코스피·코스닥 종목 수와 `nxtEnable=Y` 수
+  5. 마지막 "요약" 블록 — 아래 "실측 결과"에 붙여 넣는다
+- 키가 없으면 "키움 키가 설정되지 않았어요" 안내만 내고 호출 없이 끝난다. CH 연결이 안 되면 CH 줄만 "조회 불가".
+- **판정**: `_AL vs CH` 가 종가·거래량 모두 ✅ 면 ③단계(일봉 폴백)를 진행, ❌ 면 폴백은 보류.
+
+#### 실측 결과
+- (상용 서버에서 실행 후 요약 블록을 여기에 붙여 넣는다)
 
 ---
 
@@ -288,8 +299,9 @@ python -m apps.collector.kiwoom.test_run --ticker 005930
 
 | 증상 | 원인 | 해결 방법 |
 |---|---|---|
-| 키움 API 호출 시 `403 Forbidden` | IP 미등록 또는 모의/실전 불일치 | 오라클 서버 공인 IP가 키움 포털에 정확히 등록되었는지 확인, `KIWOOM_MODE` 확인 |
-| `Token Expired` 또는 발급 제한 에러 | 토큰 중복 발급 시도 | Redis의 `kiwoom:token:*` 키 TTL 및 캐시 상태 점검 |
+| 오류 `8010` (또는 HTTP 403) | 토큰 발급 IP ≠ 요청 IP / 등록 IP 밖에서 호출 | 상용 서버에서 실행했는지, 키움 포털 등록 IP 가 상용 서버 공인 IP 와 같은지 확인 (모의 키는 쓰지 않음 — 8030·8031 이면 실전/모의 키 혼동) |
+| 오류 `8005` (토큰 무효) | 캐시 토큰 만료·폐기 | 클라이언트가 캐시 삭제 후 1회 재발급한다. 반복되면 Redis `kiwoom:token:prod:*` 키 삭제 후 재실행 |
+| 오류 `1700`·`1701`·`1702` | 초당 한도 초과 | `KIWOOM_RATE_PER_SEC` 를 낮춘다(기본 4, 최대 5) |
 | KIS와 키움 시세(종가/거래량) 불일치 | 넥스트레이드(NXT) 포함 여부 차이 | KIS의 UN(통합) 시세 기준과 키움 제공 기준 비교 후 수집 정책 문서(`docs/data-collection.md`) 확인 |
 | 로컬 DB 터널 끊김 | 네트워크 절전 또는 세션 만료 | `./scripts/dev-db-tunnel.sh` 창 확인 (스크립트가 3초 뒤 자동 재연결함) |
 
