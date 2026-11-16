@@ -291,3 +291,12 @@ def test_kiwoom_client_factory_uses_config(monkeypatch):
     monkeypatch.setattr(md, "get_kiwoom_config", lambda: CFG)
     md._kiwoom_client()
     assert built["cfg"] is CFG
+
+
+def test_lending_row_drops_all_zero_unconfirmed_row():
+    """키움은 미확정 오늘 날짜를 0 으로 채워 준다 — 저장하지 않는다(그래프 0 낙하·급감 오탐 방지)."""
+    from apps.collector.kiwoom.normalize import lending_row
+    zero = {"dt": "20261117", "dbrt_trde_cntrcnt": "0", "dbrt_trde_rpy": "0", "dbrt_trde_irds": "0", "rmnd": "0", "remn_amt": "0"}
+    assert lending_row(zero) is None
+    repaid = {**zero, "dbrt_trde_rpy": "500", "dbrt_trde_irds": "-500"}  # 잔고가 0 이 됐어도 거래가 있으면 유지
+    assert lending_row(repaid)["balance_qty"] == 0 and lending_row(repaid)["net_qty"] == -500
