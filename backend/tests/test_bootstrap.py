@@ -97,6 +97,7 @@ def env(monkeypatch):
     monkeypatch.setattr(bs, "backfill_all_daily", stub("daily_backfill", {"ok": 2500, "total": 2600}))
     monkeypatch.setattr(bs, "collect_market_indices", lambda region: stub(f"indices_{region.lower()}")(region))
     monkeypatch.setattr(bs, "collect_investor_daily", stub("investor"))
+    monkeypatch.setattr(bs, "backfill_investor_detail", stub("investor_detail"))
     monkeypatch.setattr(bs, "collect_fundamentals", stub("fundamentals"))
     monkeypatch.setattr(bs, "collect_ipo_events", stub("ipo", {"events": 3}))
     monkeypatch.setattr(bs, "collect_macro_series", stub("macro", {"skipped": "FRED_API_KEY 없음"}))
@@ -136,6 +137,9 @@ def test_runs_all_steps_in_order(env):
     daily = env.order[0]
     assert daily[2] == {"months": 37, "end": "20261021"}  # 10:00 → 전 평일
     assert [o[2] for o in env.order if o[0] in ("canslim", "market_groups", "screener")] == [{"days": 60}] * 3
+    # 세부 수급(연기금 등)은 investor 다음, 계산 단계 앞 — 30거래일을 일봉 백필과 같은 기준일로
+    assert KEYS.index("investor_detail") == KEYS.index("investor") + 1 < KEYS.index("screener")
+    assert next(o[2] for o in env.order if o[0] == "investor_detail") == {"days": 30, "end": "20261021"}
     assert out["states"] == {k: "ok" for k in KEYS}
     assert out["end_date"] == "2026-10-21" and out["months"] == 37
     p = env.progress()
@@ -148,7 +152,7 @@ def test_runs_all_steps_in_order(env):
 
 def test_progress_updated_at_each_step(env):
     bs.run_bootstrap(37, now_fn=clock(kst(2026, 10, 22, 10, 0)))
-    # fundamentals(5번째) 실행 중 기록: 앞 4단계 ok, 자기 running, 뒤는 pending, 아직 안 끝남
+    # investor_detail(5번째) 실행 중 기록: 앞 4단계 ok, 자기 running, 뒤는 pending, 아직 안 끝남
     snap = env.snapshots[4]
     states = [s["state"] for s in snap["steps"]]
     assert states[:4] == ["ok"] * 4 and states[4] == "running" and set(states[5:]) == {"pending"}
@@ -242,14 +246,14 @@ def test_kis_window_block_mid_run(env):
                 kst(2026, 10, 22, 18, 59), kst(2026, 10, 22, 19, 0))
     out = bs.run_bootstrap(37, now_fn=now)
     assert env.keys() == ["daily_backfill", "indices_kr", "indices_us"]
-    assert [out["states"][k] for k in KEYS[3:]] == ["skipped"] * 8
+    assert [out["states"][k] for k in KEYS[3:]] == ["skipped"] * 9
     p = env.progress()
     assert all(s["reason"] == bs.KIS_BLOCKED_MSG for s in p["steps"][3:])
 
 
 def test_kis_block_does_not_apply_to_compute_steps(env):
-    # 1~7 은 18:00, 계산 단계 직전 시각이 20:10 이어도 계산은 그대로 진행(KIS 단계만 차단)
-    times = [kst(2026, 10, 22, 15, 0)] + [kst(2026, 10, 22, 18, 0)] * 7 + [kst(2026, 10, 22, 20, 10)]
+    # 1~8 은 18:00, 계산 단계 직전 시각이 20:10 이어도 계산은 그대로 진행(KIS 단계만 차단)
+    times = [kst(2026, 10, 22, 15, 0)] + [kst(2026, 10, 22, 18, 0)] * 8 + [kst(2026, 10, 22, 20, 10)]
     out = bs.run_bootstrap(37, now_fn=clock(*times))
     assert env.keys() == KEYS and set(out["states"].values()) == {"ok"}
 

@@ -146,6 +146,7 @@ def test_pipeline_patterns_failure_is_isolated(monkeypatch):
     monkeypatch.setattr(md, "_daily_ohlcv", lambda: {})
     monkeypatch.setattr(md, "collect_market_indices", lambda region="KR": {})
     monkeypatch.setattr(md, "collect_investor_daily", lambda: {})
+    monkeypatch.setattr(md, "collect_investor_detail_daily", lambda: {})
     monkeypatch.setattr(md, "compute_canslim", lambda: {})
     monkeypatch.setattr(md, "compute_market_groups", lambda: {})
     monkeypatch.setattr(md, "compute_screener", lambda: {"rows": 1})

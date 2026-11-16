@@ -20,14 +20,14 @@ class _FakeCH:
         return type("R", (), {"result_rows": self._rows})()
 
 
-def test_ensure_creates_four_replacing_tables():
+def test_ensure_creates_five_replacing_tables():
     ch = _FakeCH()
     chm.ensure_market_tables(ch)
     joined = "\n".join(ch.commands)
-    for t in ("market_index_daily", "investor_daily", "fundamentals_periodic", "macro_series"):
+    for t in ("market_index_daily", "investor_daily", "fundamentals_periodic", "macro_series", "investor_detail_daily"):
         assert f".{t}" in joined
-    assert joined.count("ReplacingMergeTree(ingested_at)") == 4
-    assert joined.count("CREATE TABLE IF NOT EXISTS") == 4
+    assert joined.count("ReplacingMergeTree(ingested_at)") == 5
+    assert joined.count("CREATE TABLE IF NOT EXISTS") == 5
 
 
 def test_upsert_index_rows():
