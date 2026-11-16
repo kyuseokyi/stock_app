@@ -40,7 +40,8 @@ def test_ensure_table_adds_flow_columns_to_existing_table():
     alters = [c for c in ch.commands if c.startswith("ALTER TABLE")]
     assert [a.split("IF NOT EXISTS ")[1] for a in alters] == ["frgn_buy_days Nullable(Int16)",
                                                               "orgn_buy_days Nullable(Int16)",
-                                                              "pension_buy_days Nullable(Int16)"]
+                                                              "pension_buy_days Nullable(Int16)",
+                                                              "lending_chg5 Nullable(Float64)"]
     assert all(".screener_daily ADD COLUMN IF NOT EXISTS" in a for a in alters)
 
 
@@ -62,7 +63,17 @@ def test_load_pension_flows_quantity_final_and_ticker_filter():
     assert "investor_detail_daily FINAL" in sql and params["tickers"] == ("AAA", "BBB")
     assert params["d"] == D2 and params["since"] == D2 - timedelta(days=90)
     assert cs.load_pension_flows(D2, client=_FakeCH(), tickers=[]) == {}
-    assert "pension_buy_days" == cs.ROW_COLUMNS[-1]  # 새 컬럼은 맨 끝(기존 컬럼 순서 보존)
+    assert cs.ROW_COLUMNS[-2:] == ["pension_buy_days", "lending_chg5"]  # 새 컬럼은 맨 끝(기존 컬럼 순서 보존)
+
+
+def test_load_lending_balances_final_and_ticker_filter():
+    ch = _FakeCH([[("AAA", D1, 1000), ("AAA", D2, 800), ("BBB", D2, 0)]])
+    out = cs.load_lending_balances(D2, days=90, client=ch, tickers=["AAA", "BBB"])
+    assert out == {"AAA": {D1: 1000, D2: 800}, "BBB": {D2: 0}}
+    sql, params = ch.queries[0]
+    assert "SELECT ticker, date, balance_qty FROM" in sql and "stock_lending_daily FINAL" in sql
+    assert params["tickers"] == ("AAA", "BBB") and params["since"] == D2 - timedelta(days=90)
+    assert cs.load_lending_balances(D2, client=_FakeCH(), tickers=[]) == {}
 
 
 def test_upsert_rows_uses_column_order():

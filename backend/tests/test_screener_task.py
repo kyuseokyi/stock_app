@@ -27,6 +27,9 @@ def fake(monkeypatch):
     monkeypatch.setattr(task.cs, "load_pension_flows",
                         lambda as_of, days=90, client=None, tickers=None: calls.setdefault("pension_load", []).append(
                             (as_of, days, tickers)) or calls.get("pension", {}))
+    monkeypatch.setattr(task.cs, "load_lending_balances",
+                        lambda as_of, days=90, client=None, tickers=None: calls.setdefault("lending_load", []).append(
+                            (as_of, days, tickers)) or calls.get("lending", {}))
     monkeypatch.setattr(task.cs, "slice_bars", lambda bars, as_of, days=400: {"AAA": as_of})
     monkeypatch.setattr(task.cs, "load_fundamentals", lambda: {"AAA": {"eps": 1.0}})
     monkeypatch.setattr(task, "_universe", lambda: [("AAA", "에이", "KOSPI")])
@@ -68,6 +71,16 @@ def test_pension_flows_merged_for_compute_and_backfill(fake, run):
     assert fake["flows"]["AAA"] == {"frgn": {}, "orgn": {}, "pension": {D2: 5}}
     assert fake["flows"]["ZZZ"] == {"frgn": {}, "orgn": {}, "pension": {D2: 1}}
     assert fake["pension_load"][0][1:] == fake["flow_load"][0][1:]  # 같은 범위·같은 대상
+
+
+@pytest.mark.parametrize("run", ["compute", "backfill"])
+def test_lending_balances_merged_for_compute_and_backfill(fake, run):
+    fake["pension"] = {"AAA": {D2: 5}}
+    fake["lending"] = {"AAA": {D2: 900}, "YYY": {D1: 10}}  # YYY: 수급 행은 없고 대차만
+    task.compute_screener() if run == "compute" else task.backfill_screener(days=2)
+    assert fake["flows"]["AAA"] == {"frgn": {}, "orgn": {}, "pension": {D2: 5}, "lending": {D2: 900}}
+    assert fake["flows"]["YYY"] == {"frgn": {}, "orgn": {}, "lending": {D1: 10}}
+    assert fake["lending_load"][0][1:] == fake["flow_load"][0][1:]
 
 
 def test_backfill_loads_flows_once_covering_earliest_day(fake):

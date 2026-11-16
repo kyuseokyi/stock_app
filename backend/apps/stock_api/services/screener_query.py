@@ -27,6 +27,7 @@ BB_SIGMAS = (1.0, 1.5, 2.0, 2.5, 3.0)
 DEFAULT_BB_SIGMA = 2.0
 FOREIGN_BUY_DAYS = 5         # 외국인 연속 순매수 프리셋 기준(거래일)
 PENSION_BUY_DAYS = 10        # 연기금 연속 순매수(수량) 프리셋 기준(거래일)
+LENDING_DROP_PCT = -20       # 대차잔고 5거래일 증감률(%) 급감 프리셋 기준(키움 ka20068 — 상용에서만 데이터)
 
 # 프리셋 = 서버 상수 조건 묶음(필터와 AND). 키는 웹·앱 상수와 같은 문자열
 PRESETS = {
@@ -37,6 +38,7 @@ PRESETS = {
     "foreign_buy_5d": f"frgn_buy_days >= {FOREIGN_BUY_DAYS}",
     "double_buy_new_high": "is_new_high = 1 AND frgn_buy_days >= 1 AND orgn_buy_days >= 1",
     "pension_buy_10d": f"pension_buy_days >= {PENSION_BUY_DAYS}",
+    "lending_drop": f"lending_chg5 <= {LENDING_DROP_PCT}",
 }
 SORTS = {
     "value": "value DESC, ticker",

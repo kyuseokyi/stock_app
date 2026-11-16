@@ -76,6 +76,7 @@ def test_latest_date_other_errors_raise(monkeypatch, caplog):
     ("foreign_buy_5d", "frgn_buy_days >= 5"),
     ("double_buy_new_high", "is_new_high = 1 AND frgn_buy_days >= 1 AND orgn_buy_days >= 1"),
     ("pension_buy_10d", "pension_buy_days >= 10"),
+    ("lending_drop", "lending_chg5 <= -20"),
 ])
 def test_preset_adds_condition(ch, preset, cond):
     fake = ch()
@@ -102,6 +103,7 @@ def test_pension_preset_where_combines_with_filters():
                      "mcap >= %(mcap_min)s"]
     assert params == {"market": "KOSDAQ", "mcap_min": 1000 * sq.EOK}
     assert sq.PENSION_BUY_DAYS == 10
+    assert sq.LENDING_DROP_PCT == -20
 
 
 def test_pension_preset_before_column_exists_is_empty_not_error(ch):

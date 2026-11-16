@@ -15,7 +15,7 @@ ROW_COLUMNS = [
     "date", "ticker", "market", "sector_m", "close", "chg_1d", "volume", "value", "mcap", "vol_ratio20", "rsi14",
     "ma5", "ma20", "ma50", "ma60", "ma120", "std20", "ma_order", "high_52w_prev", "is_new_high", "gc_days",
     "vp_above_pct", "roe", "eps", "per", "pbr", "sales_growth", "op_growth", "debt_ratio", "liquid",
-    "frgn_buy_days", "orgn_buy_days", "pension_buy_days",
+    "frgn_buy_days", "orgn_buy_days", "pension_buy_days", "lending_chg5",
 ]
 
 DAILY_DDL = f"""
@@ -54,6 +54,7 @@ CREATE TABLE IF NOT EXISTS {CLICKHOUSE_DB}.screener_daily
     frgn_buy_days Nullable(Int16),
     orgn_buy_days Nullable(Int16),
     pension_buy_days Nullable(Int16),
+    lending_chg5 Nullable(Float64),
     ingested_at DateTime64(3) DEFAULT now64(3)
 )
 ENGINE = ReplacingMergeTree(ingested_at)
@@ -61,7 +62,8 @@ PARTITION BY toYYYYMM(date)
 ORDER BY (date, ticker)
 """
 # 이미 만들어진 운영 테이블에는 CREATE IF NOT EXISTS 가 컬럼을 더하지 않는다
-_ADDED_COLUMNS = ("frgn_buy_days Nullable(Int16)", "orgn_buy_days Nullable(Int16)", "pension_buy_days Nullable(Int16)")
+_ADDED_COLUMNS = ("frgn_buy_days Nullable(Int16)", "orgn_buy_days Nullable(Int16)", "pension_buy_days Nullable(Int16)",
+                  "lending_chg5 Nullable(Float64)")
 
 _FIN_FIELDS = ("eps", "bps", "roe", "sales_growth", "op_growth", "debt_ratio")
 _FLOW_FIELDS = frozenset({"eps", "roe", "sales_growth", "op_growth"})  # 한 해 동안의 값 — 결산이 끝난 해만
@@ -131,6 +133,23 @@ def load_pension_flows(as_of: date, days: int = 90, client=None, tickers=None) -
     """{ticker: {date: 연기금(기금) 순매수 수량}} — investor_detail_daily(KIS FHPTJ04160001), as_of 이하 최근 days(달력일).
     수량으로 판정한다(금액 단위 미확인 — investor_detail.DETAIL_AMT_TO_WON). 빈 tickers 면 조회 없이 {}."""
     sql = (f"SELECT ticker, date, pension_qty FROM {CLICKHOUSE_DB}.investor_detail_daily FINAL "
+           "WHERE date <= %(d)s AND date > %(since)s")
+    params: dict = {"d": as_of, "since": _since(as_of, days)}
+    if tickers is not None:
+        if not tickers:
+            return {}
+        sql += " AND ticker IN %(tickers)s"
+        params["tickers"] = tuple(tickers)
+    out: dict[str, dict] = {}
+    for ticker, d, qty in _rows(sql, params, client):
+        out.setdefault(ticker, {})[d] = qty
+    return out
+
+
+def load_lending_balances(as_of: date, days: int = 90, client=None, tickers=None) -> dict[str, dict]:
+    """{ticker: {date: 대차잔고 주수}} — stock_lending_daily(키움 ka20068), as_of 이하 최근 days(달력일).
+    개발 서버(키움 키 없음)는 빈 테이블이라 {} → lending_chg5 는 모두 NULL. 빈 tickers 면 조회 없이 {}."""
+    sql = (f"SELECT ticker, date, balance_qty FROM {CLICKHOUSE_DB}.stock_lending_daily FINAL "
            "WHERE date <= %(d)s AND date > %(since)s")
     params: dict = {"d": as_of, "since": _since(as_of, days)}
     if tickers is not None:
