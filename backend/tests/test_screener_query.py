@@ -258,3 +258,17 @@ def test_graphql_wiring(monkeypatch):
     res = schema.execute_sync("{ screenerScreen { total } }")
     assert res.errors is None
     assert seen[1]["filters"] == {} and seen[1]["preset"] is None              # 필터 없음 = 빈 사전(거래 활발 기본 켬)
+
+
+def test_lending_preset_before_column_exists_is_empty_not_error(ch):
+    # 배포 직후 compute_screener 가 lending_chg5 컬럼을 더하기 전에 '대차잔고 급감' 칩을 눌러도 0건(오류 아님)
+    fake = ch([[(D,)]])
+    query = fake.query
+
+    def boom(sql, parameters=None):
+        if "lending_chg5" in sql:
+            raise DatabaseError("Code: 47. DB::Exception: Unknown identifier. (UNKNOWN_IDENTIFIER)", code=47)
+        return query(sql, parameters)
+
+    fake.query = boom
+    assert sq.screen(preset="lending_drop") == {"date": D.isoformat(), "total": 0, "bb_sigma": 2.0, "items": []}
