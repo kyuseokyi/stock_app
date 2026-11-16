@@ -45,13 +45,17 @@ CREATE TABLE IF NOT EXISTS {CLICKHOUSE_DB}.daily_prices
     bb_lower     Nullable(Float64),
     rsi_14       Nullable(Float64),
     macd         Nullable(Float64),
-    ingested_at  DateTime DEFAULT now()
+    ingested_at  DateTime DEFAULT now(),
+    source       LowCardinality(String) DEFAULT 'kis'
 )
 ENGINE = ReplacingMergeTree(ingested_at)
 PARTITION BY toYYYYMM(date)
 ORDER BY (ticker, date)
 TTL date + INTERVAL 10 YEAR
 """
+# 일봉 출처(kis|kiwoom). 이미 만들어진 운영 테이블에는 CREATE IF NOT EXISTS 가 컬럼을 더하지 않으므로 ALTER 로 보장.
+# 기존 행·KIS 적재(컬럼 생략)는 DEFAULT 'kis'. 조회·응답은 이 컬럼을 쓰지 않는다.
+DAILY_PRICES_SOURCE_COLUMN = "source LowCardinality(String) DEFAULT 'kis'"
 
 FUNDAMENTALS_DDL = f"""
 CREATE TABLE IF NOT EXISTS {CLICKHOUSE_DB}.fundamentals
@@ -100,6 +104,13 @@ def ensure_game_minute_bars(client=None, db: str = CLICKHOUSE_DB) -> None:
     (client or get_client()).command(game_minute_bars_ddl(db))
 
 
+def ensure_daily_prices_source(client=None, db: str = CLICKHOUSE_DB) -> None:
+    """daily_prices 에 source 컬럼을 멱등 추가(키움 폴백 첫 적재 직전·init_clickhouse 에서 부른다)."""
+    (client or get_client()).command(
+        f"ALTER TABLE {db}.daily_prices ADD COLUMN IF NOT EXISTS {DAILY_PRICES_SOURCE_COLUMN}"
+    )
+
+
 # 프로세스별 재사용 클라이언트 캐시.
 # 매 호출 새 클라이언트를 만들면 clickhouse_connect 가 여는 HTTP 소켓이 닫히지 않고
 # 쌓여 FD 누수(EMFILE)로 이어진다 → 전종목 수집이 ~1000종목 부근에서
@@ -137,6 +148,7 @@ def init_clickhouse() -> None:
     client = get_client()
     client.command(f"CREATE DATABASE IF NOT EXISTS {CLICKHOUSE_DB}")
     client.command(DAILY_PRICES_DDL)
+    ensure_daily_prices_source(client)
     client.command(FUNDAMENTALS_DDL)
     client.command(game_minute_bars_ddl())
     from apps.collector.repositories.clickhouse_market import ensure_market_tables  # 순환 import 방지
