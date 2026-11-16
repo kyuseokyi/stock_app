@@ -1,9 +1,10 @@
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
-import { useCallback, useMemo } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
 import { high52w, resolveTickerParam, scoreView } from '@/features/leaders/canslim';
+import { LendingSection } from '@/features/leaders/components/lending-section';
 import { ScoreHistory } from '@/features/leaders/components/score-history';
 import { ScoreTable } from '@/features/leaders/components/score-table';
 import { StockDailyChart } from '@/features/leaders/components/stock-daily-chart';
@@ -19,7 +20,7 @@ import { usePullRefresh } from '@/hooks/use-pull-refresh';
 import { Button, ListState } from '@/ui';
 
 /**
- * 범용 종목 상세 — 머리(이름·종가·점수) · 일봉 차트(50일선·52주 고점) · 7항목 점수표 · 점수 추이.
+ * 범용 종목 상세 — 머리(이름·종가·점수) · 일봉 차트(50일선·52주 고점) · 대차잔고(데이터 없으면 숨김) · 7항목 점수표 · 점수 추이.
  * 점수와 차트는 따로 조회한다(한쪽이 실패해도 다른 쪽은 보인다). 점수가 null 이면 분석 비대상(ETF·우선주 등).
  * 진입: 스크리너 '주도주' 목록, 테마·업종 상세의 구성 종목. name 파라미터는 비대상 종목의 제목용.
  */
@@ -54,8 +55,10 @@ function StockDetailBody({ ticker, fallbackName }: { ticker: string; fallbackNam
   // 당겨서 새로고침 — 점수 실패는 토스트(throw), 패턴은 독립 조회라 실패해도 영역만 숨는다
   const { reload: reloadPatterns } = patterns;
   const { refresh: refreshScore } = score;
+  const [lendingKey, setLendingKey] = useState(0);
   const refreshAll = useCallback(async () => {
     void reloadPatterns();
+    setLendingKey((k) => k + 1);
     await refreshScore();
   }, [reloadPatterns, refreshScore]);
   const { refreshing, onRefresh } = usePullRefresh(refreshAll);
@@ -117,6 +120,8 @@ function StockDetailBody({ ticker, fallbackName }: { ticker: string; fallbackNam
       {pattern ? (
         <PatternSummary base={pattern} close={patterns.data?.close ?? null} date={patterns.data?.date ?? null} />
       ) : null}
+
+      <LendingSection ticker={ticker} reloadKey={lendingKey} />
 
       {view === 'loading' ? (
         <View style={styles.card}>
