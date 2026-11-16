@@ -75,6 +75,7 @@ def test_latest_date_other_errors_raise(monkeypatch, caplog):
     ("new_high", "is_new_high = 1"),
     ("foreign_buy_5d", "frgn_buy_days >= 5"),
     ("double_buy_new_high", "is_new_high = 1 AND frgn_buy_days >= 1 AND orgn_buy_days >= 1"),
+    ("pension_buy_10d", "pension_buy_days >= 10"),
 ])
 def test_preset_adds_condition(ch, preset, cond):
     fake = ch()
@@ -93,6 +94,27 @@ def test_flow_preset_before_first_compute_is_empty_not_error(ch, monkeypatch):
 
     fake.query = boom
     assert sq.screen(preset="foreign_buy_5d") == {"date": D.isoformat(), "total": 0, "bb_sigma": 2.0, "items": []}
+
+
+def test_pension_preset_where_combines_with_filters():
+    where, params = sq.build_where("pension_buy_10d", {"market": "KOSDAQ", "mcap_min": 1000})
+    assert where == ["date = %(d)s", "pension_buy_days >= 10", "market = %(market)s", "liquid = 1",
+                     "mcap >= %(mcap_min)s"]
+    assert params == {"market": "KOSDAQ", "mcap_min": 1000 * sq.EOK}
+    assert sq.PENSION_BUY_DAYS == 10
+
+
+def test_pension_preset_before_column_exists_is_empty_not_error(ch):
+    fake = ch([[(D,)]])
+    query = fake.query
+
+    def boom(sql, parameters=None):
+        if "pension_buy_days" in sql:
+            raise DatabaseError("Code: 47. DB::Exception: Unknown identifier. (UNKNOWN_IDENTIFIER)", code=47)
+        return query(sql, parameters)
+
+    fake.query = boom
+    assert sq.screen(preset="pension_buy_10d") == {"date": D.isoformat(), "total": 0, "bb_sigma": 2.0, "items": []}
 
 
 def test_other_count_errors_still_raise(ch):

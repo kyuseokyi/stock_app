@@ -95,6 +95,24 @@ def test_stock_row_flow_streaks():
     assert none["frgn_buy_days"] is None and none["orgn_buy_days"] is None
 
 
+def test_stock_row_pension_streak_boundaries():
+    bars = _bars(15)
+    dates = [b[0] for b in bars]
+    row = lambda pension: compute.stock_row(dates[-1], "AAA", "KOSPI", "", bars, None, None,  # noqa: E731
+                                            {"frgn": {}, "orgn": {}, "pension": pension})
+    assert row({d: 1 for d in dates[-10:]})["pension_buy_days"] == 10              # 정확히 10일
+    assert row({d: 1 for d in dates})["pension_buy_days"] == 15
+    cut0 = {d: 1 for d in dates[-12:]} | {dates[-11]: 0}                           # 중간 0 → 끊김
+    assert row(cut0)["pension_buy_days"] == 10
+    cut_neg = {d: 5 for d in dates[-12:]} | {dates[-4]: -1}                        # 중간 순매도 → 끊김
+    assert row(cut_neg)["pension_buy_days"] == 3
+    gap = {d: 1 for d in dates[-12:] if d != dates[-6]}                            # 중간 데이터 공백 → 멈춤
+    assert row(gap)["pension_buy_days"] == 5
+    assert row({d: 1 for d in dates[:-1]})["pension_buy_days"] == 0                # 기준일 행 없음 → 0
+    assert row({})["pension_buy_days"] == 0
+    assert compute.stock_row(dates[-1], "AAA", "KOSPI", "", bars, None, None)["pension_buy_days"] == 0
+
+
 def test_compute_day_passes_ticker_flow():
     bars = _bars(10)
     as_of = bars[-1][0]
