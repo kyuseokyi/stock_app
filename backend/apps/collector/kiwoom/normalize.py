@@ -59,3 +59,26 @@ def stock_suffix(code: str, nxt_enable: str | None) -> str:
     KIS 의 UN→J 폴백과 같은 취지. `_AL` 거래량이 KRX+NXT 합산인지는 실측(probe) 뒤 ③단계에서 확정한다.
     """
     return f"{code}{SUFFIX_SOR}" if (nxt_enable or "").strip().upper() == "Y" else code
+
+
+def lending_row(raw: dict) -> dict | None:
+    """ka20068 `dbrt_trde_trnsn` 한 행 → 대차 dict. 일자가 비거나 형식이 틀리면 None.
+
+    명세 단위: 체결·상환·증감·잔고주수 = 1주, 잔고금액 = 백만원 → 원으로 환산.
+    증감(net_qty)만 부호를 살리고(상환이 많으면 음수), 나머지는 절댓값.
+    """
+    dt = str(raw.get("dt") or "").strip()
+    if len(dt) < 8 or not dt[:8].isdigit():
+        return None
+    try:
+        d = _parse_dt(dt)
+    except ValueError:
+        return None
+    return {
+        "date": d,
+        "new_qty": abs(to_int(raw.get("dbrt_trde_cntrcnt"))),
+        "repay_qty": abs(to_int(raw.get("dbrt_trde_rpy"))),
+        "net_qty": to_int(raw.get("dbrt_trde_irds")),
+        "balance_qty": abs(to_int(raw.get("rmnd"))),
+        "balance_amt": abs(to_int(raw.get("remn_amt"))) * _MILLION,
+    }

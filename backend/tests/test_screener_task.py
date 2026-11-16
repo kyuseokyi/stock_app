@@ -147,6 +147,7 @@ def test_daily_pipeline_runs_screener_last_even_if_groups_fail(monkeypatch):
     monkeypatch.setattr(md, "collect_market_indices", lambda region="KR": order.append("idx") or {})
     monkeypatch.setattr(md, "collect_investor_daily", lambda: order.append("investor") or {})
     monkeypatch.setattr(md, "collect_investor_detail_daily", lambda: order.append("investor_detail") or {})
+    monkeypatch.setattr(md, "collect_lending_daily", lambda: order.append("lending") or {})
     monkeypatch.setattr(md, "compute_canslim", lambda: order.append("canslim") or {})
 
     def groups_boom():
@@ -157,7 +158,8 @@ def test_daily_pipeline_runs_screener_last_even_if_groups_fail(monkeypatch):
     monkeypatch.setattr(md, "compute_screener", lambda: order.append("screener") or {"rows": 7})
     monkeypatch.setattr(md, "compute_patterns", lambda: order.append("patterns") or {"rows": 3})
     out = md.daily_market_pipeline()
-    assert order == ["daily", "idx", "investor", "investor_detail", "canslim", "groups", "screener", "patterns"]
+    assert order == ["daily", "idx", "investor", "investor_detail", "lending", "canslim", "groups", "screener",
+                     "patterns"]
     assert "error" in out["market_groups"] and out["screener"] == {"rows": 7}
     assert list(out)[-1] == "patterns"
 
@@ -172,6 +174,7 @@ def test_daily_pipeline_screener_failure_is_recorded_not_raised(monkeypatch):
     monkeypatch.setattr(md, "collect_market_indices", lambda region="KR": {})
     monkeypatch.setattr(md, "collect_investor_daily", lambda: {})
     monkeypatch.setattr(md, "collect_investor_detail_daily", lambda: {})
+    monkeypatch.setattr(md, "collect_lending_daily", lambda: {})
     monkeypatch.setattr(md, "compute_canslim", lambda: {})
     monkeypatch.setattr(md, "compute_market_groups", lambda: {})
     monkeypatch.setattr(md, "compute_patterns", lambda: {})

@@ -1,4 +1,4 @@
-"""ClickHouse 시장 테이블 — 지수·투자자별 순매수(3분류·세부 분류)·재무비율·거시 지표.
+"""ClickHouse 시장 테이블 — 지수·투자자별 순매수(3분류·세부 분류)·재무비율·거시 지표·종목별 대차잔고.
 
 모두 ReplacingMergeTree(ingested_at): 같은 키를 다시 넣으면 최신 행이 남는다(겹침 재수집 멱등). 조회는 FINAL.
 """
@@ -97,7 +97,26 @@ ENGINE = ReplacingMergeTree(ingested_at)
 ORDER BY (series_id, date)
 """
 
-ALL_DDL = (INDEX_DDL, INVESTOR_DDL, FUNDAMENTALS_PERIODIC_DDL, MACRO_DDL, INVESTOR_DETAIL_DDL)
+# 종목별 대차잔고 추이(키움 ka20068) — 수량=주, 금액=원(키움 백만원 × 1e6). 상용(키움 IP)에서만 행이 생긴다.
+LENDING_COLUMNS = ("new_qty", "repay_qty", "net_qty", "balance_qty", "balance_amt")
+LENDING_DDL = f"""
+CREATE TABLE IF NOT EXISTS {CLICKHOUSE_DB}.stock_lending_daily
+(
+    ticker       String,
+    date         Date,
+    new_qty      Int64,
+    repay_qty    Int64,
+    net_qty      Int64,
+    balance_qty  Int64,
+    balance_amt  Int64,
+    ingested_at  DateTime64(3) DEFAULT now64(3)
+)
+ENGINE = ReplacingMergeTree(ingested_at)
+PARTITION BY toYYYYMM(date)
+ORDER BY (ticker, date)
+"""
+
+ALL_DDL = (INDEX_DDL, INVESTOR_DDL, FUNDAMENTALS_PERIODIC_DDL, MACRO_DDL, INVESTOR_DETAIL_DDL, LENDING_DDL)
 
 
 def ensure_market_tables(client=None) -> None:
@@ -130,6 +149,12 @@ def upsert_investor_detail_daily(ticker: str, records: list[dict], client=None) 
     cols = ["ticker", "date", *INVESTOR_DETAIL_COLUMNS]
     rows = [[ticker, r["date"], *(r[c] for c in INVESTOR_DETAIL_COLUMNS)] for r in records]
     return _insert("investor_detail_daily", rows, cols, client)
+
+
+def upsert_lending_daily(ticker: str, records: list[dict], client=None) -> int:
+    cols = ["ticker", "date", *LENDING_COLUMNS]
+    rows = [[ticker, r["date"], *(r[c] for c in LENDING_COLUMNS)] for r in records]
+    return _insert("stock_lending_daily", rows, cols, client)
 
 
 def upsert_fundamentals(ticker: str, period: str, records: list[dict], client=None) -> int:
