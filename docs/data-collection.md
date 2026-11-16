@@ -157,5 +157,6 @@ NXT 애프터마켓이 20:00 에 끝나야 통합(UN) 일봉이 확정되므로 
 
 - 장중 지수 설계: `docs/superpowers/specs/2026-10-20-intraday-index-design.md`
 - 초기 데이터 준비 설계: `docs/superpowers/specs/2026-10-22-data-bootstrap-design.md`
+- 키움증권 REST API 연동: `docs/kiwoom_setup_and_dev_spec.md`
 - 스크리너: `docs/screener_plan.md`, 트레이딩 게임: `docs/trading_game_plan.md`
 - 배치(Celery) 입문: `docs/handover/07-batch-celery.md`
