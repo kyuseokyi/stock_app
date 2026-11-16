@@ -121,3 +121,28 @@ def test_compute_day_passes_ticker_flow():
                                                   {"AAA": bars, "BBB": bars}, {}, flows)
     by = {r["ticker"]: r for r in rows}
     assert by["AAA"]["frgn_buy_days"] == 1 and by["BBB"]["frgn_buy_days"] is None
+
+
+def test_stock_row_lending_chg5_boundaries():
+    bars = _bars(10)
+    dates = [b[0] for b in bars]
+    row = lambda lending: compute.stock_row(dates[-1], "AAA", "KOSPI", "", bars, None, None,  # noqa: E731
+                                            {"frgn": {}, "orgn": {}, "lending": lending})
+    assert row({dates[-6]: 1000, dates[-1]: 800})["lending_chg5"] == pytest.approx(-20.0)   # 정확히 -20%
+    assert row({dates[-6]: 1000, dates[-1]: 1500})["lending_chg5"] == pytest.approx(50.0)
+    assert row({dates[-6]: 0, dates[-1]: 800})["lending_chg5"] is None                      # 5일 전 잔고 0
+    assert row({dates[-1]: 800})["lending_chg5"] is None                                    # 5일 전 행 없음
+    assert row({})["lending_chg5"] is None
+    assert compute.stock_row(dates[-1], "AAA", "KOSPI", "", bars, None, None)["lending_chg5"] is None
+    # 기준일 행이 없으면(20:30 에 당일 대차 미공시) 최대 2거래일 전 행을 기준점으로, 비교점도 같이 당긴다
+    assert row({dates[-7]: 1000, dates[-2]: 700})["lending_chg5"] == pytest.approx(-30.0)
+    assert row({dates[-8]: 1000, dates[-3]: 700})["lending_chg5"] == pytest.approx(-30.0)
+    assert row({dates[-9]: 1000, dates[-4]: 700})["lending_chg5"] is None                   # 3거래일 지연은 버림
+
+
+def test_lending_chg_pct_short_history():
+    from apps.collector.screener import indicators as ind
+    d = [1, 2, 3, 4, 5]
+    assert ind.lending_chg_pct(d, {5: 10, 1: 20}) is None  # 5거래일 전 봉이 없음
+    assert ind.lending_chg_pct([], {}) is None
+    assert ind.lending_chg_pct([1, 2, 3, 4, 5, 6], {1: 20, 6: 10}) == pytest.approx(-50.0)

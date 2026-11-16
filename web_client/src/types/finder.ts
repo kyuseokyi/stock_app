@@ -3,6 +3,7 @@ import type { MarketFilter } from './screener'
 
 export type FinderPreset = 'volume_surge' | 'golden_cross' | 'oversold' | 'new_high' | 'foreign_buy_5d' | 'double_buy_new_high'
   | 'pension_buy_10d'
+  | 'lending_drop'
 export type FinderSort = 'value' | 'chg' | 'vol_ratio' | 'rsi' | 'mcap' | 'vp_above'
 export type MaOrderFilter = 'PERFECT' | 'REVERSE'
 export type BbPosition = 'ABOVE' | 'BELOW' | 'INSIDE'

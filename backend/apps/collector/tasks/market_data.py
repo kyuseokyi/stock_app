@@ -1,4 +1,4 @@
-"""시장 데이터 수집 Celery 태스크 — 지수·투자자별 순매수·재무비율·공모주 일정·FRED 거시 지표.
+"""시장 데이터 수집 Celery 태스크 — 지수·투자자별 순매수·대차잔고(키움)·재무비율·공모주 일정·FRED 거시 지표.
 
 일봉(20:30) 뒤 국내 지수·투자자 수집은 daily_market_pipeline 이 같은 작업 안에서 차례로 돌린다
 (KIS 초당 상한을 두 작업이 동시에 나눠 쓰지 않게, 앞 단계 예외와 무관하게 다음 단계 진행).
@@ -20,6 +20,7 @@ from apps.collector import market_parsers as mp
 from apps.collector.celery_app import celery_app
 from apps.collector.kis.client import KRX_MARKET_CODE, KISClient
 from apps.collector.kis.master import MasterStock
+from apps.collector.kiwoom import lending as kiwoom_lending
 from apps.collector.market_indices import collect_indices, index_specs
 from apps.collector.repositories import clickhouse_market as chm
 from apps.collector.rate_limit import RateLimiter
@@ -29,6 +30,7 @@ from apps.collector.tasks.patterns import compute_patterns
 from apps.collector.tasks.screener import compute_screener
 from apps.collector.tasks.universe import _DEFAULT_RATE, _run_universe, collect_all_daily
 from shared import market_repo, pipeline_record
+from shared.kiwoom_config import get_kiwoom_config
 from shared.sync_redis import get_sync_redis
 from shared.database import SyncSessionLocal
 
@@ -46,6 +48,10 @@ DETAIL_BACKFILL_DAYS = 30  # 첫 실행·수동 백필 — 연기금 10일 연�
 # 그 시간엔 호출하지 않고 바로 건너뛴다 — 전종목 2,672회를 헛되이 부르지 않게. 20:30 정기 수집은 영향 없음.
 DETAIL_OPEN_AFTER = dtime(15, 40)
 DETAIL_TIME_LIMIT_MSG = "KIS 세부 수급은 15:40 이후에만 조회돼요 — 15:40 이후 다시 실행하세요"
+# 대차잔고(키움 ka20068) — 매일 최근 5거래일 겹침, 수동 백필 60거래일. 매일 단계는 자동 장기 백필을 하지 않는다.
+LENDING_DAILY_DAYS = 5
+LENDING_BACKFILL_DAYS = 60
+LENDING_NOT_CONFIGURED = "키움 키 없음"
 
 
 def _kis_client():
@@ -185,6 +191,42 @@ def backfill_investor_detail(days: int = DETAIL_BACKFILL_DAYS, end: str | None =
     return collect_investor_detail_daily(limit=limit, rate_per_sec=rate_per_sec, workers=workers, days=days, end=end)
 
 
+# ---------------------------------------------------------------- 대차잔고(키움 ka20068)
+def _kiwoom_client():
+    from apps.collector.kiwoom.client import KiwoomClient  # 키 없을 때 requests·redis 세션을 만들지 않게 지연 import
+
+    return KiwoomClient(get_kiwoom_config())
+
+
+@celery_app.task(name="collector.collect_lending_daily")
+def collect_lending_daily(days: int | None = None, end: str | None = None, limit: int | None = None) -> dict:
+    """분석 대상 종목(보통주 — investor 단계와 같은 대상)의 대차잔고 추이(키움 ka20068).
+
+    키움 키가 없으면(개발 서버) CH·PG·키움을 건드리지 않고 `{"skipped": "키움 키 없음"}`.
+    days: 거래일 수(기본 LENDING_DAILY_DAYS=5, 달력일로는 kiwoom_lending.calendar_start), end: 기준일(기본 오늘 KST).
+    초당 상한은 KiwoomClient 의 RateLimiter(KIWOOM_RATE_PER_SEC).
+    """
+    if not get_kiwoom_config().is_configured:
+        log.info("대차잔고 수집 건너뜀: %s", LENDING_NOT_CONFIGURED)
+        return {"skipped": LENDING_NOT_CONFIGURED}
+    chm.ensure_market_tables()
+    n_days = max(1, int(days if days is not None else LENDING_DAILY_DAYS))
+    d_end = idt.to_date(end, trading_day.now_kst().date())
+    start = kiwoom_lending.calendar_start(d_end, n_days)
+    tickers = [s.ticker for s in _analysis_tickers()]
+    if limit:
+        tickers = tickers[: int(limit)]
+    out = kiwoom_lending.run_lending(tickers, start, d_end, client_factory=_kiwoom_client,
+                                     store=chm.upsert_lending_daily)
+    return {**out, "days": n_days} if isinstance(out, dict) and "skipped" not in out else out
+
+
+@celery_app.task(name="collector.backfill_lending")
+def backfill_lending(days: int = LENDING_BACKFILL_DAYS, end: str | None = None, limit: int | None = None) -> dict:
+    """수동 백필 — 최근 days 거래일(기본 60). 다시 돌려도 멱등(FINAL 기준 날짜당 1행). 키움 키 없으면 skipped."""
+    return collect_lending_daily(days=days, end=end, limit=limit)
+
+
 # ---------------------------------------------------------------- 재무비율
 def _fundamentals_one(ticker: str, client) -> int:
     n = 0
@@ -269,7 +311,7 @@ def _daily_ohlcv() -> dict:
 
 @celery_app.task(name="collector.daily_market_pipeline")
 def daily_market_pipeline() -> dict:
-    """20:30 — 전종목 일봉 → 국내 지수 → 투자자별 순매수 → 세부 투자자(연기금 등) → CANSLIM → 시장 그룹 → 스크리너 → 차트 패턴(차례로, 앞 단계 예외와 무관하게 진행).
+    """20:30 — 전종목 일봉 → 국내 지수 → 투자자별 순매수 → 세부 투자자(연기금 등) → 대차잔고(키움, 키 없으면 skipped) → CANSLIM → 시장 그룹 → 스크리너 → 차트 패턴(차례로, 앞 단계 예외와 무관하게 진행).
 
     끝나면 단계별 성공·걸린 시간·요약을 Redis 에 남긴다(관리자 데이터 현황). 기록 실패는 결과에 영향 없음.
     """
@@ -278,7 +320,8 @@ def daily_market_pipeline() -> dict:
     started = datetime.now(timezone.utc)
     steps = (("daily", _daily_ohlcv), ("indices_kr", lambda: collect_market_indices("KR")),
              ("investor", lambda: collect_investor_daily()),
-             ("investor_detail", lambda: collect_investor_detail_daily()), ("canslim", lambda: compute_canslim()),
+             ("investor_detail", lambda: collect_investor_detail_daily()),
+             ("lending", lambda: collect_lending_daily()), ("canslim", lambda: compute_canslim()),
              ("market_groups", lambda: compute_market_groups()), ("screener", lambda: compute_screener()),
              ("patterns", lambda: compute_patterns()))
     for name, step in steps:

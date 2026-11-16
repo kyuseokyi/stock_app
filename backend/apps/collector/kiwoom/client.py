@@ -10,7 +10,8 @@
 - 예외 메시지·로그에 앱키·시크릿·토큰을 절대 넣지 않는다.
 
 공식 명세: GitHub Kiwoom-Securities/Kiwoom-REST-API `kiwoom/_data/kiwoom_api_spec.json`(c7a3d25)
-  - apis["접근토큰 발급(au10001)"], apis["주식일봉차트조회요청(ka10081)"], apis["종목정보 리스트(ka10099)"], error_codes
+  - apis["접근토큰 발급(au10001)"], apis["주식일봉차트조회요청(ka10081)"], apis["종목정보 리스트(ka10099)"],
+    apis["대차거래추이요청(종목별)(ka20068)"], error_codes
 """
 
 from __future__ import annotations
@@ -40,6 +41,9 @@ DAILY_CHART_LIST_KEY = "stk_dt_pole_chart_qry"  # ka10081 response.body LIST
 TR_STOCK_LIST = "ka10099"             # 종목정보 리스트
 PATH_STOCK_INFO = "/api/dostk/stkinfo"  # ka10099 meta.URL
 STOCK_LIST_KEY = "list"               # ka10099 response.body LIST
+TR_LENDING = "ka20068"                # 대차거래추이요청(종목별)
+PATH_SLB = "/api/dostk/slb"           # ka20068 meta.URL
+LENDING_LIST_KEY = "dbrt_trde_trnsn"  # ka20068 response.body LIST(대차거래추이)
 
 # 오류 코드(명세 error_codes)
 CODE_TOKEN_INVALID = 8005  # Token이 유효하지 않습니다
@@ -276,3 +280,12 @@ class KiwoomClient:
     def list_stocks(self, mrkt_tp: str) -> list[dict]:
         """ka10099 종목정보 리스트(끝까지). mrkt_tp: "0" 코스피, "10" 코스닥."""
         return self.paginate(TR_STOCK_LIST, PATH_STOCK_INFO, {"mrkt_tp": mrkt_tp}, STOCK_LIST_KEY, _MAX_LIST_PAGES)
+
+    def get_lending_trend(self, stk_cd: str, strt_dt: str, end_dt: str, *, max_pages: int = 1) -> list[dict]:
+        """ka20068 대차거래추이(종목별) 원시 행 — [strt_dt, end_dt](YYYYMMDD). 응답 예시는 최신→과거 순.
+
+        stk_cd 는 6자리 그대로(명세 length 6, 예시 "005930") — ka10081 과 달리 `_NX`·`_AL` 접미사를 쓰지 않는다.
+        all_tp="0": 종목코드 입력 종목만 표시(명세).
+        """
+        body = {"strt_dt": strt_dt, "end_dt": end_dt, "all_tp": "0", "stk_cd": stk_cd}
+        return self.paginate(TR_LENDING, PATH_SLB, body, LENDING_LIST_KEY, max_pages)

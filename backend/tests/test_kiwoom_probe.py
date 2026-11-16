@@ -174,3 +174,71 @@ def test_parse_date():
     assert probe.parse_yyyymmdd("20260805") == date(2026, 8, 5)
     with pytest.raises(SystemExit):
         probe.parse_args(["--date", "2026-08-05"])
+
+
+# ------------------------------------------------------------------ --lending (ka20068)
+from apps.collector.kiwoom.client import KiwoomResponse  # noqa: E402
+
+
+def _lend(dt, rmnd="98242435", amt="5452455", irds="-1482754"):
+    return {"dt": dt, "dbrt_trde_cntrcnt": "1210354", "dbrt_trde_rpy": "2693108", "dbrt_trde_irds": irds,
+            "rmnd": rmnd, "remn_amt": amt}
+
+
+class _LendingClient(_FakeClient):
+    def __init__(self, lending: dict):
+        super().__init__(charts={}, stocks={})
+        self.lending = lending
+        self.posts: list[tuple] = []
+
+    def post(self, api_id, path, body, *, cont_key=None):
+        self.posts.append((api_id, path, body))
+        v = self.lending.get(body["stk_cd"], [])
+        if isinstance(v, Exception):
+            raise v
+        return KiwoomResponse(data={"dbrt_trde_trnsn": v}, cont_yn=False, next_key="")
+
+
+def test_parse_args_lending_defaults():
+    a = probe.parse_args(["--lending"])
+    assert a.lending is True and probe.lending_tickers(a.lending_tickers) == ["005930", "000660"]
+    assert probe.parse_args([]).lending is False
+    assert probe.lending_tickers(" 005930, ,000660,005930,035420,051910") == ["005930", "000660", "035420"]
+
+
+def test_run_lending_table_suffix_and_no_secrets():
+    c = _LendingClient({
+        "005930": [_lend("20261113"), _lend("20261112", rmnd="99725189", amt="5564666", irds="-520696")],
+        "000660": [],
+        "005930_AL": KiwoomApiError(1511, "종목코드 오류"),
+    })
+    lines: list[str] = []
+    code = probe.run_lending(probe.parse_args(["--lending"]), client=c, out=lines.append, today=date(2026, 11, 16))
+    text = "\n".join(lines)
+    assert code == 0
+    assert [p[2]["stk_cd"] for p in c.posts] == ["005930", "000660", "005930_AL"]
+    assert all(p[0] == "ka20068" and p[1] == "/api/dostk/slb" for p in c.posts)
+    assert c.posts[0][2] == {"strt_dt": "20261029", "end_dt": "20261116", "all_tp": "0", "stk_cd": "005930"}
+    assert "2026-11-12" in text.split("2026-11-13")[0]  # 오래된 순
+    assert "98,242,435" in text and "5,452,455,000,000" in text and "-1,482,754" in text
+    assert "55,500" in text  # 금액/주 = 5,452,455백만원 / 98,242,435주 ≈ 55,500원(단위 확인)
+    assert "최신 행 2026-11-13" in text and "cont-yn=N" in text
+    assert "005930_AL (접미사): 오류 1511: 종목코드 오류" in text
+    for secret in (FAKE_KEY, FAKE_SECRET, FAKE_TOKEN):
+        assert secret not in text
+
+
+def test_run_with_lending_flag_skips_daily_compare():
+    c = _LendingClient({"005930": [_lend("20261113")]})
+    code, text = _run(c, argv=["--lending", "--lending-tickers", "005930"])
+    assert code == 0 and "[OK] 토큰" in text
+    assert c.calls == []  # 일봉(ka10081) 은 부르지 않음
+    assert "일봉 비교" not in text and "ka20068" in text
+
+
+def test_run_lending_ip_error_is_reported_per_ticker():
+    c = _LendingClient({"005930": KiwoomIpError(8010, "IP"), "000660": [_lend("20261113")]})
+    lines: list[str] = []
+    probe.run_lending(probe.parse_args(["--lending"]), client=c, out=lines.append, today=date(2026, 11, 16))
+    text = "\n".join(lines)
+    assert "005930: 오류 8010" in text and "000660: 1행" in text

@@ -221,7 +221,8 @@ class Query:
         )
 
     # ------------------------------------------------------------ 조건검색 (공개)
-    @strawberry.field(description="조건검색 — 프리셋(volume_surge·golden_cross·oversold·new_high)과 필터(AND), "
+    @strawberry.field(description="조건검색 — 프리셋(volume_surge·golden_cross·oversold·new_high·foreign_buy_5d·"
+                                  "double_buy_new_high·pension_buy_10d·lending_drop)과 필터(AND), "
                                   "최신 기준일. sort: value|chg|vol_ratio|rsi|mcap|vp_above")
     def screener_screen(
         self,

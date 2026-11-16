@@ -49,10 +49,13 @@ def _run_day(as_of: date, universe, profiles, bars, fundamentals, flows=None) ->
 
 
 def _load_flows(as_of: date, days: int, tickers: list[str]) -> dict:
-    """외국인·기관(investor_daily) + 연기금(investor_detail_daily) 수급을 종목별 한 묶음으로 — 하루 계산·백필이 같이 쓴다."""
+    """외국인·기관(investor_daily) + 연기금(investor_detail_daily) 수급 + 대차잔고(stock_lending_daily)를 종목별 한 묶음으로
+    — 하루 계산·백필이 같이 쓴다."""
     flows = cs.load_investor_flows(as_of, days=days, tickers=tickers)
     for ticker, by_date in cs.load_pension_flows(as_of, days=days, tickers=tickers).items():
         flows.setdefault(ticker, {"frgn": {}, "orgn": {}})["pension"] = by_date
+    for ticker, by_date in cs.load_lending_balances(as_of, days=days, tickers=tickers).items():
+        flows.setdefault(ticker, {"frgn": {}, "orgn": {}})["lending"] = by_date
     return flows
 
 

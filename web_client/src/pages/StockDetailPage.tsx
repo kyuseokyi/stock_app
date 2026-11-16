@@ -7,6 +7,7 @@ import { findStock, type StockHit } from '../api/stockSearch'
 import { BaseHistoryTable, CurrentBaseSummary } from '../components/patterns/PatternParts'
 import { LetterList, ScoreHistory } from '../components/screener/CanslimParts'
 import StockDailyChart from '../components/screener/StockDailyChart'
+import LendingSection from '../components/stock/LendingSection'
 import StockSearch from '../components/stock/StockSearch'
 import Card from '../components/ui/Card'
 import { chipClass } from '../components/ui/Chip'
@@ -22,7 +23,7 @@ import { useScreenerFeatures } from '../hooks/useScreenerFeatures'
 import { stockBackPath } from '../lib/screenerFeatures'
 
 // 종목 상세 — 검색창 + 헤더(이름·종가·주도주 점수) + 일봉 차트(기간 선택, 50일선·52주 고점·현재 패턴 선)
-//   + 패턴(현재 베이스·이력) + 주도주(CANSLIM 7항목·점수 추이). 스크리너 상세 패널과 같은 부품을 쓴다.
+//   + 패턴(현재 베이스·이력) + 대차잔고(데이터 없으면 숨김) + 주도주(CANSLIM 7항목·점수 추이). 스크리너 상세 패널과 같은 부품을 쓴다.
 // 점수·패턴은 따로 불러와 하나가 실패해도 나머지는 보인다. 일봉은 종가 기준(실시간 아님).
 
 const PERIODS = [
@@ -228,6 +229,8 @@ export default function StockDetailPage() {
               )
             )}
           </Card>
+
+          <LendingSection ticker={ticker} />
         </div>
 
         <Card as="section" aria-label="주도주 분석" className="space-y-3 lg:sticky lg:top-[7.5rem]">

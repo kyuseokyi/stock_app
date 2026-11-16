@@ -17,6 +17,8 @@ VOL_AVG_DAYS = 20
 HIGH_LOOKBACK = 251         # 직전 251거래일 + 당일 = 52주
 GC_FAST, GC_SLOW, GC_WITHIN = 20, 60, 3
 VP_BARS, VP_BINS = 120, 20
+LENDING_CHG_DAYS = 5        # 대차잔고 증감률 비교 간격(거래일)
+LENDING_MAX_LAG = 2         # 기준일보다 이만큼(거래일) 늦은 대차 행까지 기준점으로 쓴다(공시 지연 — probe 로 확인)
 
 
 def sma(values: Sequence[float], n: int) -> float | None:
@@ -137,6 +139,30 @@ def buy_streak(dates: Sequence, amounts: Mapping) -> int | None:
             break
         n += 1
     return n
+
+
+def lending_chg_pct(dates: Sequence, balances: Mapping, n: int = LENDING_CHG_DAYS,
+                    max_lag: int = LENDING_MAX_LAG) -> float | None:
+    """대차잔고 n거래일 증감률(%). dates 는 그 종목의 일봉 날짜(오름차순, 마지막 = 기준일), balances = {date: 잔고주수}.
+
+    기준점 = 기준일부터 거꾸로 max_lag 거래일 안의 가장 최근 대차 행(20:30 계산 때 당일 대차가 아직 없을 수 있어서).
+    비교점 = 기준점에서 n거래일 전 봉 날짜의 대차 행. 기준점이 없거나, 비교점 행이 없거나 0 이하면 None.
+    """
+    if not dates:
+        return None
+    last = len(dates) - 1
+    for i in range(last, max(-1, last - max_lag - 1), -1):
+        if dates[i] in balances:
+            break
+    else:
+        return None
+    j = i - n
+    if j < 0:
+        return None
+    base = balances.get(dates[j])
+    if base is None or base <= 0:
+        return None
+    return (balances[dates[i]] - base) / base * 100
 
 
 def ratio(price: float, per_share: float | None) -> float | None:

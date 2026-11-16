@@ -3,6 +3,7 @@
 실행(상용 서버에서만 — 키움은 상용 서버 IP 만 허용):
     docker compose -f docker-compose.prod.yml run --rm celery_worker python -m apps.collector.kiwoom.probe
     옵션: --ticker 005930 --date 20260805 --non-nxt 293490
+    대차(ka20068) 소량 실측: --lending [--lending-tickers 005930,000660] — 일봉 비교는 건너뛰고 최근 10거래일 대차 표만.
 
 - 키가 없으면 안내만 출력하고 종료(코드 0, 호출 없음).
 - 앱키·시크릿·토큰 값은 절대 출력하지 않는다.
@@ -16,8 +17,17 @@ import argparse
 from datetime import date, datetime
 from typing import Callable
 
-from apps.collector.kiwoom.client import KST, KiwoomApiError, KiwoomClient, KiwoomError
-from apps.collector.kiwoom.normalize import SUFFIX_NXT, SUFFIX_SOR, daily_row
+from apps.collector.kiwoom.client import (
+    KST,
+    LENDING_LIST_KEY,
+    PATH_SLB,
+    TR_LENDING,
+    KiwoomApiError,
+    KiwoomClient,
+    KiwoomError,
+)
+from apps.collector.kiwoom.lending import calendar_start
+from apps.collector.kiwoom.normalize import SUFFIX_NXT, SUFFIX_SOR, daily_row, lending_row
 from shared.kiwoom_config import get_kiwoom_config
 
 NOT_CONFIGURED_MSG = ("키움 키가 설정되지 않았어요 — KIWOOM_APP_KEY·KIWOOM_APP_SECRET 을 "
@@ -25,6 +35,7 @@ NOT_CONFIGURED_MSG = ("키움 키가 설정되지 않았어요 — KIWOOM_APP_KE
 NO_ROW = "행 없음"
 CH_UNAVAILABLE = "조회 불가"
 _MARKETS = (("코스피", "0"), ("코스닥", "10"))  # ka10099 mrkt_tp
+LENDING_DAYS = 10  # --lending 표에 보여 줄 최근 거래일 수
 
 Bar = dict  # daily_row 모양(date·open·high·low·close·volume·trading_value)
 
@@ -50,7 +61,16 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument("--ticker", default="005930", help="NXT 상장 비교 종목 (기본 005930)")
     p.add_argument("--date", type=_yyyymmdd, default="20260805", help="비교 기준일 YYYYMMDD (기본 20260805)")
     p.add_argument("--non-nxt", dest="non_nxt", default="293490", help="NXT 미상장 종목 (기본 293490)")
+    p.add_argument("--lending", action="store_true",
+                   help="대차거래추이(ka20068) 소량 실측만 — 최근 10거래일 표(일봉 비교는 건너뜀)")
+    p.add_argument("--lending-tickers", dest="lending_tickers", default="005930,000660",
+                   help="--lending 대상 종목(쉼표, 최대 3개, 기본 005930,000660)")
     return p.parse_args(argv)
+
+
+def lending_tickers(raw: str) -> list[str]:
+    """쉼표 목록 → 종목코드(공백 제거·중복 제거, 최대 3개 — 소량 실측)."""
+    return list(dict.fromkeys(t.strip() for t in (raw or "").split(",") if t.strip()))[:3]
 
 
 # ------------------------------------------------------------------ 순수 함수
@@ -131,6 +151,70 @@ def _fetch_ch(ch_fetch: Callable, ticker: str, d: date):
     return bar if bar is not None else NO_ROW
 
 
+# ------------------------------------------------------------------ 대차(ka20068)
+def _fetch_lending_raw(client, stk_cd: str, start: date, end: date):
+    """한 쪽만 받아 (원시 행, 연속조회 여부). 실패는 사유 문자열 — 쪽당 행 수·cont-yn 을 보려고 post 를 직접 쓴다."""
+    body = {"strt_dt": start.strftime("%Y%m%d"), "end_dt": end.strftime("%Y%m%d"), "all_tp": "0", "stk_cd": stk_cd}
+    try:
+        r = client.post(TR_LENDING, PATH_SLB, body)
+    except KiwoomApiError as e:
+        return f"오류 {e.code}: {e.msg}"
+    except KiwoomError as e:
+        return f"오류: {e}"
+    return list(r.data.get(LENDING_LIST_KEY) or []), r.cont_yn
+
+
+def _unit_price(r: dict) -> str:
+    """잔고금액(원) / 잔고주수 — 그날 주가 근처면 금액 단위(백만원 × 1e6)가 맞다."""
+    return "-" if not r["balance_qty"] else f"{r['balance_amt'] / r['balance_qty']:,.0f}"
+
+
+def run_lending(args: argparse.Namespace, *, client, out: Callable[[str], None], today: date | None = None) -> int:
+    """종목별 최근 LENDING_DAYS 거래일 대차 표 + 접미사(_AL) 허용 여부 + 최신 행 날짜(공시 지연 확인)."""
+    end = today or datetime.now(KST).date()
+    start = calendar_start(end, LENDING_DAYS)
+    tickers = lending_tickers(args.lending_tickers)
+    summary: list[str] = []
+    for t in tickers:
+        out("")
+        out(f"== {t} 대차거래추이 (ka20068, {start.isoformat()} ~ {end.isoformat()}) ==")
+        got = _fetch_lending_raw(client, t, start, end)
+        if isinstance(got, str):
+            out(got)
+            summary.append(f"{t}: {got}")
+            continue
+        raw, cont = got
+        rows = sorted((r for r in (lending_row(x) for x in raw) if r is not None), key=lambda r: r["date"])
+        rows = rows[-LENDING_DAYS:]
+        out(f"응답 {len(raw)}행 (첫 쪽, cont-yn={'Y' if cont else 'N'}) · 정규화 {len(rows)}행")
+        out(f"{'일자':<12} " + " ".join(f"{h:>14}" for h in ("체결(주)", "상환(주)", "증감(주)", "잔고(주)",
+                                                            "잔고금액(원)", "금액/주")))
+        for r in rows:
+            cells = [_num(r[k]) for k in ("new_qty", "repay_qty", "net_qty", "balance_qty", "balance_amt")]
+            out(f"{r['date'].isoformat():<12} " + " ".join(f"{c:>14}" for c in [*cells, _unit_price(r)]))
+        latest = rows[-1]["date"].isoformat() if rows else "없음"
+        out(f"최신 행 {latest} (오늘 {end.isoformat()}) · 원시 첫 행 키: {sorted(raw[0]) if raw else '-'}")
+        summary.append(f"{t}: {len(rows)}행, 최신 {latest}, 금액/주 {_unit_price(rows[-1]) if rows else '-'}")
+
+    # 접미사 허용 여부 — 명세는 6자리(접미사 없음). `_AL` 을 한 번만 불러 오류 코드를 기록한다.
+    suffix = "대상 없음"
+    if tickers:
+        t = tickers[0]
+        got = _fetch_lending_raw(client, f"{t}{SUFFIX_SOR}", start, end)
+        suffix = got if isinstance(got, str) else f"{len(got[0])}행"
+        out("")
+        out(f"{t}{SUFFIX_SOR} (접미사): {suffix}")
+
+    out("")
+    out("---- 요약 (docs/kiwoom_setup_and_dev_spec.md ④-1 실측 결과에 붙여 넣기) ----")
+    out(f"- 실측 {datetime.now(KST).strftime('%Y-%m-%d %H:%M')} KST, ka20068 {start.isoformat()} ~ {end.isoformat()}")
+    for line in summary:
+        out(f"- {line}")
+    out(f"- `_AL` 접미사: {suffix}")
+    out("----")
+    return 0
+
+
 # ------------------------------------------------------------------ 실행
 def run(args: argparse.Namespace, *, client, ch_fetch: Callable, out: Callable[[str], None]) -> int:
     t, dt, non_nxt = args.ticker, args.date, args.non_nxt
@@ -144,6 +228,8 @@ def run(args: argparse.Namespace, *, client, ch_fetch: Callable, out: Callable[[
         return 1
     exp = info.expires_at.astimezone(KST).strftime("%Y-%m-%d %H:%M") if info.expires_at else "알 수 없음"
     out(f"[OK] 토큰 {'캐시' if info.cached else '발급'} — 만료 {exp}")
+    if getattr(args, "lending", False):
+        return run_lending(args, client=client, out=out)
 
     # 2) NXT 상장 종목: KRX / _NX / _AL / CH
     out("")
