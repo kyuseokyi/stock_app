@@ -23,7 +23,8 @@ _FIN_KEYS = ("roe", "eps", "sales_growth", "op_growth", "debt_ratio")
 def stock_row(as_of: date, ticker: str, market: str, sector_m: str, bars: list[tuple],
               listed_shares_k: int | None, fin: dict | None, flow: dict | None = None) -> dict:
     """bars: [(date, high, low, close, volume)] 오름차순(마지막 = as_of). fin: 최신 연간 재무(없으면 None).
-    flow: {"frgn": {date: 순매수 금액}, "orgn": {...}}(없으면 연속 일수 None)."""
+    flow: {"frgn": {date: 순매수 금액}, "orgn": {...}, "pension": {date: 연기금 순매수 수량}}
+    (frgn·orgn 이 없으면 연속 일수 None, 연기금은 설계대로 데이터가 없으면 0)."""
     highs = [b[1] for b in bars]
     lows = [b[2] for b in bars]
     closes = [b[3] for b in bars]
@@ -49,6 +50,7 @@ def stock_row(as_of: date, ticker: str, market: str, sector_m: str, bars: list[t
         "liquid": int(liquid),
         "frgn_buy_days": ind.buy_streak(dates, flow.get("frgn", {})),
         "orgn_buy_days": ind.buy_streak(dates, flow.get("orgn", {})),
+        "pension_buy_days": ind.buy_streak(dates, flow.get("pension", {})) or 0,
     }
 
 

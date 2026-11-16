@@ -33,6 +33,10 @@ TR_TIME_DAILYCHART = "FHKST03010230"  # 주식일별분봉조회(과거 거래�
 TR_INDEX_DAILY = "FHKUP03500100"  # 국내주식업종기간별시세(일) — 지수
 TR_OVERSEAS_DAILY = "FHKST03030100"  # 해외주식 종목/지수/환율기간별시세 — N:해외지수 X:환율
 TR_INVESTOR = "FHKST01010900"  # 주식현재가 투자자(최근 약 30거래일)
+# 종목별 투자자매매동향(일별) — 기금(연기금)·사모·투신·은행·보험 등 세부 분류.
+# 경로·파라미터·응답 키는 공식 예제 examples_llm/domestic_stock/investor_trade_by_stock_daily 기준.
+# ⚠️ 명세 확인 필요: 한 번 호출에 몇 거래일 행(output2)을 주는지는 예제에 없다(상위가 날짜를 옮겨 가며 받는다).
+TR_INVESTOR_TRADE_DAILY = "FHPTJ04160001"
 TR_FIN_RATIO = "FHKST66430300"  # 국내주식 재무비율(0:년 1:분기)
 TR_IPO = "HHKDB669108C0"  # 예탁원정보(공모주청약일정)
 TR_FLUCTUATION = "FHPST01700000"  # 국내주식 등락률 순위(최대 30건)
@@ -222,6 +226,23 @@ class KISClient:
         url = f"{self.cfg.base_url}/uapi/domestic-stock/v1/quotations/inquire-investor"
         params = {"FID_COND_MRKT_DIV_CODE": market_code, "FID_INPUT_ISCD": ticker}
         return _as_list(self._request_with_retry("get", url, TR_INVESTOR, params).get("output"))
+
+    def get_investor_trade_daily(self, ticker: str, date_yyyymmdd: str,
+                                 market_code: str = DOMESTIC_MARKET_CODE) -> list[dict]:
+        """종목별 투자자매매동향(일별) 일자별 행(output2) — date_yyyymmdd 이하. output1(현재가 요약)은 쓰지 않는다.
+
+        공식 예제의 tr_cont 연속조회 대신 상위(apps.collector.investor_detail)가 날짜를 앞으로 옮겨 다시 부른다.
+        UN 이 비거나 거부되면 상위에서 J 로 폴백한다.
+        """
+        url = f"{self.cfg.base_url}/uapi/domestic-stock/v1/quotations/investor-trade-by-stock-daily"
+        params = {
+            "FID_COND_MRKT_DIV_CODE": market_code,
+            "FID_INPUT_ISCD": ticker,
+            "FID_INPUT_DATE_1": date_yyyymmdd,
+            "FID_ORG_ADJ_PRC": "",  # 예제: 공란 입력
+            "FID_ETC_CLS_CODE": "",  # 예제: 공란 입력
+        }
+        return _as_list(self._request_with_retry("get", url, TR_INVESTOR_TRADE_DAILY, params).get("output2"))
 
     # --- 재무 ---
     def get_financial_ratio(self, ticker: str, period: str) -> list[dict]:

@@ -24,6 +24,9 @@ def fake(monkeypatch):
     monkeypatch.setattr(task.cs, "load_investor_flows",
                         lambda as_of, days=90, client=None, tickers=None: calls.setdefault("flow_load", []).append(
                             (as_of, days, tickers)) or {"AAA": {"frgn": {}, "orgn": {}}})
+    monkeypatch.setattr(task.cs, "load_pension_flows",
+                        lambda as_of, days=90, client=None, tickers=None: calls.setdefault("pension_load", []).append(
+                            (as_of, days, tickers)) or calls.get("pension", {}))
     monkeypatch.setattr(task.cs, "slice_bars", lambda bars, as_of, days=400: {"AAA": as_of})
     monkeypatch.setattr(task.cs, "load_fundamentals", lambda: {"AAA": {"eps": 1.0}})
     monkeypatch.setattr(task, "_universe", lambda: [("AAA", "에이", "KOSPI")])
@@ -56,6 +59,15 @@ def test_compute_passes_investor_flows(fake):
     task.compute_screener()
     assert fake["flow_load"] == [(D2, task.FLOW_DAYS, ["AAA"])]
     assert fake["flows"] == {"AAA": {"frgn": {}, "orgn": {}}}
+
+
+@pytest.mark.parametrize("run", ["compute", "backfill"])
+def test_pension_flows_merged_for_compute_and_backfill(fake, run):
+    fake["pension"] = {"AAA": {D2: 5}, "ZZZ": {D2: 1}}  # ZZZ: 외국인·기관 행은 없고 연기금만
+    task.compute_screener() if run == "compute" else task.backfill_screener(days=2)
+    assert fake["flows"]["AAA"] == {"frgn": {}, "orgn": {}, "pension": {D2: 5}}
+    assert fake["flows"]["ZZZ"] == {"frgn": {}, "orgn": {}, "pension": {D2: 1}}
+    assert fake["pension_load"][0][1:] == fake["flow_load"][0][1:]  # 같은 범위·같은 대상
 
 
 def test_backfill_loads_flows_once_covering_earliest_day(fake):
@@ -134,6 +146,7 @@ def test_daily_pipeline_runs_screener_last_even_if_groups_fail(monkeypatch):
     monkeypatch.setattr(md, "_daily_ohlcv", lambda: order.append("daily") or {})
     monkeypatch.setattr(md, "collect_market_indices", lambda region="KR": order.append("idx") or {})
     monkeypatch.setattr(md, "collect_investor_daily", lambda: order.append("investor") or {})
+    monkeypatch.setattr(md, "collect_investor_detail_daily", lambda: order.append("investor_detail") or {})
     monkeypatch.setattr(md, "compute_canslim", lambda: order.append("canslim") or {})
 
     def groups_boom():
@@ -144,7 +157,7 @@ def test_daily_pipeline_runs_screener_last_even_if_groups_fail(monkeypatch):
     monkeypatch.setattr(md, "compute_screener", lambda: order.append("screener") or {"rows": 7})
     monkeypatch.setattr(md, "compute_patterns", lambda: order.append("patterns") or {"rows": 3})
     out = md.daily_market_pipeline()
-    assert order == ["daily", "idx", "investor", "canslim", "groups", "screener", "patterns"]
+    assert order == ["daily", "idx", "investor", "investor_detail", "canslim", "groups", "screener", "patterns"]
     assert "error" in out["market_groups"] and out["screener"] == {"rows": 7}
     assert list(out)[-1] == "patterns"
 
@@ -158,6 +171,7 @@ def test_daily_pipeline_screener_failure_is_recorded_not_raised(monkeypatch):
     monkeypatch.setattr(md, "_daily_ohlcv", lambda: {})
     monkeypatch.setattr(md, "collect_market_indices", lambda region="KR": {})
     monkeypatch.setattr(md, "collect_investor_daily", lambda: {})
+    monkeypatch.setattr(md, "collect_investor_detail_daily", lambda: {})
     monkeypatch.setattr(md, "compute_canslim", lambda: {})
     monkeypatch.setattr(md, "compute_market_groups", lambda: {})
     monkeypatch.setattr(md, "compute_patterns", lambda: {})

@@ -1,4 +1,4 @@
-"""초기 데이터 준비(부트스트랩) — 새 서버에서 수집(1~7) → 계산(8~11)을 정해진 순서대로 한 번에.
+"""초기 데이터 준비(부트스트랩) — 새 서버에서 수집(1~8) → 계산(9~12)을 정해진 순서대로 한 번에.
 
 설계: docs/superpowers/specs/2026-10-22-data-bootstrap-design.md
 - 단계는 기존 태스크 함수를 직접(동기) 부른다. 각 단계는 이미 멱등이라 다시 실행해도 안전하다.
@@ -6,7 +6,7 @@
   실패 비율 > DAILY_MAX_FAIL_RATIO 도 실패로 본다(KIS 키 오류 등으로 전 종목이 실패하면 예외 없이 끝나는데, 그 위에서
   계산하면 빈 결과만 '성공'으로 남는다).
 - 일봉 백필이 실패하면 뒤 단계는 모두 skipped(일봉 없이는 계산 무의미). 나머지 단계 실패는 다음 단계로 진행.
-- 시간대: 시작 시 KST [16:00, 21:30) 이면 아무것도 하지 않는다. KIS 단계(1~7) 직전 [19:00, 21:30) 이면
+- 시간대: 시작 시 KST [16:00, 21:30) 이면 아무것도 하지 않는다. KIS 단계(1~8) 직전 [19:00, 21:30) 이면
   그 단계부터 끝까지 skipped(20:30 정기 수집과 KIS 호출 한도를 나눠 쓰지 않게 — 다시 누르면 이어서 채워진다).
   19:00 은 긴 단계(재무·수급)가 20:30 을 넘기지 않도록 1시간+ 여유를 둔 값.
 - 진행 상황은 Redis admin:bootstrap:progress 에 단계 시작·끝마다 덮어쓴다(관리자 화면). 기록 실패는 무시.
@@ -23,6 +23,8 @@ from apps.collector import trading_day
 from apps.collector.celery_app import celery_app
 from apps.collector.tasks.canslim import backfill_canslim
 from apps.collector.tasks.market_data import (
+    DETAIL_BACKFILL_DAYS,
+    backfill_investor_detail,
     collect_fundamentals,
     collect_investor_daily,
     collect_ipo_events,
@@ -56,6 +58,7 @@ STEPS: tuple[tuple[str, str, bool], ...] = (
     ("indices_kr", "국내 지수", True),
     ("indices_us", "미국 지수·환율", True),
     ("investor", "투자자별 순매수", True),
+    ("investor_detail", "연기금 등 세부 수급 30거래일", True),
     ("fundamentals", "재무(연간·분기)", True),
     ("ipo", "공모주 일정", True),
     ("macro", "거시 지표(FRED)", True),
@@ -78,6 +81,7 @@ def _runners(months: int, end: str) -> dict[str, Callable[[], object]]:
         "indices_kr": lambda: collect_market_indices("KR"),
         "indices_us": lambda: collect_market_indices("US"),
         "investor": lambda: collect_investor_daily(),
+        "investor_detail": lambda: backfill_investor_detail(days=DETAIL_BACKFILL_DAYS, end=end),
         "fundamentals": lambda: collect_fundamentals(),
         "ipo": lambda: collect_ipo_events(),
         "macro": lambda: collect_macro_series(),

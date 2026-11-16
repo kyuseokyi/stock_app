@@ -13,6 +13,8 @@ from datetime import date, datetime, timedelta, timezone
 import requests
 
 from apps.collector import fred
+from apps.collector import investor_detail as idt
+from apps.collector import trading_day
 from apps.collector import intraday_indices as intraday
 from apps.collector import market_parsers as mp
 from apps.collector.celery_app import celery_app
@@ -36,6 +38,10 @@ IPO_AHEAD_DAYS = 60
 MACRO_BACKFILL_DAYS = 730
 MACRO_OVERLAP_DAYS = 90  # 수정 발표(revision)까지 다시 받기
 RELEASE_AHEAD_DAYS = 60
+# 세부 투자자 매일 수집 겹침(거래일) — 하루 실패로 빠진 날이 구멍으로 남으면 연속 일수가 끊겨 10거래일 동안 프리셋에서
+# 빠진다. 한 호출이 5거래일 이상을 주면 추가 호출 없음, 하루씩만 주면 종목당 최대 5장(명세 확인 필요 — 실측 후 조정).
+DETAIL_DAILY_DAYS = 5
+DETAIL_BACKFILL_DAYS = 30  # 첫 실행·수동 백필 — 연기금 10일 연속 판정에 넉넉히
 
 
 def _kis_client():
@@ -137,6 +143,41 @@ def collect_investor_daily(limit: int | None = None, rate_per_sec: float | None 
     return _run_universe(_investor_one, limit, None, rate_per_sec, workers, tickers=_analysis_tickers())
 
 
+# ---------------------------------------------------------------- 세부 투자자(연기금 등) 순매수
+def _investor_detail_one(ticker: str, client, end: date, days: int) -> int:
+    return chm.upsert_investor_detail_daily(ticker, idt.fetch_investor_detail(client, ticker, end, days))
+
+
+@celery_app.task(name="collector.collect_investor_detail_daily")
+def collect_investor_detail_daily(limit: int | None = None, rate_per_sec: float | None = None,
+                                  workers: int | None = None, days: int | None = None,
+                                  end: str | None = None) -> dict:
+    """분석 대상 종목(보통주 — investor 단계와 같은 대상)의 연기금·사모·투신·은행·보험·기타금융 순매수.
+
+    days 를 안 주면 DETAIL_DAILY_DAYS — 매일 20:30 단계는 테이블이 비어 있어도 30거래일 백필을 하지 않는다
+    (하루 1행씩 주는 TR 이면 1시간 넘게 걸려 뒤 단계 canslim·screener 가 밀린다). 30거래일은 수동 백필
+    `collector.backfill_investor_detail` 또는 관리자 '초기 데이터 준비'로 낮 시간에 채운다.
+    end: 기준일(YYYYMMDD·YYYY-MM-DD, 기본 오늘 KST). 공유 RateLimiter 는 _run_universe 가 건다.
+    """
+    chm.ensure_market_tables()
+    if days is None:
+        days = DETAIL_DAILY_DAYS
+    d_end = idt.to_date(end, trading_day.now_kst().date())
+    n_days = max(1, int(days))
+    out = _run_universe(lambda t, c: _investor_detail_one(t, c, d_end, n_days), limit, None, rate_per_sec, workers,
+                        tickers=_analysis_tickers())
+    if isinstance(out, dict):
+        out = {**out, "days": n_days, "end": d_end.isoformat()}
+    return out
+
+
+@celery_app.task(name="collector.backfill_investor_detail")
+def backfill_investor_detail(days: int = DETAIL_BACKFILL_DAYS, end: str | None = None, limit: int | None = None,
+                             rate_per_sec: float | None = None, workers: int | None = None) -> dict:
+    """수동 백필 — 최근 days 거래일(기본 30). 다시 돌려도 멱등(FINAL 기준 날짜당 1행)."""
+    return collect_investor_detail_daily(limit=limit, rate_per_sec=rate_per_sec, workers=workers, days=days, end=end)
+
+
 # ---------------------------------------------------------------- 재무비율
 def _fundamentals_one(ticker: str, client) -> int:
     n = 0
@@ -221,7 +262,7 @@ def _daily_ohlcv() -> dict:
 
 @celery_app.task(name="collector.daily_market_pipeline")
 def daily_market_pipeline() -> dict:
-    """20:30 — 전종목 일봉 → 국내 지수 → 투자자별 순매수 → CANSLIM → 시장 그룹 → 스크리너 → 차트 패턴(차례로, 앞 단계 예외와 무관하게 진행).
+    """20:30 — 전종목 일봉 → 국내 지수 → 투자자별 순매수 → 세부 투자자(연기금 등) → CANSLIM → 시장 그룹 → 스크리너 → 차트 패턴(차례로, 앞 단계 예외와 무관하게 진행).
 
     끝나면 단계별 성공·걸린 시간·요약을 Redis 에 남긴다(관리자 데이터 현황). 기록 실패는 결과에 영향 없음.
     """
@@ -229,7 +270,8 @@ def daily_market_pipeline() -> dict:
     record: list[dict] = []
     started = datetime.now(timezone.utc)
     steps = (("daily", _daily_ohlcv), ("indices_kr", lambda: collect_market_indices("KR")),
-             ("investor", lambda: collect_investor_daily()), ("canslim", lambda: compute_canslim()),
+             ("investor", lambda: collect_investor_daily()),
+             ("investor_detail", lambda: collect_investor_detail_daily()), ("canslim", lambda: compute_canslim()),
              ("market_groups", lambda: compute_market_groups()), ("screener", lambda: compute_screener()),
              ("patterns", lambda: compute_patterns()))
     for name, step in steps:

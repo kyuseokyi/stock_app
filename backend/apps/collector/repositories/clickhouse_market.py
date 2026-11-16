@@ -1,4 +1,4 @@
-"""ClickHouse 시장 테이블 — 지수·투자자별 순매수·재무비율·거시 지표.
+"""ClickHouse 시장 테이블 — 지수·투자자별 순매수(3분류·세부 분류)·재무비율·거시 지표.
 
 모두 ReplacingMergeTree(ingested_at): 같은 키를 다시 넣으면 최신 행이 남는다(겹침 재수집 멱등). 조회는 FINAL.
 """
@@ -45,6 +45,26 @@ PARTITION BY toYYYYMM(date)
 ORDER BY (ticker, date)
 """
 
+# 세부 투자자 순매수(KIS FHPTJ04160001) — 기존 investor_daily(개인·외국인·기관)는 그대로 두고 따로 쌓는다.
+# 수량=주, 금액=KIS 원값(단위는 apps.collector.investor_detail.DETAIL_AMT_TO_WON 주석 — 명세 확인 필요).
+INVESTOR_DETAIL_COLUMNS = (
+    "pension_qty", "pension_amt", "private_eq_qty", "private_eq_amt", "invtrust_qty", "invtrust_amt",
+    "bank_qty", "bank_amt", "insurance_qty", "insurance_amt", "other_fin_qty", "other_fin_amt",
+)
+_DETAIL_COLS_DDL = ",\n".join(f"    {c:<15}Int64" for c in INVESTOR_DETAIL_COLUMNS)
+INVESTOR_DETAIL_DDL = f"""
+CREATE TABLE IF NOT EXISTS {CLICKHOUSE_DB}.investor_detail_daily
+(
+    ticker         String,
+    date           Date,
+{_DETAIL_COLS_DDL},
+    ingested_at    DateTime64(3) DEFAULT now64(3)
+)
+ENGINE = ReplacingMergeTree(ingested_at)
+PARTITION BY toYYYYMM(date)
+ORDER BY (ticker, date)
+"""
+
 FUNDAMENTALS_PERIODIC_DDL = f"""
 CREATE TABLE IF NOT EXISTS {CLICKHOUSE_DB}.fundamentals_periodic
 (
@@ -77,7 +97,7 @@ ENGINE = ReplacingMergeTree(ingested_at)
 ORDER BY (series_id, date)
 """
 
-ALL_DDL = (INDEX_DDL, INVESTOR_DDL, FUNDAMENTALS_PERIODIC_DDL, MACRO_DDL)
+ALL_DDL = (INDEX_DDL, INVESTOR_DDL, FUNDAMENTALS_PERIODIC_DDL, MACRO_DDL, INVESTOR_DETAIL_DDL)
 
 
 def ensure_market_tables(client=None) -> None:
@@ -104,6 +124,12 @@ def upsert_investor_daily(ticker: str, records: list[dict], client=None) -> int:
     rows = [[ticker, r["date"], r["prsn_qty"], r["frgn_qty"], r["orgn_qty"], r["prsn_amt"], r["frgn_amt"],
              r["orgn_amt"]] for r in records]
     return _insert("investor_daily", rows, cols, client)
+
+
+def upsert_investor_detail_daily(ticker: str, records: list[dict], client=None) -> int:
+    cols = ["ticker", "date", *INVESTOR_DETAIL_COLUMNS]
+    rows = [[ticker, r["date"], *(r[c] for c in INVESTOR_DETAIL_COLUMNS)] for r in records]
+    return _insert("investor_detail_daily", rows, cols, client)
 
 
 def upsert_fundamentals(ticker: str, period: str, records: list[dict], client=None) -> int:
@@ -133,3 +159,8 @@ def latest_index_date(code: str, client=None) -> date | None:
 def latest_macro_date(series_id: str, client=None) -> date | None:
     return _latest(f"SELECT max(date) FROM {CLICKHOUSE_DB}.macro_series FINAL WHERE series_id = %(s)s",
                    {"s": series_id}, client)
+
+
+def latest_investor_detail_date(client=None) -> date | None:
+    """세부 투자자 테이블의 최신 날짜 — 비어 있으면 None(첫 실행 → 30거래일 백필)."""
+    return _latest(f"SELECT max(date) FROM {CLICKHOUSE_DB}.investor_detail_daily FINAL", {}, client)

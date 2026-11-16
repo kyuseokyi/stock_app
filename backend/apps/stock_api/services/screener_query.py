@@ -26,6 +26,7 @@ OVERSOLD_RSI = 30.0
 BB_SIGMAS = (1.0, 1.5, 2.0, 2.5, 3.0)
 DEFAULT_BB_SIGMA = 2.0
 FOREIGN_BUY_DAYS = 5         # 외국인 연속 순매수 프리셋 기준(거래일)
+PENSION_BUY_DAYS = 10        # 연기금 연속 순매수(수량) 프리셋 기준(거래일)
 
 # 프리셋 = 서버 상수 조건 묶음(필터와 AND). 키는 웹·앱 상수와 같은 문자열
 PRESETS = {
@@ -35,6 +36,7 @@ PRESETS = {
     "new_high": "is_new_high = 1",
     "foreign_buy_5d": f"frgn_buy_days >= {FOREIGN_BUY_DAYS}",
     "double_buy_new_high": "is_new_high = 1 AND frgn_buy_days >= 1 AND orgn_buy_days >= 1",
+    "pension_buy_10d": f"pension_buy_days >= {PENSION_BUY_DAYS}",
 }
 SORTS = {
     "value": "value DESC, ticker",

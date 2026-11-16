@@ -64,6 +64,33 @@ def parse_investor(rows) -> list[dict]:
     return [out[d] for d in sorted(out)]
 
 
+# 종목별 투자자매매동향(일별, FHPTJ04160001) 순매수 필드 → 저장 컬럼. 공식 예제 chk_investor_trade_by_stock_daily.py
+# COLUMN_MAPPING 기준(순매수 = KIS 가 준 *_ntby_* 를 그대로, 매수−매도를 직접 계산하지 않는다).
+# 사모만 수량 필드 접미사가 _vol(pe_fund_ntby_vol, '사모 펀드 순매수 거래량')이다.
+# ⚠️ 명세 확인 필요: 예제에 '기타금융' 필드는 없다. KRX 기관 분류의 기타금융(옛 종금)과 가장 가까운
+#    mrbn(종금) 을 other_fin 으로 쓴다(etc=기타, etc_corp=기타법인, etc_orgt=기타단체는 쓰지 않음).
+INVESTOR_DETAIL_FIELDS = {
+    "pension_qty": "fund_ntby_qty", "pension_amt": "fund_ntby_tr_pbmn",          # 기금(연기금)
+    "private_eq_qty": "pe_fund_ntby_vol", "private_eq_amt": "pe_fund_ntby_tr_pbmn",  # 사모 펀드
+    "invtrust_qty": "ivtr_ntby_qty", "invtrust_amt": "ivtr_ntby_tr_pbmn",         # 투자신탁
+    "bank_qty": "bank_ntby_qty", "bank_amt": "bank_ntby_tr_pbmn",                 # 은행
+    "insurance_qty": "insu_ntby_qty", "insurance_amt": "insu_ntby_tr_pbmn",       # 보험
+    "other_fin_qty": "mrbn_ntby_qty", "other_fin_amt": "mrbn_ntby_tr_pbmn",       # 종금(기타금융 추정)
+}
+
+
+def parse_investor_detail(rows) -> list[dict]:
+    """FHPTJ04160001 output2 → 날짜 오름차순 [{date, pension_qty, ...}]. 날짜 없는 행(빈 응답 자리표시)은 버리고,
+    값이 비면 0, 부호(순매도 음수)는 그대로. 같은 날짜가 겹치면 뒤 행이 남는다."""
+    out: dict[date, dict] = {}
+    for r in rows or []:
+        d = _d(r.get("stck_bsop_date"))
+        if d is None:
+            continue
+        out[d] = {"date": d, **{col: _i(r.get(key)) for col, key in INVESTOR_DETAIL_FIELDS.items()}}
+    return [out[d] for d in sorted(out)]
+
+
 def parse_financial_ratio(rows) -> list[dict]:
     out: dict[str, dict] = {}
     for r in rows:

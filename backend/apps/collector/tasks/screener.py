@@ -48,6 +48,14 @@ def _run_day(as_of: date, universe, profiles, bars, fundamentals, flows=None) ->
     return out
 
 
+def _load_flows(as_of: date, days: int, tickers: list[str]) -> dict:
+    """외국인·기관(investor_daily) + 연기금(investor_detail_daily) 수급을 종목별 한 묶음으로 — 하루 계산·백필이 같이 쓴다."""
+    flows = cs.load_investor_flows(as_of, days=days, tickers=tickers)
+    for ticker, by_date in cs.load_pension_flows(as_of, days=days, tickers=tickers).items():
+        flows.setdefault(ticker, {"frgn": {}, "orgn": {}})["pension"] = by_date
+    return flows
+
+
 def _tickers(universe) -> list[str]:
     return [u[0] for u in universe]
 
@@ -66,7 +74,7 @@ def compute_screener(as_of: str | None = None) -> dict:
     if d is None:
         return {"skipped": "일봉 없음"}
     bars = cs.load_bars(d, tickers=_tickers(universe))
-    flows = cs.load_investor_flows(d, days=FLOW_DAYS, tickers=_tickers(universe))
+    flows = _load_flows(d, FLOW_DAYS, _tickers(universe))
     out = _run_day(d, universe, profiles, bars, fundamentals, flows)
     log.info("스크리너 계산: %s", out)
     return out
@@ -86,8 +94,7 @@ def backfill_screener(days: int = 60) -> dict:
     span = (max(dates) - min(dates)).days + BARS_DAYS
     all_bars = cs.load_bars(max(dates), days=span, tickers=_tickers(universe))
     # 수급은 자르지 않아도 된다 — 연속 일수는 그 날까지 잘린 봉의 날짜만 따라 센다
-    flows = cs.load_investor_flows(max(dates), days=(max(dates) - min(dates)).days + FLOW_DAYS,
-                                   tickers=_tickers(universe))
+    flows = _load_flows(max(dates), (max(dates) - min(dates)).days + FLOW_DAYS, _tickers(universe))
     ok, failed, results = [], [], []
     for d in dates:
         try:
