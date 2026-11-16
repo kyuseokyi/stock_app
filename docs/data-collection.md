@@ -84,10 +84,33 @@ NXT 애프터마켓이 20:00 에 끝나야 통합(UN) 일봉이 확정되므로 
 | 1 | 전종목 일봉 | 최근 30일 ~ +2일 **겹쳐서** 다시 받기 → 이동평균 계산 → 적재. 스레드 `KIS_WORKERS`(기본 4) 병렬, 초당 `KIS_RATE_PER_SEC`(실전 기본 15) | CH `daily_prices` |
 | 2 | 국내 지수 | 15:40 수집의 안전망(같은 날짜 덮어쓰기) | CH `market_index_daily` |
 | 3 | 종목별 투자자 수급 | 분석 대상 보통주, 최근 약 30거래일(UN→J 폴백) | CH `investor_daily` |
-| 4 | CANSLIM | 종목·시장 점수 | CH `canslim_daily`·`canslim_market` |
-| 5 | 시장 그룹 | 업종·테마별 등락률·순위 | CH `market_group_daily`·`market_stock_daily` |
-| 6 | 스크리너 | 조건검색 지표 | CH `screener_daily` |
-| 7 | 차트 패턴 | 기준일 하루를 지우고 다시 적재 | CH `chart_pattern_daily` |
+| 4 | 세부 투자자 수급(`investor_detail`) | 같은 분석 대상 보통주의 연기금(기금)·사모·투신·은행·보험·기타금융 순매수 — KIS `FHPTJ04160001`, UN→J 폴백. 매일은 기준일 하루, **테이블이 비면(첫 실행) 30거래일 백필** | CH `investor_detail_daily` |
+| 5 | CANSLIM | 종목·시장 점수 | CH `canslim_daily`·`canslim_market` |
+| 6 | 시장 그룹 | 업종·테마별 등락률·순위 | CH `market_group_daily`·`market_stock_daily` |
+| 7 | 스크리너 | 조건검색 지표(연기금 연속 순매수 일수 `pension_buy_days` 포함) | CH `screener_daily` |
+| 8 | 차트 패턴 | 기준일 하루를 지우고 다시 적재 | CH `chart_pattern_daily` |
+
+### 세부 투자자 수급(`investor_detail_daily`)
+
+설계 `docs/superpowers/specs/2026-11-16-pension-buy-preset-design.md`. 기존 `investor_daily`(개인·외국인·기관 3분류)는 그대로 두고 따로 쌓는다.
+
+- **TR**: `FHPTJ04160001` 종목별 투자자매매동향(일별), `GET /uapi/domestic-stock/v1/quotations/investor-trade-by-stock-daily`. 파라미터 `FID_COND_MRKT_DIV_CODE`(UN→J)·`FID_INPUT_ISCD`·`FID_INPUT_DATE_1`(YYYYMMDD)·`FID_ORG_ADJ_PRC`·`FID_ETC_CLS_CODE`(둘 다 공란). 일자별 행은 `output2`(`output1` 은 현재가 요약이라 안 씀). 출처: 한투 공식 예제 `koreainvestment/open-trading-api` `examples_llm/domestic_stock/investor_trade_by_stock_daily/`.
+- **연속조회**: 예제는 응답 헤더 `tr_cont` 로 다음 장을 받지만, 우리 클라이언트는 `FID_INPUT_DATE_1` 을 '받은 가장 이른 날짜 − 1일' 로 옮겨 다시 부른다(0행·더 이른 날 없음·최대 40장에서 멈춤). 시장코드는 첫 장에서 정한 것을 유지.
+- **컬럼**(모두 `Int64`, 순매수 = KIS 의 `*_ntby_*` 값 그대로):
+
+| 컬럼 | KIS 필드(수량 / 금액) | 뜻 |
+|---|---|---|
+| `pension_qty`·`pension_amt` | `fund_ntby_qty` / `fund_ntby_tr_pbmn` | 기금(연기금) |
+| `private_eq_qty`·`private_eq_amt` | `pe_fund_ntby_vol` / `pe_fund_ntby_tr_pbmn` | 사모 펀드(수량 필드만 `_vol`) |
+| `invtrust_qty`·`invtrust_amt` | `ivtr_ntby_qty` / `ivtr_ntby_tr_pbmn` | 투자신탁 |
+| `bank_qty`·`bank_amt` | `bank_ntby_qty` / `bank_ntby_tr_pbmn` | 은행 |
+| `insurance_qty`·`insurance_amt` | `insu_ntby_qty` / `insu_ntby_tr_pbmn` | 보험 |
+| `other_fin_qty`·`other_fin_amt` | `mrbn_ntby_qty` / `mrbn_ntby_tr_pbmn` | 종금(기타금융으로 추정 — **명세 확인 필요**) |
+
+- `ReplacingMergeTree(ingested_at)`, `PARTITION BY toYYYYMM(date)`, `ORDER BY (ticker, date)` — 조회는 `FINAL`. 수집 태스크가 처음 돌 때 자동 생성.
+- **명세 확인 필요**: 한 번 호출에 몇 거래일을 주는지, 금액(`*_tr_pbmn`) 단위(백만원으로 가정 — `investor_detail.DETAIL_AMT_TO_WON`, 저장은 원값), 기타금융 필드. 프리셋은 **수량**으로 판정해 금액 단위와 무관.
+- **호출량**: 종목당 1장(UN) + NXT 미상장 종목은 J 1장 더. 한 장이 30거래일 이상을 주면 백필도 같은 비용이고, 하루씩만 주면 백필은 종목당 최대 30장이 된다. 소요 ≈ 호출 수 ÷ `KIS_RATE_PER_SEC`(실전 15/초).
+- **수동 백필**: `collector.backfill_investor_detail`(기본 `days=30`, `end` 생략 시 오늘 KST).
 
 ## 5. 수집 규칙 (반드시 지킬 것 — CLAUDE.md 와 같음)
 
@@ -117,7 +140,8 @@ NXT 애프터마켓이 20:00 에 끝나야 통합(UN) 일봉이 확정되므로 
 | | `ai_daily_briefings`·`ai_stock_evaluations` | AI 브리핑·종목 평가 |
 | ClickHouse | `daily_prices` | 종목 일봉 + 이동평균 |
 | | `market_index_daily` | 국내·미국 지수·환율·미국 대표 종목 |
-| | `investor_daily` | 종목별 투자자 순매수 |
+| | `investor_daily` | 종목별 투자자 순매수(개인·외국인·기관) |
+| | `investor_detail_daily` | 종목별 세부 투자자 순매수(연기금·사모·투신·은행·보험·기타금융) |
 | | `fundamentals`·`fundamentals_periodic` | 재무비율(연간·분기) |
 | | `macro_series` | FRED 거시 지표 |
 | | `canslim_*`·`market_group_daily`·`market_stock_daily`·`screener_daily`·`chart_pattern_daily` | 계산 결과 |
@@ -131,8 +155,9 @@ NXT 애프터마켓이 20:00 에 끝나야 통합(UN) 일봉이 확정되므로 
 
 | 작업 | 어떻게 | 비고 |
 |---|---|---|
-| **초기 데이터 준비** | 관리자 화면 버튼 → `collector.bootstrap_data` | 새 서버용. 수집 1~7 → 계산 8~11 을 순서대로. 16:00~21:30 에는 시작 안 함(정기 수집과 KIS 한도 충돌 방지). 다시 누르면 이어서 채움 |
+| **초기 데이터 준비** | 관리자 화면 버튼 → `collector.bootstrap_data` | 새 서버용. 수집 1~8(4번째 '연기금 등 세부 수급 30거래일' 포함) → 계산 9~12 를 순서대로. 16:00~21:30 에는 시작 안 함(정기 수집과 KIS 한도 충돌 방지). 다시 누르면 이어서 채움 |
 | 전종목 장기 백필 | `collector.backfill_all_daily` | 개월 수 지정, 청크로 받아 이동평균은 한 번에 |
+| 세부 투자자 30거래일 백필 | `collector.backfill_investor_detail` | `{"days": 30}` 기본. 끝나면 `collector.backfill_screener` 로 `pension_buy_days` 과거 값을 채운다 |
 | 계산 60일 백필 | CANSLIM·시장 그룹·스크리너 태스크 | 과거 날짜도 **현재** 재무·테마·상장주식수로 계산(근사) |
 | 표본 점검 | `apps/collector/verify/spot_check.py` | 우리 UN 일봉 vs KRX(pykrx): 고가 ≥, 저가 ≤, 거래량 ≥ 이면 정상. 내부 테이블끼리도 비교 |
 | 수동 1종목 | `collect_daily_ohlcv(ticker)`, `backfill_domestic_daily(ticker, months)` | 확인·복구용 |

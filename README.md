@@ -560,13 +560,13 @@ uv run python -c "from apps.collector.tasks.universe import backfill_all_daily; 
 | 평일 15:40 | 국내 지수(KOSPI·KOSDAQ·KOSPI200) — KRX 정규장 마감 15:30 뒤 바로(20:30 파이프라인의 지수 단계는 안전망으로 유지). 설계 `docs/superpowers/specs/2026-10-20-market-close-schedule-design.md` | CH `market_index_daily` |
 | 평일 09:00~15:35 30초마다 | 장중 국내 지수(KOSPI·KOSDAQ·KOSPI200)·원/달러 현재값 — `collector.poll_intraday_indices`(expires 25초), 시장 칩 "● HH:MM" 배지(스크린 리더는 "장중 HH:MM"). 휴장일·장 밖에는 KIS 를 부르지 않음. 0·NaN·음수 값은 실패로 보고 이전 값 유지. 끄기 `INTRADAY_INDICES_ENABLED=false`. 설계 `docs/superpowers/specs/2026-10-20-intraday-index-design.md` | Redis `market:intraday`(TTL 10분, 읽을 때도 10분 지난 항목 제외, CH 에는 안 씀) |
 | 08:00 | FRED 거시 지표(CPI·근원CPI·PCE·실업률·고용·기준금리·국채) + CPI·고용·PCE 발표 예정일 — 키 있을 때만 | CH `macro_series`, PG `stock_events` |
-| 20:30 | `collector.daily_market_pipeline`: 전종목 일봉 → 국내 지수(KOSPI·KOSDAQ·KOSPI200) → 투자자별 순매수(보통주만) | CH `daily_prices`·`market_index_daily`·`investor_daily` |
+| 20:30 | `collector.daily_market_pipeline`: 전종목 일봉 → 국내 지수(KOSPI·KOSDAQ·KOSPI200) → 투자자별 순매수(보통주만) → 세부 투자자 순매수(연기금·사모·투신·은행·보험·기타금융, KIS `FHPTJ04160001`, 첫 실행은 30거래일 백필) | CH `daily_prices`·`market_index_daily`·`investor_daily`·`investor_detail_daily` |
 | 20:30 (마스터 동기화 때) | 종목 프로필(업종·시총·상장주식·ETF/스팩/우선주·관리/정지)·업종명·KIS 테마 | PG `stock_profile`·`sectors`·`themes`·`theme_stocks` |
 | 21:30 | 공모주 청약·상장 일정 | PG `stock_events` |
 | 토 10:00 | 재무비율(연간·분기 EPS·ROE·증가율) — 보통주만 | CH `fundamentals_periodic` |
 
 - 지수는 처음 실행 때 2년치를 백필하고 이후 10일씩 겹쳐 받는다. CH 테이블은 각 태스크가 처음 돌 때 자동 생성.
-- 수동 실행: `uv run celery -A apps.collector.celery_app call collector.collect_fundamentals` (같은 방식으로 `collect_market_indices --kwargs '{"region":"US"}'`·`collect_investor_daily`·`collect_ipo_events`·`collect_macro_series`).
+- 수동 실행: `uv run celery -A apps.collector.celery_app call collector.collect_fundamentals` (같은 방식으로 `collect_market_indices --kwargs '{"region":"US"}'`·`collect_investor_daily`·`collect_ipo_events`·`collect_macro_series`). 세부 투자자 30거래일 백필은 `collector.backfill_investor_detail --kwargs '{"days":30}'`(자세한 내용 `docs/data-collection.md` 4장).
 - 테마 보정 API(관리자 JWT, stock_api): `GET/POST /api/v1/admin/themes`, `PATCH /api/v1/admin/themes/{id}`(이름·설명·숨김), `GET/POST /api/v1/admin/themes/{id}/stocks`, `DELETE /api/v1/admin/themes/{id}/stocks/{ticker}`(제외 표시). KIS 테마 동기화는 `source=kis` 연결만 바꿔 관리자 보정이 유지된다.
 - 네이버 증권 크롤링은 하지 않는다(`robots.txt` 전체 거부) — 로드맵 "추후 확인".
 
@@ -612,6 +612,7 @@ cd backend && uv run --with pykrx python -m apps.collector.verify.spot_check --n
 설계 `docs/superpowers/specs/2026-10-21-screener-presets-design.md`, 계획 `docs/superpowers/plans/2026-10-21-screener-presets.md`. 웹 `/screener/finder`(스크리너 탭 '조건검색', 비로그인 공개), 앱은 스크리너 탭 '조건검색' 칩(프리셋 칩·필터 바텀시트·정렬·50개씩 더 불러오기, 행 → `/stock/[ticker]`).
 - **대상·계산**: 분석 대상 보통주(CANSLIM·시장 탭과 같은 범위, 약 2,600종목). `collector.compute_screener` 가 매일 20:30 일일 파이프라인 **맨 마지막 단계**(시장 그룹 계산 뒤, 앞 단계 실패와 무관)에서 돌고, 결과를 CH `screener_daily` 에 저장한다(`ReplacingMergeTree`, 같은 날 재계산은 멱등, 조회는 `FINAL`; `daily_prices` 에는 컬럼을 더하지 않음). 저장 지표: 등락률·거래대금(종가×거래량)·시총(종가×상장주식수)·거래량 비율(당일/직전 20일 평균)·RSI(14, Wilder, 최근 100종가)·이동평균(5·20·50·60·120)·표준편차(20)·배열·직전 52주 고가와 신고가 경신·골든크로스(20/60) 경과일(0~2)·매물대 위쪽 비율(최근 120일·20구간)·연간 재무(ROE·EPS·BPS·PER·PBR·매출/영업이익 성장률·부채비율)·유동성(20일 평균 거래대금 10억·종가 1,000원 이상).
 - **프리셋 4종**(서버 상수, 필터와 AND): `volume_surge` 거래량 비율 ≥ 2배 · `golden_cross` MA20이 MA60을 상향 돌파한 지 3거래일 이내(오늘 포함) · `oversold` RSI(14) ≤ 30 · `new_high` 당일 고가가 직전 251거래일 최고가를 넘음(52주 신고가 경신).
+- **수급 프리셋 3종**: `foreign_buy_5d` 외국인 5거래일 이상 연속 순매수 · `double_buy_new_high` 당일 외국인·기관 모두 순매수 + 52주 신고가(둘 다 `investor_daily`) · `pension_buy_10d` 연기금 **수량** 순매수가 10거래일 이상 연속(`screener_daily.pension_buy_days`, 원천 `investor_detail_daily`, 설계 `docs/superpowers/specs/2026-11-16-pension-buy-preset-design.md`). 연기금 데이터가 10거래일 쌓이기 전에는 결과가 비는 게 정상 → `backfill_investor_detail` 다음 `backfill_screener` 로 바로 채운다.
 - **커스텀 필터**: 시장(KOSPI/KOSDAQ)·가격 범위·시총 범위(억 원)·거래대금 하한(억 원)·유동성만 보기(기본 켜짐)·거래량 비율 하한·RSI 범위·배열(정배열/역배열)·볼린저(σ 1·1.5·2·2.5·3, 그 밖은 2 + 위치 상단 돌파/하단 이탈/밴드 안 + 밴드폭 상한 %)·매물대 위쪽 비율 상한·ROE 하한·PER/PBR 범위·부채비율 상한·매출성장률 하한. 이상한 값(음수·뒤집힌 범위·숫자 아님)은 그 조건만 무시한다(ROE·매출성장률만 음수 허용). 정렬: 거래대금(기본)·등락률·거래량 비율·RSI·시총·매물대 위쪽 비율(오름차순).
 - **API(stock_api GraphQL)**: `screenerScreen(preset, filters: ScreenerFilterInput, sort, limit, offset)` → `{ date, total, bbSigma, items }`(`limit` 최대 200). 쿼리는 `web_client/src/api/finder.ts`·`mobile/src/features/finder/api.ts`, 계약 테스트 `backend/tests/test_screener_contract.py`. 기준값은 `apps/stock_api/services/screener_query.py`(프리셋·σ·정렬)와 `apps/collector/screener/indicators.py`(기간·구간 수) 상수.
 - **배포 후 꼭 할 일**

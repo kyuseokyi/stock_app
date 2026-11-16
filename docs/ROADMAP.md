@@ -135,7 +135,8 @@
 - [ ] 숨긴 조건검색·패턴 탭 다듬은 뒤 관리자 스위치로 공개
 - [ ] 뉴스 화면(주달) — 네이버 검색 키는 등록 완료(2026-10-30), 급등락 원인·핫 키워드 분석에 사용 중. 뉴스 목록 화면은 아직 없음
 - [x] 수급 프리셋 2종(외국인 5일 연속 순매수, 외국인·기관 쌍끌이 52주 신고가) — `investor_daily`(KIS) 기준 연속 일수를 `screener_daily` 에 저장 (2026-11-05)
-- [ ] 연기금 10일 연속 매집 프리셋 — `investor_daily` 에 연기금이 없고 pykrx 경로는 하루 상위 50개만 Redis 에 둔다. 종목별 일자 이력 테이블·백필이 먼저 필요. 스펙 `specs/2026-10-30-market-analyst-service-spec.md` [B]
+- [x] 연기금 10일 연속 매집 프리셋(`pension_buy_10d`) — KIS `FHPTJ04160001` → CH `investor_detail_daily` → `screener_daily.pension_buy_days`, 웹·앱 칩. 설계 `specs/2026-11-16-pension-buy-preset-design.md` (2026-11-16 dev 구현)
+  - [ ] 서버에서 `backfill_investor_detail`(30거래일) → `backfill_screener` 실행 후 사용자 확인 필요: 한 호출당 행 수·금액 단위·기타금융(mrbn) 필드, 005930 연기금 순매수를 한투 MTS 투자자별 화면과 대조
 - [ ] 고배당주 프리셋 — 배당 데이터 출처 먼저 확인
 - [ ] CANSLIM I 항목 연기금 반영 — 지금은 KIS 기관+외국인 순매수로 판정(스펙은 pykrx 연기금·외인, 선택 사항)
 
