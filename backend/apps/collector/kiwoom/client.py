@@ -1,0 +1,278 @@
+"""키움증권 REST API 저수준 클라이언트 (동기, requests 기반). KIS `apps/collector/kis/client.py` 와 같은 패턴.
+
+- 모든 조회는 `POST` + JSON body, TR 은 헤더 `api-id`, 인증은 `authorization: Bearer <token>`.
+- 토큰(au10001 `POST /oauth2/token`): Redis 공유 캐시 `kiwoom:token:prod:{app_key[:10]}` — 값은
+  `{"token", "expires_dt"}` JSON(캐시에서 읽어도 만료 시각을 알 수 있게). TTL = 만료(KST) − 지금 − 600초, 최소 60초.
+- 연속조회: 응답 헤더 `cont-yn=Y`·`next-key` → 다음 요청 헤더에 그대로.
+- 재시도: HTTP 5xx·타임아웃·연결 오류, 한도 초과(1700·1701·1702)만 백오프(최대 3회, `1.5**n` 초).
+  8005(토큰 무효)는 캐시 삭제·재발급 후 1회, 8010(발급 IP≠요청 IP)은 즉시 실패, 그 밖은 즉시 실패.
+- 키움이 오류를 HTTP 200 으로 주는지 4xx 로 주는지 명세에 없으므로, 상태 코드보다 body `return_code` 를 먼저 본다.
+- 예외 메시지·로그에 앱키·시크릿·토큰을 절대 넣지 않는다.
+
+공식 명세: GitHub Kiwoom-Securities/Kiwoom-REST-API `kiwoom/_data/kiwoom_api_spec.json`(c7a3d25)
+  - apis["접근토큰 발급(au10001)"], apis["주식일봉차트조회요청(ka10081)"], apis["종목정보 리스트(ka10099)"], error_codes
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import time
+from dataclasses import dataclass
+from datetime import datetime
+from zoneinfo import ZoneInfo
+
+import redis
+import requests
+from requests.adapters import HTTPAdapter
+
+from apps.collector.rate_limit import RateLimiter
+from shared.kiwoom_config import KiwoomConfig, get_kiwoom_config
+
+KST = ZoneInfo("Asia/Seoul")
+
+# --- 명세에서 확인한 이름 (kiwoom_api_spec.json c7a3d25) ---
+TOKEN_PATH = "/oauth2/token"          # au10001 meta.URL
+TR_TOKEN = "au10001"
+TR_DAILY_CHART = "ka10081"            # 주식일봉차트조회요청
+PATH_CHART = "/api/dostk/chart"       # ka10081 meta.URL
+DAILY_CHART_LIST_KEY = "stk_dt_pole_chart_qry"  # ka10081 response.body LIST
+TR_STOCK_LIST = "ka10099"             # 종목정보 리스트
+PATH_STOCK_INFO = "/api/dostk/stkinfo"  # ka10099 meta.URL
+STOCK_LIST_KEY = "list"               # ka10099 response.body LIST
+
+# 오류 코드(명세 error_codes)
+CODE_TOKEN_INVALID = 8005  # Token이 유효하지 않습니다
+CODE_IP_MISMATCH = 8010    # Token을 발급받은 IP와 서비스를 요청한 IP가 동일하지 않습니다
+RATE_LIMIT_CODES = frozenset({1700, 1701, 1702})  # API별·전체·그룹 요청 개수 초과
+
+_MAX_RETRIES = 3            # 첫 시도 뒤 재시도 횟수
+_TIMEOUT = 15
+_POOL_SIZE = 4
+_TOKEN_MARGIN_SEC = 600     # 만료 10분 전에 캐시를 비워 재발급
+_MIN_TTL = 60
+_FALLBACK_TTL = 23 * 3600   # expires_dt 를 못 읽을 때(토큰 유효 24시간)
+_MAX_LIST_PAGES = 200       # "끝까지" 받는 연속조회의 안전 상한
+
+
+class KiwoomError(RuntimeError):
+    """키움 연동 오류의 공통 부모."""
+
+
+class KiwoomNotConfigured(KiwoomError):
+    """KIWOOM_APP_KEY / KIWOOM_APP_SECRET 미설정."""
+
+
+class KiwoomApiError(KiwoomError):
+    """키움 논리 오류(`return_code`≠0) 또는 재시도 대상이 아닌 HTTP 4xx."""
+
+    def __init__(self, code: int | None, msg: str):
+        self.code = code
+        self.msg = msg
+        super().__init__(f"키움 오류 code={code} msg={msg}")
+
+
+class KiwoomTokenInvalid(KiwoomApiError):
+    """8005 — 캐시 삭제·재발급 후 1회 재시도 대상."""
+
+
+class KiwoomIpError(KiwoomApiError):
+    """8010 — 등록된 IP(상용 서버) 밖에서 호출."""
+
+    def __init__(self, code: int | None, msg: str):
+        super().__init__(code, msg)
+        self.args = (f"키움은 등록된 IP(상용 서버)에서만 호출할 수 있어요 (code={code} msg={msg})",)
+
+
+class KiwoomConnectionError(KiwoomError):
+    """5xx·타임아웃·연결 오류로 재시도를 모두 소진(KIS `KISConnectionError` 와 같은 역할)."""
+
+
+@dataclass(frozen=True)
+class KiwoomResponse:
+    data: dict
+    cont_yn: bool
+    next_key: str
+
+
+@dataclass(frozen=True)
+class TokenInfo:
+    token: str
+    expires_at: datetime | None  # KST aware
+    cached: bool
+
+
+def _now() -> datetime:
+    return datetime.now(KST)
+
+
+def _parse_expires(expires_dt: str | None) -> datetime | None:
+    try:
+        return datetime.strptime(str(expires_dt).strip(), "%Y%m%d%H%M%S").replace(tzinfo=KST)
+    except (TypeError, ValueError):
+        return None
+
+
+def token_ttl(expires_dt: str | None, now: datetime) -> int:
+    """캐시 TTL(초). expires_dt 는 KST(YYYYMMDDHHmmss) — now 는 aware(어느 시간대든) 여야 한다."""
+    exp = _parse_expires(expires_dt)
+    if exp is None:
+        return _FALLBACK_TTL
+    return max(_MIN_TTL, int((exp - now).total_seconds()) - _TOKEN_MARGIN_SEC)
+
+
+def _return_code(data) -> int | None:
+    if not isinstance(data, dict) or "return_code" not in data:
+        return None
+    try:
+        return int(str(data["return_code"]).strip())
+    except ValueError:
+        return None
+
+
+def _api_error(code: int, msg: str) -> KiwoomApiError:
+    if code == CODE_TOKEN_INVALID:
+        return KiwoomTokenInvalid(code, msg)
+    if code == CODE_IP_MISMATCH:
+        return KiwoomIpError(code, msg)
+    return KiwoomApiError(code, msg)
+
+
+class KiwoomClient:
+    def __init__(self, config: KiwoomConfig | None = None, limiter=None, *, session=None, redis_client=None):
+        """limiter: 공유 RateLimiter — HTTP 요청(토큰·재시도 포함)마다 acquire. 없으면 설정 속도로 만든다.
+
+        session·redis_client 는 테스트 주입용(기본은 requests.Session·REDIS_URL).
+        """
+        self.cfg = config or get_kiwoom_config()
+        if not self.cfg.is_configured:
+            raise KiwoomNotConfigured("키움 키(KIWOOM_APP_KEY/KIWOOM_APP_SECRET)가 설정되지 않았어요.")
+        self._limiter = limiter if limiter is not None else RateLimiter(self.cfg.rate_per_sec)
+        self._redis = redis_client if redis_client is not None else redis.from_url(
+            os.getenv("REDIS_URL", "redis://localhost:6379/0"), decode_responses=True
+        )
+        self._token_key = f"kiwoom:token:prod:{self.cfg.app_key[:10]}"
+        if session is None:
+            session = requests.Session()
+            adapter = HTTPAdapter(pool_connections=_POOL_SIZE, pool_maxsize=_POOL_SIZE, max_retries=0)
+            session.mount("https://", adapter)
+        self._session = session
+
+    def close(self) -> None:
+        self._session.close()
+
+    # ------------------------------------------------------------------ 토큰
+    def _issue_token(self) -> TokenInfo:
+        body = {"grant_type": "client_credentials", "appkey": self.cfg.app_key, "secretkey": self.cfg.app_secret}
+        headers = {"content-type": "application/json;charset=UTF-8", "api-id": TR_TOKEN}
+        data, _ = self._send(f"{self.cfg.base_url}{TOKEN_PATH}", body, headers)
+        token = data.get("token")
+        if not token:
+            raise KiwoomApiError(_return_code(data), "토큰 발급 응답에 token 이 없어요")
+        expires_dt = str(data.get("expires_dt") or "")
+        self._redis.set(self._token_key, json.dumps({"token": token, "expires_dt": expires_dt}),
+                        ex=token_ttl(expires_dt, _now()))
+        return TokenInfo(token=token, expires_at=_parse_expires(expires_dt), cached=False)
+
+    def get_token_info(self) -> TokenInfo:
+        raw = self._redis.get(self._token_key)
+        if raw:
+            try:
+                cached = json.loads(raw)
+                if cached.get("token"):
+                    return TokenInfo(cached["token"], _parse_expires(cached.get("expires_dt")), cached=True)
+            except (ValueError, AttributeError):
+                pass  # 깨진 캐시는 무시하고 새로 발급
+        return self._issue_token()
+
+    def get_token(self) -> str:
+        return self.get_token_info().token
+
+    def _invalidate_token(self) -> None:
+        self._redis.delete(self._token_key)
+
+    # ------------------------------------------------------------------ 요청
+    def _send(self, url: str, body: dict, headers: dict) -> tuple[dict, dict]:
+        """POST 1건(재시도 포함). (body dict, 소문자 응답 헤더) 반환."""
+        last_exc: Exception | None = None
+        for attempt in range(_MAX_RETRIES + 1):
+            if attempt:
+                time.sleep(1.5 ** (attempt - 1))
+            self._limiter.acquire()  # 재시도도 키움 호출 — 초당 상한에 포함
+            try:
+                resp = self._session.post(url, json=body, headers=headers, timeout=_TIMEOUT)
+            except (requests.ConnectionError, requests.Timeout) as e:
+                last_exc = KiwoomConnectionError(f"키움 연결 실패: {type(e).__name__}")
+                continue
+            try:
+                data = resp.json()
+            except ValueError:
+                data = None
+            resp_headers = {str(k).lower(): v for k, v in (resp.headers or {}).items()}
+
+            code = _return_code(data)
+            if code is not None and code != 0:
+                msg = str(data.get("return_msg", ""))[:200]
+                if code in RATE_LIMIT_CODES:
+                    last_exc = KiwoomApiError(code, msg)
+                    continue
+                raise _api_error(code, msg)
+            if resp.status_code >= 500:
+                last_exc = KiwoomConnectionError(f"키움 HTTP {resp.status_code}")
+                continue
+            if resp.status_code >= 400:
+                raise KiwoomApiError(None, f"HTTP {resp.status_code}")
+            return (data if isinstance(data, dict) else {}), resp_headers
+        if isinstance(last_exc, KiwoomApiError):
+            raise last_exc
+        raise KiwoomConnectionError(f"키움 요청 실패(재시도 소진): {last_exc}")
+
+    def _headers(self, api_id: str, token: str, cont_key: str | None) -> dict:
+        h = {"content-type": "application/json;charset=UTF-8", "api-id": api_id, "authorization": f"Bearer {token}"}
+        if cont_key:
+            h["cont-yn"] = "Y"
+            h["next-key"] = cont_key
+        return h
+
+    def post(self, api_id: str, path: str, body: dict, *, cont_key: str | None = None) -> KiwoomResponse:
+        url = f"{self.cfg.base_url}{path}"
+        for attempt in range(2):
+            token = self.get_token()
+            try:
+                data, headers = self._send(url, body, self._headers(api_id, token, cont_key))
+            except KiwoomTokenInvalid:
+                if attempt:
+                    raise  # 재발급한 토큰도 무효 — 무한 반복 금지
+                self._invalidate_token()
+                continue
+            return KiwoomResponse(
+                data=data,
+                cont_yn=str(headers.get("cont-yn", "")).strip().upper() == "Y",
+                next_key=str(headers.get("next-key", "") or "").strip(),
+            )
+        raise AssertionError("unreachable")  # pragma: no cover
+
+    def paginate(self, api_id: str, path: str, body: dict, list_key: str, max_pages: int) -> list[dict]:
+        """cont-yn=Y 동안(최대 max_pages) 이어 받아 list_key 배열을 합친다."""
+        rows: list[dict] = []
+        cont_key: str | None = None
+        for _ in range(max(1, max_pages)):
+            r = self.post(api_id, path, body, cont_key=cont_key)
+            rows.extend(r.data.get(list_key) or [])
+            if not r.cont_yn or not r.next_key:
+                break
+            cont_key = r.next_key
+        return rows
+
+    # ------------------------------------------------------------------ TR
+    def get_daily_chart(self, stk_cd: str, base_dt: str, *, adjusted: bool = True, max_pages: int = 1) -> list[dict]:
+        """ka10081 주식일봉차트 원시 행 — base_dt(YYYYMMDD)부터 과거로, 최신→과거 순.
+
+        stk_cd 접미사: 없음=KRX, `_NX`=NXT, `_AL`=SOR(통합).
+        """
+        body = {"stk_cd": stk_cd, "base_dt": base_dt, "upd_stkpc_tp": "1" if adjusted else "0"}
+        return self.paginate(TR_DAILY_CHART, PATH_CHART, body, DAILY_CHART_LIST_KEY, max_pages)
+
+    def list_stocks(self, mrkt_tp: str) -> list[dict]:
+        """ka10099 종목정보 리스트(끝까지). mrkt_tp: "0" 코스피, "10" 코스닥."""
+        return self.paginate(TR_STOCK_LIST, PATH_STOCK_INFO, {"mrkt_tp": mrkt_tp}, STOCK_LIST_KEY, _MAX_LIST_PAGES)
