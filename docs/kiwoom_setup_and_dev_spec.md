@@ -169,3 +169,106 @@ DATA_COLLECTOR_PROVIDER=hybrid
    - 토큰 및 상태 캐시: `kis:*` 와 `kiwoom:*` 로 철저히 분리.
 4. **NXT(대체거래소) 시세 차이 주의**:
    - KIS는 `UN`(KRX+NXT 통합) 시세를 지원합니다. 키움 REST API의 시세 제공 기준(KRX 단독인지 NXT 통합인지)을 명세서에서 확인하고 수집 로그에 출처(`source='kiwoom'`)를 남기도록 설계합니다.
+
+---
+
+## 6. 사용자를 위한 단계별 진행 절차 및 확인 방법 (Playbook)
+
+사용자께서 전체 과정을 한눈에 파악하고 검증할 수 있는 구체적인 실행 절차입니다.
+
+### [Step 1] 클로드코드(Claude Code) 개발 시작 및 지시
+로컬 터미널에서 Claude Code를 실행한 후 아래와 같이 입력하여 작업을 지시합니다.
+
+```bash
+# 로컬 터미널에서 Claude Code 실행
+claude
+```
+
+**Claude Code 프롬프트 입력 예시:**
+> "docs/kiwoom_setup_and_dev_spec.md 문서를 읽고 Phase 1부터 Phase 3까지 개발을 진행해줘.
+> 키움 REST 클라이언트(OAuth 토큰 Redis 캐싱, Rate Limiter)와 시세 Fetcher를 작성하고, 
+> 로컬 환경은 IP 미등록 상태이므로 pytest-mock을 활용한 단위 테스트로 검증해줘. 기존 KIS 코드는 수정 없이 보존해야 해."
+
+---
+
+### [Step 2] Git 커밋 및 상용 오라클 서버 배포
+클로드코드가 로컬에서 단위 테스트를 통과하고 작업을 마치면 변경사항을 상용 서버에 반영합니다.
+
+```bash
+# 1. 로컬에서 코드 푸시
+git push origin dev
+
+# 2. 상용 오라클 서버 접속 (Termius 또는 SSH)
+ssh opc@상용서버IP (또는 kyuseok@미니PC)
+
+# 3. 상용 서버에서 코드 풀
+cd ~/stock_app   # 프로젝트 경로
+git pull origin dev
+
+# 4. 상용 서버의 backend/.env.production 파일에 키움 키 등록
+nano backend/.env.production
+# 아래 내용 추가 후 저장 (Ctrl+O, Enter, Ctrl+X):
+# KIWOOM_APP_KEY=실제_키움_APP_KEY
+# KIWOOM_APP_SECRET=실제_키움_APP_SECRET
+# KIWOOM_MODE=prod
+# KIWOOM_RATE_PER_SEC=5
+# DATA_COLLECTOR_PROVIDER=hybrid
+```
+
+---
+
+### [Step 3] 상용 서버에서 실서버 1종목 E2E 연동 테스트
+상용 서버(등록된 IP)에서 실제 키움 REST API가 정상 응답하는지 단건 테스트 스크립트를 실행합니다.
+
+```bash
+# 상용 서버 환경에서 실행
+cd backend
+source .venv/bin/activate  # 또는 conda activate stock_app
+
+# 키움 단건 조회 테스트 (클로드코드가 작성한 테스트 CLI 실행)
+python -m apps.collector.kiwoom.test_run --ticker 005930
+```
+- **확인 포인트**:
+  - `[OK] OAuth Token 발급 성공 (Redis 캐시 저장 완료)`
+  - `[OK] 005930(삼성전자) 일봉 데이터 30건 수신 완료`
+
+---
+
+### [Step 4] 로컬 PC에서 상용 데이터 연동 확인 방법
+수집기가 상용 DB에 데이터를 적재하면, 로컬 PC에서 데이터가 잘 들어왔는지 확인합니다.
+
+1. **로컬 터미널 1: DB 터널 실행**
+   ```bash
+   ./scripts/dev-db-tunnel.sh
+   ```
+2. **로컬 터미널 2 (또는 DataGrip/DBeaver): ClickHouse 쿼리 실행**
+   - ClickHouse 포트: `localhost:18123`
+   ```sql
+   -- 오늘 날짜 데이터 및 출처(source) 확인
+   SELECT 
+       ticker, date, open, high, low, close, volume, ingested_at
+   FROM stock_data.daily_prices FINAL
+   WHERE date >= today() - 2
+   ORDER BY date DESC, ticker ASC
+   LIMIT 20;
+
+   -- 전체 적재 종목 수 확인
+   SELECT count(), uniqExact(ticker) 
+   FROM stock_data.daily_prices FINAL 
+   WHERE date = today();
+   ```
+3. **관리자 웹(`admin_web`)에서 확인**
+   - 로컬 어드민 웹(`http://localhost:5173`) 접속
+   - **"데이터 현황" / "수집 파이프라인"** 메뉴에서 Celery 파이프라인의 각 단계별 성공 여부 및 요약 로그 확인
+
+---
+
+### [Step 5] 트러블슈팅 가이드
+
+| 증상 | 원인 | 해결 방법 |
+|---|---|---|
+| 키움 API 호출 시 `403 Forbidden` | IP 미등록 또는 모의/실전 불일치 | 오라클 서버 공인 IP가 키움 포털에 정확히 등록되었는지 확인, `KIWOOM_MODE` 확인 |
+| `Token Expired` 또는 발급 제한 에러 | 토큰 중복 발급 시도 | Redis의 `kiwoom:token:*` 키 TTL 및 캐시 상태 점검 |
+| KIS와 키움 시세(종가/거래량) 불일치 | 넥스트레이드(NXT) 포함 여부 차이 | KIS의 UN(통합) 시세 기준과 키움 제공 기준 비교 후 수집 정책 문서(`docs/data-collection.md`) 확인 |
+| 로컬 DB 터널 끊김 | 네트워크 절전 또는 세션 만료 | `./scripts/dev-db-tunnel.sh` 창 확인 (스크립트가 3초 뒤 자동 재연결함) |
+
