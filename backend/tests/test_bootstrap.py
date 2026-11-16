@@ -279,3 +279,13 @@ def test_task_wrapper_passes_months_and_task_id(monkeypatch):
     monkeypatch.setattr(bs, "run_bootstrap", lambda months, task_id=None: seen.update(m=months, t=task_id) or {})
     bs.bootstrap_data.apply(kwargs={"months": 12}, task_id="abc")
     assert seen == {"m": 12, "t": "abc"}
+
+
+def test_investor_detail_time_limit_marks_step_skipped(env, monkeypatch):
+    """KIS 세부 수급 15:40 전 건너뜀 → 실패가 아니라 skipped, 뒤 단계는 계속(다른 단계의 skipped 결과는 기존대로 ok)."""
+    from apps.collector.tasks import market_data as md
+    monkeypatch.setattr(bs, "backfill_investor_detail", lambda **k: {"skipped": md.DETAIL_TIME_LIMIT_MSG})
+    out = bs.run_bootstrap(37, task_id="t1", now_fn=clock(kst(2026, 10, 22, 10, 0)))
+    assert out["states"]["investor_detail"] == "skipped"
+    assert out["states"]["macro"] == "ok"  # FRED 키 없음 skipped 는 기존처럼 ok
+    assert out["states"]["screener"] == "ok"
