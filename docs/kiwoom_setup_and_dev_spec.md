@@ -9,7 +9,7 @@
 > - 모든 조회는 `POST` + JSON body, TR 은 헤더 `api-id`. 연속조회는 응답 **헤더** `cont-yn`·`next-key` 를 다음 요청 헤더에 그대로.
 > - IP 불일치는 HTTP 403 이 아니라 **오류 8010**(토큰 발급 IP ≠ 요청 IP)으로 온다. 8005 = 토큰 무효.
 > - 거래소 구분은 종목코드 접미사: 없음=KRX, `_NX`=NXT, `_AL`=SOR(통합). `_AL` 거래량이 KIS UN(KRX+NXT 합산)과 같은지는 **실측 대상**(아래 [Step 3]).
-> - 진행 순서: ① 클라이언트·실측 도구(완료) → ② 연기금 프리셋 → ③ 일봉 폴백(**완료 2026-11-16** — 아래 "③단계 일봉 폴백") → ④ 대차잔고·테마 등 키움 데이터. **종목 분할 수집은 하지 않는다**(출처마다 기준이 달라짐).
+> - 진행 순서: ① 클라이언트·실측 도구(완료) → ② 연기금 프리셋 → ③ 일봉 폴백(**완료 2026-11-16** — 아래 "③단계 일봉 폴백") → ④ 대차잔고(④-1 **구현 완료 2026-11-16, 상용 실측 대기** — 아래 "④-1 대차잔고")·테마 등 키움 데이터. **종목 분할 수집은 하지 않는다**(출처마다 기준이 달라짐).
 
 ---
 
@@ -297,6 +297,19 @@ docker compose -f docker-compose.prod.yml run --rm celery_worker python -m apps.
   WHERE date >= today() - 7
   GROUP BY source;
   ```
+
+#### ④-1 대차잔고 (ka20068, 구현 2026-11-16)
+설계: [`docs/superpowers/specs/2026-11-16-kiwoom-lending-design.md`](superpowers/specs/2026-11-16-kiwoom-lending-design.md), 동작 정리: `docs/data-collection.md` "대차잔고"
+- **명세(c7a3d25 `대차거래추이요청(종목별)(ka20068)`)**: `POST /api/dostk/slb`, body `strt_dt`·`end_dt`(YYYYMMDD, 선택)·`all_tp`("0": 입력 종목만)·`stk_cd`(필수, length 6). 응답 LIST `dbrt_trde_trnsn` — `dt`·`dbrt_trde_cntrcnt`(체결 주)·`dbrt_trde_rpy`(상환 주)·`dbrt_trde_irds`(증감 주)·`rmnd`(잔고 주)·`remn_amt`(잔고금액 **백만원**). 쪽당 행 수는 명세에 없음
+- **접미사**: 명세 `stk_cd` length 6·예시 `"005930"` → 접미사 없이 6자리로 부른다(대차는 KRX 단독 제도). `_AL` 을 받는지는 probe 가 한 번 불러 기록한다
+- 코드: `kiwoom/client.py`(`get_lending_trend`), `kiwoom/normalize.py`(`lending_row`), `kiwoom/lending.py`(`fetch_lending`·`run_lending`), `tasks/market_data.py`(`collect_lending_daily`·`backfill_lending`, 파이프라인 단계 `lending` — investor_detail 뒤·canslim 앞)
+- 실측(상용 서버에서만):
+  ```bash
+  docker compose -f docker-compose.prod.yml run --rm celery_worker python -m apps.collector.kiwoom.probe --lending
+  # 옵션: --lending-tickers 005930,000660 (최대 3개)
+  ```
+  확인할 것: ① 표의 `금액/주`(잔고금액 ÷ 잔고주수)가 그날 주가 근처면 백만원 단위가 맞다 ② `최신 행` 날짜 — 20:30 에 당일이 없으면 공시 지연(스크리너는 최대 2거래일 지연까지 허용) ③ `cont-yn` — 10거래일이 한 쪽에 들어오는지 ④ `_AL` 줄의 오류 코드
+- 실측 결과: (상용 실측 후 probe 요약 블록을 붙여 넣는다)
 
 ### [Step 4] 로컬 PC에서 상용 데이터 연동 확인 방법
 수집기가 상용 DB에 데이터를 적재하면, 로컬 PC에서 데이터가 잘 들어왔는지 확인합니다.

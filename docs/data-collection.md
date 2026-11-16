@@ -85,9 +85,10 @@ NXT 애프터마켓이 20:00 에 끝나야 통합(UN) 일봉이 확정되므로 
 | 2 | 국내 지수 | 15:40 수집의 안전망(같은 날짜 덮어쓰기) | CH `market_index_daily` |
 | 3 | 종목별 투자자 수급 | 분석 대상 보통주, 최근 약 30거래일(UN→J 폴백) | CH `investor_daily` |
 | 4 | 세부 투자자 수급(`investor_detail`) | 같은 분석 대상 보통주의 연기금(기금)·사모·투신·은행·보험·기타금융 순매수 — KIS `FHPTJ04160001`, UN→J 폴백. ⚠️ **KST 00:00~15:40 조회 불가**(rt_cd=2 `TIME LIMIT 00:00 ~ 15:40`, 2026-11-16 상용 실측) — 그 시간엔 호출 없이 건너뛰고(초기 데이터 준비에서는 이 단계만 "건너뜀"), 수동 백필은 15:40 이후에 실행. 매일은 최근 5거래일을 겹쳐 받고(하루 실패가 연속 일수 구멍으로 남지 않게), 30거래일 백필은 매일 단계에서 하지 않고 **수동 `collector.backfill_investor_detail` 또는 관리자 '초기 데이터 준비'**로 낮 시간에 한다(뒤 단계가 밀리지 않게) | CH `investor_detail_daily` |
+| 4-1 | 대차잔고(`lending`, 키움) | 같은 분석 대상 보통주의 종목별 대차잔고 추이 — 키움 `ka20068`, 매일 최근 5거래일 겹침. **키움 키가 있을 때만**(상용) — 없으면 `{"skipped": "키움 키 없음"}`(개발 서버). 60거래일 백필은 수동 `collector.backfill_lending` | CH `stock_lending_daily` |
 | 5 | CANSLIM | 종목·시장 점수 | CH `canslim_daily`·`canslim_market` |
 | 6 | 시장 그룹 | 업종·테마별 등락률·순위 | CH `market_group_daily`·`market_stock_daily` |
-| 7 | 스크리너 | 조건검색 지표(연기금 연속 순매수 일수 `pension_buy_days` 포함) | CH `screener_daily` |
+| 7 | 스크리너 | 조건검색 지표(연기금 연속 순매수 일수 `pension_buy_days`·대차잔고 5거래일 증감률 `lending_chg5` 포함) | CH `screener_daily` |
 | 8 | 차트 패턴 | 기준일 하루를 지우고 다시 적재 | CH `chart_pattern_daily` |
 
 ### 세부 투자자 수급(`investor_detail_daily`)
@@ -112,6 +113,29 @@ NXT 애프터마켓이 20:00 에 끝나야 통합(UN) 일봉이 확정되므로 
 - **호출량**: 종목당 1장(UN) + NXT 미상장 종목은 J 1장 더. 한 장이 30거래일 이상을 주면 백필도 같은 비용이고, 하루씩만 주면 백필은 종목당 최대 30장이 된다. 소요 ≈ 호출 수 ÷ `KIS_RATE_PER_SEC`(실전 15/초).
 - **수동 백필**: `collector.backfill_investor_detail`(기본 `days=30`, `end` 생략 시 오늘 KST).
 - **첫 실행 판정은 테이블 전체 기준** — 첫 백필이 일부 종목만 성공해도 다음부터는 5거래일 모드다. 배포 직후 20:30 전 낮에 수동 백필을 한 번 돌리는 것을 권한다(안 하면 첫 20:30 파이프라인 안에서 30거래일 백필이 돌아 뒤 단계가 늦어진다).
+
+### 대차잔고(`stock_lending_daily`, 키움)
+
+설계 `docs/superpowers/specs/2026-11-16-kiwoom-lending-design.md`. 키움은 상용 서버 IP 만 허용돼 **상용에서만 행이 생긴다**.
+
+- **TR**: `ka20068` 대차거래추이요청(종목별), `POST /api/dostk/slb`, body `strt_dt`·`end_dt`(YYYYMMDD)·`all_tp="0"`(입력 종목만)·`stk_cd`(**6자리, 접미사 없음** — 명세 length 6, 일봉 `ka10081` 의 `_AL` 과 다름). 응답 배열 `dbrt_trde_trnsn`(예시는 최신→과거). 연속조회 `cont-yn`·`next-key`(최대 10쪽). 출처: 키움 공식 명세 GitHub `Kiwoom-Securities/Kiwoom-REST-API` `kiwoom/_data/kiwoom_api_spec.json`(c7a3d25).
+- **컬럼**(모두 `Int64`):
+
+| 컬럼 | 키움 필드 | 명세 단위 → 저장 |
+|---|---|---|
+| `new_qty` | `dbrt_trde_cntrcnt` 대차거래체결주수 | 1주 |
+| `repay_qty` | `dbrt_trde_rpy` 대차거래상환주수 | 1주 |
+| `net_qty` | `dbrt_trde_irds` 대차거래증감 | 1주(부호 유지, 상환이 많으면 음수) |
+| `balance_qty` | `rmnd` 잔고주수 | 1주 |
+| `balance_amt` | `remn_amt` 잔고금액 | 백만원 → **원**(× 1,000,000) |
+
+- `ReplacingMergeTree(ingested_at)`, `PARTITION BY toYYYYMM(date)`, `ORDER BY (ticker, date)` — 조회는 `FINAL`. `ensure_market_tables` 가 만들므로 개발 서버에도 빈 테이블이 생긴다.
+- **기간**: 거래일 → 달력일 `거래일 × 7/5 + 4`(`kiwoom/lending.calendar_start`) — 매일 5거래일 = 11일, 백필 60거래일 = 88일.
+- **오류 처리**: 키움 키 없음 → 아무것도 건드리지 않고 skipped. 8010(등록 IP 밖)·미설정 → 경고 1회, 나머지를 부르지 않고 skipped. **첫 종목**에서 키움 논리 오류(시간 제한 등) → 나머지를 부르지 않고 `error`(헛호출 방지). 그 뒤 종목의 오류는 그 종목만 실패로 세고 계속. 0행(대차 없음)은 정상.
+- **호출량**: 종목당 1쪽(5·60거래일 모두 대개 1쪽 — 쪽당 행 수는 명세에 없어 probe 로 확인) × 약 2,600종목 ÷ `KIWOOM_RATE_PER_SEC`(기본 4/초) ≈ **11분**. 20:30 파이프라인의 CANSLIM·스크리너가 그만큼 늦게 끝난다.
+- **스크리너** `screener_daily.lending_chg5` = (기준점 잔고 − 5거래일 전 잔고) ÷ 5거래일 전 잔고 × 100. 기준점은 기준일부터 **최대 2거래일 늦은** 대차 행까지 허용(20:30 계산 때 당일 대차가 아직 공시되지 않았을 수 있어서 — probe 의 "최신 행" 날짜로 확인), 5거래일 전 잔고가 0·없으면 NULL. 프리셋 `lending_drop` = `lending_chg5 <= -20`.
+- **조회**: `GET /api/v1/stocks/{ticker}/lending?days=120`(stock_api 공개) → `[{date, balance_qty, net_qty, balance_amt}]` 오래된 순, 없으면 `[]`. 웹·앱 종목 상세 '대차잔고' 섹션(데이터 없으면 숨김).
+- **수동 백필**: `collector.backfill_lending`(기본 `days=60`, `end` 생략 시 오늘 KST). 끝나면 `collector.backfill_screener` 로 `lending_chg5` 과거 값을 채운다. 초기 데이터 준비(`bootstrap_data`)에는 넣지 않았다.
 
 ## 5. 수집 규칙 (반드시 지킬 것 — CLAUDE.md 와 같음)
 
@@ -155,6 +179,7 @@ NXT 애프터마켓이 20:00 에 끝나야 통합(UN) 일봉이 확정되므로 
 | | `market_index_daily` | 국내·미국 지수·환율·미국 대표 종목 |
 | | `investor_daily` | 종목별 투자자 순매수(개인·외국인·기관) |
 | | `investor_detail_daily` | 종목별 세부 투자자 순매수(연기금·사모·투신·은행·보험·기타금융) |
+| | `stock_lending_daily` | 종목별 대차잔고 추이(키움 ka20068, 상용에서만 행이 생김) |
 | | `fundamentals`·`fundamentals_periodic` | 재무비율(연간·분기) |
 | | `macro_series` | FRED 거시 지표 |
 | | `canslim_*`·`market_group_daily`·`market_stock_daily`·`screener_daily`·`chart_pattern_daily` | 계산 결과 |
@@ -171,6 +196,7 @@ NXT 애프터마켓이 20:00 에 끝나야 통합(UN) 일봉이 확정되므로 
 | **초기 데이터 준비** | 관리자 화면 버튼 → `collector.bootstrap_data` | 새 서버용. 수집 1~8(4번째 '연기금 등 세부 수급 30거래일' 포함) → 계산 9~12 를 순서대로. 16:00~21:30 에는 시작 안 함(정기 수집과 KIS 한도 충돌 방지). 다시 누르면 이어서 채움 |
 | 전종목 장기 백필 | `collector.backfill_all_daily` | 개월 수 지정, 청크로 받아 이동평균은 한 번에 |
 | 세부 투자자 30거래일 백필 | `collector.backfill_investor_detail` | `{"days": 30}` 기본. 끝나면 `collector.backfill_screener` 로 `pension_buy_days` 과거 값을 채운다 |
+| 대차잔고 60거래일 백필(상용) | `collector.backfill_lending` | `{"days": 60}` 기본, 키움 키 없으면 skipped. 끝나면 `collector.backfill_screener` 로 `lending_chg5` 과거 값을 채운다 |
 | 계산 60일 백필 | CANSLIM·시장 그룹·스크리너 태스크 | 과거 날짜도 **현재** 재무·테마·상장주식수로 계산(근사) |
 | 표본 점검 | `apps/collector/verify/spot_check.py` | 우리 UN 일봉 vs KRX(pykrx): 고가 ≥, 저가 ≤, 거래량 ≥ 이면 정상. 내부 테이블끼리도 비교 |
 | 수동 1종목 | `collect_daily_ohlcv(ticker)`, `backfill_domestic_daily(ticker, months)` | 확인·복구용 |
