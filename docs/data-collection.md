@@ -123,6 +123,18 @@ NXT 애프터마켓이 20:00 에 끝나야 통합(UN) 일봉이 확정되므로 
 6. **장중 값은 ClickHouse 에 쓰지 않는다** — 확정 종가 이력을 오염시키지 않게 Redis 에만(10분 TTL).
 7. **백필의 이동평균은 전체 시계열을 이어 붙인 뒤 한 번에 계산** — 청크마다 계산하면 MA120 이 깨진다.
 
+### 일봉 키움 폴백 (2026-11-16)
+
+전종목 일봉(`collect_all_daily`, 20:30 1단계)과 전종목 백필(`backfill_all_daily`)에만 붙는다. 지수·수급·분봉, 단일 종목 태스크(`collect_daily_ohlcv`·`backfill_domestic_daily`)는 대상이 아니다.
+
+- **언제**: KIS 1차·2차 패스(쿨다운·연결계열 재시도 포함)가 **다 끝난 뒤**, 최종 실패 종목과 UN·J 모두 빈 응답(기간 전체 0행)이었던 종목만 키움 `ka10081` 로 같은 기간을 받는다. KIS 정상 경로의 동작·호출 횟수는 그대로다. 백필에서 일부 청크만 빈 건(상장 전 구간) 대상이 아니다.
+- **어떻게**: 종목코드는 항상 `{ticker}_AL`(= KIS UN, NXT 미상장도 KRX 값 — 실측), 수정주가(`upd_stkpc_tp=1`), `base_dt`=기간 끝(미래면 오늘 KST). 시작보다 이른 행이 나올 때까지 연속조회(상한 10쪽) 후 기간으로 자르고, KIS 일봉과 같은 모양으로 바꿔 같은 MA 계산·저장 함수로 `source='kiwoom'` 적재. 키움 클라이언트는 실행당 1개, 순차, 초당 `KIWOOM_RATE_PER_SEC`. 대상이 없으면 클라이언트를 만들지 않는다.
+- **켜짐**: 키움 키가 있고 `KIWOOM_FALLBACK_ENABLED` 가 `false`/`0`/`no`/`off` 가 아님(기본 켜짐). 개발 서버는 키가 없어 꺼진다 — 결과 dict 도 예전과 같다.
+- **실패**: 키움도 못 채우면 그 종목은 KIS 실패 그대로. 8010(등록 IP 밖)·미설정은 경고 1회 후 그 실행의 폴백을 끈다. 빈 응답 종목은 키움도 비면 그대로 성공(0행).
+- **출처**: `daily_prices.source LowCardinality(String) DEFAULT 'kis'` — 첫 키움 적재 직전에 `ALTER … ADD COLUMN IF NOT EXISTS` 로 보장(`init_clickhouse` 도). KIS 적재는 컬럼을 생략해 `kis`. 다음 날 KIS 겹침 수집이 같은 날짜를 다시 넣으면 `ingested_at` 이 최신인 KIS 행이 이겨 출처가 `kis` 로 돌아온다.
+- **집계**: 결과 dict 에 `kiwoom_fallback`(키움으로 채운 종목 수 — 실패 회복 + 빈 응답 채움)·`kiwoom_failed`(키움도 실패). 키움으로 회복한 실패 종목은 `ok` 에 더하고 `failed_count`·`failed_sample` 에서 뺀다. 관리자 파이프라인 카드는 요약 JSON 을 그대로 보여 준다.
+- **점검(상용)**: `SELECT source, count(), uniqExact(ticker) FROM stock_data.daily_prices FINAL WHERE date >= today() - 7 GROUP BY source`
+
 ## 6. 실시간 — 트레이딩 게임 (`run_game_ws.py`)
 
 - 진행 중인 시즌 종목을 60초마다 확인해 바뀌면 구독을 갈아탄다.
@@ -139,7 +151,7 @@ NXT 애프터마켓이 20:00 에 끝나야 통합(UN) 일봉이 확정되므로 
 | | `stock_profile`·`sectors`·`themes`·`theme_stocks` | 종목 프로필(시가총액·업종 코드 등)·업종 이름·테마(관리자 보정 포함) |
 | | `stock_events` | 일정(공모주·FRED 발표일) |
 | | `ai_daily_briefings`·`ai_stock_evaluations` | AI 브리핑·종목 평가 |
-| ClickHouse | `daily_prices` | 종목 일봉 + 이동평균 |
+| ClickHouse | `daily_prices` | 종목 일봉 + 이동평균. `source`(`kis` 기본 / `kiwoom` 폴백) — 조회·응답에는 안 씀 |
 | | `market_index_daily` | 국내·미국 지수·환율·미국 대표 종목 |
 | | `investor_daily` | 종목별 투자자 순매수(개인·외국인·기관) |
 | | `investor_detail_daily` | 종목별 세부 투자자 순매수(연기금·사모·투신·은행·보험·기타금융) |
@@ -169,6 +181,7 @@ NXT 애프터마켓이 20:00 에 끝나야 통합(UN) 일봉이 확정되므로 
 - **모의투자 키(vps)는 권하지 않는다.** 초당 한도가 낮고(기본 8), 장운영정보 등 일부 API 가 지원되지 않는다.
 - **부분 실패는 숨지 않는다.** 종목 하나의 실패는 격리되고(나머지 계속), 단계 결과는 관리자 "데이터 현황"에서 본다. 연결 오류는 적응형 쿨다운 후 재시도, 4xx 는 즉시 실패.
 - 공휴일은 따로 거르지 않는다 — KIS 가 빈 응답을 준다.
+- 키움 폴백을 잠시 끄려면 `KIWOOM_FALLBACK_ENABLED=false` 후 collector 재시작(키움 키는 그대로 둬도 된다).
 
 ## 10. 알려진 한계·남은 일
 
