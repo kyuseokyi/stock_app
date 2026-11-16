@@ -223,10 +223,9 @@ nano /opt/stock_app/env/.env.production
 # KIWOOM_APP_SECRET=실제_키움_APP_SECRET
 # KIWOOM_RATE_PER_SEC=4
 
-# 4. 반영 — env 복사 → 빌드 → 교체 (docs/deploy/owner-todo.md 의 서버 반영 순서)
-cp /opt/stock_app/env/.env.production backend/.env.production
-docker compose -f docker-compose.prod.yml build celery_worker
-docker compose -f docker-compose.prod.yml up -d
+# 4. 반영 — docs/deploy/owner-todo.md 의 "서버 반영 순서"를 그대로 따른다
+#    (env 복사: .env.production→backend/, compose.env→.env, chown ubuntu:docker → build → 마이그레이션 → up -d → ps)
+#    celery_worker 는 env_file 로 backend/.env.production 을 읽으므로 env 복사가 빠지면 키가 안 들어간다.
 ```
 
 ---
