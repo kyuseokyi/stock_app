@@ -474,6 +474,7 @@ uv run pytest tests/test_universe_cooldown.py    # 특정 파일
 | `KIS_COOLDOWN_THRESHOLD` | collector | `5` | 연속 연결실패 몇 회에서 적응형 쿨다운 시작 |
 | `KIS_COOLDOWN_BASE_SEC` / `KIS_COOLDOWN_MAX_SEC` | collector | `60` / `600` | 쿨다운 시작·상한(초). 연속실패 지속 시 2배씩 에스컬레이트 |
 | `KIS_ACCOUNT_NO` | collector | (빈값) | 계좌번호(시세조회만이면 생략 가능) |
+| `KIWOOM_APP_KEY` / `KIWOOM_APP_SECRET` / `KIWOOM_RATE_PER_SEC` | collector | (빈값) / `4` | 키움증권 REST(실전 키만). 상용 서버 IP 만 허용돼 상용에서만 호출되고, 비우면 키움 기능은 꺼짐(KIS 수집 영향 없음). 초당 상한 1~5. 현재는 실측 도구 `python -m apps.collector.kiwoom.probe` 만 사용 — `docs/kiwoom_setup_and_dev_spec.md` |
 | `MOCK_TICK_STREAM` | collector(게임 WS) | (빈값) | `true`면 실 KIS WS 대신 Mock 틱 생성(장외/키 없이 검증). 키 미설정 시 자동 Mock |
 | `MOCK_BASE_PRICE` | collector(게임 WS) | `71500` | Mock 틱 기준가(랜덤워크 시작가) |
 | `GAME_WS_TICK_INTERVAL_SEC` | trading_game | `0.25` | WS 틱 묶기 전송 간격(초) — 새 틱이 있을 때만 최신 1개 전송 |
