@@ -124,38 +124,49 @@ DATA_COLLECTOR_PROVIDER=hybrid
 
 ---
 
-## 4. 상용 수집 + 개발 터널링 운영 가이드 (IP 제한 환경 최적화)
+## 4. 상용 수집 + 개발서버(맥미니) 데이터 공유 아키텍처 (IP 제한 최적화)
 
-키움증권 REST API에 **상용 오라클 서버 IP**가 등록되었으므로, 시스템 아키텍처는 다음과 같이 완벽하게 역할이 분리됩니다.
+사용자 환경의 서버 구성:
+- **상용 서버**: **오라클 클라우드 인스턴스** (`funnotedaily.com`, 공인 IP 등록)
+- **개발 서버**: **맥미니 인텔 서버** (`haezean.com`)
+- **로컬 개발 환경**: **내 맥(Mac)**
+
+주식 데이터는 **오직 상용 서버(오라클 클라우드)에서만 수집**하고, **개발 서버(맥미니)와 로컬 PC는 상용 서버의 주식 데이터를 공유(Read-Only)**하여 사용합니다.
 
 ```
-[상용 서버 (오라클 클라우드 인스턴스 - 등록 IP)]
-┌──────────────────────────────────────────────────┐
-│  Celery Beat / Worker                            │
-│  - 등록된 공인 IP로 키움 REST API 및 KIS 직접 호출 │
-│  - 전종목 일봉/수급 수집 후 ClickHouse/PG 적재   │
-│  - ClickHouse (8123), PostgreSQL (5432)          │
-└─────────────────────────┬────────────────────────┘
-                          │ (Cloudflare Tunnel: ssh.haezean.com)
-                          ▼
-[로컬 개발 PC (미등록 IP)]
-┌──────────────────────────────────────────────────┐
-│  ./scripts/dev-db-tunnel.sh 실행                │
-│  - 키움 API를 직접 쏘지 않음 (IP 불일치 차단 방지) │
-│  - localhost:18123 ──► 상용 ClickHouse (RO)      │
-│  - localhost:15432 ──► 상용 PostgreSQL (RO)     │
-│  - 클라이언트/비즈니스 로직은 상용 데이터로 테스트 │
-│  - 수집기 코드 개발 시에는 단위 테스트(Mock) 활용  │
-└──────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────┐
+│ [상용 서버] 오라클 클라우드 인스턴스 (공인 IP 등록)             │
+│                                                             │
+│  - Celery Beat / Worker 가동 (전종목 시세 수집 독점 전담)     │
+│  - KIS REST API + 키움증권 REST API 호출 (IP 화이트리스트)  │
+│  - ClickHouse (8123) 시세 적재 & PostgreSQL (5432) 메타 적재 │
+└──────────────┬──────────────────────────────┬───────────────┘
+               │                              │
+               │ (터널링 / 안전한 DB 연결)     │ (Cloudflare SSH Tunnel)
+               ▼                              ▼
+┌──────────────────────────────┐ ┌──────────────────────────────┐
+│ [개발 서버] 맥미니 (haezean)  │ │ [로컬 PC] 내 맥 (개발 환경)  │
+│                              │ │                              │
+│ - 주식 데이터 직접 수집 안 함 │ │ - ./scripts/dev-db-tunnel.sh │
+│   (중복 수집·IP 차단 방지)   │ │ - 상용 ClickHouse 읽기 조회  │
+│ - 상용 오라클 DB(CH/PG)를    │ │ - 수집 로직은 Mock 테스트    │
+│   Read-Only로 연결하여       │ │ - API/UI 개발에 상용 시세     │
+│   개발 백엔드·웹 서비스 구동 │ │   그대로 활용                │
+└──────────────────────────────┘ └──────────────────────────────┘
 ```
 
-1. **실제 데이터 수집은 상용 오라클 서버에서만 전담**:
-   - 키움증권은 등록된 오라클 서버 IP에서만 요청을 승인합니다.
-   - 따라서 실제 크롤링/수집 워커(Celery Beat/Worker)는 상용 오라클 서버에서만 상시 기동합니다.
-2. **로컬 개발 환경의 개발 및 테스트 방식**:
-   - **DB 조회**: 터미널에서 `./scripts/dev-db-tunnel.sh`를 실행하여 상용 오라클 서버가 모아둔 ClickHouse/PostgreSQL 데이터를 실시간으로 읽어와 앱/웹을 개발합니다.
-   - **수집 모듈 코드 개발**: 키움 API 직접 호출 시 403 Forbidden이 발생하므로, 로컬에서는 **Mock 응답 fixture(pytest-mock)**를 사용하여 단위 테스트 및 파싱 로직을 100% 검증합니다.
-   - **실서버 E2E 검증**: 키움 실서버와의 최종 연동 검증은 오라클 서버 인스턴스에서 테스트 스크립트(CLI)를 1회 실행하여 확인합니다.
+### 세부 운영 원칙
+1. **상용 서버 (오라클 클라우드) — 데이터 수집 독점 전담**:
+   - 키움증권 REST API는 오라클 클라우드 IP만 승인하므로, **Celery Beat 및 Collector 워커는 오라클 클라우드에서만 실행**됩니다.
+   - KIS와 키움 API를 조합하여 매일 정규 시세(일봉, 분봉, 수급 등)를 수집하고 상용 ClickHouse와 PostgreSQL에 적재합니다.
+
+2. **개발 서버 (맥미니) — 상용 데이터 참조**:
+   - 맥미니에서는 주식 수집 워커(`celery beat`, `collector worker`)를 절대 실행하지 않습니다. (동시 호출로 인한 API 키 한도 초과 및 차단 원천 방지)
+   - 맥미니의 백엔드 서비스(`stock_api`, `blog`, `admin_web` 등)는 **상용 오라클 서버의 ClickHouse(시세)와 PostgreSQL(종목 메타)을 읽기 전용(Read-Only)으로 바라보도록 설정**하여 개발/테스트 서비스를 제공합니다.
+
+3. **로컬 개발 PC (내 맥) — 터널링 조회 및 Mock 개발**:
+   - 로컬 개발 시 `./scripts/dev-db-tunnel.sh`를 통해 상용 오라클 서버(또는 개발서버)의 DB를 터널링하여 상용 데이터를 확인합니다.
+   - 키움 수집기 코드 개발 및 로직 테스트는 **Mock 응답 fixture(pytest-mock)**를 사용하여 오프라인으로 안전하게 검증합니다.
 
 ---
 
@@ -191,22 +202,22 @@ claude
 
 ---
 
-### [Step 2] Git 커밋 및 상용 오라클 서버 배포
-클로드코드가 로컬에서 단위 테스트를 통과하고 작업을 마치면 변경사항을 상용 서버에 반영합니다.
+### [Step 2] 상용 오라클 서버 배포 및 키움 키 설정
+클로드코드가 로컬에서 단위 테스트를 통과하고 작업을 마치면 오라클 상용 서버에 반영합니다.
 
 ```bash
 # 1. 로컬에서 코드 푸시
 git push origin dev
 
 # 2. 상용 오라클 서버 접속 (Termius 또는 SSH)
-ssh opc@상용서버IP (또는 kyuseok@미니PC)
+ssh opc@<상용 서버 IP>  # 상용 오라클 서버
 
 # 3. 상용 서버에서 코드 풀
-cd ~/stock_app   # 프로젝트 경로
+cd /opt/stock_app/repo (또는 프로젝트 경로)
 git pull origin dev
 
-# 4. 상용 서버의 backend/.env.production 파일에 키움 키 등록
-nano backend/.env.production
+# 4. 상용 서버의 /opt/stock_app/env/.env.production 파일에 키움 키 등록
+nano /opt/stock_app/env/.env.production
 # 아래 내용 추가 후 저장 (Ctrl+O, Enter, Ctrl+X):
 # KIWOOM_APP_KEY=실제_키움_APP_KEY
 # KIWOOM_APP_SECRET=실제_키움_APP_SECRET
@@ -217,7 +228,17 @@ nano backend/.env.production
 
 ---
 
-### [Step 3] 상용 서버에서 실서버 1종목 E2E 연동 테스트
+### [Step 2-1] 개발 서버(맥미니) 설정 — 상용 DB 참조
+개발 서버(맥미니, `haezean.com`)에서는 데이터 수집기를 돌리지 않고, 오라클 상용 서버의 ClickHouse/PostgreSQL을 바라보도록 설정합니다.
+
+- 맥미니의 백엔드 env (`/opt/stock_app/env/.env.production` on Mac mini)에서:
+  - `CLICKHOUSE_HOST`: 상용 오라클 서버 주소 (또는 상용 Cloudflare Tunnel 주소)
+  - `DATABASE_URL`: 상용 PostgreSQL 주소 (Read-Only)
+  - Celery Beat/수집 워커는 실행 제외 (API 서버 `stock_api`, `blog`, `auth`만 실행)
+
+---
+
+### [Step 3] 상용 오라클 서버에서 실서버 1종목 E2E 연동 테스트
 상용 서버(등록된 IP)에서 실제 키움 REST API가 정상 응답하는지 단건 테스트 스크립트를 실행합니다.
 
 ```bash
