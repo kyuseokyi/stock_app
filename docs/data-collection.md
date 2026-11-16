@@ -84,7 +84,7 @@ NXT 애프터마켓이 20:00 에 끝나야 통합(UN) 일봉이 확정되므로 
 | 1 | 전종목 일봉 | 최근 30일 ~ +2일 **겹쳐서** 다시 받기 → 이동평균 계산 → 적재. 스레드 `KIS_WORKERS`(기본 4) 병렬, 초당 `KIS_RATE_PER_SEC`(실전 기본 15) | CH `daily_prices` |
 | 2 | 국내 지수 | 15:40 수집의 안전망(같은 날짜 덮어쓰기) | CH `market_index_daily` |
 | 3 | 종목별 투자자 수급 | 분석 대상 보통주, 최근 약 30거래일(UN→J 폴백) | CH `investor_daily` |
-| 4 | 세부 투자자 수급(`investor_detail`) | 같은 분석 대상 보통주의 연기금(기금)·사모·투신·은행·보험·기타금융 순매수 — KIS `FHPTJ04160001`, UN→J 폴백. 매일은 최근 5거래일을 겹쳐 받고(하루 실패가 연속 일수 구멍으로 남지 않게), **테이블이 비면(첫 실행) 30거래일 백필** | CH `investor_detail_daily` |
+| 4 | 세부 투자자 수급(`investor_detail`) | 같은 분석 대상 보통주의 연기금(기금)·사모·투신·은행·보험·기타금융 순매수 — KIS `FHPTJ04160001`, UN→J 폴백. 매일은 최근 5거래일을 겹쳐 받고(하루 실패가 연속 일수 구멍으로 남지 않게), 30거래일 백필은 매일 단계에서 하지 않고 **수동 `collector.backfill_investor_detail` 또는 관리자 '초기 데이터 준비'**로 낮 시간에 한다(뒤 단계가 밀리지 않게) | CH `investor_detail_daily` |
 | 5 | CANSLIM | 종목·시장 점수 | CH `canslim_daily`·`canslim_market` |
 | 6 | 시장 그룹 | 업종·테마별 등락률·순위 | CH `market_group_daily`·`market_stock_daily` |
 | 7 | 스크리너 | 조건검색 지표(연기금 연속 순매수 일수 `pension_buy_days` 포함) | CH `screener_daily` |

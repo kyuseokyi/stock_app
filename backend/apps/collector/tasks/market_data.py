@@ -154,12 +154,14 @@ def collect_investor_detail_daily(limit: int | None = None, rate_per_sec: float 
                                   end: str | None = None) -> dict:
     """분석 대상 종목(보통주 — investor 단계와 같은 대상)의 연기금·사모·투신·은행·보험·기타금융 순매수.
 
-    days 를 안 주면 테이블이 비었을 때(첫 실행) DETAIL_BACKFILL_DAYS, 아니면 DETAIL_DAILY_DAYS.
+    days 를 안 주면 DETAIL_DAILY_DAYS — 매일 20:30 단계는 테이블이 비어 있어도 30거래일 백필을 하지 않는다
+    (하루 1행씩 주는 TR 이면 1시간 넘게 걸려 뒤 단계 canslim·screener 가 밀린다). 30거래일은 수동 백필
+    `collector.backfill_investor_detail` 또는 관리자 '초기 데이터 준비'로 낮 시간에 채운다.
     end: 기준일(YYYYMMDD·YYYY-MM-DD, 기본 오늘 KST). 공유 RateLimiter 는 _run_universe 가 건다.
     """
     chm.ensure_market_tables()
     if days is None:
-        days = DETAIL_BACKFILL_DAYS if chm.latest_investor_detail_date() is None else DETAIL_DAILY_DAYS
+        days = DETAIL_DAILY_DAYS
     d_end = idt.to_date(end, trading_day.now_kst().date())
     n_days = max(1, int(days))
     out = _run_universe(lambda t, c: _investor_detail_one(t, c, d_end, n_days), limit, None, rate_per_sec, workers,

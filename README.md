@@ -560,7 +560,7 @@ uv run python -c "from apps.collector.tasks.universe import backfill_all_daily; 
 | 평일 15:40 | 국내 지수(KOSPI·KOSDAQ·KOSPI200) — KRX 정규장 마감 15:30 뒤 바로(20:30 파이프라인의 지수 단계는 안전망으로 유지). 설계 `docs/superpowers/specs/2026-10-20-market-close-schedule-design.md` | CH `market_index_daily` |
 | 평일 09:00~15:35 30초마다 | 장중 국내 지수(KOSPI·KOSDAQ·KOSPI200)·원/달러 현재값 — `collector.poll_intraday_indices`(expires 25초), 시장 칩 "● HH:MM" 배지(스크린 리더는 "장중 HH:MM"). 휴장일·장 밖에는 KIS 를 부르지 않음. 0·NaN·음수 값은 실패로 보고 이전 값 유지. 끄기 `INTRADAY_INDICES_ENABLED=false`. 설계 `docs/superpowers/specs/2026-10-20-intraday-index-design.md` | Redis `market:intraday`(TTL 10분, 읽을 때도 10분 지난 항목 제외, CH 에는 안 씀) |
 | 08:00 | FRED 거시 지표(CPI·근원CPI·PCE·실업률·고용·기준금리·국채) + CPI·고용·PCE 발표 예정일 — 키 있을 때만 | CH `macro_series`, PG `stock_events` |
-| 20:30 | `collector.daily_market_pipeline`: 전종목 일봉 → 국내 지수(KOSPI·KOSDAQ·KOSPI200) → 투자자별 순매수(보통주만) → 세부 투자자 순매수(연기금·사모·투신·은행·보험·기타금융, KIS `FHPTJ04160001`, 첫 실행은 30거래일 백필) | CH `daily_prices`·`market_index_daily`·`investor_daily`·`investor_detail_daily` |
+| 20:30 | `collector.daily_market_pipeline`: 전종목 일봉 → 국내 지수(KOSPI·KOSDAQ·KOSPI200) → 투자자별 순매수(보통주만) → 세부 투자자 순매수(연기금·사모·투신·은행·보험·기타금융, KIS `FHPTJ04160001`, 매일 5거래일 겹침 — 30거래일 백필은 수동 `collector.backfill_investor_detail`·초기 데이터 준비) | CH `daily_prices`·`market_index_daily`·`investor_daily`·`investor_detail_daily` |
 | 20:30 (마스터 동기화 때) | 종목 프로필(업종·시총·상장주식·ETF/스팩/우선주·관리/정지)·업종명·KIS 테마 | PG `stock_profile`·`sectors`·`themes`·`theme_stocks` |
 | 21:30 | 공모주 청약·상장 일정 | PG `stock_events` |
 | 토 10:00 | 재무비율(연간·분기 EPS·ROE·증가율) — 보통주만 | CH `fundamentals_periodic` |

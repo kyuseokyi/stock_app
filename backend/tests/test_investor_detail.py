@@ -202,8 +202,10 @@ def task_env(monkeypatch):
     return seen
 
 
-@pytest.mark.parametrize("latest, days", [(None, md.DETAIL_BACKFILL_DAYS), (date(2026, 11, 12), md.DETAIL_DAILY_DAYS)])
-def test_collect_first_run_backfills(task_env, monkeypatch, latest, days):
+@pytest.mark.parametrize("latest", [None, date(2026, 11, 12)])
+def test_collect_daily_never_auto_backfills(task_env, monkeypatch, latest):
+    """매일 단계는 테이블이 비어 있어도 5거래일만 — 30거래일 백필은 수동·초기 데이터 준비에서만."""
+    days = md.DETAIL_DAILY_DAYS
     monkeypatch.setattr(md.chm, "latest_investor_detail_date", lambda: latest)
     out = md.collect_investor_detail_daily(end="20261113")
     assert out == {"ok": 1, "total": 1, "days": days, "end": "2026-11-13"}
