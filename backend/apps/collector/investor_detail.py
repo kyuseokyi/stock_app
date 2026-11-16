@@ -18,7 +18,8 @@ from apps.collector.market_parsers import _d, parse_investor_detail
 
 # ⚠️ 명세 확인 필요: *_ntby_tr_pbmn(순매수 거래대금) 단위. investor_flow.KIS_AMT_TO_WON 과 같게 백만원으로 본다.
 # 저장은 KIS 원값 그대로(변환하지 않음) — 금액을 원으로 쓰는 쪽이 이 상수를 곱한다. 프리셋은 수량으로 판정해 무관.
-# 검증: 같은 날짜 |pension_amt × 1e6 / pension_qty| 가 daily_prices 종가 근처면 백만원(종가 × 1e-6 근처면 원 → 1 로).
+# 검증: 같은 날짜 비율 = |pension_amt| × 1e6 / |pension_qty| / daily_prices 종가 — 1 근처면 백만원(유지),
+#      1e3 근처면 천원(→ 1_000), 1e6 근처면 원(→ 1). 수량이 작은 행은 반올림 오차가 커서 |qty| > 1000 행만 본다.
 DETAIL_AMT_TO_WON = 1_000_000
 MAX_PAGES = 40  # 한 종목 연속조회 상한 — 한 호출이 1거래일씩만 줘도 30거래일 백필이 끝나게
 

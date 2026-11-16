@@ -38,7 +38,9 @@ IPO_AHEAD_DAYS = 60
 MACRO_BACKFILL_DAYS = 730
 MACRO_OVERLAP_DAYS = 90  # 수정 발표(revision)까지 다시 받기
 RELEASE_AHEAD_DAYS = 60
-DETAIL_DAILY_DAYS = 1      # 세부 투자자 매일 수집 — 기준일 하루(한 호출이 여러 날을 주면 받은 만큼 겹쳐 적재)
+# 세부 투자자 매일 수집 겹침(거래일) — 하루 실패로 빠진 날이 구멍으로 남으면 연속 일수가 끊겨 10거래일 동안 프리셋에서
+# 빠진다. 한 호출이 5거래일 이상을 주면 추가 호출 없음, 하루씩만 주면 종목당 최대 5장(명세 확인 필요 — 실측 후 조정).
+DETAIL_DAILY_DAYS = 5
 DETAIL_BACKFILL_DAYS = 30  # 첫 실행·수동 백필 — 연기금 10일 연속 판정에 넉넉히
 
 

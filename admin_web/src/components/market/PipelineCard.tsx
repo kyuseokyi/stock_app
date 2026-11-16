@@ -6,6 +6,7 @@ const STEP_LABEL: Record<string, string> = {
   daily: '전종목 일봉',
   indices_kr: '국내 지수',
   investor: '투자자 순매수',
+  investor_detail: '연기금 등 세부 수급',
   canslim: 'CANSLIM',
   market_groups: '시장 그룹',
 }
