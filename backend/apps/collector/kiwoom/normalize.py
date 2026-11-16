@@ -66,6 +66,8 @@ def lending_row(raw: dict) -> dict | None:
 
     명세 단위: 체결·상환·증감·잔고주수 = 1주, 잔고금액 = 백만원 → 원으로 환산.
     증감(net_qty)만 부호를 살리고(상환이 많으면 음수), 나머지는 절댓값.
+    다섯 값이 모두 0 인 행은 None — 키움은 아직 확정되지 않은 오늘 날짜를 0 으로 채워 준다(2026-11-17 상용 실측).
+    그대로 저장하면 그래프가 0 으로 꺼지고 lending_chg5 가 -100% 가 되어 '대차잔고 급감'에 모두 걸린다.
     """
     dt = str(raw.get("dt") or "").strip()
     if len(dt) < 8 or not dt[:8].isdigit():
@@ -74,7 +76,7 @@ def lending_row(raw: dict) -> dict | None:
         d = _parse_dt(dt)
     except ValueError:
         return None
-    return {
+    row = {
         "date": d,
         "new_qty": abs(to_int(raw.get("dbrt_trde_cntrcnt"))),
         "repay_qty": abs(to_int(raw.get("dbrt_trde_rpy"))),
@@ -82,3 +84,6 @@ def lending_row(raw: dict) -> dict | None:
         "balance_qty": abs(to_int(raw.get("rmnd"))),
         "balance_amt": abs(to_int(raw.get("remn_amt"))) * _MILLION,
     }
+    if not any(row[k] for k in ("new_qty", "repay_qty", "net_qty", "balance_qty", "balance_amt")):
+        return None
+    return row
