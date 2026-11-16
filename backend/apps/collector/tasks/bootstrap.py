@@ -169,7 +169,11 @@ def run_bootstrap(months: int = 37, task_id: str | None = None,
         summary = pipeline_record.summarize(result)
         if key == "daily_backfill" and isinstance(result, dict) and "error" not in result:
             summary = f"성공 {result.get('ok', 0)} · 실패 {result.get('failed_count', 0)} — {summary}"
-        s.update(state="failed" if failed else "ok", seconds=round(time.monotonic() - t0, 1), summary=summary)
+        state = "failed" if failed else "ok"
+        if key == "investor_detail" and not failed and isinstance(result, dict) and result.get("skipped"):
+            state = "skipped"  # 단계가 스스로 건너뜀(예: KIS 세부 수급 15:40 전 조회 불가) — 실패가 아니라 나중에 다시
+            s.update(reason=str(result["skipped"]))
+        s.update(state=state, seconds=round(time.monotonic() - t0, 1), summary=summary)
         if failed and key == "daily_backfill":
             stop_reason = DAILY_FAILED_MSG
         _save(progress)

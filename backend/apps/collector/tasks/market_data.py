@@ -8,7 +8,7 @@ from __future__ import annotations
 import logging
 import time
 import uuid
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, time as dtime, timedelta, timezone
 
 import requests
 
@@ -42,6 +42,10 @@ RELEASE_AHEAD_DAYS = 60
 # 빠진다. 한 호출이 5거래일 이상을 주면 추가 호출 없음, 하루씩만 주면 종목당 최대 5장(명세 확인 필요 — 실측 후 조정).
 DETAIL_DAILY_DAYS = 5
 DETAIL_BACKFILL_DAYS = 30  # 첫 실행·수동 백필 — 연기금 10일 연속 판정에 넉넉히
+# KIS FHPTJ04160001 은 KST 00:00~15:40 조회 불가(rt_cd=2 'TIME LIMIT 00:00 ~ 15:40', 2026-11-16 상용 실측).
+# 그 시간엔 호출하지 않고 바로 건너뛴다 — 전종목 2,672회를 헛되이 부르지 않게. 20:30 정기 수집은 영향 없음.
+DETAIL_OPEN_AFTER = dtime(15, 40)
+DETAIL_TIME_LIMIT_MSG = "KIS 세부 수급은 15:40 이후에만 조회돼요 — 15:40 이후 다시 실행하세요"
 
 
 def _kis_client():
@@ -159,6 +163,9 @@ def collect_investor_detail_daily(limit: int | None = None, rate_per_sec: float 
     `collector.backfill_investor_detail` 또는 관리자 '초기 데이터 준비'로 낮 시간에 채운다.
     end: 기준일(YYYYMMDD·YYYY-MM-DD, 기본 오늘 KST). 공유 RateLimiter 는 _run_universe 가 건다.
     """
+    if trading_day.now_kst().time() < DETAIL_OPEN_AFTER:
+        log.warning("세부 수급 건너뜀: %s", DETAIL_TIME_LIMIT_MSG)
+        return {"skipped": DETAIL_TIME_LIMIT_MSG}
     chm.ensure_market_tables()
     if days is None:
         days = DETAIL_DAILY_DAYS

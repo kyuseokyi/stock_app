@@ -1,10 +1,12 @@
 """세부 투자자(연기금 등) 수집 — 요청 파라미터·파서·UN→J 폴백·날짜 연속조회·CH 적재·태스크(실제 KIS 호출 없음)."""
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime, timedelta, timezone
 
 import pytest
 import requests
+
+KST = timezone(timedelta(hours=9))
 
 from apps.collector import investor_detail as idt
 from apps.collector.kis.client import TR_INVESTOR_TRADE_DAILY, KISClient, KISConnectionError
@@ -199,6 +201,8 @@ def task_env(monkeypatch):
         return {"ok": 1, "total": 1}
 
     monkeypatch.setattr(md, "_run_universe", fake_run)
+    # KIS 세부 수급은 15:40 이후에만 — 테스트는 저녁 시각으로 고정
+    monkeypatch.setattr(md.trading_day, "now_kst", lambda: datetime(2026, 11, 13, 18, 0, tzinfo=KST))
     return seen
 
 
@@ -220,3 +224,18 @@ def test_collect_one_saves_fetched_rows(task_env, monkeypatch):
     f = _Fake({"UN": [], "J": [_row(d) for d in _DAYS]}, page=5)
     assert task_env["collect_one"]("293490", f) == 10
     assert len(saved["293490"]) == 10 and f.calls[1] == ("J", "20261113")
+
+
+@pytest.mark.parametrize("hh, mm", [(0, 0), (9, 0), (15, 39)])
+def test_collect_skips_before_1540_without_calling_kis(task_env, monkeypatch, hh, mm):
+    """00:00~15:40 은 KIS 가 rt_cd=2 TIME LIMIT 로 거절 — 호출 없이 건너뛴다."""
+    monkeypatch.setattr(md.trading_day, "now_kst", lambda: datetime(2026, 11, 16, hh, mm, tzinfo=KST))
+    monkeypatch.setattr(md.chm, "ensure_market_tables", lambda: pytest.fail("건너뛸 때는 아무것도 하지 않음"))
+    out = md.collect_investor_detail_daily(end="20261113")
+    assert out == {"skipped": md.DETAIL_TIME_LIMIT_MSG}
+    assert "tickers" not in task_env
+
+
+def test_collect_runs_from_1540(task_env, monkeypatch):
+    monkeypatch.setattr(md.trading_day, "now_kst", lambda: datetime(2026, 11, 16, 15, 40, tzinfo=KST))
+    assert md.collect_investor_detail_daily(end="20261113")["ok"] == 1
