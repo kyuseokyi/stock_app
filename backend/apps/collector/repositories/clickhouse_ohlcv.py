@@ -15,8 +15,12 @@ _COLUMNS = [
 ]
 
 
-def upsert_daily_prices(ticker: str, records: list[dict]) -> int:
-    """OHLCV+MA 레코드를 daily_prices 에 적재. 삽입 행수 반환."""
+def upsert_daily_prices(ticker: str, records: list[dict], source: str | None = None) -> int:
+    """OHLCV+MA 레코드를 daily_prices 에 적재. 삽입 행수 반환.
+
+    source: 출처(예: 'kiwoom'). None(KIS 기본 경로)이면 source 컬럼을 넣지 않아 DEFAULT 'kis' 가 된다
+    — KIS 적재의 컬럼·행 모양은 기존과 같다.
+    """
     if not records:
         return 0
     rows = [
@@ -28,8 +32,12 @@ def upsert_daily_prices(ticker: str, records: list[dict]) -> int:
         ]
         for r in records
     ]
+    columns = _COLUMNS
+    if source is not None:
+        columns = [*_COLUMNS, "source"]
+        rows = [[*row, source] for row in rows]
     client = get_client()
-    client.insert(f"{CLICKHOUSE_DB}.daily_prices", rows, column_names=_COLUMNS)
+    client.insert(f"{CLICKHOUSE_DB}.daily_prices", rows, column_names=columns)
     return len(rows)
 
 

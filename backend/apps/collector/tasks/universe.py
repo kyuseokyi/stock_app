@@ -18,16 +18,20 @@ import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime, timedelta
+from typing import Callable
 
 from apps.collector import trading_day
 from apps.collector.celery_app import celery_app
 from apps.collector.indicators import enrich_with_ma
 from apps.collector.kis.client import KISClient, KISConnectionError
 from apps.collector.kis.fetcher import fetch_domestic_daily, fetch_domestic_daily_range
+from apps.collector.kiwoom import fetcher as kiwoom_fetcher
+from apps.collector.kiwoom.daily_fallback import DailyFallback, fallback_enabled
 from apps.collector.rate_limit import RateLimiter
 from apps.collector.tasks.ohlcv import enrich_overlap_window
 from apps.collector.repositories.clickhouse_ohlcv import upsert_daily_prices
 from apps.collector.stock_master import load_domestic_tickers
+from shared.clickhouse_schema import ensure_daily_prices_source
 
 logger = logging.getLogger(__name__)
 
@@ -149,8 +153,13 @@ def _collect_pass(targets, collect_one, get_client, label: str, workers: int = 1
     return state["ok"], state["inserted"], failed
 
 
-def _run_universe(collect_one, limit, source, rate_per_sec, workers: int | None = None, tickers=None) -> dict:
-    """공통 루프: 마스터 로드(또는 주어진 tickers) → 병렬 수집(공유 레이트리밋) → 실패격리 → 2차 재시도 → 집계."""
+def _run_universe(collect_one, limit, source, rate_per_sec, workers: int | None = None, tickers=None,
+                  fallback: DailyFallback | None = None) -> dict:
+    """공통 루프: 마스터 로드(또는 주어진 tickers) → 병렬 수집(공유 레이트리밋) → 실패격리 → 2차 재시도 → 집계.
+
+    fallback(일봉 전용, 키움 켜졌을 때만): KIS 1·2차 패스가 끝난 뒤 최종 실패·빈 응답 종목을 키움으로 채운다.
+    키움으로 회복한 종목은 실패에서 빼고 성공에 더하며, 결과에 kiwoom_fallback·kiwoom_failed 를 붙인다.
+    """
     if tickers is None:
         tickers = load_domestic_tickers(source)
     if limit:
@@ -201,28 +210,66 @@ def _run_universe(collect_one, limit, source, rate_per_sec, workers: int | None 
             if close is not None:
                 close()
 
+    fb_stats = None
+    if fallback is not None:
+        try:
+            fb_stats = fallback.run(failed)
+        except Exception as e:  # noqa: BLE001 — 폴백 오류가 KIS 수집 결과를 막지 않게
+            logger.warning("[키움 폴백] 패스 오류: %s", str(e)[:160])
+            fb_stats = {"recovered": set(), "filled": 0, "failed": 0, "inserted": 0}
+        recovered = fb_stats["recovered"]
+        ok += len(recovered)
+        inserted_sum += fb_stats["inserted"]
+        failed = [f for f in failed if f["ticker"] not in recovered]
+
     elapsed = time.monotonic() - started
     logger.info(
         "전종목 작업 종료: 성공 %d(2차 회복 %d)/%d, 최종 실패 %d, %.0f초",
         ok, retried_ok, total, len(failed), elapsed,
     )
-    return {
+    result = {
         "total": total,
         "ok": ok,
         "retried_ok": retried_ok,
         "failed_count": len(failed),
         "inserted": inserted_sum,
         "elapsed_sec": round(elapsed, 1),
-        "failed_sample": failed[:30],
     }
+    if fb_stats is not None:
+        # failed_sample 앞에 둔다 — 관리자 파이프라인 요약이 200자에서 잘린다
+        result["kiwoom_fallback"] = fb_stats["filled"]
+        result["kiwoom_failed"] = fb_stats["failed"]
+    result["failed_sample"] = failed[:30]
+    return result
 
 
-def _collect_daily_one(ticker: str, client: KISClient) -> int:
+def _daily_fallback(store_window: Callable[[object, str], int]) -> DailyFallback | None:
+    """키움이 켜져 있으면 이번 실행의 폴백, 아니면 None(개발 서버 — 기존 경로 그대로)."""
+    if not fallback_enabled():
+        return None
+    return DailyFallback(store_window, ensure_column=ensure_daily_prices_source)
+
+
+def _daily_window() -> tuple[str, str]:
     today = date.today()
     start = (today - timedelta(days=_LOOKBACK_DAYS)).strftime("%Y%m%d")
     end = (today + timedelta(days=_LOOKAHEAD_DAYS)).strftime("%Y%m%d")
+    return start, end
+
+
+def _collect_daily_one(ticker: str, client: KISClient, fallback: DailyFallback | None = None) -> int:
+    start, end = _daily_window()
     ohlcv = fetch_domestic_daily(ticker, start, end, client=client)
+    if not ohlcv and fallback is not None:
+        fallback.note_empty(ticker)  # UN·J 모두 빈 응답 → KIS 패스가 끝난 뒤 키움으로
     return upsert_daily_prices(ticker, enrich_overlap_window(ticker, ohlcv))
+
+
+def _kiwoom_daily_one(kiwoom_client, ticker: str) -> int:
+    """일봉 겹침창을 키움으로 받아 MA 계산 후 source='kiwoom' 적재."""
+    start, end = _daily_window()
+    ohlcv = kiwoom_fetcher.fetch_daily_ohlcv(ticker, start, end, client=kiwoom_client)
+    return upsert_daily_prices(ticker, enrich_overlap_window(ticker, ohlcv), source="kiwoom")
 
 
 @celery_app.task(name="collector.collect_all_daily")
@@ -232,8 +279,18 @@ def collect_all_daily(
     rate_per_sec: float | None = None,
     workers: int | None = None,
 ) -> dict:
-    """전종목 일봉 겹침창(today-30d~+2d) 수집. workers 미지정이면 KIS_WORKERS(기본 4)."""
-    return _run_universe(_collect_daily_one, limit, source, rate_per_sec, workers)
+    """전종목 일봉 겹침창(today-30d~+2d) 수집. workers 미지정이면 KIS_WORKERS(기본 4).
+
+    키움이 켜져 있으면(키 있음 + KIWOOM_FALLBACK_ENABLED≠false) KIS 가 끝난 뒤 실패·빈 응답 종목을 키움으로 채운다.
+    """
+    fallback = _daily_fallback(_kiwoom_daily_one)
+    if fallback is None:
+        return _run_universe(_collect_daily_one, limit, source, rate_per_sec, workers)
+
+    def collect_one(ticker: str, client: KISClient) -> int:
+        return _collect_daily_one(ticker, client, fallback)
+
+    return _run_universe(collect_one, limit, source, rate_per_sec, workers, fallback=fallback)
 
 
 @celery_app.task(name="collector.backfill_all_daily")
@@ -255,8 +312,18 @@ def backfill_all_daily(
     start_s = (end_day - timedelta(days=int(months) * 31)).strftime("%Y%m%d")
     end_s = end_day.strftime("%Y%m%d")
 
+    def _kiwoom_backfill_one(kiwoom_client, ticker: str) -> int:
+        ohlcv = kiwoom_fetcher.fetch_daily_ohlcv(ticker, start_s, end_s, client=kiwoom_client)
+        return upsert_daily_prices(ticker, enrich_with_ma(ohlcv), source="kiwoom")
+
+    fallback = _daily_fallback(_kiwoom_backfill_one)
+
     def _backfill_one(ticker: str, client: KISClient) -> int:
         ohlcv = fetch_domestic_daily_range(ticker, start_s, end_s, client=client)
+        if not ohlcv and fallback is not None:
+            fallback.note_empty(ticker)  # 전 기간 UN·J 빈 응답(일부 청크만 빈 건 정상 — 대상 아님)
         return upsert_daily_prices(ticker, enrich_with_ma(ohlcv))
 
-    return _run_universe(_backfill_one, limit, source, rate_per_sec, workers)
+    if fallback is None:
+        return _run_universe(_backfill_one, limit, source, rate_per_sec, workers)
+    return _run_universe(_backfill_one, limit, source, rate_per_sec, workers, fallback=fallback)

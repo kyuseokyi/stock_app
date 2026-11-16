@@ -9,7 +9,7 @@
 > - 모든 조회는 `POST` + JSON body, TR 은 헤더 `api-id`. 연속조회는 응답 **헤더** `cont-yn`·`next-key` 를 다음 요청 헤더에 그대로.
 > - IP 불일치는 HTTP 403 이 아니라 **오류 8010**(토큰 발급 IP ≠ 요청 IP)으로 온다. 8005 = 토큰 무효.
 > - 거래소 구분은 종목코드 접미사: 없음=KRX, `_NX`=NXT, `_AL`=SOR(통합). `_AL` 거래량이 KIS UN(KRX+NXT 합산)과 같은지는 **실측 대상**(아래 [Step 3]).
-> - 진행 순서: ① 클라이언트·실측 도구(완료) → ② 연기금 프리셋 → ③ 일봉 폴백(실측이 "같음"일 때만) → ④ 대차잔고·테마 등 키움 데이터. **종목 분할 수집은 하지 않는다**(출처마다 기준이 달라짐).
+> - 진행 순서: ① 클라이언트·실측 도구(완료) → ② 연기금 프리셋 → ③ 일봉 폴백(**완료 2026-11-16** — 아래 "③단계 일봉 폴백") → ④ 대차잔고·테마 등 키움 데이터. **종목 분할 수집은 하지 않는다**(출처마다 기준이 달라짐).
 
 ---
 
@@ -113,6 +113,7 @@ KIWOOM_RATE_PER_SEC=4  # 초당 호출 상한(기본 4, 1~5로 자름 — 키움
     - `kiwoom`: 키움 단독 수집
     - ~~`hybrid` 분할 수집~~ (정정: **하지 않음** — 출처마다 기준이 달라짐)
     - **장애 폴백**: KIS 요청 실패(한도 초과, 5xx) 시 키움으로 — ③단계, **실측에서 `_AL` 이 KIS UN 과 같을 때만**
+  - (정정) **③단계 완료(2026-11-16)** — `DATA_COLLECTOR_PROVIDER`·`provider.py` 없이, 전종목 일봉·백필에서 KIS 가 다 끝난 뒤 실패·빈 응답 종목만 키움으로 채운다. 아래 "③단계 일봉 폴백" 참고
 
 ### Phase 5: 단위 테스트 및 검증
 - (정정) **파일**: `backend/tests/test_kiwoom_config.py`·`test_kiwoom_client.py`·`test_kiwoom_normalize.py`·`test_kiwoom_probe.py`(완료, HTTP 전부 가짜)
@@ -279,6 +280,21 @@ docker compose -f docker-compose.prod.yml run --rm celery_worker python -m apps.
 
 ---
 
+#### ③단계 일봉 폴백 (완료 2026-11-16)
+설계: [`docs/superpowers/specs/2026-11-16-kiwoom-daily-fallback-design.md`](superpowers/specs/2026-11-16-kiwoom-daily-fallback-design.md), 동작 정리: `docs/data-collection.md` "일봉 키움 폴백"
+- 코드: `backend/apps/collector/kiwoom/fetcher.py`(`fetch_daily_ohlcv` — `{ticker}_AL`·수정주가·연속조회 상한 10쪽·기간 자르기), `kiwoom/daily_fallback.py`(켜짐 조건·폴백 패스), `tasks/universe.py`(`collect_all_daily`·`backfill_all_daily` 연결·집계)
+- 언제: KIS 1·2차 패스가 끝난 뒤 최종 실패 + UN·J 모두 빈 응답 종목만. KIS 정상 경로는 그대로
+- 출처: CH `daily_prices.source`(`kis` 기본 / `kiwoom`). 다음 날 KIS 겹침 수집이 같은 날짜를 다시 넣으면 `kis` 로 돌아온다
+- 결과: 일봉 단계 요약에 `kiwoom_fallback`(채운 종목 수)·`kiwoom_failed`
+- **켜고 끄기**: 상용 `backend/.env.production` 에 키움 키가 있으면 기본 켜짐. 끄려면 `KIWOOM_FALLBACK_ENABLED=false` 를 넣고 collector(worker) 재시작 — 다시 켜려면 줄을 지우거나 `true`. 키가 없으면(개발 서버) 항상 꺼짐
+- 상용 확인: 20:30 파이프라인 뒤 관리자 "데이터 현황" 일봉 요약의 `kiwoom_fallback`, 그리고
+  ```sql
+  SELECT source, count() AS rows, uniqExact(ticker) AS tickers
+  FROM stock_data.daily_prices FINAL
+  WHERE date >= today() - 7
+  GROUP BY source;
+  ```
+
 ### [Step 4] 로컬 PC에서 상용 데이터 연동 확인 방법
 수집기가 상용 DB에 데이터를 적재하면, 로컬 PC에서 데이터가 잘 들어왔는지 확인합니다.
 
@@ -291,7 +307,7 @@ docker compose -f docker-compose.prod.yml run --rm celery_worker python -m apps.
    ```sql
    -- 오늘 날짜 데이터 및 출처(source) 확인
    SELECT 
-       ticker, date, open, high, low, close, volume, ingested_at
+       ticker, date, open, high, low, close, volume, source, ingested_at
    FROM stock_data.daily_prices FINAL
    WHERE date >= today() - 2
    ORDER BY date DESC, ticker ASC
