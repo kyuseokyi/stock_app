@@ -146,7 +146,7 @@ npm run dev        # http://localhost:5173
 - API 응답 타입은 `admin_web/src/types/`(백엔드 pydantic·GraphQL 스키마 기준)에 있다. 백엔드 응답 스키마를 바꾸면 여기도 함께 갱신한다.
 - **트레이딩 게임 > 데일리 코치**(`/game/coach`)는 trading_game(8003)을 호출한다. `VITE_GAME_API_URL`은 **선택** 변수 — dev 에서 미설정 시 `http://localhost:8003`, 배포 빌드에서 미설정이면 화면에 "게임 서버 미연결" 안내(빌드는 실패하지 않음). trading_game 운영 배포 전까지 필수 목록(`vite.config.js` REQUIRED)에 넣지 않는다.
 - **트레이딩 게임 > 🎓 아카데미 문항**(`/game/academy`): 문항 추가·편집(선택지 2~6·정답 라디오·해설·순서)·활성 토글·삭제, 활성 문항 수 표시(활성 문항을 모두 맞혀야 5배 해금). **🧩 퀴즈 관리**(`/game/quizzes`): 활성 필터·페이지네이션 목록, 상세 차트(기준일선 + 이후 5거래일은 stock_api 일봉으로 다른 색), 패턴·해설 편집, 활성 토글, 삭제(시도 있으면 비활성 안내), "N개 자동 생성", "직접 출제"(국내 종목 검색·기준일). 게임 서버(8003)와 차트·검색용 stock_api(8002) 필요.
-- **시장 데이터 › 테마 보정**(`/market/themes`): KIS 테마 숨김·이름·설명 수정, 관리자 테마 생성, 종목 검색 추가·제외. 최신 순위·1일 등락·거래대금을 함께 표시하고, 저장하면 서버가 테마 순위를 다시 계산한다.
+- **시장 데이터 › 테마 보정**(`/market/themes`): 화면 위에 테마 출처(키움/KIS)·키움 스냅숏 날짜. 테마 숨김·이름·설명 수정, 관리자 테마 생성, 종목 검색 추가·제외. 최신 순위·1일 등락·거래대금을 함께 표시하고, 저장하면 서버가 테마 순위를 다시 계산한다.
 - **시장 데이터 › 데이터 현황**(`/market/status`): 일봉·지수·투자자·재무·FRED·공모주·CANSLIM·시장 그룹의 최신일과 상태(기준 거래일 비교), 설정 상태(값은 표시 안 함), 최근 일일 파이프라인 단계별 결과.
   KIS 를 호출하지 않는 계산 4개(CANSLIM·시장 그룹 계산과 각 60일 백필)는 버튼으로 실행한다. 같은 작업은 동시에 하나만 돈다(Redis 잠금).
   API: stock_api `GET /api/v1/admin/market/status`, `GET·POST /api/v1/admin/market/jobs[/{job}]`(관리자 JWT).
@@ -563,12 +563,13 @@ uv run python -c "from apps.collector.tasks.universe import backfill_all_daily; 
 | 08:00 | FRED 거시 지표(CPI·근원CPI·PCE·실업률·고용·기준금리·국채) + CPI·고용·PCE 발표 예정일 — 키 있을 때만 | CH `macro_series`, PG `stock_events` |
 | 20:30 | `collector.daily_market_pipeline`: 전종목 일봉 → 국내 지수(KOSPI·KOSDAQ·KOSPI200) → 투자자별 순매수(보통주만) → 세부 투자자 순매수(연기금·사모·투신·은행·보험·기타금융, KIS `FHPTJ04160001`, 매일 5거래일 겹침 — 30거래일 백필은 수동 `collector.backfill_investor_detail`·초기 데이터 준비) → 대차잔고(키움 `ka20068`, 키움 키 있는 상용만, 매일 5거래일 겹침 — 60거래일 백필은 수동 `collector.backfill_lending`) | CH `daily_prices`·`market_index_daily`·`investor_daily`·`investor_detail_daily`·`stock_lending_daily` |
 | 20:30 (마스터 동기화 때) | 종목 프로필(업종·시총·상장주식·ETF/스팩/우선주·관리/정지)·업종명·KIS 테마 | PG `stock_profile`·`sectors`·`themes`·`theme_stocks` |
+| 20:30 (CANSLIM 뒤·시장 그룹 앞) | 키움 테마 스냅숏 `collector.collect_themes_kiwoom`(ka90001·ka90002, 키움 키 있는 상용만 — 없으면 skipped). 구성 종목 있는 키움 테마 100개 이상이면 테마 계산을 키움 기준으로, 아니면 KIS 마스터(`docs/data-collection.md` "테마 출처") | PG `themes`·`theme_stocks`(`source=kiwoom`, 코드 `KW` 접두사) |
 | 21:30 | 공모주 청약·상장 일정 | PG `stock_events` |
 | 토 10:00 | 재무비율(연간·분기 EPS·ROE·증가율) — 보통주만 | CH `fundamentals_periodic` |
 
 - 지수는 처음 실행 때 2년치를 백필하고 이후 10일씩 겹쳐 받는다. CH 테이블은 각 태스크가 처음 돌 때 자동 생성.
 - 수동 실행: `uv run celery -A apps.collector.celery_app call collector.collect_fundamentals` (같은 방식으로 `collect_market_indices --kwargs '{"region":"US"}'`·`collect_investor_daily`·`collect_ipo_events`·`collect_macro_series`). 세부 투자자 30거래일 백필은 `collector.backfill_investor_detail --kwargs '{"days":30}'`(자세한 내용 `docs/data-collection.md` 4장). 대차잔고 60거래일 백필(상용)은 `collector.backfill_lending --kwargs '{"days":60}'` 뒤 `collector.backfill_screener`.
-- 테마 보정 API(관리자 JWT, stock_api): `GET/POST /api/v1/admin/themes`, `PATCH /api/v1/admin/themes/{id}`(이름·설명·숨김), `GET/POST /api/v1/admin/themes/{id}/stocks`, `DELETE /api/v1/admin/themes/{id}/stocks/{ticker}`(제외 표시). KIS 테마 동기화는 `source=kis` 연결만 바꿔 관리자 보정이 유지된다.
+- 테마 보정 API(관리자 JWT, stock_api): `GET/POST /api/v1/admin/themes`, `PATCH /api/v1/admin/themes/{id}`(이름·설명·숨김), `GET/POST /api/v1/admin/themes/{id}/stocks`, `DELETE /api/v1/admin/themes/{id}/stocks/{ticker}`(제외 표시). KIS 테마 동기화는 `source=kis`, 키움 테마 동기화는 `source=kiwoom` 연결만 바꿔 관리자 보정이 유지된다. `GET /api/v1/admin/themes/source` → 지금 계산에 쓰는 출처(`kiwoom`/`kis`)·스냅숏 날짜, 목록은 그 출처 + 관리자 테마만.
 - 네이버 증권 크롤링은 하지 않는다(`robots.txt` 전체 거부) — 로드맵 "추후 확인".
 
 ### 🔍 시장 데이터 표본 점검 (로컬 CLI)
