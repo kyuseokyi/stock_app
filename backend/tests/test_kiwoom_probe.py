@@ -345,7 +345,7 @@ def test_run_investors_top5_unit_and_errors_without_secrets():
     # 상위 5종목: 두 시장 합쳐 금액 내림차순 — 에코프로비엠(500) 이 1위, 종목4~6 은 잘림
     assert text.index("에코프로비엠") < text.index("종목0") and "종목3" in text and "종목4" not in text
     assert "단위 추정 ×10,000" in text  # 10주 × 100,000 / 100 = 10,000
-    assert "5,000,000" in text  # 에코프로비엠 500 × 1만 = 5,000,000원
+    assert "500,000,000" in text  # 에코프로비엠 500 × 백만 = 5억원
     for secret in (FAKE_KEY, FAKE_SECRET, FAKE_TOKEN):
         assert secret not in text
 

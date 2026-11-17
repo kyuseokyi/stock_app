@@ -123,7 +123,7 @@ def fetch_kiwoom(day: date, *, session=None, client_factory=None) -> dict | None
     if not cfg.is_configured:
         return None
     from apps.collector.kiwoom.client import KiwoomClient, KiwoomIpError, KiwoomNotConfigured
-    from apps.collector.kiwoom.normalize import KIWOOM_FLOW_AMT_TO_WON, implied_amt_unit, investor_flow_row
+    from apps.collector.kiwoom.normalize import KIWOOM_FLOW_QTY_PRICE_RATIO, implied_amt_unit, investor_flow_row
 
     try:
         client = client_factory() if client_factory else KiwoomClient(cfg)
@@ -156,9 +156,9 @@ def fetch_kiwoom(day: date, *, session=None, client_factory=None) -> dict | None
     if not all_rows:
         return None
     unit = implied_amt_unit(all_rows)
-    if unit is not None and unit != KIWOOM_FLOW_AMT_TO_WON:
-        log.warning("키움 ka10058 금액 단위 추정 %s ≠ 설정 %s — normalize.KIWOOM_FLOW_AMT_TO_WON 확인 필요",
-                    unit, KIWOOM_FLOW_AMT_TO_WON)
+    if unit is not None and unit != KIWOOM_FLOW_QTY_PRICE_RATIO:
+        log.warning("키움 ka10058 금액 단위 추정 비율 %s ≠ 예상 %s — 응답 단위가 바뀌었는지 normalize 확인 필요",
+                    unit, KIWOOM_FLOW_QTY_PRICE_RATIO)
     names = _universe_names(session, sorted({r["ticker"] for r in all_rows}))
     out: dict = {"date": day.isoformat(), "source": "kiwoom"}
     for key, rows in got.items():

@@ -22,6 +22,11 @@ def to_int(value) -> int:
     if value is None:
         return 0
     s = str(value).replace(",", "").strip()
+    # 키움은 등락 표시 부호를 값 앞에 덧붙여 '+-5'(=음수 5) 처럼 부호가 두 개 오기도 한다(ka10058 실측 2026-11-17).
+    if s[:2] in ("+-", "-+", "--"):
+        s = "-" + s[2:]
+    elif s[:2] == "++":
+        s = s[1:]
     if s in ("", "+", "-"):
         return 0
     try:
@@ -123,11 +128,12 @@ def theme_member_ticker(raw: dict) -> str | None:
 
 
 # ------------------------------------------------------------------ 투자자별 순매수(ka10058)
-# ⚠️ netslmt_amt 단위 — 명세 설명은 "단위: 원"인데, 명세 response_example 세 행은 모두
-#   순매도수량 × 추정평균가 ≈ netslmt_amt × 10,000 이다(4464주×57056≈2.547억 vs 25467, 12×86658 vs 106,
-#   46×16320 vs 75). 예시 산술을 따라 만원 → 원(×10,000)으로 본다. 상용 `probe --investors` 의
-#   '단위 추정'(implied_amt_unit) 값이 10,000 이 아니면 이 상수를 그 값으로 고칠 것.
-KIWOOM_FLOW_AMT_TO_WON = 10_000
+# netslmt_amt 단위 = 백만원 — 명세 설명("원")·예시 산술(만원) 모두 틀림. 상용 실측(2026-11-17, 기준일 11-16)에서
+#   pykrx 같은 날 값과 교차 확인: 대덕전자 외국인 14,421 ↔ 144.2억, 삼성전자 기관 195,491 ↔ 1,729억(통합이라 조금 큼) 등.
+KIWOOM_FLOW_AMT_TO_WON = 1_000_000
+# 응답 자체의 일관성 비율 |순매도수량 × 추정평균가 ÷ netslmt_amt| — 명세 예시·실측 모두 10,000(수량 단위가 원 단위와
+#   다름). 이 비율이 바뀌면 응답 단위가 바뀐 것이므로 경고한다(implied_amt_unit).
+KIWOOM_FLOW_QTY_PRICE_RATIO = 10_000
 
 
 def investor_flow_row(raw: dict) -> dict | None:
@@ -151,8 +157,8 @@ def investor_flow_row(raw: dict) -> dict | None:
 
 
 def implied_amt_unit(rows: list[dict]) -> int | None:
-    """|수량 × 추정평균가 / 원시 금액| 의 중앙값을 10의 거듭제곱으로 반올림 — 금액 단위(원 환산 배수) 추정.
-    계산할 수 있는 행이 없으면 None. (예시 기준 10,000 = 만원)"""
+    """|수량 × 추정평균가 / 원시 금액| 의 중앙값을 10의 거듭제곱으로 반올림 — 응답 단위 일관성 비율.
+    계산할 수 있는 행이 없으면 None. 정상이면 KIWOOM_FLOW_QTY_PRICE_RATIO(10,000)."""
     import math
 
     ratios = sorted(abs(r["qty"] * r["avg_price"] / r["raw_amt"]) for r in rows
