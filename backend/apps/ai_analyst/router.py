@@ -14,7 +14,7 @@ from fastapi.concurrency import run_in_threadpool
 from apps.ai_analyst.services import investor_flow_ai, market_movers, morning_brief, stock_qualitative
 from apps.ai_analyst.schemas import InvestorFlowResponse
 from apps.collector.intraday_indices import KST
-from apps.stock_api.services import market_query, verify_ticker
+from apps.stock_api.services import featured_query, market_query, verify_ticker
 from shared.database import SyncSessionLocal
 
 log = logging.getLogger(__name__)
@@ -83,6 +83,13 @@ async def get_heatmap(response: Response, kind: str = "sector", size: str = "mca
         raise _invalid("INVALID_PERIOD", f"period 는 {', '.join(market_query.PERIODS)} 중 하나예요.")
     response.headers["Cache-Control"] = CACHE_CONTROL
     return await _safe(market_query.treemap, dict(_EMPTY_TREEMAP), kind, size, period)
+
+
+@market_router.get("/featured")
+async def get_featured(response: Response):
+    """오늘 특징주 — 52주 신고가·신저가(20:30 계산, 장중엔 직전 거래일) + 오늘 VI 발동(키움, 없으면 vi=null)."""
+    response.headers["Cache-Control"] = CACHE_CONTROL
+    return await _safe(featured_query.get_featured, featured_query.empty())
 
 
 # ---------------------------------------------------------------- /api/v1/ai

@@ -354,3 +354,52 @@ def test_run_investors_ip_error_stops():
     c = _InvestorClient({("9000", "001"): KiwoomIpError(8010, "ip")})
     code, text = _run(c, argv=["--investors", "--investors-date", "20261116"])
     assert code == 0 and len(c.posts) == 1 and "등록된 IP" in text
+
+
+# ------------------------------------------------------------------ VI 발동(ka10054)
+class _ViClient(_FakeClient):
+    def __init__(self, result, cont=False):
+        super().__init__(charts={}, stocks={})
+        self.result, self.cont = result, cont
+        self.posts: list[tuple] = []
+
+    def post(self, api_id, path, body, *, cont_key=None):
+        self.posts.append((api_id, path, body, cont_key))
+        if isinstance(self.result, Exception):
+            raise self.result
+        return KiwoomResponse(data={"motn_stk": self.result}, cont_yn=self.cont, next_key="NK" if self.cont else "")
+
+
+def _vi(cd, nm, t, ex="KRX", dyn="+9.30", cnt="1"):
+    return {"stk_cd": cd, "stk_nm": nm, "acc_trde_qty": "1105968", "motn_pric": "67000", "dynm_dispty_rt": dyn,
+            "trde_cntr_proc_time": t, "virelis_time": "100511", "viaplc_tp": "동적", "dynm_stdpc": "61300",
+            "static_stdpc": "0", "static_dispty_rt": "0.00", "open_pric_pre_flu_rt": "+16.93", "vimotn_cnt": cnt,
+            "stex_tp": ex}
+
+
+def test_parse_args_vi():
+    assert probe.parse_args(["--vi"]).vi is True and probe.parse_args([]).vi is False
+
+
+def test_run_vi_one_call_raw_and_aggregate_without_secrets():
+    rows = [_vi("005930", "삼성전자", "100311", cnt="2"), _vi("005930", "삼성전자", "101500", ex="NXT", cnt="3"),
+            _vi("000660", "SK하이닉스", "094000", dyn="-2.50")]
+    c = _ViClient(rows, cont=True)
+    code, text = _run(c, argv=["--vi"])
+    assert code == 0 and c.calls == []  # 일봉 비교 안 함
+    assert len(c.posts) == 1 and c.posts[0][0] == "ka10054" and c.posts[0][1] == "/api/dostk/stkinfo"
+    assert c.posts[0][2]["stex_tp"] == "3" and c.posts[0][2]["skip_stk"] == "100000011"
+    assert "응답 3행 (첫 쪽, cont-yn=Y)" in text and "'KRX': 2" in text and "'NXT': 1" in text
+    assert "1105968" in text  # 누적거래량 원시 값 그대로(단위 실측용)
+    assert "종목별 집계 2종목" in text
+    assert text.index("10:15:00") < text.index("09:40:00")  # 최근 발동 먼저
+    assert "하락" in text and "-2.50" in text
+    assert "④-4" in text
+    for secret in (FAKE_KEY, FAKE_SECRET, FAKE_TOKEN):
+        assert secret not in text
+
+
+def test_run_vi_error_is_reported():
+    c = _ViClient(KiwoomApiError(1999, "조회 가능 시간이 아닙니다"))
+    code, text = _run(c, argv=["--vi"])
+    assert code == 0 and "오류 1999" in text and "ka10054: 오류 1999" in text

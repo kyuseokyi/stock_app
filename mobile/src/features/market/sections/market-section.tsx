@@ -10,6 +10,7 @@ import { Chip, ListState, SectionHead } from '@/ui';
 import { BasisNote } from '../components/basis-note';
 import { BriefCard } from '../components/brief-card';
 import { EventList } from '../components/event-list';
+import { FeaturedBoard } from '../components/featured-board';
 import { FlowBoard } from '../components/flow-board';
 import { GroupRow } from '../components/group-row';
 import { HotKeywords } from '../components/hot-keywords';
@@ -25,10 +26,12 @@ import {
   type MarketSession,
   splitCarousel,
 } from '../dashboard';
+import { hasFeatured } from '../featured';
 import { groupOverview, NEUTRAL_HINT } from '../overview-groups';
 import type { FlowSource } from '../rest-types';
 import type { GroupKind } from '../types';
 import { useAutoRefresh } from '../use-auto-refresh';
+import { useFeatured, useFeaturedAutoRefresh } from '../use-featured';
 import { useInvestorFlow } from '../use-investor-flow';
 import { useMarketOverview } from '../use-market-overview';
 import { useMorningBrief } from '../use-morning-brief';
@@ -45,7 +48,7 @@ type Props = {
 /**
  * 개요 칩 = 마켓 대시보드(스펙 §2.1 ②~⑦).
  * ② AI 장전 브리핑 → ③ 지수 캐러셀(+ 돈의 흐름·경제지표) → ⑤ 급등락 & AI 원인 → ⑤-2 수급 전광판
- * → ⑥ 핫 키워드·주도 테마 → ⑦ 다가오는 일정.
+ * → ⑤-3 오늘 특징주 → ⑥ 핫 키워드·주도 테마 → ⑦ 다가오는 일정.
  * 섹션마다 따로 불러와 하나가 실패해도 나머지는 보인다. 전부 실패했을 때만 전체 오류 화면.
  */
 /** 수급 전광판 출처 라벨 */
@@ -57,6 +60,7 @@ export function MarketSection({ onMore, onOpenGroup, onHeader }: Props) {
   const brief = useMorningBrief();
   const movers = useMovers();
   const flow = useInvestorFlow();
+  const featured = useFeatured();
   const today = kstDateString();
 
   const indices = useMemo(() => overview.data?.overview.indices ?? [], [overview.data]);
@@ -64,7 +68,7 @@ export function MarketSection({ onMore, onOpenGroup, onHeader }: Props) {
   const session = marketSession(indices);
 
   // 당겨서 새로고침 — 모든 섹션을 함께, 전부 실패했을 때만 토스트(일부 실패는 그 섹션만 이전 값 유지)
-  const sources = [overview, brief, movers, flow];
+  const sources = [overview, brief, movers, flow, featured];
   const refreshAll = async () => {
     const results = await Promise.allSettled(sources.map((s) => s.refresh()));
     if (results.every((r) => r.status === 'rejected')) throw (results[0] as PromiseRejectedResult).reason;
@@ -75,12 +79,14 @@ export function MarketSection({ onMore, onOpenGroup, onHeader }: Props) {
   // 지수·거시는 30초(기존), 급등락은 정규장일 때만 60초마다 조용히 갱신 — 화면이 포커스·앱이 앞에 있을 때만
   useAutoRefresh(overview.silentRefresh);
   useMoversAutoRefresh(movers.silentRefresh, session);
+  useFeaturedAutoRefresh(featured.silentRefresh, session);
 
   // 하루 몇 번만 바뀌는 데이터는 타이머 없이, 화면·앱 복귀 때 마지막 조회 후 10분이 지났으면 1회만 조용히 다시 받는다
   useReturnRefresh(overview.silentRefreshAll, overview.fetchedAt);
   useReturnRefresh(brief.silentRefresh, brief.fetchedAt);
   useReturnRefresh(movers.silentRefresh, movers.fetchedAt);
   useReturnRefresh(flow.silentRefresh, flow.fetchedAt);
+  useReturnRefresh(featured.silentRefresh, featured.fetchedAt);
 
   // ① 헤더 기준 시각 — 섹션마다 기준이 달라(급등락·수급은 각 카드에 표시) 국내 지수 기준으로 한정한다
   const basis = indexHeaderBasis(indices);
@@ -117,6 +123,7 @@ export function MarketSection({ onMore, onOpenGroup, onHeader }: Props) {
   const otherIndices = [...g.kr, ...g.us];
   const mv = movers.data;
   const fl = flow.data;
+  const fd = featured.data;
   const hasFlow = fl != null && (fl.foreignTop.length + fl.institutionTop.length + fl.pensionTop.length + fl.doubleBuy.length > 0);
   const themes = overview.data?.themes ?? [];
   const events = overview.data?.events ?? [];
@@ -182,6 +189,16 @@ export function MarketSection({ onMore, onOpenGroup, onHeader }: Props) {
         </View>
       ) : flow.error && !fl ? (
         <InlineError text="수급 데이터를 불러오지 못했어요" onRetry={flow.reload} />
+      ) : null}
+
+      {/* ⑤-3 오늘 특징주 — 신고가·신저가(20:30 계산) + VI 발동(키움, 없으면 그 탭 숨김) */}
+      {hasFeatured(fd) ? (
+        <View style={styles.card}>
+          <SectionHead title="오늘 특징주" />
+          <FeaturedBoard featured={fd} today={today} onOpenStock={openStock} />
+        </View>
+      ) : featured.error && !fd ? (
+        <InlineError text="오늘 특징주를 불러오지 못했어요" onRetry={featured.reload} />
       ) : null}
 
       {/* ⑥ 핫 키워드 & 주도 테마 */}

@@ -74,6 +74,15 @@ def prev_high(highs: Sequence[float], n: int = HIGH_LOOKBACK) -> float | None:
     return max(highs[-n - 1:-1])
 
 
+def prev_low(lows: Sequence[float], n: int = HIGH_LOOKBACK) -> float | None:
+    """prev_high 와 대칭 — 당일을 뺀 직전 n거래일 최저가. 봉이 n+1개 미만이면 None.
+    0 이하 저가(거래정지일 0 봉 등)는 빼고 본다 — 0 이 끼면 신저가가 영영 나올 수 없게 되므로. 전부 0 이하면 None."""
+    if len(lows) < n + 1:
+        return None
+    vals = [v for v in lows[-n - 1:-1] if v > 0]
+    return min(vals) if vals else None
+
+
 def gc_days(closes: Sequence[float], fast: int = GC_FAST, slow: int = GC_SLOW, within: int = GC_WITHIN) -> int | None:
     """MA(fast) 가 MA(slow) 를 아래→위로 뚫은 뒤 지난 거래일 수(0 = 오늘). 오늘 포함 마지막 within 봉 안의 교차만 보고,
     지금도 fast > slow 여야 한다(golden_cross_within 과 같은 판정). 없거나 데이터 부족이면 None."""

@@ -36,6 +36,7 @@ celery_app = Celery(
         "apps.collector.tasks.market_groups",
         "apps.collector.tasks.screener",
         "apps.collector.tasks.patterns",
+        "apps.collector.tasks.featured",
         "apps.collector.tasks.push_sends",
         "apps.collector.tasks.bootstrap",
         "apps.ai_analyst.tasks",
@@ -75,6 +76,13 @@ celery_app.conf.beat_schedule = {
         "task": "collector.poll_intraday_indices",
         "schedule": 30.0,
         "options": {"expires": 25},
+    },
+    # 키움 VI 발동 종목(오늘 특징주 카드) — 거래일 09:00~15:30 5분마다(하루 79회 + 연속조회). 키움 키가 없거나
+    # 장 밖(15:35~15:55 포함)·휴장일이면 태스크가 호출 없이 끝난다. 그날 연속 3회 실패면 남은 호출 중단. 밀린 실행은 버린다
+    "poll-vi-stocks": {
+        "task": "collector.poll_vi_stocks",
+        "schedule": crontab(minute="*/5", hour="9-15", day_of_week="mon-fri"),
+        "options": {"expires": 240},
     },
     # 미국 지수·환율·대표 종목 — 미국 장 마감(서머타임 05:00 / 그 외 06:00 KST) 뒤. 미국 월~금 → 한국 화~토 아침
     "collect-us-indices": {

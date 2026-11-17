@@ -12,7 +12,7 @@
 공식 명세: GitHub Kiwoom-Securities/Kiwoom-REST-API `kiwoom/_data/kiwoom_api_spec.json`(c7a3d25)
   - apis["접근토큰 발급(au10001)"], apis["주식일봉차트조회요청(ka10081)"], apis["종목정보 리스트(ka10099)"],
     apis["대차거래추이요청(종목별)(ka20068)"], apis["테마그룹별요청(ka90001)"], apis["테마구성종목요청(ka90002)"],
-    apis["투자자별일별매매종목요청(ka10058)"], error_codes
+    apis["투자자별일별매매종목요청(ka10058)"], apis["변동성완화장치발동종목요청(ka10054)"], error_codes
 """
 
 from __future__ import annotations
@@ -59,6 +59,12 @@ INVESTOR_CODES = {"foreign": "9000", "institution": "9999", "pension": "6000"}
 INVESTOR_MARKETS = {"kospi": "001", "kosdaq": "101"}
 TRDE_NET_BUY = "2"                    # ka10058 trde_tp — 1:순매도, 2:순매수
 STEX_UNIFIED = "3"                    # stex_tp — 1:KRX, 2:NXT, 3:통합(우리 일봉 UN 과 같은 기준)
+TR_VI = "ka10054"                     # 변동성완화장치발동종목요청 — meta.URL 은 PATH_STOCK_INFO
+VI_LIST_KEY = "motn_stk"              # ka10054 response.body LIST(stk_cd·stk_nm·motn_pric·trde_cntr_proc_time …)
+# ka10054 skip_stk(명세): 9자리, 순서 = 우선주·관리종목·투자경고/위험·투자주의·환기종목·단기과열·증거금100%·ETF·ETN,
+#   0=포함 1=제외. 우선주·ETF·ETN 만 뺀다(특징주 카드는 보통주 기준 — 신고저가 유니버스와 맞춤).
+VI_SKIP_STK = "100000011"
+VI_MAX_PAGES = 10                     # 하루 발동 목록 연속조회 안전 상한
 
 # 오류 코드(명세 error_codes)
 CODE_TOKEN_INVALID = 8005  # Token이 유효하지 않습니다
@@ -172,6 +178,14 @@ def investor_daily_body(investor: str, strt_dt: str, end_dt: str, market: str, *
         raise ValueError(f"알 수 없는 시장 구분: {market}")
     return {"strt_dt": strt_dt, "end_dt": end_dt, "trde_tp": TRDE_NET_BUY, "mrkt_tp": INVESTOR_MARKETS[market],
             "invsr_tp": INVESTOR_CODES[investor], "stex_tp": stex_tp}
+
+
+def vi_body(*, stex_tp: str = STEX_UNIFIED, skip_stk: str = VI_SKIP_STK) -> dict:
+    """ka10054 body(명세 request.body 13개 모두 필수, request_example 기준). 전체 시장(000)·장전구분 전체(0)·
+    발동구분 전체(0)·발동방향 전체(0), 거래량·거래대금 조건 사용 안 함."""
+    return {"mrkt_tp": "000", "bf_mkrt_tp": "0", "stk_cd": "", "motn_tp": "0", "skip_stk": skip_stk,
+            "trde_qty_tp": "0", "min_trde_qty": "0", "max_trde_qty": "0", "trde_prica_tp": "0",
+            "min_trde_prica": "0", "max_trde_prica": "0", "motn_drc": "0", "stex_tp": stex_tp}
 
 
 class KiwoomClient:
@@ -344,3 +358,8 @@ class KiwoomClient:
         return self.paginate(TR_INVESTOR_DAILY, PATH_STOCK_INFO,
                              investor_daily_body(investor, strt_dt, end_dt, market, stex_tp=stex_tp),
                              INVESTOR_DAILY_LIST_KEY, max_pages)
+
+    def vi_stocks(self, *, stex_tp: str = STEX_UNIFIED, max_pages: int = VI_MAX_PAGES) -> list[dict]:
+        """ka10054 변동성완화장치(VI) 발동 종목 원시 행 — 오늘 발동 목록(연속조회 최대 max_pages).
+        한 종목이 여러 행(발동마다·거래소별 KRX/NXT)으로 올 수 있다(명세 예시) — 종목별 집계는 kiwoom.vi."""
+        return self.paginate(TR_VI, PATH_STOCK_INFO, vi_body(stex_tp=stex_tp), VI_LIST_KEY, max_pages)

@@ -1,6 +1,11 @@
 import { normalizeSources } from './newsSources'
 import type {
   DoubleBuyItem,
+  Featured,
+  FeaturedList,
+  FeaturedStock,
+  FeaturedVi,
+  ViStock,
   FlowItem,
   FlowSource,
   HotKeyword,
@@ -135,3 +140,52 @@ export function normalizeInvestorFlow(raw: unknown): InvestorFlow {
     updatedAt: strOrNull(r.updated_at),
   }
 }
+
+const featuredStock = (x: Obj): FeaturedStock | null => {
+  const ticker = str(x.ticker)
+  if (!ticker) return null
+  return { ticker, name: str(x.name) || ticker, market: strOrNull(x.market), close: num(x.close), changeRate: num(x.change_rate) }
+}
+
+function featuredList(v: unknown): FeaturedList {
+  const r = isObj(v) ? v : {}
+  const items = list(r.items, featuredStock).slice(0, 20)
+  const count = num(r.count)
+  return { count: count != null && count >= items.length ? Math.floor(count) : items.length, items }
+}
+
+const viStock = (x: Obj): ViStock | null => {
+  const ticker = str(x.ticker)
+  if (!ticker) return null
+  const dir = str(x.direction)
+  const count = num(x.count)
+  return {
+    ticker,
+    name: str(x.name) || ticker,
+    time: str(x.time),
+    kind: str(x.kind),
+    direction: dir === 'up' || dir === 'down' ? dir : null,
+    price: num(x.price),
+    rate: num(x.rate),
+    count: count != null && count > 0 ? Math.floor(count) : 1,
+  }
+}
+
+function featuredVi(v: unknown): FeaturedVi | null {
+  if (!isObj(v)) return null
+  const items = list(v.items, viStock).slice(0, 20)
+  const count = num(v.count)
+  return {
+    date: strOrNull(v.date),
+    updatedAt: strOrNull(v.updated_at),
+    count: count != null && count >= items.length ? Math.floor(count) : items.length,
+    items,
+  }
+}
+
+/** GET /market/featured → 오늘 특징주(신고가·신저가 각 최대 20, VI 는 없으면 null) */
+export function normalizeFeatured(raw: unknown): Featured {
+  const r = isObj(raw) ? raw : {}
+  return { date: strOrNull(r.date), highs: featuredList(r.highs), lows: featuredList(r.lows), vi: featuredVi(r.vi) }
+}
+

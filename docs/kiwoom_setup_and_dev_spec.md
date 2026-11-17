@@ -9,7 +9,7 @@
 > - 모든 조회는 `POST` + JSON body, TR 은 헤더 `api-id`. 연속조회는 응답 **헤더** `cont-yn`·`next-key` 를 다음 요청 헤더에 그대로.
 > - IP 불일치는 HTTP 403 이 아니라 **오류 8010**(토큰 발급 IP ≠ 요청 IP)으로 온다. 8005 = 토큰 무효.
 > - 거래소 구분은 종목코드 접미사: 없음=KRX, `_NX`=NXT, `_AL`=SOR(통합). `_AL` 거래량이 KIS UN(KRX+NXT 합산)과 같은지는 **실측 대상**(아래 [Step 3]).
-> - 진행 순서: ① 클라이언트·실측 도구(완료) → ② 연기금 프리셋 → ③ 일봉 폴백(**완료 2026-11-16** — 아래 "③단계 일봉 폴백") → ④ 대차잔고(④-1 **구현·상용 실측 완료 2026-11-17** — 아래 "④-1 대차잔고")·테마(④-2 **구현·상용 실측 2026-11-17, 교체 진행** — 아래 "④-2 테마")·시황 수급(④-3 **구현 2026-11-17, 상용 실측 대기** — 아래 "④-3 투자자별 순매수") 등 키움 데이터. **종목 분할 수집은 하지 않는다**(출처마다 기준이 달라짐).
+> - 진행 순서: ① 클라이언트·실측 도구(완료) → ② 연기금 프리셋 → ③ 일봉 폴백(**완료 2026-11-16** — 아래 "③단계 일봉 폴백") → ④ 대차잔고(④-1 **구현·상용 실측 완료 2026-11-17** — 아래 "④-1 대차잔고")·테마(④-2 **구현·상용 실측 2026-11-17, 교체 진행** — 아래 "④-2 테마")·시황 수급(④-3 **구현 2026-11-17, 상용 실측 대기** — 아래 "④-3 투자자별 순매수")·VI 발동(④-4 **구현 2026-11-17, 상용 실측 대기** — 아래 "④-4 VI 발동") 등 키움 데이터. **종목 분할 수집은 하지 않는다**(출처마다 기준이 달라짐).
 
 ---
 
@@ -353,6 +353,20 @@ docker compose -f docker-compose.prod.yml run --rm celery_worker python -m apps.
   - ETF(KODEX 레버리지·TIGER 반도체TOP10)가 원시 목록 상위에 섞임 — 수집은 보통주 유니버스 필터로 거른다(probe 는 원시 그대로 표시).
 - 실측 결과: (상용 실행 뒤 probe 요약 블록을 여기에)
 - **상용 순서**: 배포 → `probe --investors` → 단위 ✅ 이면 그대로(❌ 면 상수 수정 커밋·배포) → 다음 전광판 갱신(15:45·18:10·22:00) 뒤 시황 탭 캡션 '출처 키움'·금액(억 단위)이 상식적인지 확인. 키움이 실패하면 자동으로 pykrx → KIS 라 서비스 영향은 없다
+
+#### ④-4 VI 발동 — 오늘 특징주 카드 (ka10054, 구현 2026-11-17)
+설계: [`docs/superpowers/specs/2026-11-17-featured-stocks-design.md`](superpowers/specs/2026-11-17-featured-stocks-design.md), 동작 정리: `docs/data-collection.md` "오늘 특징주"
+- **명세(c7a3d25 `변동성완화장치발동종목요청(ka10054)`)**: `POST /api/dostk/stkinfo`(ka10099·ka10058 과 같은 경로, api-id 로 구분). body 13개 모두 필수 — `mrkt_tp`(000 전체·001 코스피·101 코스닥), `bf_mkrt_tp`(0 전체·1 정규시장·2 시간외단일가), `stk_cd`(선택, 공백이면 전체), `motn_tp`(0 전체·1 정적·2 동적·3 동적+정적), `skip_stk`(9자리 — 우선주·관리·투자경고/위험·투자주의·환기·단기과열·증거금100%·ETF·ETN 순, 0 포함·1 제외), `trde_qty_tp`·`min_trde_qty`·`max_trde_qty`, `trde_prica_tp`·`min_trde_prica`·`max_trde_prica`(백만원), `motn_drc`(0 전체·1 상승·2 하락), `stex_tp`(1 KRX·2 NXT·3 통합). 응답 LIST `motn_stk` — `stk_cd`·`stk_nm`·`acc_trde_qty`(1주)·`motn_pric`(발동가, 원)·`dynm_dispty_rt`·`static_dispty_rt`·`open_pric_pre_flu_rt`(%, 부호·소수 둘째 자리)·`trde_cntr_proc_time`·`virelis_time`(HHmmss)·`viaplc_tp`(동적/정적/동적+정적)·`dynm_stdpc`·`static_stdpc`(원)·`vimotn_cnt`(VI발동횟수)·`stex_tp`(KRX/NXT). 연속조회 `cont-yn`·`next-key`. 명세 예시에 같은 종목이 발동마다·거래소별로 여러 행.
+- 우리가 보내는 body: `{"mrkt_tp":"000","bf_mkrt_tp":"0","stk_cd":"","motn_tp":"0","skip_stk":"100000011","trde_qty_tp":"0","min_trde_qty":"0","max_trde_qty":"0","trde_prica_tp":"0","min_trde_prica":"0","max_trde_prica":"0","motn_drc":"0","stex_tp":"3"}`
+- 단위는 명세 설명을 믿지 않는다(ka10058 은 실측 백만원이었음) — 괴리율은 `to_float`(소수 유지·부호 두 개 처리), 가격은 `to_price`. probe 가 원시 문자열을 그대로 보여 준다.
+- 코드: `kiwoom/client.py`(`vi_body`·`vi_stocks`), `kiwoom/normalize.py`(`to_float`·`vi_row`), `kiwoom/vi.py`(집계·병합·장중 판정·연속 실패 중단), `collector/tasks/featured.py`(`poll_vi_stocks`), `shared/featured_store.py`(Redis)
+- 실측(상용 서버에서만, **장중에**):
+  ```bash
+  docker compose -f docker-compose.prod.yml run --rm celery_worker python -m apps.collector.kiwoom.probe --vi
+  ```
+  확인할 것: ① 행 수·`cont-yn`(쪽당 몇 행, 하루 몇 쪽) ② 거래소별 행 수(통합 `stex_tp=3` 에 NXT 행이 섞이는지) ③ 원시 `motn_pric` 이 원 단위인지(HTS 발동가와 비교)·괴리율이 % 소수인지·`acc_trde_qty` 단위 ④ 응답이 오늘 누적인지(장 초반·후반 두 번 실행해 비교) ⑤ 장 밖(16시 이후) 실행 시 오류·0행(시간 제한) ⑥ 발동 시각·종목이 HTS VI 발동 화면과 같은지
+- 실측 결과: (상용 실행 뒤 probe 요약 블록을 여기에)
+- **상용 순서**: 배포 → 장중 `probe --vi` → 단위·누적 여부 확인(다르면 normalize 수정 커밋·배포) → 5분 뒤 마켓 탭 '오늘 특징주'에 VI 발동 탭이 생기는지 확인. 실패가 이어지면 그날은 자동 중단, 신고저가 카드는 영향 없음
 
 ### [Step 4] 로컬 PC에서 상용 데이터 연동 확인 방법
 수집기가 상용 DB에 데이터를 적재하면, 로컬 PC에서 데이터가 잘 들어왔는지 확인합니다.

@@ -61,6 +61,7 @@ FRED 기본 시리즈: CPI·근원 CPI·근원 PCE·실업률·비농업 고용�
 | 08:30 평일 | `ai.generate_morning_briefing` | AI 모닝 브리핑 |
 | 08:30 토 | `ai.generate_weekly_briefing` | 주간 마감 브리핑 |
 | 09:00~15:35 30초마다 | `collector.poll_intraday_indices` | 장중 KOSPI·KOSDAQ·KOSPI200·원/달러 → Redis. 장 밖이면 바로 끝남 |
+| 09:00~15:30 5분마다(평일·거래일) | `collector.poll_vi_stocks` | 키움 VI 발동 종목(`ka10054`) → Redis — **키움 키 있을 때만**(상용), 아래 "오늘 특징주" |
 | 09:10~15:30 2분마다 | `ai.refresh_market_movers_list` | 급등락 순위(KIS) |
 | 09:10~15:30 10분마다 | `ai.analyze_market_movers` | 급등락 원인 AI 해설 |
 | 15:40 평일 | `collector.collect_market_indices` (KR) | 국내 지수 확정 종가 |
@@ -91,6 +92,7 @@ NXT 애프터마켓이 20:00 에 끝나야 통합(UN) 일봉이 확정되므로 
 | 6 | 시장 그룹 | 업종·테마별 등락률·순위(테마는 "테마 출처"가 고른 멤버십) | CH `market_group_daily`·`market_stock_daily` |
 | 7 | 스크리너 | 조건검색 지표(연기금 연속 순매수 일수 `pension_buy_days`·대차잔고 5거래일 증감률 `lending_chg5` 포함) | CH `screener_daily` |
 | 8 | 차트 패턴 | 기준일 하루를 지우고 다시 적재 | CH `chart_pattern_daily` |
+| 9 | 신고저가(`featured_highs`) | 52주 신고가·신저가(오늘 특징주 카드) — 아래 "오늘 특징주". 계산 대상 0종목이면 지난 스냅숏 유지 | Redis `market:featured:highs` |
 
 ### 세부 투자자 수급(`investor_detail_daily`)
 
@@ -151,6 +153,21 @@ NXT 애프터마켓이 20:00 에 끝나야 통합(UN) 일봉이 확정되므로 
 - **호출량**: ka90001 연속조회 몇 쪽 + 테마 수(수백) × ka90002 1쪽 ÷ `KIWOOM_RATE_PER_SEC`(기본 4/초) → 테마 300개면 약 **1.5분**, 500개면 약 2분.
 - **한계**: 과거 테마 구성 이력은 없다 — 60일 백필도 현재 스냅숏으로 계산(근사). 출처가 바뀐 첫날은 테마 id 가 달라 `market_group_daily` 의 KIS 테마 행이 숨김 행으로 덮이고, 순위 추이는 `backfill_market_groups` 로 다시 채운다.
 - **수동 실행**: `collector.collect_themes_kiwoom`(인자 없음) → `collector.backfill_market_groups`.
+
+### 오늘 특징주 — 52주 신고가·신저가 + VI 발동 (2026-11-17)
+
+설계: [`docs/superpowers/specs/2026-11-17-featured-stocks-design.md`](superpowers/specs/2026-11-17-featured-stocks-design.md). 웹·앱 마켓 탭 '오늘 특징주' 카드, API `GET /api/v1/market/featured`.
+
+- **신고저가**(키움 없이 우리 일봉, 개발·상용 모두) — 20:30 파이프라인 마지막 단계 `featured_highs`(`collector.compute_featured_highs`, 수동 실행 가능 — 인자 `as_of`·`top_n`).
+  - 정의: 스크리너 `is_new_high` 와 같은 기준(`screener/indicators.prev_high`·대칭 `prev_low`, 직전 251거래일). 당일 고가 > 직전 최고 → 신고가, 당일 저가 < 직전 최저(0 이하 저가 제외) → 신저가.
+  - 대상: 분석 유니버스(보통주 — ETF·스팩·우선주 제외, `market_repo.analysis_universe`) 중 봉 252개 이상·기준일 봉 있는 종목.
+  - 정렬: 신고가 등락률 내림차순, 신저가 오름차순, 각 상위 20 + 전체 개수. 장중에는 직전 거래일 결과(화면 캡션 '전 거래일(MM.DD) 종가 기준').
+  - 저장: Redis `market:featured:highs`(TTL 14일, 덮어쓰기). CH 테이블은 만들지 않았다(이력 화면은 범위 밖).
+- **VI 발동**(키움 `ka10054`, **키움 키 있을 때만** — 상용) — beat `poll-vi-stocks`(평일 9~15시 5분마다, 태스크가 거래일·09:00~15:30 만 호출).
+  - body: `mrkt_tp=000`(전체)·`bf_mkrt_tp=0`·`motn_tp=0`·`skip_stk=100000011`(우선주·ETF·ETN 제외)·거래량/거래대금 조건 안 씀·`motn_drc=0`·`stex_tp=3`(통합). 응답 `motn_stk`, 연속조회 최대 10쪽.
+  - 같은 종목 여러 행(발동마다·KRX/NXT)은 최근 발동 행 + 발동 횟수 최댓값으로 묶고 이전 스냅숏과 병합. Redis `market:vi:{YYYYMMDD}`(TTL 2일).
+  - 호출량: 하루 79회(+연속조회). 그날 연속 3회 실패·8010 이면 남은 호출 중단(`market:vi:halt:{YYYYMMDD}`), 실패해도 지난 스냅숏 유지.
+  - 키 없음(개발 서버)·오늘 키 없음 → API `vi: null` → 화면은 VI 탭을 숨긴다(신고저가는 그대로).
 
 ### 시황 수급 전광판 출처 (키움 → pykrx → KIS, 2026-11-17)
 
@@ -222,6 +239,7 @@ NXT 애프터마켓이 20:00 에 끝나야 통합(UN) 일봉이 확정되므로 
 | **초기 데이터 준비** | 관리자 화면 버튼 → `collector.bootstrap_data` | 새 서버용. 수집 1~9('연기금 등 세부 수급 30거래일'·'대차잔고 60거래일' 포함) → 계산(CANSLIM → '테마(키움)' → 시장 그룹 → 조건검색 → 패턴)을 순서대로. 16:00~21:30 에는 시작 안 함(정기 수집과 KIS 한도 충돌 방지). 세부 수급은 15:40 전, 대차잔고·테마(키움)는 키움 키가 없으면(개발 서버) 그 단계만 '건너뜀'. **21:30 이후에 누르면 모든 단계가 한 번에 채워진다**. 다시 누르면 이어서 채움 |
 | 전종목 장기 백필 | `collector.backfill_all_daily` | 개월 수 지정, 청크로 받아 이동평균은 한 번에 |
 | 세부 투자자 30거래일 백필 | `collector.backfill_investor_detail` | `{"days": 30}` 기본. 끝나면 `collector.backfill_screener` 로 `pension_buy_days` 과거 값을 채운다 |
+| 오늘 특징주 신고저가 | `collector.compute_featured_highs` | 인자 없으면 일봉 최신 거래일. 배포 직후 20:30 전에 카드를 채울 때 |
 | 키움 테마 스냅숏(상용) | `collector.collect_themes_kiwoom` | 인자 없음, 키움 키 없으면 skipped. 끝나면 `collector.backfill_market_groups` 로 순위 추이를 새 테마로 채운다 |
 | 대차잔고 60거래일 백필(상용) | `collector.backfill_lending` | `{"days": 60}` 기본, 키움 키 없으면 skipped. 끝나면 `collector.backfill_screener` 로 `lending_chg5` 과거 값을 채운다 |
 | 계산 60일 백필 | CANSLIM·시장 그룹·스크리너 태스크 | 과거 날짜도 **현재** 재무·테마·상장주식수로 계산(근사) |

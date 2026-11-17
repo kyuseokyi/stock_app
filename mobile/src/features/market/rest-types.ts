@@ -101,3 +101,53 @@ export interface Heatmap {
   date: string | null;
   groups: HeatmapGroup[];
 }
+
+/** 오늘 특징주 — 52주 신고가·신저가 종목 */
+export interface FeaturedStock {
+  ticker: string;
+  name: string;
+  market: string | null;
+  close: number | null;
+  /** 당일 등락률(%) */
+  changeRate: number | null;
+}
+
+export interface FeaturedList {
+  /** 전체 종목 수(목록은 상위 20까지만 옴) */
+  count: number;
+  items: FeaturedStock[];
+}
+
+export type ViDirection = 'up' | 'down';
+
+/** VI(변동성완화장치) 발동 종목 — 같은 종목은 최근 발동 한 줄 + 횟수 */
+export interface ViStock {
+  ticker: string;
+  name: string;
+  /** 최근 발동 시각 'HH:MM:SS' */
+  time: string;
+  /** 정적·동적·동적+정적 */
+  kind: string;
+  direction: ViDirection | null;
+  /** 발동가(원) */
+  price: number | null;
+  /** 괴리율(%) */
+  rate: number | null;
+  count: number;
+}
+
+export interface FeaturedVi {
+  date: string | null;
+  updatedAt: string | null;
+  count: number;
+  items: ViStock[];
+}
+
+/** GET /market/featured — vi 가 null 이면(키움 미연결·수집 전) VI 칸을 숨긴다 */
+export interface Featured {
+  /** 신고저가 기준 거래일(20:30 계산 — 장중에는 직전 거래일) */
+  date: string | null;
+  highs: FeaturedList;
+  lows: FeaturedList;
+  vi: FeaturedVi | null;
+}

@@ -35,6 +35,22 @@ def to_int(value) -> int:
         return int(float(s))
 
 
+def to_float(value) -> float:
+    """부호를 살려 실수로(괴리율·등락률 % — to_int 는 소수를 버리므로 쓰면 안 된다). 부호 두 개('+-1.25')는 to_int 와
+    같게 처리. 빈 값·부호만·숫자가 아니면 0.0."""
+    if value is None:
+        return 0.0
+    s = str(value).replace(",", "").replace("%", "").strip()
+    if s[:2] in ("+-", "-+", "--"):
+        s = "-" + s[2:]
+    elif s[:2] == "++":
+        s = s[1:]
+    try:
+        return float(s)
+    except ValueError:
+        return 0.0
+
+
 def to_price(value) -> int:
     """가격 — 키움은 등락 방향을 부호로 붙이므로 절댓값."""
     return abs(to_int(value))
@@ -167,3 +183,42 @@ def implied_amt_unit(rows: list[dict]) -> int | None:
         return None
     mid = ratios[len(ratios) // 2]
     return 10 ** max(0, round(math.log10(mid)))
+
+
+# ------------------------------------------------------------------ VI 발동(ka10054)
+def _hhmmss(value) -> str:
+    """'HHmmss'(앞 0 이 빠진 5자리도) → 'HH:MM:SS'. 형식이 틀리면 ''."""
+    s = str(value or "").strip()
+    if not s.isdigit() or len(s) > 6:
+        return ""
+    s = s.zfill(6)
+    return f"{s[:2]}:{s[2:4]}:{s[4:]}"
+
+
+def vi_row(raw: dict) -> dict | None:
+    """ka10054 `motn_stk` 한 행 → VI 발동 dict. 종목코드가 6자리로 안 풀리면 None.
+
+    방향(direction): 동적 괴리율 부호, 0 이면 정적 괴리율 부호(up/down, 둘 다 0 이면 None).
+    단위(명세): 발동가 원, 괴리율·시가대비등락률 %(소수 둘째 자리) — 상용 probe --vi 로 실측 확인.
+    """
+    ticker = plain_ticker(raw.get("stk_cd"))
+    if ticker is None:
+        return None
+    dyn = to_float(raw.get("dynm_dispty_rt"))
+    st = to_float(raw.get("static_dispty_rt"))
+    rate = dyn if dyn else st
+    return {
+        "ticker": ticker,
+        "name": str(raw.get("stk_nm") or "").strip() or ticker,
+        "time": _hhmmss(raw.get("trde_cntr_proc_time")),
+        "released_at": _hhmmss(raw.get("virelis_time")),
+        "kind": str(raw.get("viaplc_tp") or "").strip(),
+        "direction": "up" if rate > 0 else "down" if rate < 0 else None,
+        "price": to_price(raw.get("motn_pric")),
+        "rate": rate,
+        "dynamic_rate": dyn,
+        "static_rate": st,
+        "open_rate": to_float(raw.get("open_pric_pre_flu_rt")),
+        "count": abs(to_int(raw.get("vimotn_cnt"))),
+        "exchange": str(raw.get("stex_tp") or "").strip(),
+    }
