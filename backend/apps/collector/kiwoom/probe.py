@@ -7,6 +7,8 @@
     테마(ka90001·ka90002) 소량 실측: --themes — 테마 수·앞 10개·첫 테마 구성 종목 앞 10개(일봉 비교는 건너뜀).
     투자자별 순매수(ka10058) 소량 실측: --investors [--investors-date 20261116] — 외국인·기관계·연기금 ×
       코스피·코스닥 첫 쪽만(6회), 투자자별 상위 5종목·원시 금액·단위 추정(일봉 비교는 건너뜀).
+    VI 발동(ka10054) 소량 실측(장중에): --vi — 첫 쪽 1회만, 행 수·cont-yn·원시 행(시각·거래소·발동가·괴리율·횟수·
+      누적거래량 원시 값 그대로)·종목별 집계 결과(일봉 비교는 건너뜀).
 
 - 키가 없으면 안내만 출력하고 종료(코드 0, 호출 없음).
 - 앱키·시크릿·토큰 값은 절대 출력하지 않는다.
@@ -33,12 +35,15 @@ from apps.collector.kiwoom.client import (
     TR_LENDING,
     TR_THEME_GROUPS,
     TR_THEME_MEMBERS,
+    TR_VI,
+    VI_LIST_KEY,
     KiwoomApiError,
     KiwoomClient,
     KiwoomError,
     KiwoomIpError,
     investor_daily_body,
     theme_groups_body,
+    vi_body,
 )
 from apps.collector.kiwoom.lending import calendar_start
 from apps.collector.kiwoom.normalize import (
@@ -51,6 +56,7 @@ from apps.collector.kiwoom.normalize import (
     investor_flow_row,
     lending_row,
     theme_member_ticker,
+    vi_row,
 )
 from shared.kiwoom_config import get_kiwoom_config
 
@@ -64,6 +70,7 @@ THEME_SHOW = 10    # --themes 에 보여 줄 앞쪽 테마·종목 수
 INVESTOR_SHOW = 5  # --investors 투자자별 상위 종목 수
 _INVESTOR_LABELS = (("foreign", "외국인"), ("institution", "기관계"), ("pension", "연기금"))
 _INVESTOR_MARKETS = (("kospi", "코스피"), ("kosdaq", "코스닥"))
+VI_SHOW = 10       # --vi 원시 행·집계 종목 표시 수
 THEME_MAX_PAGES = 50  # --themes 테마 목록 연속조회 상한(소량 실측이지만 전체 테마 수를 알아야 한다)
 
 Bar = dict  # daily_row 모양(date·open·high·low·close·volume·trading_value)
@@ -96,6 +103,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                    help="테마(ka90001·ka90002) 소량 실측만 — 테마 수·앞 10개·첫 테마 구성 종목(일봉 비교는 건너뜀)")
     p.add_argument("--investors", action="store_true",
                    help="투자자별 순매수(ka10058) 소량 실측만 — 외국인·기관계·연기금 상위 5(일봉 비교는 건너뜀)")
+    p.add_argument("--vi", action="store_true",
+                   help="VI 발동(ka10054) 소량 실측만 — 첫 쪽 1회, 원시 행·종목별 집계(장중에 실행, 일봉 비교는 건너뜀)")
     p.add_argument("--investors-date", dest="investors_date", type=_yyyymmdd, default=None,
                    help="--investors 기준일 YYYYMMDD (기본 직전 평일 — 공휴일은 고려하지 않음)")
     p.add_argument("--lending-tickers", dest="lending_tickers", default="005930,000660",
@@ -411,6 +420,71 @@ def run_investors(args: argparse.Namespace, *, client, out: Callable[[str], None
     return 0
 
 
+# ------------------------------------------------------------------ VI 발동(ka10054)
+_VI_RAW_FIELDS = ("stk_cd", "stex_tp", "viaplc_tp", "trde_cntr_proc_time", "virelis_time", "motn_pric",
+                  "dynm_dispty_rt", "static_dispty_rt", "open_pric_pre_flu_rt", "vimotn_cnt", "acc_trde_qty")
+
+
+def run_vi(args: argparse.Namespace, *, client, out: Callable[[str], None], now: datetime | None = None) -> int:
+    """ka10054 첫 쪽 1회 — 행 수·cont-yn·거래소별 행 수·원시 행(단위 실측용으로 원시 문자열 그대로)·종목별 집계."""
+    from apps.collector.kiwoom.vi import aggregate  # probe 단독 실행 때만 필요
+
+    now = now or datetime.now(KST)
+    out("")
+    out(f"== VI 발동 (ka10054, {now.strftime('%Y-%m-%d %H:%M')} KST, mrkt_tp=000 · stex_tp=3 통합 · "
+        f"skip_stk={vi_body()['skip_stk']}) ==")
+    summary: list[str] = []
+    try:
+        r = client.post(TR_VI, PATH_STOCK_INFO, vi_body())
+    except KiwoomApiError as e:
+        line = f"오류 {e.code}: {e.msg}"
+        out(line)
+        summary.append(f"ka10054: {line}")
+        raw = None
+    except KiwoomError as e:
+        line = f"오류: {e}"
+        out(line)
+        summary.append(f"ka10054: {line}")
+        raw = None
+    else:
+        raw = list(r.data.get(VI_LIST_KEY) or [])
+        by_ex: dict[str, int] = {}
+        for x in raw:
+            k = str(x.get("stex_tp", "")).strip() or "-"
+            by_ex[k] = by_ex.get(k, 0) + 1
+        out(f"응답 {len(raw)}행 (첫 쪽, cont-yn={'Y' if r.cont_yn else 'N'}) · 거래소별 {by_ex}")
+        out(f"원시 첫 행 키: {sorted(raw[0]) if raw else '-'}")
+        if raw:
+            out("원시 행(앞 %d개, 값은 응답 문자열 그대로 — 단위 확인용):" % VI_SHOW)
+            out("  " + " | ".join(_VI_RAW_FIELDS))
+            for x in raw[:VI_SHOW]:
+                out("  " + " | ".join(str(x.get(k, "")) for k in _VI_RAW_FIELDS))
+        agg = aggregate([vi_row(x) for x in raw])
+        items = sorted(agg.values(), key=lambda x: (x.get("time", ""), x["ticker"]), reverse=True)
+        out("")
+        out(f"종목별 집계 {len(items)}종목 (최근 발동 순, 앞 {VI_SHOW}개):")
+        out(f"  {'시각':<8} {'종목':<8} {'이름':<14} {'구분':<8} {'방향':<4} {'발동가':>10} {'괴리율':>8} "
+            f"{'횟수':>4} 거래소")
+        for x in items[:VI_SHOW]:
+            arrow = {"up": "상승", "down": "하락"}.get(x["direction"] or "", "-")
+            out(f"  {x['time']:<8} {x['ticker']:<8} {x['name'][:14]:<14} {x['kind']:<8} {arrow:<4} "
+                f"{x['price']:>10,} {x['rate']:>+8.2f} {x['count']:>4} {x['exchange']}")
+        times = sorted(x["time"] for x in items if x["time"])
+        span = f"{times[0]} ~ {times[-1]}" if times else "-"
+        summary.append(f"ka10054: 첫 쪽 {len(raw)}행, cont-yn={'Y' if r.cont_yn else 'N'}, 거래소별 {by_ex}, "
+                       f"집계 {len(items)}종목, 발동 시각 범위 {span}")
+        summary.append(f"원시 첫 행 키: {sorted(raw[0]) if raw else '-'}")
+
+    out("")
+    out("---- 요약 (docs/kiwoom_setup_and_dev_spec.md ④-4 실측 결과에 붙여 넣기) ----")
+    out(f"- 실측 {now.strftime('%Y-%m-%d %H:%M')} KST")
+    for line in summary:
+        out(f"- {line}")
+    out("- 확인할 것: 발동가 단위(원)·괴리율 %(소수 둘째 자리)·누적거래량 단위, 응답이 오늘 누적인지, 장 밖 시간 제한")
+    out("----")
+    return 0
+
+
 # ------------------------------------------------------------------ 실행
 def run(args: argparse.Namespace, *, client, ch_fetch: Callable, out: Callable[[str], None]) -> int:
     t, dt, non_nxt = args.ticker, args.date, args.non_nxt
@@ -430,6 +504,8 @@ def run(args: argparse.Namespace, *, client, ch_fetch: Callable, out: Callable[[
         return run_themes(args, client=client, out=out)
     if getattr(args, "investors", False):
         return run_investors(args, client=client, out=out)
+    if getattr(args, "vi", False):
+        return run_vi(args, client=client, out=out)
 
     # 2) NXT 상장 종목: KRX / _NX / _AL / CH
     out("")
