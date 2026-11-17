@@ -11,6 +11,7 @@ const STEP_LABEL: Record<string, string> = {
   canslim: 'CANSLIM',
   themes_kiwoom: '테마(키움)',
   market_groups: '시장 그룹',
+  featured_highs: '신고저가(오늘 특징주)',
 }
 
 export default function PipelineCard({ record }: { record: PipelineRecord | null }) {

@@ -36,6 +36,7 @@ celery_app = Celery(
         "apps.collector.tasks.market_groups",
         "apps.collector.tasks.screener",
         "apps.collector.tasks.patterns",
+        "apps.collector.tasks.featured",
         "apps.collector.tasks.push_sends",
         "apps.collector.tasks.bootstrap",
         "apps.ai_analyst.tasks",

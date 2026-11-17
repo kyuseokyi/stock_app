@@ -155,5 +155,6 @@ def test_pipeline_patterns_failure_is_isolated(monkeypatch):
         raise RuntimeError("patterns down")
 
     monkeypatch.setattr(md, "compute_patterns", boom)
+    monkeypatch.setattr(md, "compute_featured_highs", lambda: {"highs": 0})
     out = md.daily_market_pipeline()
-    assert list(out)[-1] == "patterns" and "patterns down" in out["patterns"]["error"] and out["screener"] == {"rows": 1}
+    assert list(out)[-2] == "patterns" and out["featured_highs"] == {"highs": 0} and "patterns down" in out["patterns"]["error"] and out["screener"] == {"rows": 1}

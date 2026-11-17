@@ -171,11 +171,12 @@ def test_daily_pipeline_runs_screener_last_even_if_groups_fail(monkeypatch):
     monkeypatch.setattr(md, "compute_market_groups", groups_boom)
     monkeypatch.setattr(md, "compute_screener", lambda: order.append("screener") or {"rows": 7})
     monkeypatch.setattr(md, "compute_patterns", lambda: order.append("patterns") or {"rows": 3})
+    monkeypatch.setattr(md, "compute_featured_highs", lambda: order.append("featured") or {})
     out = md.daily_market_pipeline()
     assert order == ["daily", "idx", "investor", "investor_detail", "lending", "canslim", "themes", "groups", "screener",
-                     "patterns"]
+                     "patterns", "featured"]
     assert "error" in out["market_groups"] and out["screener"] == {"rows": 7}
-    assert list(out)[-1] == "patterns"
+    assert list(out)[-2:] == ["patterns", "featured_highs"]
 
 
 def test_daily_pipeline_screener_failure_is_recorded_not_raised(monkeypatch):
@@ -192,6 +193,7 @@ def test_daily_pipeline_screener_failure_is_recorded_not_raised(monkeypatch):
     monkeypatch.setattr(md, "compute_canslim", lambda: {})
     monkeypatch.setattr(md, "compute_market_groups", lambda: {})
     monkeypatch.setattr(md, "compute_patterns", lambda: {})
+    monkeypatch.setattr(md, "compute_featured_highs", lambda: {})
 
     def boom():
         raise RuntimeError("screener down")
@@ -200,7 +202,8 @@ def test_daily_pipeline_screener_failure_is_recorded_not_raised(monkeypatch):
     out = md.daily_market_pipeline()          # 예외가 밖으로 새지 않는다
     assert "screener down" in out["screener"]["error"]
     rec = pipeline_record.load(fake)
-    last = rec["steps"][-2]
+    last = rec["steps"][-3]
     assert last["name"] == "screener" and last["ok"] is False and "screener down" in last["summary"]
-    assert rec["steps"][-1]["name"] == "patterns" and rec["steps"][-1]["ok"] is True
-    assert all(s["ok"] for s in rec["steps"][:-2])
+    assert rec["steps"][-2]["name"] == "patterns" and rec["steps"][-2]["ok"] is True
+    assert rec["steps"][-1]["name"] == "featured_highs" and rec["steps"][-1]["ok"] is True
+    assert all(s["ok"] for s in rec["steps"][:-3])
