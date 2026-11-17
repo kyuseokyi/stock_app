@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
-import { cancelPushSend, createFundNotice, listPushSends, previewFundNotice } from '../api/fundNotices'
+import { cancelPushSend, createFundNotice, listPushSends, previewFundNotice, sendTestPush } from '../api/fundNotices'
 import { createPushTemplate, deletePushTemplate, listPushTemplates, updatePushTemplate } from '../api/pushTemplates'
 import { apiErrorDetail, apiErrorMessage } from '../lib/apiError'
 import { minScheduleLocal, renderPushText, todayKst } from '../lib/pushText'
 import { showToast } from '../lib/toast'
 import type { FundNoticePreviewOut, PushSendMode, PushSendOut, PushTemplateOut } from '../types/api'
 
+const TAB_LABEL = { send: '발송', templates: '문구 템플릿', test: '테스트 알림' } as const
 const MODE_LABEL: Record<PushSendMode, string> = { now: '즉시', test: '테스트', scheduled: '예약' }
 const STATUS_LABEL: Record<PushSendOut['status'], string> = {
   scheduled: '예약됨', sending: '발송 중', done: '완료', failed: '실패', cancelled: '취소',
@@ -26,25 +27,25 @@ function errorCode(e: unknown): string | undefined {
   return typeof d === 'object' && d !== null && 'code' in d ? String((d as { code: unknown }).code) : undefined
 }
 
-// 펀드 리포트 알림 — 작성·발송(테스트/즉시/예약) · 발송 이력 · 문구 템플릿
+// 펀드 리포트 알림 — 작성·발송(테스트/즉시/예약) · 발송 이력 · 문구 템플릿 · 단순 테스트 알림
 export default function FundNoticesPage() {
-  const [tab, setTab] = useState<'send' | 'templates'>('send')
+  const [tab, setTab] = useState<'send' | 'templates' | 'test'>('send')
   return (
     <div>
       <h2 className="mb-6 text-2xl font-bold text-slate-900">펀드 리포트 알림</h2>
       <div className="mb-4 flex gap-2">
-        {(['send', 'templates'] as const).map((t) => (
+        {(['send', 'templates', 'test'] as const).map((t) => (
           <button
             key={t}
             aria-pressed={tab === t}
             onClick={() => setTab(t)}
             className={`rounded-lg px-4 py-2 text-sm font-medium ${tab === t ? 'bg-indigo-600 text-white' : 'border border-slate-200 bg-white text-slate-600'}`}
           >
-            {t === 'send' ? '발송' : '문구 템플릿'}
+            {TAB_LABEL[t]}
           </button>
         ))}
       </div>
-      {tab === 'send' ? <SendPanel /> : <TemplatesPanel />}
+      {tab === 'send' ? <SendPanel /> : tab === 'templates' ? <TemplatesPanel /> : <TestPushPanel />}
     </div>
   )
 }
@@ -374,5 +375,57 @@ function TemplatesPanel() {
         </table>
       </div>
     </div>
+  )
+}
+
+// 단순 테스트 알림 — 입력한 문구를 그대로 내 기기로. 펀드 리포트·발송 이력과 무관(앱은 탭하면 열기만 한다)
+function TestPushPanel() {
+  const [title, setTitle] = useState('테스트 알림')
+  const [body, setBody] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [last, setLast] = useState<string | null>(null)
+  const ready = title.trim() !== '' && body.trim() !== ''
+
+  const send = async (e: FormEvent) => {
+    e.preventDefault()
+    if (!ready || busy) return
+    setBusy(true)
+    try {
+      const r = await sendTestPush({ title: title.trim(), body: body.trim() })
+      const at = new Date().toLocaleTimeString('ko-KR', { timeStyle: 'short' })
+      setLast(`${at} · 내 기기 ${r.target_count}대로 보냈어요`)
+      showToast(`내 기기 ${r.target_count}대로 보냈어요`, { icon: '📨' })
+    } catch (err) {
+      showToast(apiErrorMessage(err), { icon: '⚠️' })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <form onSubmit={(e) => void send(e)} className="space-y-3 rounded-xl border border-slate-200 bg-white p-4">
+      <p className="text-sm text-slate-500">
+        입력한 문구를 <b>관리자 계정으로 로그인하고 알림을 허용한 내 기기</b>로만 보냅니다. 다른 사용자에게는 가지 않고 발송 이력에도 남지 않아요.
+        앱이 화면에 떠 있으면 알림이 보이지 않을 수 있으니 앱을 닫거나 다른 화면으로 나간 뒤 보내세요.
+      </p>
+      <label className="block text-sm text-slate-600">
+        제목 <span className="text-slate-400">({title.length}/100)</span>
+        <input value={title} maxLength={100} onChange={(e) => setTitle(e.target.value)} className={inputClass} />
+      </label>
+      <label className="block text-sm text-slate-600">
+        본문 <span className="text-slate-400">({body.length}/500)</span>
+        <textarea value={body} maxLength={500} rows={2} onChange={(e) => setBody(e.target.value)} className={inputClass} />
+      </label>
+      <div className="flex flex-wrap items-center gap-3">
+        <button
+          type="submit"
+          disabled={!ready || busy}
+          className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-40"
+        >
+          {busy ? '보내는 중…' : '내 기기로 보내기'}
+        </button>
+        {last && <span className="text-sm text-slate-500">{last}</span>}
+      </div>
+    </form>
   )
 }
