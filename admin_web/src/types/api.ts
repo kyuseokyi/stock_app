@@ -126,6 +126,16 @@ export interface PushSendListOut {
   total: number
 }
 
+/** 관리자 단순 테스트 알림 — 관리자 본인 기기로만 (POST /admin/push-test) */
+export interface TestPushIn {
+  title: string
+  body: string
+}
+
+export interface TestPushOut {
+  target_count: number
+}
+
 export interface FundNoticePreviewOut {
   target_count: number
   my_device_count: number

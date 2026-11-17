@@ -308,3 +308,53 @@ def test_wake_failure_does_not_change_status(maker, monkeypatch):
     with maker() as db:
         s = db.get(PushSend, sid)
         assert (s.status, s.success_count, s.failure_count) == ("done", 2, 0)
+
+
+# ── 관리자 단순 테스트 알림 ──
+
+
+def _seed_users(mk) -> tuple[int, int]:
+    with mk() as db:
+        admin = User(nickname="관리자", role=UserRole.ADMIN, is_active=True)
+        other = User(nickname="일반", role=UserRole.FREE, is_active=True)
+        db.add_all([admin, other])
+        db.flush()
+        db.add_all([
+            PushDevice(token="ExponentPushToken[a1]", user_id=admin.id, platform="android", fund_notice=False),
+            PushDevice(token="ExponentPushToken[a2]", user_id=admin.id, platform="android", fund_notice=True),
+            PushDevice(token="ExponentPushToken[o1]", user_id=other.id, platform="android", fund_notice=True),
+        ])
+        db.commit()
+        return admin.id, other.id
+
+
+def test_send_test_push_only_admin_devices_with_text(maker, monkeypatch):
+    admin_id, _ = _seed_users(maker)
+    fake = FakeSender(invalid={"ExponentPushToken[a2]"})
+    monkeypatch.setattr(push_sends, "get_push_sender", lambda: fake)
+    out = push_sends.send_test_push(admin_id, "테스트 제목", "테스트 본문")
+    assert out == {"user_id": admin_id, "target": 2, "success": 1}
+    tokens, msg = fake.calls[0]
+    assert sorted(tokens) == ["ExponentPushToken[a1]", "ExponentPushToken[a2]"]  # 다른 사용자 기기는 제외
+    assert (msg.title, msg.body, msg.data) == ("테스트 제목", "테스트 본문", {"type": "test"})
+    assert len(fake.calls) == 1  # 깨우기용 무음 발송 없음
+    with maker() as db:  # 무효 토큰만 정리, 이력 없음
+        left = sorted(db.execute(select(PushDevice.token)).scalars())
+        assert left == ["ExponentPushToken[a1]", "ExponentPushToken[o1]"]
+        assert db.execute(select(PushSend)).first() is None
+
+
+def test_send_test_push_no_device_and_sender_error(maker, monkeypatch):
+    _seed_users(maker)
+    fake = FakeSender()
+    monkeypatch.setattr(push_sends, "get_push_sender", lambda: fake)
+    assert push_sends.send_test_push(9999, "t", "b") == {"user_id": 9999, "target": 0, "success": 0}
+    assert fake.calls == []
+
+    class Boom(FakeSender):
+        def send_batch(self, tokens, message):
+            raise RuntimeError("expo down")
+
+    admin_id = 1
+    monkeypatch.setattr(push_sends, "get_push_sender", lambda: Boom())
+    assert push_sends.send_test_push(admin_id, "t", "b") == {"user_id": admin_id, "target": 2, "success": 0}

@@ -89,3 +89,21 @@ class PushTemplateOut(BaseModel):
     last_sent_at: dt.datetime | None
     created_at: dt.datetime
     updated_at: dt.datetime
+
+
+class TestPushIn(BaseModel):
+    """관리자 단순 테스트 알림 — 관리자 본인 기기로만 보낸다."""
+
+    title: str = Field(min_length=1, max_length=100)
+    body: str = Field(min_length=1, max_length=500)
+
+    @field_validator("title", "body")
+    @classmethod
+    def _not_blank(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("공백만 입력할 수 없습니다.")
+        return v
+
+
+class TestPushOut(BaseModel):
+    target_count: int
