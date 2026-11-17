@@ -1,8 +1,8 @@
 import axios from 'axios'
 import { STOCK_API_URL } from '../config'
-import { normalizeInvestorFlow, normalizeMorningBrief, normalizeMovers } from '../lib/marketRest'
+import { normalizeFeatured, normalizeInvestorFlow, normalizeMorningBrief, normalizeMovers } from '../lib/marketRest'
 import { deriveStockApiUrl } from '../lib/stockApiUrl'
-import type { InvestorFlow, MorningBrief, Movers } from '../types/marketRest'
+import type { Featured, InvestorFlow, MorningBrief, Movers } from '../types/marketRest'
 
 // stock_api REST(마켓 AI, 공개 GET) — 응답은 lib/marketRest 로 모양을 맞춰 돌려준다.
 // GraphQL 계약 파일(api/market.ts)과 분리: 그쪽은 백엔드 계약 테스트가 파일을 직접 읽는다.
@@ -26,4 +26,8 @@ export async function getMovers(timeoutMs?: number): Promise<Movers> {
 
 export async function getInvestorFlow(timeoutMs?: number): Promise<InvestorFlow> {
   return normalizeInvestorFlow(await getJson('/api/v1/market/investor-flow', timeoutMs))
+}
+
+export async function getFeatured(timeoutMs?: number): Promise<Featured> {
+  return normalizeFeatured(await getJson('/api/v1/market/featured', timeoutMs))
 }
