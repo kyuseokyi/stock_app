@@ -98,6 +98,7 @@ def env(monkeypatch):
     monkeypatch.setattr(bs, "collect_market_indices", lambda region: stub(f"indices_{region.lower()}")(region))
     monkeypatch.setattr(bs, "collect_investor_daily", stub("investor"))
     monkeypatch.setattr(bs, "backfill_investor_detail", stub("investor_detail"))
+    monkeypatch.setattr(bs, "backfill_lending", stub("lending"))
     monkeypatch.setattr(bs, "collect_fundamentals", stub("fundamentals"))
     monkeypatch.setattr(bs, "collect_ipo_events", stub("ipo", {"events": 3}))
     monkeypatch.setattr(bs, "collect_macro_series", stub("macro", {"skipped": "FRED_API_KEY 없음"}))
@@ -246,7 +247,7 @@ def test_kis_window_block_mid_run(env):
                 kst(2026, 10, 22, 18, 59), kst(2026, 10, 22, 19, 0))
     out = bs.run_bootstrap(37, now_fn=now)
     assert env.keys() == ["daily_backfill", "indices_kr", "indices_us"]
-    assert [out["states"][k] for k in KEYS[3:]] == ["skipped"] * 9
+    assert [out["states"][k] for k in KEYS[3:]] == ["skipped"] * len(KEYS[3:])
     p = env.progress()
     assert all(s["reason"] == bs.KIS_BLOCKED_MSG for s in p["steps"][3:])
 
@@ -288,4 +289,13 @@ def test_investor_detail_time_limit_marks_step_skipped(env, monkeypatch):
     out = bs.run_bootstrap(37, task_id="t1", now_fn=clock(kst(2026, 10, 22, 10, 0)))
     assert out["states"]["investor_detail"] == "skipped"
     assert out["states"]["macro"] == "ok"  # FRED 키 없음 skipped 는 기존처럼 ok
+    assert out["states"]["screener"] == "ok"
+
+
+def test_lending_step_after_investor_detail_and_skips_without_kiwoom(env, monkeypatch):
+    """대차잔고 단계 — 세부 수급 다음, 계산 단계 앞. 키움 키가 없으면 실패가 아니라 skipped(개발 서버)."""
+    assert KEYS.index("lending") == KEYS.index("investor_detail") + 1 < KEYS.index("screener")
+    monkeypatch.setattr(bs, "backfill_lending", lambda **k: {"skipped": "키움 키 없음"})
+    out = bs.run_bootstrap(37, task_id="t1", now_fn=clock(kst(2026, 10, 22, 10, 0)))
+    assert out["states"]["lending"] == "skipped"
     assert out["states"]["screener"] == "ok"

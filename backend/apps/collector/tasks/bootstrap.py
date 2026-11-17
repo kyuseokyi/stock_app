@@ -24,7 +24,9 @@ from apps.collector.celery_app import celery_app
 from apps.collector.tasks.canslim import backfill_canslim
 from apps.collector.tasks.market_data import (
     DETAIL_BACKFILL_DAYS,
+    LENDING_BACKFILL_DAYS,
     backfill_investor_detail,
+    backfill_lending,
     collect_fundamentals,
     collect_investor_daily,
     collect_ipo_events,
@@ -59,6 +61,7 @@ STEPS: tuple[tuple[str, str, bool], ...] = (
     ("indices_us", "미국 지수·환율", True),
     ("investor", "투자자별 순매수", True),
     ("investor_detail", "연기금 등 세부 수급 30거래일", True),
+    ("lending", "대차잔고 60거래일(키움 — 키 없으면 건너뜀)", False),
     ("fundamentals", "재무(연간·분기)", True),
     ("ipo", "공모주 일정", True),
     ("macro", "거시 지표(FRED)", True),
@@ -82,6 +85,7 @@ def _runners(months: int, end: str) -> dict[str, Callable[[], object]]:
         "indices_us": lambda: collect_market_indices("US"),
         "investor": lambda: collect_investor_daily(),
         "investor_detail": lambda: backfill_investor_detail(days=DETAIL_BACKFILL_DAYS, end=end),
+        "lending": lambda: backfill_lending(days=LENDING_BACKFILL_DAYS, end=end),
         "fundamentals": lambda: collect_fundamentals(),
         "ipo": lambda: collect_ipo_events(),
         "macro": lambda: collect_macro_series(),
@@ -170,8 +174,8 @@ def run_bootstrap(months: int = 37, task_id: str | None = None,
         if key == "daily_backfill" and isinstance(result, dict) and "error" not in result:
             summary = f"성공 {result.get('ok', 0)} · 실패 {result.get('failed_count', 0)} — {summary}"
         state = "failed" if failed else "ok"
-        if key == "investor_detail" and not failed and isinstance(result, dict) and result.get("skipped"):
-            state = "skipped"  # 단계가 스스로 건너뜀(예: KIS 세부 수급 15:40 전 조회 불가) — 실패가 아니라 나중에 다시
+        if key in ("investor_detail", "lending") and not failed and isinstance(result, dict) and result.get("skipped"):
+            state = "skipped"  # 단계가 스스로 건너뜀(KIS 세부 수급 15:40 전 조회 불가, 키움 키 없음) — 실패가 아니라 나중에 다시
             s.update(reason=str(result["skipped"]))
         s.update(state=state, seconds=round(time.monotonic() - t0, 1), summary=summary)
         if failed and key == "daily_backfill":

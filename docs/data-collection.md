@@ -193,7 +193,7 @@ NXT 애프터마켓이 20:00 에 끝나야 통합(UN) 일봉이 확정되므로 
 
 | 작업 | 어떻게 | 비고 |
 |---|---|---|
-| **초기 데이터 준비** | 관리자 화면 버튼 → `collector.bootstrap_data` | 새 서버용. 수집 1~8(4번째 '연기금 등 세부 수급 30거래일' 포함) → 계산 9~12 를 순서대로. 16:00~21:30 에는 시작 안 함(정기 수집과 KIS 한도 충돌 방지). 다시 누르면 이어서 채움 |
+| **초기 데이터 준비** | 관리자 화면 버튼 → `collector.bootstrap_data` | 새 서버용. 수집 1~9('연기금 등 세부 수급 30거래일'·'대차잔고 60거래일' 포함) → 계산 10~13 을 순서대로. 16:00~21:30 에는 시작 안 함(정기 수집과 KIS 한도 충돌 방지). 세부 수급은 15:40 전, 대차잔고는 키움 키가 없으면(개발 서버) 그 단계만 '건너뜀'. **21:30 이후에 누르면 모든 단계가 한 번에 채워진다**. 다시 누르면 이어서 채움 |
 | 전종목 장기 백필 | `collector.backfill_all_daily` | 개월 수 지정, 청크로 받아 이동평균은 한 번에 |
 | 세부 투자자 30거래일 백필 | `collector.backfill_investor_detail` | `{"days": 30}` 기본. 끝나면 `collector.backfill_screener` 로 `pension_buy_days` 과거 값을 채운다 |
 | 대차잔고 60거래일 백필(상용) | `collector.backfill_lending` | `{"days": 60}` 기본, 키움 키 없으면 skipped. 끝나면 `collector.backfill_screener` 로 `lending_chg5` 과거 값을 채운다 |
