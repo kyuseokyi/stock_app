@@ -87,3 +87,31 @@ def lending_row(raw: dict) -> dict | None:
     if not any(row[k] for k in ("new_qty", "repay_qty", "net_qty", "balance_qty", "balance_amt")):
         return None
     return row
+
+
+# ------------------------------------------------------------------ 테마(ka90001·ka90002)
+_THEME_CODE_MAX = 8  # themes.kis_code 는 String(10) — 접두사(2자)를 붙여도 넘치지 않는 길이만
+
+
+def theme_group(raw: dict) -> dict | None:
+    """ka90001 `thema_grp` 한 행 → {raw_code, code(KW 접두사), name}. 코드·이름이 비거나 너무 길면 None.
+
+    키움 테마 코드는 KIS 테마 코드(3자리 숫자)와 겹칠 수 있어 저장용 코드에 접두사를 붙인다.
+    등락률·기간수익률(flu_rt·dt_prft_rt)은 쓰지 않는다 — 순위·등락은 우리 일봉으로 계산.
+    """
+    from shared.market_repo import KIWOOM_THEME_PREFIX  # shared 는 apps 를 모르므로 여기서 가져온다
+
+    code = str(raw.get("thema_grp_cd") or "").strip()
+    name = str(raw.get("thema_nm") or "").strip()
+    if not code or not name or len(code) > _THEME_CODE_MAX:
+        return None
+    return {"raw_code": code, "code": f"{KIWOOM_THEME_PREFIX}{code}", "name": name[:100]}
+
+
+def theme_member_ticker(raw: dict) -> str | None:
+    """ka90002 `thema_comp_stk` 한 행의 stk_cd → 6자리 종목코드. 응답 길이가 20 이라 `_AL`·`_NX` 접미사나
+    앞의 `A` 가 붙어 올 수 있어 떼어 낸다. 6자리 영숫자가 아니면 None."""
+    code = str(raw.get("stk_cd") or "").strip().upper().split("_", 1)[0]
+    if len(code) == 7 and code.startswith("A"):
+        code = code[1:]
+    return code if len(code) == 6 and code.isalnum() else None

@@ -11,7 +11,8 @@
 
 공식 명세: GitHub Kiwoom-Securities/Kiwoom-REST-API `kiwoom/_data/kiwoom_api_spec.json`(c7a3d25)
   - apis["접근토큰 발급(au10001)"], apis["주식일봉차트조회요청(ka10081)"], apis["종목정보 리스트(ka10099)"],
-    apis["대차거래추이요청(종목별)(ka20068)"], error_codes
+    apis["대차거래추이요청(종목별)(ka20068)"], apis["테마그룹별요청(ka90001)"], apis["테마구성종목요청(ka90002)"],
+    error_codes
 """
 
 from __future__ import annotations
@@ -44,6 +45,12 @@ STOCK_LIST_KEY = "list"               # ka10099 response.body LIST
 TR_LENDING = "ka20068"                # 대차거래추이요청(종목별)
 PATH_SLB = "/api/dostk/slb"           # ka20068 meta.URL
 LENDING_LIST_KEY = "dbrt_trde_trnsn"  # ka20068 response.body LIST(대차거래추이)
+TR_THEME_GROUPS = "ka90001"           # 테마그룹별요청
+TR_THEME_MEMBERS = "ka90002"          # 테마구성종목요청
+PATH_THEME = "/api/dostk/thme"        # ka90001·ka90002 meta.URL(둘 다 같은 경로, api-id 로 구분)
+THEME_GROUPS_LIST_KEY = "thema_grp"   # ka90001 response.body LIST(thema_grp_cd·thema_nm·stk_num …)
+THEME_MEMBERS_LIST_KEY = "thema_comp_stk"  # ka90002 response.body LIST(stk_cd·stk_nm …)
+STEX_UNIFIED = "3"                    # stex_tp — 1:KRX, 2:NXT, 3:통합(우리 일봉 UN 과 같은 기준)
 
 # 오류 코드(명세 error_codes)
 CODE_TOKEN_INVALID = 8005  # Token이 유효하지 않습니다
@@ -289,3 +296,22 @@ class KiwoomClient:
         """
         body = {"strt_dt": strt_dt, "end_dt": end_dt, "all_tp": "0", "stk_cd": stk_cd}
         return self.paginate(TR_LENDING, PATH_SLB, body, LENDING_LIST_KEY, max_pages)
+
+    def theme_groups_body(self, *, date_tp: str = "1", stex_tp: str = STEX_UNIFIED) -> dict:
+        """ka90001 body(명세 request.body 그대로). qry_tp=0 전체검색, flu_pl_amt_tp=1 상위기간수익률(필수값이라 넣을 뿐
+        순위·등락은 쓰지 않는다), date_tp 는 길이 2(1~99일)."""
+        return {"qry_tp": "0", "stk_cd": "", "date_tp": date_tp, "thema_nm": "", "flu_pl_amt_tp": "1",
+                "stex_tp": stex_tp}
+
+    def list_themes(self, *, stex_tp: str = STEX_UNIFIED, max_pages: int = _MAX_LIST_PAGES) -> list[dict]:
+        """ka90001 테마그룹별요청 — 전체 테마(끝까지 연속조회) 원시 행."""
+        return self.paginate(TR_THEME_GROUPS, PATH_THEME, self.theme_groups_body(stex_tp=stex_tp),
+                             THEME_GROUPS_LIST_KEY, max_pages)
+
+    def theme_members(self, thema_grp_cd: str, *, stex_tp: str = STEX_UNIFIED, max_pages: int = 10) -> list[dict]:
+        """ka90002 테마구성종목요청 — 한 테마의 구성 종목 원시 행. thema_grp_cd 는 키움 원 코드(접두사 없이).
+
+        date_tp 는 명세상 선택·길이 1(ka90001 은 길이 2) — 기간수익률용이라 구성 종목에는 영향 없어 "1".
+        """
+        body = {"date_tp": "1", "thema_grp_cd": thema_grp_cd, "stex_tp": stex_tp}
+        return self.paginate(TR_THEME_MEMBERS, PATH_THEME, body, THEME_MEMBERS_LIST_KEY, max_pages)
