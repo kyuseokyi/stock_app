@@ -1,4 +1,6 @@
-"""초기 데이터 준비(부트스트랩) — 새 서버에서 수집(1~8) → 계산(9~12)을 정해진 순서대로 한 번에.
+"""초기 데이터 준비(부트스트랩) — 새 서버에서 수집 → 계산을 정해진 순서대로 한 번에(키움 테마는 시장 그룹 백필 앞).
+
+과거 60일 시장 그룹 백필도 현재 테마 스냅숏으로 계산한다(과거 테마 구성 이력은 없음 — 근사).
 
 설계: docs/superpowers/specs/2026-10-22-data-bootstrap-design.md
 - 단계는 기존 태스크 함수를 직접(동기) 부른다. 각 단계는 이미 멱등이라 다시 실행해도 안전하다.
@@ -27,6 +29,7 @@ from apps.collector.tasks.market_data import (
     LENDING_BACKFILL_DAYS,
     backfill_investor_detail,
     backfill_lending,
+    collect_themes_kiwoom,
     collect_fundamentals,
     collect_investor_daily,
     collect_ipo_events,
@@ -66,6 +69,7 @@ STEPS: tuple[tuple[str, str, bool], ...] = (
     ("ipo", "공모주 일정", True),
     ("macro", "거시 지표(FRED)", True),
     ("canslim", "CANSLIM 60일 백필", False),
+    ("themes_kiwoom", "테마(키움 — 키 없으면 건너뜀)", False),
     ("market_groups", "시장 그룹 60일 백필", False),
     ("screener", "조건검색 60일 백필", False),
     ("patterns", "차트 패턴", False),
@@ -90,6 +94,7 @@ def _runners(months: int, end: str) -> dict[str, Callable[[], object]]:
         "ipo": lambda: collect_ipo_events(),
         "macro": lambda: collect_macro_series(),
         "canslim": lambda: backfill_canslim(days=BACKFILL_DAYS),
+        "themes_kiwoom": lambda: collect_themes_kiwoom(),
         "market_groups": lambda: backfill_market_groups(days=BACKFILL_DAYS),
         "screener": lambda: backfill_screener(days=BACKFILL_DAYS),
         "patterns": lambda: compute_patterns(),
@@ -174,7 +179,7 @@ def run_bootstrap(months: int = 37, task_id: str | None = None,
         if key == "daily_backfill" and isinstance(result, dict) and "error" not in result:
             summary = f"성공 {result.get('ok', 0)} · 실패 {result.get('failed_count', 0)} — {summary}"
         state = "failed" if failed else "ok"
-        if key in ("investor_detail", "lending") and not failed and isinstance(result, dict) and result.get("skipped"):
+        if key in ("investor_detail", "lending", "themes_kiwoom") and not failed and isinstance(result, dict) and result.get("skipped"):
             state = "skipped"  # 단계가 스스로 건너뜀(KIS 세부 수급 15:40 전 조회 불가, 키움 키 없음) — 실패가 아니라 나중에 다시
             s.update(reason=str(result["skipped"]))
         s.update(state=state, seconds=round(time.monotonic() - t0, 1), summary=summary)

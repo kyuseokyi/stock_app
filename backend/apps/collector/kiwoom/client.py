@@ -149,6 +149,12 @@ def _api_error(code: int, msg: str) -> KiwoomApiError:
     return KiwoomApiError(code, msg)
 
 
+def theme_groups_body(*, date_tp: str = "1", stex_tp: str = STEX_UNIFIED) -> dict:
+    """ka90001 body(명세 request.body 그대로). qry_tp=0 전체검색, flu_pl_amt_tp=1 상위기간수익률(필수값이라 넣을 뿐
+    순위·등락은 쓰지 않는다), date_tp 는 길이 2(1~99일)."""
+    return {"qry_tp": "0", "stk_cd": "", "date_tp": date_tp, "thema_nm": "", "flu_pl_amt_tp": "1", "stex_tp": stex_tp}
+
+
 class KiwoomClient:
     def __init__(self, config: KiwoomConfig | None = None, limiter=None, *, session=None, redis_client=None):
         """limiter: 공유 RateLimiter — HTTP 요청(토큰·재시도 포함)마다 acquire. 없으면 설정 속도로 만든다.
@@ -297,15 +303,9 @@ class KiwoomClient:
         body = {"strt_dt": strt_dt, "end_dt": end_dt, "all_tp": "0", "stk_cd": stk_cd}
         return self.paginate(TR_LENDING, PATH_SLB, body, LENDING_LIST_KEY, max_pages)
 
-    def theme_groups_body(self, *, date_tp: str = "1", stex_tp: str = STEX_UNIFIED) -> dict:
-        """ka90001 body(명세 request.body 그대로). qry_tp=0 전체검색, flu_pl_amt_tp=1 상위기간수익률(필수값이라 넣을 뿐
-        순위·등락은 쓰지 않는다), date_tp 는 길이 2(1~99일)."""
-        return {"qry_tp": "0", "stk_cd": "", "date_tp": date_tp, "thema_nm": "", "flu_pl_amt_tp": "1",
-                "stex_tp": stex_tp}
-
     def list_themes(self, *, stex_tp: str = STEX_UNIFIED, max_pages: int = _MAX_LIST_PAGES) -> list[dict]:
         """ka90001 테마그룹별요청 — 전체 테마(끝까지 연속조회) 원시 행."""
-        return self.paginate(TR_THEME_GROUPS, PATH_THEME, self.theme_groups_body(stex_tp=stex_tp),
+        return self.paginate(TR_THEME_GROUPS, PATH_THEME, theme_groups_body(stex_tp=stex_tp),
                              THEME_GROUPS_LIST_KEY, max_pages)
 
     def theme_members(self, thema_grp_cd: str, *, stex_tp: str = STEX_UNIFIED, max_pages: int = 10) -> list[dict]:

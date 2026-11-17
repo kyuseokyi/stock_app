@@ -328,3 +328,26 @@ def test_theme_source_falls_back_to_kis_when_too_few(db):
 def test_theme_source_ignores_kiwoom_themes_without_members(db):
     repo.sync_kiwoom_themes(db, _kw_rows(3, ()), now=T1)
     assert repo.active_theme_source(db, min_themes=1)["kiwoom_themes"] == 0
+
+
+# ------------------------------------------------------------------ 태스크
+def test_task_skipped_without_kiwoom_keys(monkeypatch):
+    from apps.collector.tasks import market_data as md
+    monkeypatch.setattr(md, "get_kiwoom_config", lambda: KiwoomConfig("", "", 4))
+    monkeypatch.setattr(md.kiwoom_themes, "run_themes", lambda **k: pytest.fail("키 없으면 키움·PG 를 건드리지 않음"))
+    assert md.collect_themes_kiwoom() == {"skipped": "키움 키 없음"}
+
+
+def test_task_runs_with_client_factory_and_store(monkeypatch):
+    from apps.collector.tasks import market_data as md
+    seen: dict = {}
+    monkeypatch.setattr(md, "get_kiwoom_config", lambda: CFG)
+    monkeypatch.setattr(md.kiwoom_themes, "run_themes",
+                        lambda **k: seen.update(k) or {"themes": 300})
+    assert md.collect_themes_kiwoom() == {"themes": 300}
+    assert seen["client_factory"] is md._kiwoom_client and seen["store"] is md._store_kiwoom_themes
+
+
+def test_task_is_registered():
+    from apps.collector.tasks import market_data as md
+    assert md.collect_themes_kiwoom.name == "collector.collect_themes_kiwoom"

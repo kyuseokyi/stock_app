@@ -1,4 +1,4 @@
-"""시장 데이터 수집 Celery 태스크 — 지수·투자자별 순매수·대차잔고(키움)·재무비율·공모주 일정·FRED 거시 지표.
+"""시장 데이터 수집 Celery 태스크 — 지수·투자자별 순매수·대차잔고(키움)·테마 스냅숏(키움)·재무비율·공모주 일정·FRED 거시 지표.
 
 일봉(20:30) 뒤 국내 지수·투자자 수집은 daily_market_pipeline 이 같은 작업 안에서 차례로 돌린다
 (KIS 초당 상한을 두 작업이 동시에 나눠 쓰지 않게, 앞 단계 예외와 무관하게 다음 단계 진행).
@@ -21,6 +21,7 @@ from apps.collector.celery_app import celery_app
 from apps.collector.kis.client import KRX_MARKET_CODE, KISClient
 from apps.collector.kis.master import MasterStock
 from apps.collector.kiwoom import lending as kiwoom_lending
+from apps.collector.kiwoom import themes as kiwoom_themes
 from apps.collector.market_indices import collect_indices, index_specs
 from apps.collector.repositories import clickhouse_market as chm
 from apps.collector.rate_limit import RateLimiter
@@ -227,6 +228,24 @@ def backfill_lending(days: int = LENDING_BACKFILL_DAYS, end: str | None = None, 
     return collect_lending_daily(days=days, end=end, limit=limit)
 
 
+# ---------------------------------------------------------------- 테마(키움 ka90001·ka90002)
+def _store_kiwoom_themes(rows, keep_codes) -> dict:
+    with SyncSessionLocal() as db:
+        return market_repo.sync_kiwoom_themes(db, rows, keep_codes)
+
+
+@celery_app.task(name="collector.collect_themes_kiwoom")
+def collect_themes_kiwoom() -> dict:
+    """키움 테마 스냅숏(테마 목록 + 테마별 구성 종목) 교체 — 시장 그룹 계산 앞. 실패하면 지난 스냅숏 유지.
+
+    키움 키가 없으면(개발 서버) PG·키움을 건드리지 않고 `{"skipped": "키움 키 없음"}` — 테마는 KIS 마스터로 계산된다.
+    """
+    if not get_kiwoom_config().is_configured:
+        log.info("키움 테마 수집 건너뜀: %s", LENDING_NOT_CONFIGURED)
+        return {"skipped": LENDING_NOT_CONFIGURED}
+    return kiwoom_themes.run_themes(client_factory=_kiwoom_client, store=_store_kiwoom_themes)
+
+
 # ---------------------------------------------------------------- 재무비율
 def _fundamentals_one(ticker: str, client) -> int:
     n = 0
@@ -311,7 +330,7 @@ def _daily_ohlcv() -> dict:
 
 @celery_app.task(name="collector.daily_market_pipeline")
 def daily_market_pipeline() -> dict:
-    """20:30 — 전종목 일봉 → 국내 지수 → 투자자별 순매수 → 세부 투자자(연기금 등) → 대차잔고(키움, 키 없으면 skipped) → CANSLIM → 시장 그룹 → 스크리너 → 차트 패턴(차례로, 앞 단계 예외와 무관하게 진행).
+    """20:30 — 전종목 일봉 → 국내 지수 → 투자자별 순매수 → 세부 투자자(연기금 등) → 대차잔고(키움, 키 없으면 skipped) → CANSLIM → 테마(키움, 키 없으면 skipped) → 시장 그룹 → 스크리너 → 차트 패턴(차례로, 앞 단계 예외와 무관하게 진행).
 
     끝나면 단계별 성공·걸린 시간·요약을 Redis 에 남긴다(관리자 데이터 현황). 기록 실패는 결과에 영향 없음.
     """
@@ -322,6 +341,7 @@ def daily_market_pipeline() -> dict:
              ("investor", lambda: collect_investor_daily()),
              ("investor_detail", lambda: collect_investor_detail_daily()),
              ("lending", lambda: collect_lending_daily()), ("canslim", lambda: compute_canslim()),
+             ("themes_kiwoom", lambda: collect_themes_kiwoom()),
              ("market_groups", lambda: compute_market_groups()), ("screener", lambda: compute_screener()),
              ("patterns", lambda: compute_patterns()))
     for name, step in steps:
