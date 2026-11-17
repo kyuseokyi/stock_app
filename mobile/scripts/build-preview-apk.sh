@@ -58,5 +58,6 @@ echo "$CONFIG" | grep -q '"projectId"' || { echo "[preview] ✗ APK 설정에 pr
 echo "$CONFIG" | grep -q '"com.stockapp"' || { echo "[preview] ✗ APK 설정의 패키지가 com.stockapp 이 아님" >&2; exit 1; }
 
 echo "[preview] ✓ $APK"
+bash "$(dirname "$0")/copy-apk-to-drive.sh" "$APK" # Google Drive 동기화 폴더로(APK_DRIVE=0 이면 생략)
 echo "[preview] 설치: adb install -r \"$APK\"  ·  OTA: npm run ota:preview -- \"메시지\""
 echo "[preview] 개발 APK 를 다시 만들기 전에: npm run prebuild:dev:android"

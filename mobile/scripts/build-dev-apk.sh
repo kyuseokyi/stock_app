@@ -78,3 +78,4 @@ if grep -q '^EAS_PROJECT_ID=' "$TMP" && ! unzip -p "$APK" assets/app.config 2>/d
 fi
 
 echo "[devapk] ✓ $APK"
+bash "$(dirname "$0")/copy-apk-to-drive.sh" "$APK" # Google Drive 동기화 폴더로(APK_DRIVE=0 이면 생략)
