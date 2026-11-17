@@ -177,8 +177,14 @@ def kiwoom_theme_count(session: Session) -> int:
 
 
 def kiwoom_snapshot_date(session: Session) -> date | None:
-    """마지막으로 성공한 키움 테마 동기화 날짜(KST). 없으면 None."""
-    ts = session.scalar(select(func.max(Theme.updated_at)).where(Theme.source == THEME_SOURCE_KIWOOM))
+    """마지막으로 성공한 키움 테마 동기화 날짜(KST). 없으면 None.
+
+    키움 연결이 있는 키움 테마의 **min**(updated_at) — 성공한 동기화는 스냅숏의 모든 테마를 같은 시각으로 맞추고,
+    관리자 수정(숨김·이름, onupdate)은 한 행만 올리므로 min 이 곧 마지막 성공 시각이다(max 면 관리자 수정이 날짜를 가림).
+    """
+    has_link = select(ThemeStock.theme_id).where(ThemeStock.source == THEME_SOURCE_KIWOOM)
+    ts = session.scalar(select(func.min(Theme.updated_at)).where(
+        Theme.source == THEME_SOURCE_KIWOOM, Theme.id.in_(has_link)))
     if ts is None:
         return None
     if isinstance(ts, str):  # sqlite 는 문자열로 돌려줄 수 있다

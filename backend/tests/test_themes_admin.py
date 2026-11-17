@@ -194,3 +194,15 @@ async def test_source_falls_back_to_kis_when_snapshot_too_small(api, maker):
     state["user"] = admin
     assert (await client.get("/api/v1/admin/themes/source")).json()["source"] == "kis"
     assert [t["id"] for t in (await client.get("/api/v1/admin/themes")).json()] == [tid]
+
+
+async def test_source_snapshot_date_survives_admin_patch(api, maker, monkeypatch):
+    from shared import market_repo
+    monkeypatch.setattr(market_repo, "KIWOOM_THEME_MIN", 2)
+    client, state = api
+    admin, _, _ = await _seed(maker)
+    await _seed_kiwoom(maker, 2)
+    state["user"] = admin
+    kw = [t for t in (await client.get("/api/v1/admin/themes")).json() if t["source"] == "kiwoom"][0]
+    assert (await client.patch(f"/api/v1/admin/themes/{kw['id']}", json={"name": "새 이름"})).status_code == 200
+    assert (await client.get("/api/v1/admin/themes/source")).json()["snapshot_date"] == "2026-11-17"

@@ -351,3 +351,16 @@ def test_task_runs_with_client_factory_and_store(monkeypatch):
 def test_task_is_registered():
     from apps.collector.tasks import market_data as md
     assert md.collect_themes_kiwoom.name == "collector.collect_themes_kiwoom"
+
+
+def test_snapshot_date_not_moved_by_admin_edit(db):
+    """관리자 수정(onupdate)이 스냅숏 날짜를 오늘로 가리지 않게 — min(updated_at)."""
+    repo.sync_kiwoom_themes(db, _kw_rows(3), now=T1)
+    t = db.scalar(select(Theme).where(Theme.kis_code == "KW100"))
+    t.name = "바꾼 이름"
+    t.updated_at = datetime(2026, 11, 20, 1, 0, tzinfo=timezone.utc)  # 사흘 뒤 관리자 수정
+    db.commit()
+    assert repo.kiwoom_snapshot_date(db).isoformat() == "2026-11-17"
+    # 다음 성공 동기화는 전체를 같은 시각으로
+    repo.sync_kiwoom_themes(db, _kw_rows(3), now=datetime(2026, 11, 21, 11, 40, tzinfo=timezone.utc))
+    assert repo.kiwoom_snapshot_date(db).isoformat() == "2026-11-21"
