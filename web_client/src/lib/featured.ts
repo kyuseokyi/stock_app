@@ -36,10 +36,11 @@ export function featuredTabText(tab: FeaturedTab, f: Featured): string {
   return n > 0 ? `${FEATURED_TAB_LABEL[tab]} ${n}` : FEATURED_TAB_LABEL[tab]
 }
 
-/** 탭별 기준 — 신고저가는 '11/16 종가 기준', VI 는 '11.17 10:05 기준' */
-export function featuredCaption(tab: FeaturedTab, f: Featured): string | null {
+/** 탭별 기준 — 신고저가는 '11/16 종가 기준'(오늘이 아니면 '전 거래일 11/16 종가 기준'), VI 는 '11.17 10:05 기준' */
+export function featuredCaption(tab: FeaturedTab, f: Featured, today?: string): string | null {
   if (tab === 'vi') return formatBasis(f.vi?.updatedAt)
-  return closeBasisLabel(f.date)
+  const label = closeBasisLabel(f.date)
+  return label && today && f.date && f.date.slice(0, 10) !== today ? `전 거래일 ${label}` : label
 }
 
 /** 목록이 잘렸을 때 안내 — '전체 35종목 중 20' */

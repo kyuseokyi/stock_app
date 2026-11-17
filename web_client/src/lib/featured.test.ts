@@ -71,6 +71,8 @@ describe('화면 규칙', () => {
     expect(featuredTabText('highs', f)).toBe('신고가 35')
     expect(featuredTabText('lows', f)).toBe('신저가')
     expect(featuredCaption('highs', f)).toBe('11/16 종가 기준')
+    expect(featuredCaption('highs', f, '2026-11-16')).toBe('11/16 종가 기준')
+    expect(featuredCaption('highs', f, '2026-11-17')).toBe('전 거래일 11/16 종가 기준')
     expect(featuredCaption('vi', f)).toBe('11.17 10:05 기준')
     expect(featuredMoreText(35, 20)).toBe('전체 35종목 중 20종목')
     expect(featuredMoreText(5, 5)).toBeNull()

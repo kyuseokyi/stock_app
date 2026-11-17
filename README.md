@@ -474,7 +474,7 @@ uv run pytest tests/test_universe_cooldown.py    # 특정 파일
 | `KIS_COOLDOWN_THRESHOLD` | collector | `5` | 연속 연결실패 몇 회에서 적응형 쿨다운 시작 |
 | `KIS_COOLDOWN_BASE_SEC` / `KIS_COOLDOWN_MAX_SEC` | collector | `60` / `600` | 쿨다운 시작·상한(초). 연속실패 지속 시 2배씩 에스컬레이트 |
 | `KIS_ACCOUNT_NO` | collector | (빈값) | 계좌번호(시세조회만이면 생략 가능) |
-| `KIWOOM_APP_KEY` / `KIWOOM_APP_SECRET` / `KIWOOM_RATE_PER_SEC` | collector | (빈값) / `4` | 키움증권 REST(실전 키만). 상용 서버 IP 만 허용돼 상용에서만 호출되고, 비우면 키움 기능은 꺼짐(KIS 수집 영향 없음). 초당 상한 1~5. 실측 도구 `python -m apps.collector.kiwoom.probe`(대차는 `--lending`), 일봉 폴백(아래)·대차잔고 수집(20:30 `lending` 단계 — 키 없으면 skipped) — `docs/kiwoom_setup_and_dev_spec.md` |
+| `KIWOOM_APP_KEY` / `KIWOOM_APP_SECRET` / `KIWOOM_RATE_PER_SEC` | collector | (빈값) / `4` | 키움증권 REST(실전 키만). 상용 서버 IP 만 허용돼 상용에서만 호출되고, 비우면 키움 기능은 꺼짐(KIS 수집 영향 없음). 초당 상한 1~5. 실측 도구 `python -m apps.collector.kiwoom.probe`(대차는 `--lending`, VI 발동은 장중 `--vi`), 일봉 폴백(아래)·대차잔고 수집(20:30 `lending` 단계 — 키 없으면 skipped) — `docs/kiwoom_setup_and_dev_spec.md` |
 | `KIWOOM_FALLBACK_ENABLED` | collector | (빈값=켜짐) | 전종목 일봉·백필에서 KIS 가 끝난 뒤 실패·빈 응답 종목만 키움 `ka10081`(`_AL`)로 채움(`daily_prices.source='kiwoom'`). 키움 키가 있을 때만 동작, `false`/`0`/`no`/`off` 면 끔 — `docs/data-collection.md` |
 | `MOCK_TICK_STREAM` | collector(게임 WS) | (빈값) | `true`면 실 KIS WS 대신 Mock 틱 생성(장외/키 없이 검증). 키 미설정 시 자동 Mock |
 | `MOCK_BASE_PRICE` | collector(게임 WS) | `71500` | Mock 틱 기준가(랜덤워크 시작가) |
@@ -559,11 +559,13 @@ uv run python -c "from apps.collector.tasks.universe import backfill_all_daily; 
 |---|---|---|
 | 화~토 06:30 (+07:30 안전망) | 미국 지수(S&P500·나스닥·나스닥100·SOX·VIX·다우)·원/달러·대표 종목 — 미국 장 마감(서머타임 05:00 / 그 외 06:00) 뒤 | CH `market_index_daily` |
 | 평일 15:40 | 국내 지수(KOSPI·KOSDAQ·KOSPI200) — KRX 정규장 마감 15:30 뒤 바로(20:30 파이프라인의 지수 단계는 안전망으로 유지). 설계 `docs/superpowers/specs/2026-10-20-market-close-schedule-design.md` | CH `market_index_daily` |
+| 평일 09:00~15:30 5분마다 | 키움 VI 발동 종목(`ka10054`) — `collector.poll_vi_stocks`(expires 240초), 키움 키 있는 상용만(없으면 바로 끝남). 그날 연속 3회 실패면 남은 호출 중단. 마켓 탭 '오늘 특징주' VI 탭 | Redis `market:vi:{YYYYMMDD}`(TTL 2일) |
 | 평일 09:00~15:35 30초마다 | 장중 국내 지수(KOSPI·KOSDAQ·KOSPI200)·원/달러 현재값 — `collector.poll_intraday_indices`(expires 25초), 시장 칩 "● HH:MM" 배지(스크린 리더는 "장중 HH:MM"). 휴장일·장 밖에는 KIS 를 부르지 않음. 0·NaN·음수 값은 실패로 보고 이전 값 유지. 끄기 `INTRADAY_INDICES_ENABLED=false`. 설계 `docs/superpowers/specs/2026-10-20-intraday-index-design.md` | Redis `market:intraday`(TTL 10분, 읽을 때도 10분 지난 항목 제외, CH 에는 안 씀) |
 | 08:00 | FRED 거시 지표(CPI·근원CPI·PCE·실업률·고용·기준금리·국채) + CPI·고용·PCE 발표 예정일 — 키 있을 때만 | CH `macro_series`, PG `stock_events` |
 | 20:30 | `collector.daily_market_pipeline`: 전종목 일봉 → 국내 지수(KOSPI·KOSDAQ·KOSPI200) → 투자자별 순매수(보통주만) → 세부 투자자 순매수(연기금·사모·투신·은행·보험·기타금융, KIS `FHPTJ04160001`, 매일 5거래일 겹침 — 30거래일 백필은 수동 `collector.backfill_investor_detail`·초기 데이터 준비) → 대차잔고(키움 `ka20068`, 키움 키 있는 상용만, 매일 5거래일 겹침 — 60거래일 백필은 수동 `collector.backfill_lending`) | CH `daily_prices`·`market_index_daily`·`investor_daily`·`investor_detail_daily`·`stock_lending_daily` |
 | 20:30 (마스터 동기화 때) | 종목 프로필(업종·시총·상장주식·ETF/스팩/우선주·관리/정지)·업종명·KIS 테마 | PG `stock_profile`·`sectors`·`themes`·`theme_stocks` |
 | 20:30 (CANSLIM 뒤·시장 그룹 앞) | 키움 테마 스냅숏 `collector.collect_themes_kiwoom`(ka90001·ka90002, 키움 키 있는 상용만 — 없으면 skipped). 구성 종목 있는 키움 테마 100개 이상이면 테마 계산을 키움 기준으로, 아니면 KIS 마스터(`docs/data-collection.md` "테마 출처") | PG `themes`·`theme_stocks`(`source=kiwoom`, 코드 `KW` 접두사) |
+| 20:30 (파이프라인 마지막) | 52주 신고가·신저가 `collector.compute_featured_highs`(보통주·252거래일 이상, 등락률 정렬 상위 20) — 마켓 탭 '오늘 특징주' | Redis `market:featured:highs`(TTL 14일) |
 | 21:30 | 공모주 청약·상장 일정 | PG `stock_events` |
 | 토 10:00 | 재무비율(연간·분기 EPS·ROE·증가율) — 보통주만 | CH `fundamentals_periodic` |
 
@@ -677,6 +679,7 @@ cd backend && uv run --with pykrx python -m apps.collector.verify.spot_check --n
 - **REST(stock_api, 공개 GET, `Cache-Control: public, max-age=30`)**:
   - `GET /api/v1/market/morning-brief` → `{"brief": {...} | null}` (오늘 것, 없으면 최근 1건)
   - `GET /api/v1/market/movers` → `{"updated_at", "gainers": [...], "losers": [...], "keywords": [...]}` (오늘 캐시가 없으면 마지막 결과 — 화면은 `updated_at` 을 보여 줄 것)
+  - `GET /api/v1/market/featured` → `{"date", "highs": {"count", "items"}, "lows": {...}, "vi": {"date", "updated_at", "count", "items"} | null}` — 오늘 특징주(신고가·신저가 상위 20 + 오늘 VI 발동, VI 없으면 null), Redis 장애에도 200 + 빈 모양
   - `GET /api/v1/market/investor-flow` → `{"date", "source", "foreign_top", "institution_top", "pension_top", "double_buy", "ai_comment", "updated_at"}`
   - `GET /api/v1/market/heatmap?kind=sector|theme&size=mcap|value&period=1d|5d|20d` → GraphQL `marketTreemap` 과 같은 결과 `{"date", "groups": [{"id","name","chg","size","stocks":[{"ticker","name","chg","size"}]}]}`. 잘못된 값은 422 `{"detail": {"code", "message"}}`
   - `GET /api/v1/ai/screener-analysis/{ticker}` → `{"analysis": {...} | null}` (ticker 는 영문·숫자 6자리, 아니면 422)

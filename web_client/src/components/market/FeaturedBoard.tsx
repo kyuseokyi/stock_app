@@ -11,7 +11,7 @@ import {
   viMeta,
   type FeaturedTab,
 } from '../../lib/featured'
-import { formatPct, formatPrice, pnlClass } from '../../lib/format'
+import { formatPct, formatPrice, kstDateString, pnlClass } from '../../lib/format'
 import type { Featured, FeaturedStock, ViStock } from '../../types/marketRest'
 
 // 오늘 특징주 — 탭(신고가 / 신저가 / VI 발동) + 상위 목록. 종목을 누르면 종목 상세.
@@ -20,7 +20,7 @@ export default function FeaturedBoard({ featured, initialTab = 'highs' }: { feat
   const [tab, setTab] = useState<FeaturedTab>(initialTab)
   const current = currentFeaturedTab(tab, featured)
   const options = featuredTabs(featured).map((t): [FeaturedTab, string] => [t, featuredTabText(t, featured)])
-  const caption = featuredCaption(current, featured)
+  const caption = featuredCaption(current, featured, kstDateString())
   const total = current === 'vi' ? (featured.vi?.count ?? 0) : featured[current].count
   const shown = current === 'vi' ? (featured.vi?.items.length ?? 0) : featured[current].items.length
   const more = featuredMoreText(total, shown)
