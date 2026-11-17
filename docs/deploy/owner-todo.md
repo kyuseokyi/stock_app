@@ -23,7 +23,7 @@
 ## 3. 상용 앱 빌드와 Google 설정
 
 - [ ] **상용 정식 빌드**(EAS production, AAB) — `cd mobile && npm run build:android:prod`(첫 실행 때 EAS 가 상용 서명 키를 만든다) → **Expo 대시보드 Credentials 에서 키스토어 백업**
-- [ ] **푸시**: EAS 에 `com.stockapp` FCM 자격 증명 업로드
+- [x] **푸시**: EAS 에 `com.stockapp` FCM 자격 증명 업로드 — 2026-10-21 업로드, 11-17 상용 테스트 APK(`npm run build:android:preview`)로 대상 기기 등록·알림 수신 확인. 상용 서버 `PUSH_BACKEND=expo` 동작
 - [ ] **Drive 백업(개발용)**: Google Cloud → Drive API 켜기 → OAuth 동의 화면(테스트, 본인 테스트 사용자) → Android 클라이언트 `com.stockapp.dev` + SHA-1 `5E:8F:16:06:2E:A3:CD:2C:4A:0D:54:78:76:BA:A6:F3:8C:AB:F6:25` → 웹 클라이언트 ID 를 `mobile/.env.development` 의 `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID` 에
 - [ ] **Drive 백업(상용)**(U8): 상용 프로젝트(권장) → Android 클라이언트 `com.stockapp` 를 **두 개**(EAS 업로드 키 SHA-1, Play Console 앱 서명 키 SHA-1) → 웹 클라이언트 ID 를 `mobile/.env.production` 에 → OAuth 동의 화면 **프로덕션 게시**(홈페이지·처리방침 `https://app.funnotedaily.com/privacy`·승인 도메인 `funnotedaily.com`)
 
