@@ -108,8 +108,8 @@ export default function ProfileScreen() {
   if (user) {
     return (
       <ScrollView
-        style={styles.flex}
-        contentContainerStyle={[styles.content, { paddingTop: insets.top + 24 }]}
+        style={[styles.flex, { marginTop: insets.top }]} // 상태 표시줄 여백은 스크롤 밖(스크롤 때 겹치지 않게)
+        contentContainerStyle={[styles.content, { paddingTop: 24 }]}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
         <Text style={styles.screenTitle}>내정보</Text>
         <Card>
@@ -163,8 +163,8 @@ export default function ProfileScreen() {
 
   return (
     <ScrollView
-      style={styles.flex}
-      contentContainerStyle={[styles.content, { paddingTop: insets.top + 24 }]}
+      style={[styles.flex, { marginTop: insets.top }]} // 상태 표시줄 여백은 스크롤 밖(스크롤 때 겹치지 않게)
+      contentContainerStyle={[styles.content, { paddingTop: 24 }]}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
       <Text style={styles.screenTitle}>내정보</Text>
       <Text style={styles.subtitle}>간편 로그인으로 시작해 보세요.</Text>
