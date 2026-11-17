@@ -38,10 +38,10 @@ export default function HomeScreen() {
     <>
       {/* 요약과 추천 글이 따로 로딩되도록 목록을 항상 그린다. 빈 상태·오류도 목록 안에 둬서 당겨서 새로고침이 되게 한다 */}
       <FlatList
-        style={styles.list}
+        style={[styles.list, { marginTop: insets.top }]} // 상태 표시줄 여백은 스크롤 밖 — 안에 두면 스크롤 때 내용이 그 밑으로 지나감
         contentContainerStyle={[
           styles.listContent,
-          { paddingTop: insets.top + 16 },
+          { paddingTop: 16 },
           data.length === 0 && styles.grow,
         ]}
         data={data}

@@ -258,8 +258,8 @@ export default function GameScreen() {
   return (
     <View style={styles.flex}>
       <ScrollView
-        style={styles.flex}
-        contentContainerStyle={[styles.content, { paddingTop: insets.top + 8 }]}
+        style={[styles.flex, { marginTop: insets.top }]} // 상태 표시줄 여백은 스크롤 밖(스크롤 때 겹치지 않게)
+        contentContainerStyle={[styles.content, { paddingTop: 8 }]}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void onRefresh()} />}>
         {/* 큰 제목은 생략(하단 탭이 '게임') — 차트가 첫 화면에 더 크게 들어오게 */}
         <GameHeader
