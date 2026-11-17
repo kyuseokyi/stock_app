@@ -239,3 +239,50 @@ async def test_sse_failure_does_not_block_dispatch(api, maker, spies, monkeypatc
     r = await client.post("/api/v1/admin/fund-notices", json=_body())
     assert r.status_code == 201
     assert len(spies["dispatched"]) == 1
+
+
+# ── 단순 테스트 알림(POST /api/v1/admin/push-test) ──
+
+
+async def test_push_test_dispatches_to_admin_devices(api, maker, spies):
+    client, state = api
+    admin, _ = await _seed(maker, admin_devices=2)
+    state["user"] = admin
+    r = await client.post("/api/v1/admin/push-test", json={"title": "테스트", "body": "알림 확인"})
+    assert r.status_code == 200 and r.json() == {"target_count": 2}
+    assert spies["dispatched"] == [("collector.send_test_push", [admin.id, "테스트", "알림 확인"])]
+    assert await _sends(maker) == []  # 발송 이력에 남기지 않는다
+    assert spies["published"] == []  # 펀드 갱신 SSE 도 보내지 않는다
+
+
+async def test_push_test_without_device_is_400(api, maker, spies):
+    client, state = api
+    admin, _ = await _seed(maker, admin_devices=0)
+    state["user"] = admin
+    r = await client.post("/api/v1/admin/push-test", json={"title": "테스트", "body": "알림 확인"})
+    assert r.status_code == 400 and r.json()["detail"]["code"] == "no_device"
+    assert spies["dispatched"] == []
+
+
+async def test_push_test_validation_and_permission(api, maker):
+    client, state = api
+    admin, user = await _seed(maker)
+    state["user"] = user
+    assert (await client.post("/api/v1/admin/push-test", json={"title": "t", "body": "b"})).status_code == 403
+    state["user"] = admin
+    assert (await client.post("/api/v1/admin/push-test", json={"title": "  ", "body": "b"})).status_code == 422
+    assert (await client.post("/api/v1/admin/push-test", json={"title": "t", "body": ""})).status_code == 422
+    assert (await client.post("/api/v1/admin/push-test", json={"title": "t" * 101, "body": "b"})).status_code == 422
+
+
+async def test_push_test_dispatch_failure_is_503(api, maker, monkeypatch):
+    client, state = api
+    admin, _ = await _seed(maker)
+    state["user"] = admin
+
+    def _boom(*a, **kw):
+        raise RuntimeError("broker down")
+
+    monkeypatch.setattr(push_dispatch.celery_app, "send_task", _boom)
+    r = await client.post("/api/v1/admin/push-test", json={"title": "테스트", "body": "알림 확인"})
+    assert r.status_code == 503 and r.json()["detail"]["code"] == "dispatch_failed"

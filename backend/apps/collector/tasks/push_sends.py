@@ -1,4 +1,4 @@
-"""펀드 리포트 알림 발송(blog 가 위임) + 예약 발송 beat(작업 4)."""
+"""펀드 리포트 알림 발송(blog 가 위임) + 예약 발송 beat(작업 4) + 관리자 단순 테스트 알림."""
 from __future__ import annotations
 
 import json
@@ -117,6 +117,32 @@ def _run_send(db, send: PushSend, send_id: int) -> dict:
         send_id, send.mode, len(tokens), result.success, result.failure, len(result.invalid_tokens),
     )
     return {"send_id": send_id, "status": send.status, "target": len(tokens), "success": result.success}
+
+
+@celery_app.task(name="collector.send_test_push")
+def send_test_push(user_id: int, title: str, body: str) -> dict:
+    """관리자 테스트 알림 — 그 관리자 기기로만, 입력 문구 그대로. 이력(push_sends)은 남기지 않는다.
+    data.type=test: 앱은 탭하면 열기만 한다(이동 없음). 무효 토큰은 다른 발송처럼 정리."""
+    with SyncSessionLocal() as db:
+        tokens = list(db.execute(select(PushDevice.token).where(PushDevice.user_id == user_id)).scalars())
+        if not tokens:
+            return {"user_id": user_id, "target": 0, "success": 0}
+        message = PushMessage(
+            title=title, body=body, data={"type": "test"}, channel_id=FUND_CHANNEL_ID, sound="default"
+        )
+        try:
+            result = get_push_sender().send_batch(tokens, message)
+        except Exception as exc:  # noqa: BLE001 - 재시도로 중복 발송되지 않게 삼킨다
+            logger.warning("send_test_push: 발송기 오류(user_id=%s): %s", user_id, exc)
+            return {"user_id": user_id, "target": len(tokens), "success": 0}
+        if result.invalid_tokens:
+            db.execute(delete(PushDevice).where(PushDevice.token.in_(result.invalid_tokens)))
+            db.commit()
+        logger.info(
+            "send_test_push: user=%s target=%s ok=%s fail=%s invalid=%s",
+            user_id, len(tokens), result.success, result.failure, len(result.invalid_tokens),
+        )
+        return {"user_id": user_id, "target": len(tokens), "success": result.success}
 
 
 def _claim(db: Session, send_id: int, now: datetime) -> bool:

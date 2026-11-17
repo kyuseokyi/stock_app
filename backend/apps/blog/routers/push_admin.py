@@ -1,4 +1,4 @@
-"""관리자 — 펀드 리포트 알림 발송·이력·템플릿."""
+"""관리자 — 펀드 리포트 알림 발송·이력·템플릿 + 단순 테스트 알림."""
 from __future__ import annotations
 
 from datetime import date
@@ -17,9 +17,11 @@ from ..push_schemas import (
     PushSendOut,
     PushTemplateIn,
     PushTemplateOut,
+    TestPushIn,
+    TestPushOut,
 )
 from ..repositories import push_repo
-from ..services import fund_notice
+from ..services import fund_notice, push_test
 from ..services.fund_notice import NoticeError
 
 router = APIRouter(prefix="/api/v1/admin", tags=["push-admin"])
@@ -94,3 +96,12 @@ async def delete_template(template_id: int, db: AsyncSession = Depends(get_db), 
         raise _http(e) from e
     await push_repo.delete_template(db, tpl)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post("/push-test", response_model=TestPushOut)
+async def send_test_push(payload: TestPushIn, db: AsyncSession = Depends(get_db), admin: User = Depends(require_admin)):
+    """입력한 제목·본문을 관리자 본인 기기로 보낸다(발송 이력에 남기지 않음)."""
+    try:
+        return await push_test.send_test(db, admin=admin, payload=payload)
+    except NoticeError as e:
+        raise _http(e) from e
