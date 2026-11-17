@@ -12,7 +12,7 @@
 공식 명세: GitHub Kiwoom-Securities/Kiwoom-REST-API `kiwoom/_data/kiwoom_api_spec.json`(c7a3d25)
   - apis["접근토큰 발급(au10001)"], apis["주식일봉차트조회요청(ka10081)"], apis["종목정보 리스트(ka10099)"],
     apis["대차거래추이요청(종목별)(ka20068)"], apis["테마그룹별요청(ka90001)"], apis["테마구성종목요청(ka90002)"],
-    error_codes
+    apis["투자자별일별매매종목요청(ka10058)"], error_codes
 """
 
 from __future__ import annotations
@@ -50,6 +50,14 @@ TR_THEME_MEMBERS = "ka90002"          # 테마구성종목요청
 PATH_THEME = "/api/dostk/thme"        # ka90001·ka90002 meta.URL(둘 다 같은 경로, api-id 로 구분)
 THEME_GROUPS_LIST_KEY = "thema_grp"   # ka90001 response.body LIST(thema_grp_cd·thema_nm·stk_num …)
 THEME_MEMBERS_LIST_KEY = "thema_comp_stk"  # ka90002 response.body LIST(stk_cd·stk_nm …)
+TR_INVESTOR_DAILY = "ka10058"         # 투자자별일별매매종목요청 — meta.URL 은 ka10099 와 같은 PATH_STOCK_INFO
+INVESTOR_DAILY_LIST_KEY = "invsr_daly_trde_stk"  # ka10058 response.body LIST(stk_cd·stk_nm·netslmt_amt …)
+# ka10058 invsr_tp(명세): 8000 개인, 9000 외국인, 1000 금융투자, 3000 투신, 3100 사모펀드, 5000 기타금융,
+# 4000 은행, 2000 보험, 6000 연기금, 7000 국가, 7100 기타법인, 9999 기관계 — 전광판에 쓰는 셋만 매핑
+INVESTOR_CODES = {"foreign": "9000", "institution": "9999", "pension": "6000"}
+# ka10058 mrkt_tp(명세): 001 코스피, 101 코스닥 — ka10099 의 "0"/"10" 과 다르다
+INVESTOR_MARKETS = {"kospi": "001", "kosdaq": "101"}
+TRDE_NET_BUY = "2"                    # ka10058 trde_tp — 1:순매도, 2:순매수
 STEX_UNIFIED = "3"                    # stex_tp — 1:KRX, 2:NXT, 3:통합(우리 일봉 UN 과 같은 기준)
 
 # 오류 코드(명세 error_codes)
@@ -153,6 +161,17 @@ def theme_groups_body(*, date_tp: str = "1", stex_tp: str = STEX_UNIFIED) -> dic
     """ka90001 body(명세 request.body 그대로). qry_tp=0 전체검색, flu_pl_amt_tp=1 상위기간수익률(필수값이라 넣을 뿐
     순위·등락은 쓰지 않는다), date_tp 는 길이 2(1~99일)."""
     return {"qry_tp": "0", "stk_cd": "", "date_tp": date_tp, "thema_nm": "", "flu_pl_amt_tp": "1", "stex_tp": stex_tp}
+
+
+def investor_daily_body(investor: str, strt_dt: str, end_dt: str, market: str, *,
+                        stex_tp: str = STEX_UNIFIED) -> dict:
+    """ka10058 body(명세 request.body 6개 모두 필수). investor: foreign|institution|pension, market: kospi|kosdaq."""
+    if investor not in INVESTOR_CODES:
+        raise ValueError(f"알 수 없는 투자자 구분: {investor}")
+    if market not in INVESTOR_MARKETS:
+        raise ValueError(f"알 수 없는 시장 구분: {market}")
+    return {"strt_dt": strt_dt, "end_dt": end_dt, "trde_tp": TRDE_NET_BUY, "mrkt_tp": INVESTOR_MARKETS[market],
+            "invsr_tp": INVESTOR_CODES[investor], "stex_tp": stex_tp}
 
 
 class KiwoomClient:
@@ -315,3 +334,13 @@ class KiwoomClient:
         """
         body = {"date_tp": "1", "thema_grp_cd": thema_grp_cd, "stex_tp": stex_tp}
         return self.paginate(TR_THEME_MEMBERS, PATH_THEME, body, THEME_MEMBERS_LIST_KEY, max_pages)
+
+    def investor_daily_top(self, investor: str, strt_dt: str, end_dt: str, market: str, *,
+                           stex_tp: str = STEX_UNIFIED, max_pages: int = 2) -> list[dict]:
+        """ka10058 투자자별일별매매종목(순매수) 원시 행 — [strt_dt, end_dt] 기간 합계, 한 시장·한 투자자.
+
+        정렬 순서·쪽당 행 수는 명세에 없다(probe --investors 로 확인). 정렬은 호출하는 쪽에서 다시 한다.
+        """
+        return self.paginate(TR_INVESTOR_DAILY, PATH_STOCK_INFO,
+                             investor_daily_body(investor, strt_dt, end_dt, market, stex_tp=stex_tp),
+                             INVESTOR_DAILY_LIST_KEY, max_pages)

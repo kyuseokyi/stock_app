@@ -50,7 +50,7 @@ export interface Movers {
   keywords: HotKeyword[];
 }
 
-export type FlowSource = 'pykrx' | 'kis';
+export type FlowSource = 'kiwoom' | 'pykrx' | 'kis';
 
 export interface FlowItem {
   ticker: string;

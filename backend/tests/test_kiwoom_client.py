@@ -295,3 +295,28 @@ def test_list_stocks_reads_to_end(redis_client):
     assert [r["code"] for r in rows] == ["005930", "293490"]
     assert c._session.calls[1]["json"] == {"mrkt_tp": "10"}
     assert c._session.calls[1]["headers"]["api-id"] == "ka10099"
+
+
+# ------------------------------------------------------------------ ka10058 투자자별일별매매종목
+def test_investor_daily_body_codes():
+    b = kc.investor_daily_body("pension", "20261117", "20261117", "kosdaq")
+    assert b == {"strt_dt": "20261117", "end_dt": "20261117", "trde_tp": "2", "mrkt_tp": "101",
+                 "invsr_tp": "6000", "stex_tp": "3"}
+    assert kc.investor_daily_body("foreign", "a", "b", "kospi")["invsr_tp"] == "9000"
+    assert kc.investor_daily_body("institution", "a", "b", "kospi")["mrkt_tp"] == "001"
+    assert kc.investor_daily_body("institution", "a", "b", "kospi")["invsr_tp"] == "9999"  # 기관계
+    with pytest.raises(ValueError):
+        kc.investor_daily_body("retail", "a", "b", "kospi")
+    with pytest.raises(ValueError):
+        kc.investor_daily_body("foreign", "a", "b", "konex")
+
+
+def test_investor_daily_top_path_header_and_pages(redis_client):
+    p1 = _ok({"invsr_daly_trde_stk": [{"stk_cd": "005930"}]}, headers={"cont-yn": "Y", "next-key": "N2"})
+    p2 = _ok({"invsr_daly_trde_stk": [{"stk_cd": "000660"}]}, headers={"cont-yn": "Y", "next-key": "N3"})
+    c = _client([_token_resp(), p1, p2], redis_client)
+    rows = c.investor_daily_top("foreign", "20261117", "20261117", "kospi", max_pages=2)
+    assert [r["stk_cd"] for r in rows] == ["005930", "000660"]  # max_pages 에서 멈춤
+    call = c._session.calls[1]
+    assert call["url"].endswith("/api/dostk/stkinfo") and call["headers"]["api-id"] == "ka10058"
+    assert call["json"]["invsr_tp"] == "9000" and call["json"]["trde_tp"] == "2"

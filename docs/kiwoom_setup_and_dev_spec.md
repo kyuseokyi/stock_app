@@ -9,7 +9,7 @@
 > - 모든 조회는 `POST` + JSON body, TR 은 헤더 `api-id`. 연속조회는 응답 **헤더** `cont-yn`·`next-key` 를 다음 요청 헤더에 그대로.
 > - IP 불일치는 HTTP 403 이 아니라 **오류 8010**(토큰 발급 IP ≠ 요청 IP)으로 온다. 8005 = 토큰 무효.
 > - 거래소 구분은 종목코드 접미사: 없음=KRX, `_NX`=NXT, `_AL`=SOR(통합). `_AL` 거래량이 KIS UN(KRX+NXT 합산)과 같은지는 **실측 대상**(아래 [Step 3]).
-> - 진행 순서: ① 클라이언트·실측 도구(완료) → ② 연기금 프리셋 → ③ 일봉 폴백(**완료 2026-11-16** — 아래 "③단계 일봉 폴백") → ④ 대차잔고(④-1 **구현·상용 실측 완료 2026-11-17** — 아래 "④-1 대차잔고")·테마(④-2 **구현·상용 실측 2026-11-17, 교체 진행** — 아래 "④-2 테마") 등 키움 데이터. **종목 분할 수집은 하지 않는다**(출처마다 기준이 달라짐).
+> - 진행 순서: ① 클라이언트·실측 도구(완료) → ② 연기금 프리셋 → ③ 일봉 폴백(**완료 2026-11-16** — 아래 "③단계 일봉 폴백") → ④ 대차잔고(④-1 **구현·상용 실측 완료 2026-11-17** — 아래 "④-1 대차잔고")·테마(④-2 **구현·상용 실측 2026-11-17, 교체 진행** — 아래 "④-2 테마")·시황 수급(④-3 **구현 2026-11-17, 상용 실측 대기** — 아래 "④-3 투자자별 순매수") 등 키움 데이터. **종목 분할 수집은 하지 않는다**(출처마다 기준이 달라짐).
 
 ---
 
@@ -332,6 +332,21 @@ docker compose -f docker-compose.prod.yml run --rm celery_worker python -m apps.
   - KIS 마스터(약 302개)보다 적고 테마당 2~10종목으로 작다 → 오래된 테마가 없는 대신 수가 절반 이하. 사용자 결정(2026-11-17): **교체 진행**, 화면을 보고 판단. 작은 테마가 순위를 흔들면 "구성 종목 3개 미만 제외" 같은 규칙을 추가 검토.
   - 되돌리기: `themes`·`theme_stocks` 의 `source='kiwoom'` 행을 정리하면 다음 계산부터 KIS 마스터(출처는 데이터로 선택). 20:30 `themes_kiwoom` 단계가 다시 채우므로 단계도 함께 꺼야 한다.
 - **상용 순서**: 배포 → `probe --themes` → 이상 없으면 `collector.collect_themes_kiwoom` 수동 1회 → `collector.backfill_market_groups` → 관리자 '테마 보정' 화면 위 출처가 '키움'·스냅숏 날짜가 오늘인지, 웹 마켓 테마 탭 확인. 이후 매일 20:30 파이프라인이 갱신
+
+#### ④-3 투자자별 순매수 — 시황 수급 전광판 (ka10058, 구현 2026-11-17)
+설계: [`docs/superpowers/specs/2026-11-17-kiwoom-investor-flow-design.md`](superpowers/specs/2026-11-17-kiwoom-investor-flow-design.md), 동작 정리: `docs/data-collection.md` "시황 수급 전광판 출처"
+- **명세(c7a3d25 `투자자별일별매매종목요청(ka10058)`)**: `POST /api/dostk/stkinfo`(ka10099 와 같은 경로, api-id 로 구분). body 6개 모두 필수 — `strt_dt`·`end_dt`(YYYYMMDD), `trde_tp`(1 순매도·2 순매수), `mrkt_tp`(**001 코스피·101 코스닥** — ka10099 의 0·10 과 다름), `invsr_tp`(8000 개인·9000 외국인·1000 금융투자·3000 투신·3100 사모펀드·5000 기타금융·4000 은행·2000 보험·6000 연기금·7000 국가·7100 기타법인·9999 기관계), `stex_tp`(1 KRX·2 NXT·3 통합). 응답 LIST `invsr_daly_trde_stk` — `stk_cd`(length 20)·`stk_nm`·`netslmt_qty`(1주, 부호)·`netslmt_amt`(설명 "원", 부호)·`prsm_avg_pric`(추정평균가)·`cur_prc`·`pre_sig`·`pred_pre`·`avg_pric_pre`·`pre_rt`·`dt_trde_qty`. 연속조회 `cont-yn`·`next-key`
+- **단위 충돌**: 명세 예시 `netslmt_qty +4464`·`prsm_avg_pric 57056`·`netslmt_amt +25467` → 4464×57056 ≈ 2.547억 = 25467 × 1만(나머지 두 행도 ×1만). 설명("원")과 예시가 달라 **예시를 따라 ×10,000**, 실측으로 확정
+- 우리가 보내는 body: `{"strt_dt":D,"end_dt":D,"trde_tp":"2","mrkt_tp":"001"|"101","invsr_tp":"9000"|"9999"|"6000","stex_tp":"3"}`
+- 코드: `kiwoom/client.py`(`investor_daily_body`·`investor_daily_top`), `kiwoom/normalize.py`(`plain_ticker`·`investor_flow_row`·`implied_amt_unit`), `collector/investor_flow.py`(`fetch_kiwoom`·`_fill_from_pykrx`)
+- 실측(상용 서버에서만):
+  ```bash
+  docker compose -f docker-compose.prod.yml run --rm celery_worker python -m apps.collector.kiwoom.probe --investors
+  # 기준일 지정: --investors-date 20261116 (기본 직전 평일 — 공휴일은 모름)
+  ```
+  확인할 것: ① **'단위 추정'이 ×10,000 ✅** 인지(아니면 `KIWOOM_FLOW_AMT_TO_WON` 을 그 값으로) ② 투자자×시장별 응답 행 수·`cont-yn`(쪽당 몇 행인지, 상위 N 으로 잘리는지) ③ 원시 금액이 내림차순으로 오는지 ④ 원시 `stk_cd` 접미사 ⑤ 시간 제한·미확정 0행 같은 숨은 조건(장중·15:45 무렵 한 번 더 돌려 오류 코드·0행 확인) ⑥ 상위 종목이 HTS/MTS 투자자별 순매수와 같은지
+- 실측 결과: (상용 실행 뒤 probe 요약 블록을 여기에)
+- **상용 순서**: 배포 → `probe --investors` → 단위 ✅ 이면 그대로(❌ 면 상수 수정 커밋·배포) → 다음 전광판 갱신(15:45·18:10·22:00) 뒤 시황 탭 캡션 '출처 키움'·금액(억 단위)이 상식적인지 확인. 키움이 실패하면 자동으로 pykrx → KIS 라 서비스 영향은 없다
 
 ### [Step 4] 로컬 PC에서 상용 데이터 연동 확인 방법
 수집기가 상용 DB에 데이터를 적재하면, 로컬 PC에서 데이터가 잘 들어왔는지 확인합니다.

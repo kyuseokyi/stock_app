@@ -47,3 +47,40 @@ def test_stock_suffix():
     assert stock_suffix("293490", "N") == "293490"
     assert stock_suffix("293490", "") == "293490"
     assert stock_suffix("005930", "y") == "005930_AL"
+
+
+# ------------------------------------------------------------------ ka10058
+from apps.collector.kiwoom import normalize as kn  # noqa: E402
+
+
+@pytest.mark.parametrize("raw, want", [
+    ("005930", "005930"), ("005930_AL", "005930"), ("A005930", "005930"), (" 0001a0_NX ", "0001A0"),
+    ("", None), ("12345", None), (None, None),
+])
+def test_plain_ticker(raw, want):
+    assert kn.plain_ticker(raw) == want
+
+
+def test_investor_flow_row_converts_unit_and_strips_suffix():
+    # 명세 response_example 1행 — 4464주 × 추정평균가 57056 ≈ 2.547억 ≈ 25467 × 1만
+    raw = {"stk_cd": "005930_AL", "stk_nm": "삼성전자", "netslmt_qty": "+4464", "netslmt_amt": "+25467",
+           "prsm_avg_pric": "57056"}
+    r = kn.investor_flow_row(raw)
+    assert r["ticker"] == "005930" and r["name"] == "삼성전자"
+    assert r["net_amount"] == 25467 * kn.KIWOOM_FLOW_AMT_TO_WON == 254_670_000
+    assert r["raw_amt"] == 25467 and r["qty"] == 4464 and r["avg_price"] == 57056
+    assert kn.investor_flow_row({"stk_cd": "x", "netslmt_amt": "1"}) is None
+
+
+def test_investor_flow_row_keeps_negative_sign():
+    assert kn.investor_flow_row({"stk_cd": "000660", "stk_nm": "n", "netslmt_amt": "-30"})["net_amount"] == -300_000
+
+
+def test_implied_unit_matches_spec_example():
+    rows = [kn.investor_flow_row(x) for x in (
+        {"stk_cd": "005930", "netslmt_qty": "+4464", "netslmt_amt": "+25467", "prsm_avg_pric": "57056"},
+        {"stk_cd": "005930", "netslmt_qty": "+12", "netslmt_amt": "+106", "prsm_avg_pric": "86658"},
+        {"stk_cd": "005930", "netslmt_qty": "+46", "netslmt_amt": "+75", "prsm_avg_pric": "16320"},
+    )]
+    assert kn.implied_amt_unit(rows) == 10_000
+    assert kn.implied_amt_unit([{"raw_amt": 0, "qty": 0, "avg_price": 0}]) is None

@@ -86,6 +86,7 @@ describe('flowCaption', () => {
   it('기준일·출처', () => {
     expect(flowCaption({ date: '2026-10-30', source: 'pykrx' })).toBe('10.30 기준 · 출처 KRX(pykrx)')
     expect(flowCaption({ date: null, source: 'kis' })).toBe('출처 KIS')
+    expect(flowCaption({ date: '2026-11-17', source: 'kiwoom' })).toBe('11.17 기준 · 출처 키움')
     expect(flowCaption({ date: null, source: null })).toBeNull()
   })
 })

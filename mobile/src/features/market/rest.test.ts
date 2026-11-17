@@ -111,6 +111,7 @@ describe('normalizeInvestorFlow', () => {
     expect(f.doubleBuy).toEqual([{ ticker: '000660', name: 'SK하이닉스', foreignAmount: 1e10, institutionAmount: 5e9 }]);
     expect(f.aiComment).toBe('외인 반도체 매수');
     expect(normalizeInvestorFlow({ source: 'krx' }).source).toBeNull();
+    expect(normalizeInvestorFlow({ source: 'kiwoom' }).source).toBe('kiwoom');
   });
 });
 

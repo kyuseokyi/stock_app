@@ -1,6 +1,6 @@
 """투자자별 수급 전광판 + AI 2줄 해설 — `apps.collector.investor_flow.collect` → 업종명 → Gemini → Redis.
 
-collect 가 None(pykrx·KIS 폴백 모두 실패)이거나 예외면 이전 캐시를 덮지 않고 None.
+collect 가 None(키움·pykrx·KIS 폴백 모두 실패)이거나 예외면 이전 캐시를 덮지 않고 None.
 Gemini 가 없으면 ai_comment=None 으로라도 캐시한다(수급 숫자 자체는 유효).
 """
 from __future__ import annotations

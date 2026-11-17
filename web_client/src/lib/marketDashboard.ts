@@ -1,5 +1,5 @@
 import type { MacroValue, MarketIndex } from '../types/market'
-import type { InvestorFlow, Movers } from '../types/marketRest'
+import type { FlowSource, InvestorFlow, Movers } from '../types/marketRest'
 
 // 마켓 개요 표시용 순수 함수 — 기준 시각·장운영 뱃지·억 단위·지수 분류(앱 market/dashboard.ts 와 같은 규칙·문구).
 
@@ -88,11 +88,13 @@ export function formatEok(won: number): string {
   return r === 0 ? '0억' : `${sign}${r.toFixed(1)}억`
 }
 
+const FLOW_SOURCE_LABEL: Record<FlowSource, string> = { kiwoom: '키움', pykrx: 'KRX(pykrx)', kis: 'KIS' }
+
 /** 수급 전광판 캡션 — '10.30 기준 · 출처 KRX(pykrx)'. 둘 다 없으면 null */
 export function flowCaption(flow: Pick<InvestorFlow, 'date' | 'source'>): string | null {
   const parts = [
     flow.date ? `${formatShortDate(flow.date)} 기준` : null,
-    flow.source ? `출처 ${flow.source === 'kis' ? 'KIS' : 'KRX(pykrx)'}` : null,
+    flow.source ? `출처 ${FLOW_SOURCE_LABEL[flow.source]}` : null,
   ].filter(Boolean)
   return parts.length > 0 ? parts.join(' · ') : null
 }

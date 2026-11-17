@@ -26,6 +26,7 @@ import {
   splitCarousel,
 } from '../dashboard';
 import { groupOverview, NEUTRAL_HINT } from '../overview-groups';
+import type { FlowSource } from '../rest-types';
 import type { GroupKind } from '../types';
 import { useAutoRefresh } from '../use-auto-refresh';
 import { useInvestorFlow } from '../use-investor-flow';
@@ -47,6 +48,9 @@ type Props = {
  * → ⑥ 핫 키워드·주도 테마 → ⑦ 다가오는 일정.
  * 섹션마다 따로 불러와 하나가 실패해도 나머지는 보인다. 전부 실패했을 때만 전체 오류 화면.
  */
+/** 수급 전광판 출처 라벨 */
+const FLOW_SOURCE_LABEL: Record<FlowSource, string> = { kiwoom: '키움', pykrx: 'KRX(pykrx)', kis: 'KIS' };
+
 export function MarketSection({ onMore, onOpenGroup, onHeader }: Props) {
   const router = useRouter();
   const overview = useMarketOverview();
@@ -170,7 +174,7 @@ export function MarketSection({ onMore, onOpenGroup, onHeader }: Props) {
         <View style={styles.card}>
           <SectionHead
             title="수급 전광판"
-            caption={[fl.date ? `${formatShortDate(fl.date)} 기준` : null, fl.source ? `출처 ${fl.source === 'kis' ? 'KIS' : 'KRX(pykrx)'}` : null]
+            caption={[fl.date ? `${formatShortDate(fl.date)} 기준` : null, fl.source ? `출처 ${FLOW_SOURCE_LABEL[fl.source]}` : null]
               .filter(Boolean)
               .join(' · ') || null}
           />
