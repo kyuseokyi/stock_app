@@ -4,6 +4,7 @@ import type {
   JobsOverview,
   MarketStatusReport,
   ThemeMetrics,
+  ThemeSource,
   ThemeStockRow,
   VerifyReport,
 } from '../types/marketAdmin'
@@ -13,6 +14,9 @@ const THEMES = '/api/v1/admin/themes'
 const MARKET = '/api/v1/admin/market'
 
 export const listThemes = async (): Promise<AdminTheme[]> => (await http.get<AdminTheme[]>(THEMES)).data
+
+export const getThemeSource = async (): Promise<ThemeSource> =>
+  (await http.get<ThemeSource>(`${THEMES}/source`)).data
 
 export const getThemeMetrics = async (): Promise<ThemeMetrics> =>
   (await http.get<ThemeMetrics>(`${THEMES}/metrics`)).data

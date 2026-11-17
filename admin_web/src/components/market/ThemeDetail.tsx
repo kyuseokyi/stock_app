@@ -81,7 +81,11 @@ export default function ThemeDetail({ theme, onChanged, onClose }: Props) {
       <div className="flex items-start justify-between gap-2">
         <div>
           <p className="text-xs text-slate-400">
-            {theme.source === 'admin' ? '관리자 테마' : `KIS 테마 ${theme.kis_code ?? ''}`}
+            {theme.source === 'admin'
+              ? '관리자 테마'
+              : theme.source === 'kiwoom'
+                ? `키움 테마 ${(theme.kis_code ?? '').replace(/^KW/, '')}`
+                : `KIS 테마 ${theme.kis_code ?? ''}`}
           </p>
           <h2 className="break-keep text-lg font-bold text-slate-800">{theme.name}</h2>
         </div>
@@ -163,7 +167,7 @@ export default function ThemeDetail({ theme, onChanged, onClose }: Props) {
                       <span className="font-medium text-slate-800">{s.name ?? s.ticker}</span>{' '}
                       <span className="text-xs text-slate-400">{s.ticker}</span>
                     </td>
-                    <td className="text-xs text-slate-500">{s.source === 'admin' ? '관리자' : 'KIS'}</td>
+                    <td className="text-xs text-slate-500">{s.source === 'admin' ? '관리자' : s.source === 'kiwoom' ? '키움' : 'KIS'}</td>
                     <td className={`text-right font-medium ${pctClass(s.chg_1d)}`}>{formatPct(s.chg_1d)}</td>
                     <td className="max-w-[200px] break-keep pl-3 text-xs text-slate-500" title={s.reason ?? ''}>
                       {s.reason ?? '—'}

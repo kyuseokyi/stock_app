@@ -9,6 +9,7 @@ const STEP_LABEL: Record<string, string> = {
   investor_detail: '연기금 등 세부 수급',
   lending: '대차잔고(키움)',
   canslim: 'CANSLIM',
+  themes_kiwoom: '테마(키움)',
   market_groups: '시장 그룹',
 }
 

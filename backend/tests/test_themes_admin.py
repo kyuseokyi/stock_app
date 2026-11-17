@@ -147,3 +147,50 @@ async def test_metrics_endpoint_and_stock_fields(api, maker, monkeypatch):
     stocks = (await client.get(f"/api/v1/admin/themes/{tid}/stocks")).json()
     assert stocks == [{"ticker": "005930", "source": "kis", "is_excluded": False, "reason": None,
                        "name": None, "chg_1d": None, "value": None}]
+
+
+async def _seed_kiwoom(maker, n: int):
+    from datetime import datetime, timezone
+    async with maker() as s:
+        rows = [Theme(kis_code=f"KW{100 + i}", name=f"키움{i}", source="kiwoom",
+                      updated_at=datetime(2026, 11, 17, 11, 40, tzinfo=timezone.utc)) for i in range(n)]
+        s.add_all(rows)
+        await s.commit()
+        s.add_all([ThemeStock(theme_id=t.id, ticker="000660", source="kiwoom") for t in rows])
+        await s.commit()
+
+
+async def test_source_kis_without_kiwoom_snapshot(api, maker):
+    """개발 서버(키움 행 없음) — 출처 kis, 목록은 기존과 같다."""
+    client, state = api
+    admin, _, tid = await _seed(maker)
+    state["user"] = admin
+    assert (await client.get("/api/v1/admin/themes/source")).json() == {
+        "source": "kis", "snapshot_date": None, "kiwoom_themes": 0}
+    assert [t["id"] for t in (await client.get("/api/v1/admin/themes")).json()] == [tid]
+
+
+async def test_source_kiwoom_lists_kiwoom_and_admin_only(api, maker, monkeypatch):
+    from shared import market_repo
+    monkeypatch.setattr(market_repo, "KIWOOM_THEME_MIN", 2)
+    client, state = api
+    admin, user, _ = await _seed(maker)
+    await _seed_kiwoom(maker, 2)
+    state["user"] = admin
+    created = (await client.post("/api/v1/admin/themes", json={"name": "HBM"})).json()
+    src = (await client.get("/api/v1/admin/themes/source")).json()
+    assert src == {"source": "kiwoom", "snapshot_date": "2026-11-17", "kiwoom_themes": 2}
+    listed = (await client.get("/api/v1/admin/themes")).json()
+    assert sorted(t["source"] for t in listed) == ["admin", "kiwoom", "kiwoom"]  # KIS 테마는 숨김
+    assert created["id"] in {t["id"] for t in listed}
+    state["user"] = user
+    assert (await client.get("/api/v1/admin/themes/source")).status_code == 403
+
+
+async def test_source_falls_back_to_kis_when_snapshot_too_small(api, maker):
+    client, state = api
+    admin, _, tid = await _seed(maker)
+    await _seed_kiwoom(maker, 3)  # 기본 100개 미만
+    state["user"] = admin
+    assert (await client.get("/api/v1/admin/themes/source")).json()["source"] == "kis"
+    assert [t["id"] for t in (await client.get("/api/v1/admin/themes")).json()] == [tid]

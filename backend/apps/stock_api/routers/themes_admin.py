@@ -43,6 +43,12 @@ async def list_themes(_admin: User = Depends(require_admin), db: AsyncSession = 
     return await svc.list_themes(db)
 
 
+@router.get("/source")
+async def theme_source(_admin: User = Depends(require_admin), db: AsyncSession = Depends(get_db)):
+    """지금 계산에 쓰는 테마 출처(키움 스냅숏/KIS 마스터)와 스냅숏 날짜 — 목록 응답(기존 형태)과 따로."""
+    return await svc.theme_source(db)
+
+
 @router.get("/metrics")
 async def theme_metrics_(_admin: User = Depends(require_admin)):
     """테마별 최신 기준일 시장 지표 — 목록 응답(기존 형태)과 따로 받아 화면에서 합친다."""

@@ -4,7 +4,7 @@ export interface AdminTheme {
   id: number
   kis_code: string | null
   name: string
-  source: 'kis' | 'admin'
+  source: 'kis' | 'kiwoom' | 'admin'
   is_hidden: boolean
   description: string | null
   stock_count: number
@@ -24,9 +24,16 @@ export interface ThemeMetrics {
   themes: Record<string, ThemeMetric> // 키: 테마 id 문자열
 }
 
+// 지금 테마 계산에 쓰는 출처 — 키움 스냅숏(상용) 또는 KIS 마스터(키움 스냅숏 없음·부족 시 폴백)
+export interface ThemeSource {
+  source: 'kiwoom' | 'kis'
+  snapshot_date: string | null // 키움 스냅숏 날짜(KST, YYYY-MM-DD)
+  kiwoom_themes: number // 구성 종목이 있는 키움 테마 수
+}
+
 export interface ThemeStockRow {
   ticker: string
-  source: 'kis' | 'admin'
+  source: 'kis' | 'kiwoom' | 'admin'
   is_excluded: boolean
   reason: string | null
   name: string | null

@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { createTheme, getThemeMetrics, listThemes } from '../api/marketAdmin'
+import { createTheme, getThemeMetrics, getThemeSource, listThemes } from '../api/marketAdmin'
 import ThemeDetail, { THEME_SAVED_MESSAGE } from '../components/market/ThemeDetail'
 import ThemeList, { type ThemeRow } from '../components/market/ThemeList'
 import { apiErrorMessage } from '../lib/apiError'
 import { showToast } from '../lib/toast'
-import type { AdminTheme, ThemeMetrics } from '../types/marketAdmin'
+import type { AdminTheme, ThemeMetrics, ThemeSource } from '../types/marketAdmin'
 
 type SortKey = 'rank' | 'chg_1d' | 'value' | 'stock_count' | 'name'
 
@@ -30,9 +30,34 @@ const compare =
     return key === 'rank' ? av - bv : bv - av
   }
 
+// 지금 계산에 쓰는 테마 출처 — 키움 테마는 코드가 달라 KIS 테마에 했던 보정이 이어지지 않는다는 점도 알려 준다
+function SourceBadge({ source }: { source: ThemeSource }) {
+  const kiwoom = source.source === 'kiwoom'
+  return (
+    <p className="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+      <span
+        className={`rounded-full px-2 py-0.5 font-semibold ${
+          kiwoom ? 'bg-indigo-50 text-indigo-700' : 'bg-slate-100 text-slate-700'
+        }`}
+      >
+        출처: {kiwoom ? '키움' : 'KIS 테마 마스터'}
+      </span>
+      {kiwoom ? (
+        <span>
+          스냅숏 {source.snapshot_date ?? '-'} · 테마 {source.kiwoom_themes.toLocaleString()}개 (KIS 테마 보정은 적용되지
+          않아요)
+        </span>
+      ) : (
+        <span>키움 테마 스냅숏이 없거나 부족해 KIS 마스터로 계산해요</span>
+      )}
+    </p>
+  )
+}
+
 export default function MarketThemes() {
   const [themes, setThemes] = useState<AdminTheme[]>([])
   const [metrics, setMetrics] = useState<ThemeMetrics>(EMPTY_METRICS)
+  const [source, setSource] = useState<ThemeSource | null>(null)
   const [loading, setLoading] = useState(true)
   const [query, setQuery] = useState('')
   const [sort, setSort] = useState<SortKey>('rank')
@@ -45,9 +70,14 @@ export default function MarketThemes() {
 
   const load = useCallback(async () => {
     try {
-      const [list, m] = await Promise.all([listThemes(), getThemeMetrics().catch(() => EMPTY_METRICS)])
+      const [list, m, src] = await Promise.all([
+        listThemes(),
+        getThemeMetrics().catch(() => EMPTY_METRICS),
+        getThemeSource().catch(() => null),
+      ])
       setThemes(list)
       setMetrics(m)
+      setSource(src)
     } catch (e) {
       showToast(apiErrorMessage(e), { icon: '⚠️' })
     } finally {
@@ -101,9 +131,10 @@ export default function MarketThemes() {
       <div>
         <h1 className="text-xl font-bold text-slate-800">테마 보정</h1>
         <p className="mt-1 text-sm text-slate-500">
-          KIS 테마를 숨기거나 이름을 고치고, 종목을 추가·제외해요. 바꾼 내용은 웹 스크리너 테마 탭에 반영돼요.
+          테마를 숨기거나 이름을 고치고, 종목을 추가·제외해요. 바꾼 내용은 웹 스크리너 테마 탭에 반영돼요.
           {metrics.as_of && ` · 지표 기준일 ${metrics.as_of}`}
         </p>
+        {source && <SourceBadge source={source} />}
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
