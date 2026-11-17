@@ -152,6 +152,23 @@ else
   EAS=(npx --yes eas-cli)
 fi
 
+# 발행한 번들(dist/)에 env 의 API 주소가 실제로 들어갔는지 — 빠졌으면 이미 발행된 상태라 크게 알리고 실패로 끝낸다.
+BUNDLE_BAD=0
+check_bundle() {
+  local p="$1" hbc url missing=""
+  hbc=$(find dist/_expo/static/js/"$p" -name '*.hbc' 2>/dev/null | head -1)
+  [ -n "$hbc" ] || { echo "[ota] ⚠ $p 번들을 찾지 못해 주소 검사를 못 함" >&2; return 0; }
+  while IFS= read -r url; do
+    LC_ALL=C grep -aqF "$url" "$hbc" || missing="$missing $url"
+  done < <(grep -E '^EXPO_PUBLIC_[A-Z_]*_URL=' "$MERGED" | cut -d= -f2-)
+  if [ -n "$missing" ]; then
+    echo "[ota] ✗✗ $p 번들에 API 주소가 없음:$missing — 이 업데이트를 받은 앱은 서버에 못 붙는다. 바로 고쳐 다시 발행할 것" >&2
+    BUNDLE_BAD=1
+  else
+    echo "[ota] ✓ $p 번들 API 주소 확인"
+  fi
+}
+
 if [ "$TARGET" = dev ]; then
   cp "$MERGED" "$TMP"
   CREATED_TMP=1
@@ -159,12 +176,19 @@ if [ "$TARGET" = dev ]; then
   #   빌드 때와 같아야 fingerprint 가 같다.
   for p in $OTA_PLATFORMS; do
     (set -a; . "./$TMP"; set +a; env "${ENV_ARGS[@]}" "${EAS[@]}" update "${DEST_ARGS[@]}" --environment "$EAS_ENV" --platform "$p" --message "$MESSAGE")
+    check_bundle "$p"
   done
 else
+  # eas update 는 --environment 를 주면 EXPO_NO_DOTENV=1 로 .env 파일을 읽지 않는다(eas-cli commands/update/index.js).
+  #   → .env.production 을 프로세스 env 로 넘겨야 EXPO_PUBLIC_* 가 번들에 실린다. 빠뜨리면 코드 기본값(localhost)이 실려
+  #   앱 전체가 네트워크 오류가 된다(2026-11-17 preview 발행 사고).
   for p in $OTA_PLATFORMS; do
-    env "${ENV_ARGS[@]}" "${EAS[@]}" update "${DEST_ARGS[@]}" --environment "$EAS_ENV" --platform "$p" --message "$MESSAGE"
+    (set -a; . "./$BASE"; set +a; env "${ENV_ARGS[@]}" "${EAS[@]}" update "${DEST_ARGS[@]}" --environment "$EAS_ENV" --platform "$p" --message "$MESSAGE")
+    check_bundle "$p"
   done
 fi
+
+[ "$BUNDLE_BAD" = 1 ] && exit 1
 
 if [ "$OTA_STAGE" = 1 ]; then
   echo "[ota] ✓ $STAGED_BRANCH 브랜치에 예약 발행 완료 — 아직 아무 앱도 받지 않습니다."
