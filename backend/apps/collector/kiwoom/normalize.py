@@ -108,10 +108,56 @@ def theme_group(raw: dict) -> dict | None:
     return {"raw_code": code, "code": f"{KIWOOM_THEME_PREFIX}{code}", "name": name[:100]}
 
 
-def theme_member_ticker(raw: dict) -> str | None:
-    """ka90002 `thema_comp_stk` 한 행의 stk_cd → 6자리 종목코드. 응답 길이가 20 이라 `_AL`·`_NX` 접미사나
-    앞의 `A` 가 붙어 올 수 있어 떼어 낸다. 6자리 영숫자가 아니면 None."""
-    code = str(raw.get("stk_cd") or "").strip().upper().split("_", 1)[0]
+def plain_ticker(stk_cd) -> str | None:
+    """키움 응답 stk_cd(길이 20) → 6자리 종목코드. `_AL`·`_NX` 접미사와 앞의 `A` 를 떼어 낸다.
+    6자리 영숫자가 아니면 None."""
+    code = str(stk_cd or "").strip().upper().split("_", 1)[0]
     if len(code) == 7 and code.startswith("A"):
         code = code[1:]
     return code if len(code) == 6 and code.isalnum() else None
+
+
+def theme_member_ticker(raw: dict) -> str | None:
+    """ka90002 `thema_comp_stk` 한 행의 stk_cd → 6자리 종목코드(`plain_ticker`)."""
+    return plain_ticker(raw.get("stk_cd"))
+
+
+# ------------------------------------------------------------------ 투자자별 순매수(ka10058)
+# ⚠️ netslmt_amt 단위 — 명세 설명은 "단위: 원"인데, 명세 response_example 세 행은 모두
+#   순매도수량 × 추정평균가 ≈ netslmt_amt × 10,000 이다(4464주×57056≈2.547억 vs 25467, 12×86658 vs 106,
+#   46×16320 vs 75). 예시 산술을 따라 만원 → 원(×10,000)으로 본다. 상용 `probe --investors` 의
+#   '단위 추정'(implied_amt_unit) 값이 10,000 이 아니면 이 상수를 그 값으로 고칠 것.
+KIWOOM_FLOW_AMT_TO_WON = 10_000
+
+
+def investor_flow_row(raw: dict) -> dict | None:
+    """ka10058 `invsr_daly_trde_stk` 한 행 → {ticker,name,net_amount(원), raw_amt,qty,avg_price}.
+
+    trde_tp=2(순매수) 조회라 이름은 '순매도' 필드지만 값은 순매수 — 부호는 그대로 살린다.
+    종목코드가 6자리로 안 풀리면 None.
+    """
+    ticker = plain_ticker(raw.get("stk_cd"))
+    if ticker is None:
+        return None
+    amt = to_int(raw.get("netslmt_amt"))
+    return {
+        "ticker": ticker,
+        "name": str(raw.get("stk_nm") or "").strip() or ticker,
+        "net_amount": float(amt * KIWOOM_FLOW_AMT_TO_WON),
+        "raw_amt": amt,
+        "qty": to_int(raw.get("netslmt_qty")),
+        "avg_price": to_price(raw.get("prsm_avg_pric")),
+    }
+
+
+def implied_amt_unit(rows: list[dict]) -> int | None:
+    """|수량 × 추정평균가 / 원시 금액| 의 중앙값을 10의 거듭제곱으로 반올림 — 금액 단위(원 환산 배수) 추정.
+    계산할 수 있는 행이 없으면 None. (예시 기준 10,000 = 만원)"""
+    import math
+
+    ratios = sorted(abs(r["qty"] * r["avg_price"] / r["raw_amt"]) for r in rows
+                    if r.get("raw_amt") and r.get("qty") and r.get("avg_price"))
+    if not ratios:
+        return None
+    mid = ratios[len(ratios) // 2]
+    return 10 ** max(0, round(math.log10(mid)))
