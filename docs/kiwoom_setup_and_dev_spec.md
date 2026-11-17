@@ -9,7 +9,7 @@
 > - 모든 조회는 `POST` + JSON body, TR 은 헤더 `api-id`. 연속조회는 응답 **헤더** `cont-yn`·`next-key` 를 다음 요청 헤더에 그대로.
 > - IP 불일치는 HTTP 403 이 아니라 **오류 8010**(토큰 발급 IP ≠ 요청 IP)으로 온다. 8005 = 토큰 무효.
 > - 거래소 구분은 종목코드 접미사: 없음=KRX, `_NX`=NXT, `_AL`=SOR(통합). `_AL` 거래량이 KIS UN(KRX+NXT 합산)과 같은지는 **실측 대상**(아래 [Step 3]).
-> - 진행 순서: ① 클라이언트·실측 도구(완료) → ② 연기금 프리셋 → ③ 일봉 폴백(**완료 2026-11-16** — 아래 "③단계 일봉 폴백") → ④ 대차잔고(④-1 **구현·상용 실측 완료 2026-11-17** — 아래 "④-1 대차잔고")·테마 등 키움 데이터. **종목 분할 수집은 하지 않는다**(출처마다 기준이 달라짐).
+> - 진행 순서: ① 클라이언트·실측 도구(완료) → ② 연기금 프리셋 → ③ 일봉 폴백(**완료 2026-11-16** — 아래 "③단계 일봉 폴백") → ④ 대차잔고(④-1 **구현·상용 실측 완료 2026-11-17** — 아래 "④-1 대차잔고")·테마(④-2 **구현 2026-11-17, 상용 실측 대기** — 아래 "④-2 테마") 등 키움 데이터. **종목 분할 수집은 하지 않는다**(출처마다 기준이 달라짐).
 
 ---
 
@@ -315,6 +315,21 @@ docker compose -f docker-compose.prod.yml run --rm celery_worker python -m apps.
   - 실제 값이 있는 마지막 날은 **전 거래일**(공시 하루 지연) → `LENDING_MAX_LAG=2` 가 필요한 이유
   - ⚠️ **오늘 날짜를 다섯 값 모두 0 으로 채워 준다** → `lending_row` 가 모두 0 인 행을 버리도록 수정(2026-11-17, 백필 전). 저장했다면 그래프 0 낙하·`lending_chg5` -100% 로 '대차잔고 급감' 오탐
   - `005930_AL` 도 13행 — 접미사 없이 6자리 그대로 써도 된다
+
+#### ④-2 테마 (ka90001·ka90002, 구현 2026-11-17)
+설계: [`docs/superpowers/specs/2026-11-17-kiwoom-themes-design.md`](superpowers/specs/2026-11-17-kiwoom-themes-design.md), 동작 정리: `docs/data-collection.md` "테마 출처"
+- **명세(c7a3d25 `테마그룹별요청(ka90001)`)**: `POST /api/dostk/thme`, body `qry_tp`(필수, 0 전체검색·1 테마검색·2 종목검색)·`stk_cd`(선택)·`date_tp`(필수, length 2, n일전 1~99)·`thema_nm`(선택)·`flu_pl_amt_tp`(필수, 1 상위기간수익률·2 하위기간수익률·3 상위등락률·4 하위등락률)·`stex_tp`(필수, 1 KRX·2 NXT·3 통합). 응답 LIST `thema_grp` — `thema_grp_cd`·`thema_nm`·`stk_num`·`flu_sig`·`flu_rt`·`rising_stk_num`·`fall_stk_num`·`dt_prft_rt`·`main_stk`. 연속조회 `cont-yn`·`next-key`
+- **명세(c7a3d25 `테마구성종목요청(ka90002)`)**: 같은 경로 `POST /api/dostk/thme`(api-id 로 구분), body `date_tp`(선택, **length 1**)·`thema_grp_cd`(필수, length 6)·`stex_tp`(필수). 응답 `flu_rt`·`dt_prft_rt` + LIST `thema_comp_stk` — `stk_cd`(length 20)·`stk_nm`·`cur_prc`·`flu_sig`·`pred_pre`·`flu_rt`·`acc_trde_qty`·`sel_bid`·`sel_req`·`buy_bid`·`buy_req`·`dt_prft_rt_n`
+- 우리가 보내는 body: ka90001 `{"qry_tp":"0","stk_cd":"","date_tp":"1","thema_nm":"","flu_pl_amt_tp":"1","stex_tp":"3"}`(끝까지 연속조회), ka90002 `{"date_tp":"1","thema_grp_cd":<원 코드>,"stex_tp":"3"}`. 쓰는 필드는 코드·이름·`stk_cd` 뿐(등락은 버림)
+- 정규화: 테마 코드 → `KW` 접두사, `stk_cd` → `_AL`·`_NX` 접미사·앞 `A` 를 떼고 6자리 영숫자만(명세 예시처럼 같은 종목이 여러 번 와도 한 번)
+- 코드: `kiwoom/client.py`(`theme_groups_body`·`list_themes`·`theme_members`), `kiwoom/normalize.py`(`theme_group`·`theme_member_ticker`), `kiwoom/themes.py`(`run_themes`), `shared/market_repo.py`(`sync_kiwoom_themes`·`active_theme_source`·`theme_groups`), `tasks/market_data.py`(`collect_themes_kiwoom`, 파이프라인 단계 `themes_kiwoom` — canslim 뒤·market_groups 바로 앞), `tasks/bootstrap.py`(같은 단계, 시장 그룹 60일 백필 앞)
+- 실측(상용 서버에서만):
+  ```bash
+  docker compose -f docker-compose.prod.yml run --rm celery_worker python -m apps.collector.kiwoom.probe --themes
+  ```
+  확인할 것: ① `stex_tp=3`(통합)을 받는지(거부되면 KRX `stex_tp=1` 로 한 번 더 불러 기록 — 코드 기본값을 바꿔야 함) ② `qry_tp=0` 이 등락순 상위 N개로 잘리지 않고 **전체**(수백 개)를 주는지 — 테마 수·쪽 수·마지막 `cont-yn` ③ 첫 테마 구성 종목 수 = ka90001 `stk_num` 인지, 원시 `stk_cd` 에 접미사가 붙는지 ④ 시간 제한·미확정 행 같은 숨은 조건(오류 코드)
+- 실측 결과: (상용 배포 뒤 probe 출력의 요약 블록을 여기에 붙인다)
+- **상용 순서**: 배포 → `probe --themes` → 이상 없으면 `collector.collect_themes_kiwoom` 수동 1회 → `collector.backfill_market_groups` → 관리자 '테마 보정' 화면 위 출처가 '키움'·스냅숏 날짜가 오늘인지, 웹 마켓 테마 탭 확인. 이후 매일 20:30 파이프라인이 갱신
 
 ### [Step 4] 로컬 PC에서 상용 데이터 연동 확인 방법
 수집기가 상용 DB에 데이터를 적재하면, 로컬 PC에서 데이터가 잘 들어왔는지 확인합니다.

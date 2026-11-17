@@ -103,6 +103,7 @@ def env(monkeypatch):
     monkeypatch.setattr(bs, "collect_ipo_events", stub("ipo", {"events": 3}))
     monkeypatch.setattr(bs, "collect_macro_series", stub("macro", {"skipped": "FRED_API_KEY 없음"}))
     monkeypatch.setattr(bs, "backfill_canslim", stub("canslim"))
+    monkeypatch.setattr(bs, "collect_themes_kiwoom", stub("themes_kiwoom"))
     monkeypatch.setattr(bs, "backfill_market_groups", stub("market_groups"))
     monkeypatch.setattr(bs, "backfill_screener", stub("screener"))
     monkeypatch.setattr(bs, "compute_patterns", stub("patterns", {"rows": 9}))
@@ -299,3 +300,13 @@ def test_lending_step_after_investor_detail_and_skips_without_kiwoom(env, monkey
     out = bs.run_bootstrap(37, task_id="t1", now_fn=clock(kst(2026, 10, 22, 10, 0)))
     assert out["states"]["lending"] == "skipped"
     assert out["states"]["screener"] == "ok"
+
+
+def test_themes_kiwoom_step_before_market_groups_and_skips_without_kiwoom(env, monkeypatch):
+    """키움 테마 단계 — 시장 그룹 60일 백필 바로 앞(백필이 새 스냅숏으로 계산). 키 없으면 skipped, 뒤 단계 계속."""
+    assert KEYS.index("themes_kiwoom") + 1 == KEYS.index("market_groups")
+    assert dict((k, kis) for k, _, kis in bs.STEPS)["themes_kiwoom"] is False  # KIS 시간대 차단 대상 아님
+    monkeypatch.setattr(bs, "collect_themes_kiwoom", lambda: {"skipped": "키움 키 없음"})
+    out = bs.run_bootstrap(37, task_id="t1", now_fn=clock(kst(2026, 10, 22, 10, 0)))
+    assert out["states"]["themes_kiwoom"] == "skipped"
+    assert out["states"]["market_groups"] == "ok"

@@ -4,6 +4,7 @@
     docker compose -f docker-compose.prod.yml run --rm celery_worker python -m apps.collector.kiwoom.probe
     옵션: --ticker 005930 --date 20260805 --non-nxt 293490
     대차(ka20068) 소량 실측: --lending [--lending-tickers 005930,000660] — 일봉 비교는 건너뛰고 최근 10거래일 대차 표만.
+    테마(ka90001·ka90002) 소량 실측: --themes — 테마 수·앞 10개·첫 테마 구성 종목 앞 10개(일봉 비교는 건너뜀).
 
 - 키가 없으면 안내만 출력하고 종료(코드 0, 호출 없음).
 - 앱키·시크릿·토큰 값은 절대 출력하지 않는다.
@@ -21,13 +22,19 @@ from apps.collector.kiwoom.client import (
     KST,
     LENDING_LIST_KEY,
     PATH_SLB,
+    PATH_THEME,
+    THEME_GROUPS_LIST_KEY,
+    THEME_MEMBERS_LIST_KEY,
     TR_LENDING,
+    TR_THEME_GROUPS,
+    TR_THEME_MEMBERS,
     KiwoomApiError,
     KiwoomClient,
     KiwoomError,
+    theme_groups_body,
 )
 from apps.collector.kiwoom.lending import calendar_start
-from apps.collector.kiwoom.normalize import SUFFIX_NXT, SUFFIX_SOR, daily_row, lending_row
+from apps.collector.kiwoom.normalize import SUFFIX_NXT, SUFFIX_SOR, daily_row, lending_row, theme_member_ticker
 from shared.kiwoom_config import get_kiwoom_config
 
 NOT_CONFIGURED_MSG = ("키움 키가 설정되지 않았어요 — KIWOOM_APP_KEY·KIWOOM_APP_SECRET 을 "
@@ -36,6 +43,8 @@ NO_ROW = "행 없음"
 CH_UNAVAILABLE = "조회 불가"
 _MARKETS = (("코스피", "0"), ("코스닥", "10"))  # ka10099 mrkt_tp
 LENDING_DAYS = 10  # --lending 표에 보여 줄 최근 거래일 수
+THEME_SHOW = 10    # --themes 에 보여 줄 앞쪽 테마·종목 수
+THEME_MAX_PAGES = 50  # --themes 테마 목록 연속조회 상한(소량 실측이지만 전체 테마 수를 알아야 한다)
 
 Bar = dict  # daily_row 모양(date·open·high·low·close·volume·trading_value)
 
@@ -63,6 +72,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument("--non-nxt", dest="non_nxt", default="293490", help="NXT 미상장 종목 (기본 293490)")
     p.add_argument("--lending", action="store_true",
                    help="대차거래추이(ka20068) 소량 실측만 — 최근 10거래일 표(일봉 비교는 건너뜀)")
+    p.add_argument("--themes", action="store_true",
+                   help="테마(ka90001·ka90002) 소량 실측만 — 테마 수·앞 10개·첫 테마 구성 종목(일봉 비교는 건너뜀)")
     p.add_argument("--lending-tickers", dest="lending_tickers", default="005930,000660",
                    help="--lending 대상 종목(쉼표, 최대 3개, 기본 005930,000660)")
     return p.parse_args(argv)
@@ -215,6 +226,84 @@ def run_lending(args: argparse.Namespace, *, client, out: Callable[[str], None],
     return 0
 
 
+# ------------------------------------------------------------------ 테마(ka90001·ka90002)
+def _post_pages(client, api_id: str, body: dict, list_key: str, max_pages: int):
+    """연속조회를 직접 돌며 (행, 쪽별 행 수, 마지막 cont-yn). 실패는 사유 문자열."""
+    rows: list[dict] = []
+    pages: list[int] = []
+    cont_key = None
+    cont = False
+    try:
+        for _ in range(max_pages):
+            r = client.post(api_id, PATH_THEME, body, cont_key=cont_key)
+            got = list(r.data.get(list_key) or [])
+            rows.extend(got)
+            pages.append(len(got))
+            cont = r.cont_yn
+            if not r.cont_yn or not r.next_key:
+                break
+            cont_key = r.next_key
+    except KiwoomApiError as e:
+        return f"오류 {e.code}: {e.msg}"
+    except KiwoomError as e:
+        return f"오류: {e}"
+    return rows, pages, cont
+
+
+def run_themes(args: argparse.Namespace, *, client, out: Callable[[str], None]) -> int:
+    """테마 수·앞 THEME_SHOW 개(코드·이름·종목 수) + 첫 테마 구성 종목 앞 THEME_SHOW 개(원시 stk_cd 그대로)."""
+    out("")
+    out("== 테마 목록 (ka90001, qry_tp=0 전체 · stex_tp=3 통합) ==")
+    got = _post_pages(client, TR_THEME_GROUPS, theme_groups_body(), THEME_GROUPS_LIST_KEY, THEME_MAX_PAGES)
+    summary: list[str] = []
+    if isinstance(got, str):
+        out(got)
+        summary.append(f"ka90001(stex_tp=3): {got}")
+        # 통합이 거부되면 KRX(1) 로 한 번 더 — 어느 쪽이 되는지 기록
+        got1 = _post_pages(client, TR_THEME_GROUPS, theme_groups_body(stex_tp="1"), THEME_GROUPS_LIST_KEY, 1)
+        line = got1 if isinstance(got1, str) else f"{len(got1[0])}행(첫 쪽)"
+        out(f"stex_tp=1(KRX) 재시도: {line}")
+        summary.append(f"ka90001(stex_tp=1): {line}")
+        groups: list[dict] = []
+    else:
+        groups, pages, cont = got
+        out(f"테마 {len(groups)}개 · {len(pages)}쪽(쪽별 {pages}) · 마지막 cont-yn={'Y' if cont else 'N'}")
+        out(f"{'코드':<8} {'종목 수':>6}  이름")
+        for g in groups[:THEME_SHOW]:
+            out(f"{str(g.get('thema_grp_cd', '')):<8} {str(g.get('stk_num', '')):>6}  {g.get('thema_nm', '')}")
+        out(f"원시 첫 행 키: {sorted(groups[0]) if groups else '-'}")
+        summary.append(f"ka90001(stex_tp=3): 테마 {len(groups)}개, {len(pages)}쪽 {pages}, "
+                       f"마지막 cont-yn={'Y' if cont else 'N'}")
+
+    if groups:
+        first = groups[0]
+        code = str(first.get("thema_grp_cd", "")).strip()
+        out("")
+        out(f"== 구성 종목 (ka90002, {code} {first.get('thema_nm', '')}) ==")
+        body = {"date_tp": "1", "thema_grp_cd": code, "stex_tp": "3"}
+        got2 = _post_pages(client, TR_THEME_MEMBERS, body, THEME_MEMBERS_LIST_KEY, 5)
+        if isinstance(got2, str):
+            out(got2)
+            summary.append(f"ka90002({code}): {got2}")
+        else:
+            rows, pages, cont = got2
+            tickers = [theme_member_ticker(r) for r in rows]
+            out(f"응답 {len(rows)}행 · {len(pages)}쪽 · cont-yn={'Y' if cont else 'N'} · "
+                f"정규화 {len(set(t for t in tickers if t))}종목 (ka90001 stk_num={first.get('stk_num', '')})")
+            for r, t in list(zip(rows, tickers))[:THEME_SHOW]:
+                out(f"{str(r.get('stk_cd', '')):<12} → {t or '버림':<8} {r.get('stk_nm', '')}")
+            summary.append(f"ka90002({code}): {len(rows)}행, 종목 {len(set(t for t in tickers if t))}, "
+                           f"stk_num={first.get('stk_num', '')}, 원시 stk_cd 예 {rows[0].get('stk_cd') if rows else '-'}")
+
+    out("")
+    out("---- 요약 (docs/kiwoom_setup_and_dev_spec.md ④-2 실측 결과에 붙여 넣기) ----")
+    out(f"- 실측 {datetime.now(KST).strftime('%Y-%m-%d %H:%M')} KST")
+    for line in summary:
+        out(f"- {line}")
+    out("----")
+    return 0
+
+
 # ------------------------------------------------------------------ 실행
 def run(args: argparse.Namespace, *, client, ch_fetch: Callable, out: Callable[[str], None]) -> int:
     t, dt, non_nxt = args.ticker, args.date, args.non_nxt
@@ -230,6 +319,8 @@ def run(args: argparse.Namespace, *, client, ch_fetch: Callable, out: Callable[[
     out(f"[OK] 토큰 {'캐시' if info.cached else '발급'} — 만료 {exp}")
     if getattr(args, "lending", False):
         return run_lending(args, client=client, out=out)
+    if getattr(args, "themes", False):
+        return run_themes(args, client=client, out=out)
 
     # 2) NXT 상장 종목: KRX / _NX / _AL / CH
     out("")

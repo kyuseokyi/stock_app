@@ -242,3 +242,55 @@ def test_run_lending_ip_error_is_reported_per_ticker():
     probe.run_lending(probe.parse_args(["--lending"]), client=c, out=lines.append, today=date(2026, 11, 16))
     text = "\n".join(lines)
     assert "005930: 오류 8010" in text and "000660: 1행" in text
+
+
+# ------------------------------------------------------------------ 테마(ka90001·ka90002)
+class _ThemeClient(_FakeClient):
+    def __init__(self, pages: list, members=None, groups_error=None):
+        super().__init__(charts={}, stocks={})
+        self.pages, self.members, self.groups_error = list(pages), members, groups_error
+        self.posts: list[tuple] = []
+
+    def post(self, api_id, path, body, *, cont_key=None):
+        self.posts.append((api_id, path, body, cont_key))
+        if api_id == "ka90001":
+            if self.groups_error and body["stex_tp"] == "3":
+                raise self.groups_error
+            rows, more = self.pages.pop(0) if self.pages else ([], False)
+            return KiwoomResponse(data={"thema_grp": rows}, cont_yn=more, next_key="NK" if more else "")
+        if isinstance(self.members, Exception):
+            raise self.members
+        return KiwoomResponse(data={"thema_comp_stk": self.members or []}, cont_yn=False, next_key="")
+
+
+def _g(cd, nm, n):
+    return {"thema_grp_cd": cd, "thema_nm": nm, "stk_num": n, "flu_rt": "+0.02", "dt_prft_rt": "+1.00"}
+
+
+def test_parse_args_themes_flag():
+    assert probe.parse_args(["--themes"]).themes is True and probe.parse_args([]).themes is False
+
+
+def test_run_themes_counts_pages_and_members_without_secrets():
+    p1 = ([_g(str(100 + i), f"테마{i}", "5") for i in range(12)], True)
+    p2 = ([_g("200", "끝테마", "3")], False)
+    c = _ThemeClient([p1, p2], members=[{"stk_cd": "005930_AL", "stk_nm": "삼성전자"},
+                                        {"stk_cd": "000660", "stk_nm": "SK하이닉스"},
+                                        {"stk_cd": "005930", "stk_nm": "삼성전자"}])
+    code, text = _run(c, argv=["--themes"])
+    assert code == 0 and c.calls == []  # 일봉 비교 안 함
+    assert "테마 13개 · 2쪽(쪽별 [12, 1]) · 마지막 cont-yn=N" in text
+    assert "테마9" in text and "테마10" not in text  # 앞 10개만
+    assert c.posts[0][2]["stex_tp"] == "3" and c.posts[1][3] == "NK"
+    assert c.posts[2][0] == "ka90002" and c.posts[2][2] == {"date_tp": "1", "thema_grp_cd": "100", "stex_tp": "3"}
+    assert "응답 3행" in text and "정규화 2종목" in text and "005930_AL" in text
+    for secret in (FAKE_KEY, FAKE_SECRET, FAKE_TOKEN):
+        assert secret not in text
+
+
+def test_run_themes_unified_rejected_retries_krx():
+    c = _ThemeClient([([_g("100", "가", "1")], False)], groups_error=KiwoomApiError(1511, "거래소구분 오류"))
+    code, text = _run(c, argv=["--themes"])
+    assert code == 0
+    assert "오류 1511" in text and "stex_tp=1(KRX) 재시도: 1행" in text
+    assert [p[0] for p in c.posts] == ["ka90001", "ka90001"]  # 목록이 없으면 구성 종목은 부르지 않음

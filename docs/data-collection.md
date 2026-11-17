@@ -87,7 +87,8 @@ NXT 애프터마켓이 20:00 에 끝나야 통합(UN) 일봉이 확정되므로 
 | 4 | 세부 투자자 수급(`investor_detail`) | 같은 분석 대상 보통주의 연기금(기금)·사모·투신·은행·보험·기타금융 순매수 — KIS `FHPTJ04160001`, UN→J 폴백. ⚠️ **KST 00:00~15:40 조회 불가**(rt_cd=2 `TIME LIMIT 00:00 ~ 15:40`, 2026-11-16 상용 실측) — 그 시간엔 호출 없이 건너뛰고(초기 데이터 준비에서는 이 단계만 "건너뜀"), 수동 백필은 15:40 이후에 실행. 매일은 최근 5거래일을 겹쳐 받고(하루 실패가 연속 일수 구멍으로 남지 않게), 30거래일 백필은 매일 단계에서 하지 않고 **수동 `collector.backfill_investor_detail` 또는 관리자 '초기 데이터 준비'**로 낮 시간에 한다(뒤 단계가 밀리지 않게) | CH `investor_detail_daily` |
 | 4-1 | 대차잔고(`lending`, 키움) | 같은 분석 대상 보통주의 종목별 대차잔고 추이 — 키움 `ka20068`, 매일 최근 5거래일 겹침. **키움 키가 있을 때만**(상용) — 없으면 `{"skipped": "키움 키 없음"}`(개발 서버). 60거래일 백필은 수동 `collector.backfill_lending` | CH `stock_lending_daily` |
 | 5 | CANSLIM | 종목·시장 점수 | CH `canslim_daily`·`canslim_market` |
-| 6 | 시장 그룹 | 업종·테마별 등락률·순위 | CH `market_group_daily`·`market_stock_daily` |
+| 5-1 | 테마(`themes_kiwoom`, 키움) | 키움 `ka90001`(전체 테마)·`ka90002`(테마별 구성 종목) 스냅숏 교체 — 아래 "테마 출처". **키움 키가 있을 때만**(상용) — 없으면 `{"skipped": "키움 키 없음"}`(개발 서버, KIS 마스터 그대로). 실패하면 지난 스냅숏 유지 | PG `themes`·`theme_stocks`(`source=kiwoom`) |
+| 6 | 시장 그룹 | 업종·테마별 등락률·순위(테마는 "테마 출처"가 고른 멤버십) | CH `market_group_daily`·`market_stock_daily` |
 | 7 | 스크리너 | 조건검색 지표(연기금 연속 순매수 일수 `pension_buy_days`·대차잔고 5거래일 증감률 `lending_chg5` 포함) | CH `screener_daily` |
 | 8 | 차트 패턴 | 기준일 하루를 지우고 다시 적재 | CH `chart_pattern_daily` |
 
@@ -135,7 +136,21 @@ NXT 애프터마켓이 20:00 에 끝나야 통합(UN) 일봉이 확정되므로 
 - **호출량**: 종목당 1쪽(5·60거래일 모두 대개 1쪽 — 쪽당 행 수는 명세에 없어 probe 로 확인) × 약 2,600종목 ÷ `KIWOOM_RATE_PER_SEC`(기본 4/초) ≈ **11분**. 20:30 파이프라인의 CANSLIM·스크리너가 그만큼 늦게 끝난다.
 - **스크리너** `screener_daily.lending_chg5` = (기준점 잔고 − 5거래일 전 잔고) ÷ 5거래일 전 잔고 × 100. 기준점은 기준일부터 **최대 2거래일 늦은** 대차 행까지 허용(20:30 계산 때 당일 대차가 아직 공시되지 않았을 수 있어서 — probe 의 "최신 행" 날짜로 확인), 5거래일 전 잔고가 0·없으면 NULL. 프리셋 `lending_drop` = `lending_chg5 <= -20`.
 - **조회**: `GET /api/v1/stocks/{ticker}/lending?days=120`(stock_api 공개) → `[{date, balance_qty, net_qty, balance_amt}]` 오래된 순, 없으면 `[]`. 웹·앱 종목 상세 '대차잔고' 섹션(데이터 없으면 숨김).
-- **수동 백필**: `collector.backfill_lending`(기본 `days=60`, `end` 생략 시 오늘 KST). 끝나면 `collector.backfill_screener` 로 `lending_chg5` 과거 값을 채운다. 초기 데이터 준비(`bootstrap_data`)에는 넣지 않았다.
+- **수동 백필**: `collector.backfill_lending`(기본 `days=60`, `end` 생략 시 오늘 KST). 끝나면 `collector.backfill_screener` 로 `lending_chg5` 과거 값을 채운다. 초기 데이터 준비(`bootstrap_data`)에도 '대차잔고 60거래일' 단계로 들어 있다.
+
+### 테마 출처 (키움 스냅숏 ↔ KIS 마스터, 2026-11-17)
+
+설계: [`docs/superpowers/specs/2026-11-17-kiwoom-themes-design.md`](superpowers/specs/2026-11-17-kiwoom-themes-design.md). KIS `theme_code.mst` 는 2025-11 이후 갱신이 없어 오래된 테마가 섞인다 → 키움 키가 있는 서버(상용)는 키움 테마로 교체.
+
+- **가져오는 것**: 테마 목록(코드·이름)과 테마별 구성 종목뿐. 순위·등락·기간수익률은 지금처럼 우리 일봉(UN)으로 계산 — 키움 등락률은 저장·표시하지 않는다. 시장 그룹 계산·화면·API 응답 구조는 그대로, **테마 멤버십의 출처만** 바뀐다.
+- **저장**: 기존 PG `themes`·`theme_stocks` 를 그대로 쓴다(마이그레이션 없음). 키움 테마는 `themes.source='kiwoom'`, 코드는 `kis_code` 에 **`KW` 접두사**(예 `KW319` — KIS 3자리 코드와 겹치지 않게), 연결은 `theme_stocks.source='kiwoom'`. KIS 동기화는 `source=kis` 행만, 키움 동기화는 `source=kiwoom` 행만 바꾼다.
+- **스냅숏 교체**(`market_repo.sync_kiwoom_themes`, 한 트랜잭션·멱등): 스냅숏에 없는 키움 테마는 행을 지우지 않고(숨김 등 보정 보존) 키움 연결만 지운다 → 계산에서 빠짐. 성공할 때마다 스냅숏의 키움 테마 `updated_at` 을 같은 시각으로 맞추고, 키움 연결이 있는 키움 테마의 `min(updated_at)`(KST 날짜)을 **스냅숏 날짜**로 쓴다(관리자 수정은 한 행만 올리므로 날짜를 가리지 않는다).
+- **검증 후 쓰기**(`kiwoom/themes.run_themes`): 테마 수 < 100, 목록(ka90001) 실패, **첫 테마** ka90002 에서 키움 논리 오류(→ 나머지 호출 중단), 구성 종목 실패 > 5% 이면 **쓰지 않는다**(지난 스냅숏 유지). 5% 이하면 쓰되 실패 테마는 기존 연결 유지. 키 없음·8010 → skipped.
+- **출처 선택**(`market_repo.active_theme_source`): 구성 종목이 있는 키움 테마가 **100개 이상**이면 `kiwoom`, 아니면 `kis`(키움 스냅숏이 한 번도 없거나 너무 적을 때의 안전한 폴백). 데이터만 보고 정하므로 키 없는 개발 서버는 늘 `kis` 로 지금과 같다. 관리자 테마(`source=admin`)는 어느 출처든 함께 쓴다. `market_repo.theme_groups` 가 이 규칙으로 거르므로 시장 그룹 계산·마켓 테마 상세·데이터 검증·표본 점검이 같은 멤버십을 본다.
+- **관리자 테마 보정**: 목록은 지금 출처 + 관리자 테마만. 키움 테마는 코드가 달라 KIS 테마에 했던 숨김·제외가 이어지지 않는다(정상 — 필요하면 키움 테마에 다시). 화면 위에 출처·스냅숏 날짜(`GET /api/v1/admin/themes/source`).
+- **호출량**: ka90001 연속조회 몇 쪽 + 테마 수(수백) × ka90002 1쪽 ÷ `KIWOOM_RATE_PER_SEC`(기본 4/초) → 테마 300개면 약 **1.5분**, 500개면 약 2분.
+- **한계**: 과거 테마 구성 이력은 없다 — 60일 백필도 현재 스냅숏으로 계산(근사). 출처가 바뀐 첫날은 테마 id 가 달라 `market_group_daily` 의 KIS 테마 행이 숨김 행으로 덮이고, 순위 추이는 `backfill_market_groups` 로 다시 채운다.
+- **수동 실행**: `collector.collect_themes_kiwoom`(인자 없음) → `collector.backfill_market_groups`.
 
 ## 5. 수집 규칙 (반드시 지킬 것 — CLAUDE.md 와 같음)
 
@@ -193,9 +208,10 @@ NXT 애프터마켓이 20:00 에 끝나야 통합(UN) 일봉이 확정되므로 
 
 | 작업 | 어떻게 | 비고 |
 |---|---|---|
-| **초기 데이터 준비** | 관리자 화면 버튼 → `collector.bootstrap_data` | 새 서버용. 수집 1~9('연기금 등 세부 수급 30거래일'·'대차잔고 60거래일' 포함) → 계산 10~13 을 순서대로. 16:00~21:30 에는 시작 안 함(정기 수집과 KIS 한도 충돌 방지). 세부 수급은 15:40 전, 대차잔고는 키움 키가 없으면(개발 서버) 그 단계만 '건너뜀'. **21:30 이후에 누르면 모든 단계가 한 번에 채워진다**. 다시 누르면 이어서 채움 |
+| **초기 데이터 준비** | 관리자 화면 버튼 → `collector.bootstrap_data` | 새 서버용. 수집 1~9('연기금 등 세부 수급 30거래일'·'대차잔고 60거래일' 포함) → 계산(CANSLIM → '테마(키움)' → 시장 그룹 → 조건검색 → 패턴)을 순서대로. 16:00~21:30 에는 시작 안 함(정기 수집과 KIS 한도 충돌 방지). 세부 수급은 15:40 전, 대차잔고·테마(키움)는 키움 키가 없으면(개발 서버) 그 단계만 '건너뜀'. **21:30 이후에 누르면 모든 단계가 한 번에 채워진다**. 다시 누르면 이어서 채움 |
 | 전종목 장기 백필 | `collector.backfill_all_daily` | 개월 수 지정, 청크로 받아 이동평균은 한 번에 |
 | 세부 투자자 30거래일 백필 | `collector.backfill_investor_detail` | `{"days": 30}` 기본. 끝나면 `collector.backfill_screener` 로 `pension_buy_days` 과거 값을 채운다 |
+| 키움 테마 스냅숏(상용) | `collector.collect_themes_kiwoom` | 인자 없음, 키움 키 없으면 skipped. 끝나면 `collector.backfill_market_groups` 로 순위 추이를 새 테마로 채운다 |
 | 대차잔고 60거래일 백필(상용) | `collector.backfill_lending` | `{"days": 60}` 기본, 키움 키 없으면 skipped. 끝나면 `collector.backfill_screener` 로 `lending_chg5` 과거 값을 채운다 |
 | 계산 60일 백필 | CANSLIM·시장 그룹·스크리너 태스크 | 과거 날짜도 **현재** 재무·테마·상장주식수로 계산(근사) |
 | 표본 점검 | `apps/collector/verify/spot_check.py` | 우리 UN 일봉 vs KRX(pykrx): 고가 ≥, 저가 ≤, 거래량 ≥ 이면 정상. 내부 테이블끼리도 비교 |

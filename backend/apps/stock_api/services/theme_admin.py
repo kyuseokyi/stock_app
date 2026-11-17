@@ -1,6 +1,8 @@
 """테마 관리자 보정(async) — KIS 테마 숨김·이름 수정, 관리자 테마 생성, 종목 추가·제외.
 
-KIS 동기화(shared.market_repo.sync_kis_themes)는 source='kis' 연결만 건드리므로 여기서 바꾼 표시는 유지된다.
+KIS 동기화(shared.market_repo.sync_kis_themes)는 source='kis', 키움 동기화(sync_kiwoom_themes)는 source='kiwoom' 연결만
+건드리므로 여기서 바꾼 표시는 유지된다. 목록은 지금 계산에 쓰는 출처(active_theme_source)의 테마 + 관리자 테마만 보여 준다
+(키움 테마는 코드가 달라 KIS 테마에 했던 보정이 이어지지 않는다 — 정상).
 바꾼 뒤에는 시장 그룹(테마 순위) 재계산을 워커에 맡긴다 — 실패해도 보정은 성공(다음 일일 파이프라인에서 반영).
 """
 from __future__ import annotations
@@ -11,6 +13,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.collector.celery_app import celery_app
+from shared import market_repo
 from shared.market_models import Theme, ThemeStock
 
 log = logging.getLogger(__name__)
@@ -48,9 +51,20 @@ async def _get(db: AsyncSession, theme_id: int) -> Theme:
     return t
 
 
+async def theme_source(db: AsyncSession) -> dict:
+    """{source: kiwoom|kis, snapshot_date: 'YYYY-MM-DD'|None, kiwoom_themes: 구성 종목 있는 키움 테마 수}."""
+    src = await db.run_sync(market_repo.active_theme_source)
+    d = src.get("snapshot_date")
+    return {**src, "snapshot_date": d.isoformat() if d else None}
+
+
 async def list_themes(db: AsyncSession) -> list[dict]:
     counts = await _counts(db)
-    themes = (await db.execute(select(Theme).order_by(Theme.is_hidden, Theme.name))).scalars().all()
+    active = (await db.run_sync(market_repo.active_theme_source))["source"]
+    themes = (await db.execute(
+        select(Theme).where(Theme.source != market_repo.excluded_theme_source(active))
+        .order_by(Theme.is_hidden, Theme.name)
+    )).scalars().all()
     return [_dto(t, counts.get(t.id, 0)) for t in themes]
 
 
