@@ -67,13 +67,13 @@ def test_investor_flow_row_converts_unit_and_strips_suffix():
            "prsm_avg_pric": "57056"}
     r = kn.investor_flow_row(raw)
     assert r["ticker"] == "005930" and r["name"] == "삼성전자"
-    assert r["net_amount"] == 25467 * kn.KIWOOM_FLOW_AMT_TO_WON == 254_670_000
+    assert r["net_amount"] == 25467 * kn.KIWOOM_FLOW_AMT_TO_WON == 25_467_000_000  # 백만원(실측)
     assert r["raw_amt"] == 25467 and r["qty"] == 4464 and r["avg_price"] == 57056
     assert kn.investor_flow_row({"stk_cd": "x", "netslmt_amt": "1"}) is None
 
 
 def test_investor_flow_row_keeps_negative_sign():
-    assert kn.investor_flow_row({"stk_cd": "000660", "stk_nm": "n", "netslmt_amt": "-30"})["net_amount"] == -300_000
+    assert kn.investor_flow_row({"stk_cd": "000660", "stk_nm": "n", "netslmt_amt": "-30"})["net_amount"] == -30_000_000
 
 
 def test_implied_unit_matches_spec_example():
@@ -84,3 +84,10 @@ def test_implied_unit_matches_spec_example():
     )]
     assert kn.implied_amt_unit(rows) == 10_000
     assert kn.implied_amt_unit([{"raw_amt": 0, "qty": 0, "avg_price": 0}]) is None
+
+
+def test_to_int_handles_double_sign():
+    # 상용 실측(2026-11-17): 순매수 목록 끝의 음수 행이 '+-5' 로 왔다
+    assert kn.to_int("+-5") == -5 and kn.to_int("-+5") == -5 and kn.to_int("--5") == -5
+    assert kn.to_int("++5") == 5 and kn.to_int("+-") == 0
+    assert kn.investor_flow_row({"stk_cd": "000660", "stk_nm": "n", "netslmt_amt": "+-5"})["net_amount"] == -5_000_000

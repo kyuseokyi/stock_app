@@ -43,6 +43,7 @@ from apps.collector.kiwoom.client import (
 from apps.collector.kiwoom.lending import calendar_start
 from apps.collector.kiwoom.normalize import (
     KIWOOM_FLOW_AMT_TO_WON,
+    KIWOOM_FLOW_QTY_PRICE_RATIO,
     SUFFIX_NXT,
     SUFFIX_SOR,
     daily_row,
@@ -394,8 +395,9 @@ def run_investors(args: argparse.Namespace, *, client, out: Callable[[str], None
                     f"{x['raw_amt']:>12,} {x['qty']:>12,} {x['avg_price']:>10,} {per:>10}")
     unit = implied_amt_unit(all_rows)
     unit_text = "계산 불가" if unit is None else f"×{unit:,}"
-    verdict = "" if unit is None else (" ✅ 설정과 같음" if unit == KIWOOM_FLOW_AMT_TO_WON
-                                       else f" ❌ 설정 ×{KIWOOM_FLOW_AMT_TO_WON:,} 과 다름 — normalize 상수 수정")
+    verdict = "" if unit is None else (
+        f" ✅ 예상 비율과 같음(금액 ×{KIWOOM_FLOW_AMT_TO_WON:,} = 백만원)" if unit == KIWOOM_FLOW_QTY_PRICE_RATIO
+        else f" ❌ 예상 ×{KIWOOM_FLOW_QTY_PRICE_RATIO:,} 과 다름 — 응답 단위 변경 의심, normalize 확인")
     out("")
     out(f"단위 추정 {unit_text} (수량×추정평균가÷원시 금액 중앙값){verdict}")
 
