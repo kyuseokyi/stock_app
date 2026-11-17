@@ -13,7 +13,7 @@ KIS REST(실전 키)               → 일봉·지수·수급·재무·공모주
 KIS WebSocket                   → 게임 실시간 체결                     → Redis(틱)·CH(1분봉)   → 트레이딩 게임
 KIS REST(장중 30초)             → 장중 지수·환율                       → Redis(10분 TTL)        → 시황 전광판
 FRED API                        → 미국 거시 지표·발표일                → ClickHouse·PG 일정    → 시황·일정
-pykrx(KRX 로그인, 선택)          → 투자자 수급 확정치                   → Redis                  → 시황 수급
+키움 ka10058(상용) → pykrx(선택)  → 투자자 수급(순매수 상위)              → Redis                  → 시황 수급
 네이버 검색 API·OpenDART·Gemini  → 뉴스·공시 → AI 해설                  → PostgreSQL·Redis       → AI 시황·종목 평가
                                  ↓ 매일 20:30 수집이 끝나면 같은 작업에서 계산
                                  CANSLIM → 시장 그룹(업종·테마) → 스크리너 → 차트 패턴 → ClickHouse
@@ -29,7 +29,7 @@ pykrx(KRX 로그인, 선택)          → 투자자 수급 확정치            
 | KIS 마스터 파일 `new.real.download.dws.co.kr/common/master/` | 전종목(`kospi_code.mst`·`kosdaq_code.mst`), 업종(`idxcode.mst`), 테마(`theme_code.mst`), 해외 지수 코드 | 없음(공개 파일) | `STOCK_MASTER_SOURCE=auto` 면 코드 안 대형주 목록으로 대체(검증용) |
 | KIS Open API (REST·WS) | 시세·지수·수급·재무·공모주·순위·실시간 체결 | `KIS_APP_KEY`·`KIS_APP_SECRET`·`KIS_MODE`(prod=실전 / vps=모의) | 수집 실패. 게임 실시간은 가짜 틱(Mock)으로 동작 |
 | FRED | 미국 CPI·실업률·금리 등 + 발표 예정일 | `FRED_API_KEY` | 거시 지표 수집 건너뜀 |
-| pykrx (KRX 정보데이터시스템) | 시장 전체 투자자 순매수(연기금 포함) | `KRX_ID`·`KRX_PW` | KIS 수급(`investor_daily`)으로 대체 — 연기금 없음, 전 거래일일 수 있음 |
+| pykrx (KRX 정보데이터시스템) | 시장 전체 투자자 순매수(연기금 포함) — 키움 다음 2순위 | `KRX_ID`·`KRX_PW` | KIS 수급(`investor_daily`)으로 대체 — 연기금 없음, 전 거래일일 수 있음 |
 | 네이버 검색 API(API HUB) | 종목·급등락 뉴스 | 네이버 검색 키 | AI 해설이 뉴스 없이 생성되거나 건너뜀 |
 | OpenDART | 공시 | DART 키 | 종목 정성 평가에서 공시 제외 |
 | Gemini | AI 시황·해설 생성 | `GEMINI_API_KEY` | AI 태스크가 skipped 로 바로 끝남 |
@@ -151,6 +151,17 @@ NXT 애프터마켓이 20:00 에 끝나야 통합(UN) 일봉이 확정되므로 
 - **호출량**: ka90001 연속조회 몇 쪽 + 테마 수(수백) × ka90002 1쪽 ÷ `KIWOOM_RATE_PER_SEC`(기본 4/초) → 테마 300개면 약 **1.5분**, 500개면 약 2분.
 - **한계**: 과거 테마 구성 이력은 없다 — 60일 백필도 현재 스냅숏으로 계산(근사). 출처가 바뀐 첫날은 테마 id 가 달라 `market_group_daily` 의 KIS 테마 행이 숨김 행으로 덮이고, 순위 추이는 `backfill_market_groups` 로 다시 채운다.
 - **수동 실행**: `collector.collect_themes_kiwoom`(인자 없음) → `collector.backfill_market_groups`.
+
+### 시황 수급 전광판 출처 (키움 → pykrx → KIS, 2026-11-17)
+
+설계: [`docs/superpowers/specs/2026-11-17-kiwoom-investor-flow-design.md`](superpowers/specs/2026-11-17-kiwoom-investor-flow-design.md). 코드 `apps/collector/investor_flow.py`(`ai.collect_investor_flow` 15:45·18:10·22:00 가 부름).
+
+- **1순위 키움 `ka10058`**(투자자별일별매매종목, **키움 키가 있을 때만** — 상용): 외국인(9000)·기관계(9999)·연기금(6000) × 코스피(001)·코스닥(101) = 6회, 순매수(`trde_tp=2`), 통합(`stex_tp=3`), 기간 = 기준일 하루, 시장·투자자당 최대 2쪽. 종목코드 접미사(`_AL` 등)·앞 `A` 제거, **보통주 유니버스로 거른다**(ETF·스팩·우선주 제외 — KIS 폴백과 같은 기준), 두 시장 합쳐 순매수 금액 내림차순 상위 50(응답은 10).
+- **금액 단위 ⚠️**: 명세 `netslmt_amt` 설명은 "원"이지만 명세 응답 예시 세 행은 모두 `수량 × 추정평균가 ≈ 금액 × 10,000` → **만원으로 보고 ×10,000**(`kiwoom/normalize.KIWOOM_FLOW_AMT_TO_WON`). 수집 때 같은 비율로 단위를 추정해 설정과 다르면 경고 로그, 상용 `probe --investors` 의 '단위 추정' 으로 확정한다.
+- **투자자별 혼합**: 키움에서 실패·빈 투자자만 **같은 날** pykrx 로 채운다. 그래도 외국인·기관 중 하나가 비면 전체를 KIS(`investor_daily`, 전 거래일일 수 있음)로 넘긴다 — 날짜가 다른 KIS 와는 섞지 않는다. 연기금만 비면 빈 채로 둔다(KIS 경로와 같음). 8010·키 미설정이면 남은 키움 호출을 하지 않는다.
+- **`source`**: 외국인·기관이 모두 키움이면 `kiwoom`, 아니면 `pykrx`/`kis`. 투자자별 출처는 로그(`투자자 순매수 출처 혼합`)에만. 응답 구조는 그대로, 웹·앱 캡션은 '출처 키움'.
+- **키 없는 개발 서버**: 키움을 건드리지 않고 지금처럼 pykrx → KIS.
+- **한계**: AI 해설은 같은 기준일·출처면 재사용하므로 15:45 잠정·18:10 확정이 둘 다 `kiwoom` 이면 18:10 숫자는 바뀌어도 해설은 15:45 것이 남는다(pykrx 때와 같음).
 
 ## 5. 수집 규칙 (반드시 지킬 것 — CLAUDE.md 와 같음)
 
