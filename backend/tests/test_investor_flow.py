@@ -1,4 +1,4 @@
-"""시장 투자자별 순매수 집계 — pykrx(가짜 모듈) 우선, CH investor_daily(KIS) 폴백."""
+"""시장 투자자별 순매수 집계 — 키움(가짜 클라이언트, 설정 시) → pykrx(가짜 모듈) → CH investor_daily(KIS) 폴백."""
 import sys
 import types
 from datetime import date
@@ -9,6 +9,13 @@ import pytest
 from apps.collector import investor_flow as inf
 
 D = date(2026, 10, 30)
+
+
+@pytest.fixture(autouse=True)
+def _no_kiwoom(monkeypatch):
+    """로컬 셸에 키움 키가 있어도 기존 테스트로 새지 않게 — 키움 테스트는 with_kiwoom 으로 켠다."""
+    monkeypatch.delenv("KIWOOM_APP_KEY", raising=False)
+    monkeypatch.delenv("KIWOOM_APP_SECRET", raising=False)
 
 
 @pytest.fixture
@@ -168,3 +175,124 @@ def test_double_buy_helper():
     i = [{"ticker": "b", "name": "B", "net_amount": 50.0}, {"ticker": "a", "name": "A", "net_amount": 1.0},
          {"ticker": "c", "name": "C", "net_amount": 100.0}]
     assert [r["ticker"] for r in inf.double_buy(f, i)] == ["b", "a"]
+
+
+# --- 키움 ka10058 ------------------------------------------------------------- #
+from apps.collector.kiwoom import client as kwc  # noqa: E402
+from apps.collector.kiwoom.client import KiwoomApiError, KiwoomIpError  # noqa: E402
+from apps.collector.kiwoom.normalize import KIWOOM_FLOW_AMT_TO_WON as KW  # noqa: E402
+
+
+class _FakeKiwoom:
+    """investor_daily_top 호출을 기록하고 (investor, market) → 원시 행 또는 예외를 돌려준다."""
+
+    def __init__(self, data):
+        self.data, self.calls, self.closed = data, [], False
+
+    def investor_daily_top(self, investor, strt_dt, end_dt, market, *, max_pages=1):
+        self.calls.append((investor, strt_dt, end_dt, market, max_pages))
+        got = self.data.get((investor, market), [])
+        if isinstance(got, Exception):
+            raise got
+        return got
+
+    def close(self):
+        self.closed = True
+
+
+def _kw(code, name, amt):
+    return {"stk_cd": code, "stk_nm": name, "netslmt_qty": "+1", "netslmt_amt": amt, "prsm_avg_pric": "1"}
+
+
+@pytest.fixture
+def with_kiwoom(monkeypatch):
+    monkeypatch.setenv("KIWOOM_APP_KEY", "FAKEKEY")
+    monkeypatch.setenv("KIWOOM_APP_SECRET", "FAKESECRET")
+
+    def install(data):
+        fake = _FakeKiwoom(data)
+        monkeypatch.setattr(kwc, "KiwoomClient", lambda cfg=None: fake)
+        return fake
+    return install
+
+
+FULL_KW = {
+    ("foreign", "kospi"): [_kw("005930_AL", "삼성전자", "+500"), _kw("069500", "KODEX 200", "+9999"),
+                           _kw("000660", "SK하이닉스", "-30")],
+    ("foreign", "kosdaq"): [_kw("A247540", "에코프로비엠", "+400")],
+    ("institution", "kospi"): [_kw("000660_AL", "SK하이닉스", "+200"), _kw("005930", "삼성전자", "+100")],
+    ("pension", "kospi"): [_kw("005930", "삼성전자", "+70")],
+}
+
+
+def test_kiwoom_not_configured_skips_client(no_krx, monkeypatch):
+    monkeypatch.setattr(kwc, "KiwoomClient", lambda *a, **k: pytest.fail("키움 미설정인데 클라이언트 생성"))
+    assert inf.fetch_kiwoom(D, session=object()) is None
+
+
+def test_kiwoom_first_source_shape_unit_suffix_and_filter(with_kiwoom, with_krx, monkeypatch, universe):
+    fake = with_kiwoom(FULL_KW)
+    pykrx_calls = _install_fake_pykrx(monkeypatch, {})
+    out = inf.collect(D, session=object())
+    assert set(out) == {"date", "source", "foreign_top", "institution_top", "pension_top", "double_buy"}
+    assert out["source"] == "kiwoom" and out["date"] == "2026-10-30"
+    # 접미사 제거·ETF(069500, 유니버스 밖) 제외·음수 제외·두 시장 합쳐 정렬·만원→원
+    assert [(r["ticker"], r["net_amount"]) for r in out["foreign_top"]] == [("005930", 500.0 * KW),
+                                                                            ("247540", 400.0 * KW)]
+    assert out["pension_top"] == [{"ticker": "005930", "name": "삼성전자", "net_amount": 70.0 * KW}]
+    assert [r["ticker"] for r in out["double_buy"]] == ["005930"]
+    assert pykrx_calls == []  # 셋 다 키움으로 찼으면 pykrx 는 부르지 않는다
+    assert ("foreign", "20261030", "20261030", "kosdaq", inf.KIWOOM_MAX_PAGES) in fake.calls
+    assert len(fake.calls) == 6 and fake.closed
+
+
+def test_kiwoom_missing_pension_filled_from_pykrx_same_day(with_kiwoom, with_krx, monkeypatch, universe):
+    data = dict(FULL_KW)
+    data[("pension", "kospi")] = KiwoomApiError(1999, "시간 제한")
+    with_kiwoom(data)
+    calls = _install_fake_pykrx(monkeypatch, {("KOSPI", "연기금"): _df([("000660", "SK하이닉스", 30)])})
+    out = inf.collect(D, session=object())
+    assert out["source"] == "kiwoom"  # 외국인·기관이 키움
+    assert out["pension_top"] == [{"ticker": "000660", "name": "SK하이닉스", "net_amount": 30.0}]
+    assert {c[3] for c in calls} == {"연기금"}  # 빠진 투자자만 pykrx 로
+
+
+def test_kiwoom_missing_institution_from_pykrx_marks_source_pykrx(with_kiwoom, with_krx, monkeypatch, universe):
+    data = {k: v for k, v in FULL_KW.items() if k[0] != "institution"}
+    with_kiwoom(data)
+    _install_fake_pykrx(monkeypatch, {("KOSPI", "기관합계"): _df([("005930", "삼성전자", 7)])})
+    out = inf.collect(D, session=object())
+    assert out["source"] == "pykrx"
+    assert out["foreign_top"][0]["net_amount"] == 500.0 * KW and out["institution_top"][0]["net_amount"] == 7.0
+
+
+def test_kiwoom_core_missing_and_no_pykrx_goes_to_kis(with_kiwoom, no_krx, universe):
+    with_kiwoom({("foreign", "kospi"): [_kw("005930", "삼성전자", "+5")]})  # 기관 없음, pykrx 없음
+    ch = _FakeCH([[(date(2026, 10, 29),)], [("005930", 500, 100)]])
+    out = inf.collect(D, ch=ch, session=object())
+    assert out["source"] == "kis" and out["date"] == "2026-10-29"  # 날짜가 다른 KIS 와는 섞지 않는다
+
+
+def test_kiwoom_ip_error_stops_and_falls_to_pykrx(with_kiwoom, with_krx, monkeypatch, universe):
+    fake = with_kiwoom({("foreign", "kospi"): KiwoomIpError(8010, "ip")})
+    _install_fake_pykrx(monkeypatch, {("KOSPI", "외국인"): _df([("005930", "삼성전자", 5)]),
+                                      ("KOSPI", "기관합계"): _df([("005930", "삼성전자", 3)])})
+    out = inf.collect(D, session=object())
+    assert out["source"] == "pykrx" and len(fake.calls) == 1 and fake.closed  # 남은 5회는 부르지 않음
+
+
+def test_kiwoom_all_fail_uses_full_pykrx(with_kiwoom, with_krx, monkeypatch, universe):
+    with_kiwoom({k: RuntimeError("boom") for k in FULL_KW})
+    calls = _install_fake_pykrx(monkeypatch, {("KOSPI", "외국인"): _df([("005930", "삼성전자", 5)])})
+    out = inf.collect(D, session=object())
+    assert out["source"] == "pykrx" and len(calls) == 6
+
+
+def test_kiwoom_unit_mismatch_warns(with_kiwoom, no_krx, universe, caplog):
+    # 수량×평균가 = 금액(원 단위로 온 경우) → 추정 1 ≠ 설정 → 경고
+    row = {"stk_cd": "005930", "stk_nm": "삼성전자", "netslmt_qty": "+10", "netslmt_amt": "+1000",
+           "prsm_avg_pric": "100"}
+    with_kiwoom({("foreign", "kospi"): [row], ("institution", "kospi"): [row]})
+    with caplog.at_level("WARNING"):
+        assert inf.fetch_kiwoom(D, session=object())["source"] == "kiwoom"
+    assert "금액 단위 추정" in caplog.text

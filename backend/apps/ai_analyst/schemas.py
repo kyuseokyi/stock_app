@@ -131,7 +131,7 @@ class DoubleBuyItem(BaseModel):
 
 class InvestorFlowResponse(BaseModel):
     date: str | None = None
-    source: str | None = None  # "pykrx" | "kis"
+    source: str | None = None  # "kiwoom" | "pykrx" | "kis"
     foreign_top: list[FlowItem] = []
     institution_top: list[FlowItem] = []
     pension_top: list[FlowItem] = []

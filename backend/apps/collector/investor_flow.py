@@ -1,7 +1,12 @@
 """시장 전체 투자자별(외국인·기관·연기금) 순매수 상위 집계 — 시황 탭 수급 전광판용.
 
-1순위 pykrx(KRX 로그인 env KRX_ID/KRX_PW 가 있을 때만) → 실패·빈 결과면 2순위 ClickHouse investor_daily(KIS, 20:30 적재).
+1순위 키움 ka10058(KIWOOM_APP_KEY/SECRET 이 있을 때만 — 상용 서버) → 2순위 pykrx(KRX 로그인 env KRX_ID/KRX_PW 가
+있을 때만) → 3순위 ClickHouse investor_daily(KIS, 20:30 적재).
+- 키움에서 빠진(실패·빈) 투자자는 **같은 날** pykrx 로만 채운다(투자자별 혼합). 날짜가 다를 수 있는 KIS 와는 섞지 않는다.
+  혼합 뒤에도 외국인·기관 중 하나가 비면 전체를 KIS 로 넘긴다. 최상위 source 는 외국인·기관이 모두 키움이면 "kiwoom",
+  아니면 "pykrx"(투자자별 출처는 로그에 남긴다 — 응답 구조는 그대로).
 KIS 폴백은 연기금이 없고, 기준일이 전 거래일일 수 있다 → 결과에 source·date 를 담는다.
+설계: docs/superpowers/specs/2026-11-17-kiwoom-investor-flow-design.md
 이 모듈은 수집·집계만 한다(Redis 저장·AI 해설은 상위 태스크/서비스 담당).
 
 금액 단위는 모두 원(KRW)으로 통일한다.
@@ -21,6 +26,9 @@ LOOKBACK_DAYS = 14  # KIS 폴백: 기준일 이전 이 기간 안에서 최신 �
 
 PYKRX_MARKETS = ("KOSPI", "KOSDAQ")
 PYKRX_INVESTORS = {"foreign": "외국인", "institution": "기관합계", "pension": "연기금"}
+INVESTORS = tuple(PYKRX_INVESTORS)  # foreign, institution, pension
+KIWOOM_MARKETS = ("kospi", "kosdaq")
+KIWOOM_MAX_PAGES = 2  # 시장·투자자당 연속조회 상한(POOL_N 50 을 채우면 충분 — 쪽당 행 수는 probe 로 확인)
 
 # ⚠️ 미검증: KIS inquire-investor 의 *_ntby_tr_pbmn(순매수 거래대금) 단위.
 # 저장소 안에는 근거가 없다(docs/superpowers/plans/2026-10-19-market-data-verification.md:48 "단위는 확인되지 않아 변환하지 않는다").
@@ -50,7 +58,7 @@ def double_buy(foreign: list[dict], institution: list[dict], n: int = TOP_N) -> 
     return out[:n]
 
 
-# --- 1순위: pykrx ------------------------------------------------------------- #
+# --- 2순위: pykrx ------------------------------------------------------------- #
 def _pykrx_rows(df) -> list[dict] | None:
     """pykrx DataFrame(인덱스=티커) → [{ticker,name,net_amount}]. 필요한 컬럼이 없으면 None.
 
@@ -65,12 +73,14 @@ def _pykrx_rows(df) -> list[dict] | None:
     return [_flow(str(t), str(r["종목명"]), r["순매수거래대금"]) for t, r in df.iterrows()]
 
 
-def fetch_pykrx(day: date) -> dict | None:
+def fetch_pykrx(day: date, investors: tuple[str, ...] | list[str] | None = None) -> dict | None:
     """KRX 로그인 정보가 없으면 pykrx 를 import 하지도 않고 None.
 
     pykrx 1.2.9 는 import 시점에 KRX 로그인을 시도하고 stdout 에 출력하므로 반드시 함수 안에서 지연 import 한다.
+    investors: 받을 투자자 키(기본 셋 다) — 키움에서 빠진 투자자만 채울 때 일부만 부른다.
     반환: {"date","source":"pykrx","foreign":[상위 POOL_N],"institution":[...],"pension":[...]} 또는 None.
     """
+    keys = tuple(investors) if investors else INVESTORS
     if krx_credentials() is None:
         return None
     try:
@@ -81,7 +91,8 @@ def fetch_pykrx(day: date) -> dict | None:
     d = day.strftime("%Y%m%d")
     out: dict = {"date": day.isoformat(), "source": "pykrx"}
     try:
-        for key, investor in PYKRX_INVESTORS.items():
+        for key in keys:
+            investor = PYKRX_INVESTORS[key]
             rows: list[dict] = []
             for market in PYKRX_MARKETS:
                 parsed = _pykrx_rows(stock.get_market_net_purchases_of_equities(d, d, market, investor))
@@ -92,12 +103,95 @@ def fetch_pykrx(day: date) -> dict | None:
     except Exception as exc:  # noqa: BLE001 — 로그인 실패·응답 형식 변경 등
         log.warning("pykrx 투자자 순매수 조회 실패: %s", exc)
         return None
-    if not any(out[k] for k in PYKRX_INVESTORS):
+    if not any(out[k] for k in keys):
         return None
     return out
 
 
-# --- 2순위: ClickHouse investor_daily(KIS) ------------------------------------ #
+# --- 1순위: 키움 ka10058 ------------------------------------------------------ #
+def fetch_kiwoom(day: date, *, session=None, client_factory=None) -> dict | None:
+    """키움 키가 없으면 클라이언트·Redis 를 건드리지 않고 None(개발 서버는 기존 순서 그대로).
+
+    투자자마다 코스피·코스닥 순매수 행을 받아 보통주 유니버스로 거른 뒤(ETF·스팩·우선주 제외, KIS 폴백과 같은 기준)
+    금액 내림차순 상위 POOL_N. 실패·빈 투자자는 키를 빼고 돌려준다(상위에서 pykrx 로 채움).
+    등록 IP 밖(8010)·키 미설정이면 남은 호출을 하지 않는다.
+    반환: {"date","source":"kiwoom", <성공한 투자자>: [...]} 또는 None(하나도 없을 때).
+    """
+    from shared.kiwoom_config import get_kiwoom_config
+
+    cfg = get_kiwoom_config()
+    if not cfg.is_configured:
+        return None
+    from apps.collector.kiwoom.client import KiwoomClient, KiwoomIpError, KiwoomNotConfigured
+    from apps.collector.kiwoom.normalize import KIWOOM_FLOW_AMT_TO_WON, implied_amt_unit, investor_flow_row
+
+    try:
+        client = client_factory() if client_factory else KiwoomClient(cfg)
+    except Exception as exc:  # noqa: BLE001
+        log.warning("키움 클라이언트 생성 실패: %s", exc)
+        return None
+    d = day.strftime("%Y%m%d")
+    got: dict[str, list[dict]] = {}
+    try:
+        for key in INVESTORS:
+            try:
+                by_ticker: dict[str, dict] = {}
+                for market in KIWOOM_MARKETS:
+                    for raw in client.investor_daily_top(key, d, d, market, max_pages=KIWOOM_MAX_PAGES):
+                        row = investor_flow_row(raw)
+                        if row is not None:
+                            by_ticker.setdefault(row["ticker"], row)
+                got[key] = list(by_ticker.values())
+            except (KiwoomIpError, KiwoomNotConfigured) as exc:
+                log.warning("키움 투자자 순매수 호출 불가 — 남은 호출 중단: %s", exc)
+                break
+            except Exception as exc:  # noqa: BLE001 — 그 투자자만 다음 출처로
+                log.warning("키움 %s 순매수 조회 실패: %s", key, exc)
+    finally:
+        close = getattr(client, "close", None)
+        if close is not None:
+            close()
+
+    all_rows = [r for rows in got.values() for r in rows]
+    if not all_rows:
+        return None
+    unit = implied_amt_unit(all_rows)
+    if unit is not None and unit != KIWOOM_FLOW_AMT_TO_WON:
+        log.warning("키움 ka10058 금액 단위 추정 %s ≠ 설정 %s — normalize.KIWOOM_FLOW_AMT_TO_WON 확인 필요",
+                    unit, KIWOOM_FLOW_AMT_TO_WON)
+    names = _universe_names(session, sorted({r["ticker"] for r in all_rows}))
+    out: dict = {"date": day.isoformat(), "source": "kiwoom"}
+    for key, rows in got.items():
+        top = _top([_flow(r["ticker"], names[r["ticker"]], r["net_amount"]) for r in rows if r["ticker"] in names],
+                   POOL_N)
+        if top:
+            out[key] = top
+    if not any(k in out for k in INVESTORS):
+        return None
+    return out
+
+
+def _fill_from_pykrx(day: date, kw: dict) -> dict | None:
+    """키움 결과에서 빠진 투자자만 같은 날 pykrx 로 채운다. 외국인·기관이 둘 다 차야 성공(아니면 None → KIS)."""
+    sources = {k: "kiwoom" for k in INVESTORS if kw.get(k)}
+    missing = [k for k in INVESTORS if not kw.get(k)]
+    merged = {"date": kw["date"], **{k: kw.get(k) or [] for k in INVESTORS}}
+    if missing:
+        px = fetch_pykrx(day, missing) or {}
+        for k in missing:
+            if px.get(k):
+                merged[k] = px[k]
+                sources[k] = "pykrx"
+    if not merged["foreign"] or not merged["institution"]:
+        log.warning("키움+pykrx 로 외국인·기관을 다 채우지 못함(%s) — KIS 로 넘김", sources)
+        return None
+    merged["source"] = "kiwoom" if sources.get("foreign") == sources.get("institution") == "kiwoom" else "pykrx"
+    if any(v != "kiwoom" for v in sources.values()) or len(sources) < len(INVESTORS):
+        log.info("투자자 순매수 출처 혼합: %s", sources)
+    return merged
+
+
+# --- 3순위: ClickHouse investor_daily(KIS) ------------------------------------ #
 def fetch_kis_fallback(ch, day: date, session=None) -> dict | None:
     """day 이하 최신 적재일 하나를 골라 외국인·기관 순매수 상위(양수만). 보통주 유니버스로 ETF·스팩·우선주 제외.
 
@@ -165,11 +259,12 @@ def _universe_names(session, tickers: list[str]) -> dict[str, str]:
 
 # --- 진입점 ------------------------------------------------------------------- #
 def collect(day: date, *, ch=None, session=None) -> dict | None:
-    """pykrx → KIS(CH) 폴백 → 둘 다 없으면 None.
+    """키움(설정 시) → pykrx → KIS(CH) 폴백 → 모두 없으면 None.
 
     반환 키(API 계약과 동일): date, source, foreign_top, institution_top, pension_top, double_buy.
     """
-    raw = fetch_pykrx(day)
+    kw = fetch_kiwoom(day, session=session)
+    raw = fetch_pykrx(day) if kw is None else _fill_from_pykrx(day, kw)
     if raw is None:
         if ch is None:
             from shared.clickhouse_schema import get_client
