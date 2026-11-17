@@ -99,6 +99,7 @@ describe('normalizeInvestorFlow', () => {
       ai_comment: '  ',
     })
     expect(f.source).toBeNull()
+    expect(normalizeInvestorFlow({ source: 'kiwoom' }).source).toBe('kiwoom')
     expect(f.foreignTop).toEqual([{ ticker: 'A', name: '가', netAmount: 1e9 }])
     expect(f.doubleBuy).toEqual([{ ticker: 'C', name: 'C', foreignAmount: 1, institutionAmount: 2 }])
     expect(f.aiComment).toBeNull()

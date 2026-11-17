@@ -118,7 +118,7 @@ const doubleBuy = (x: Obj): DoubleBuyItem | null => {
   return { ticker, name: str(x.name) || ticker, foreignAmount: f, institutionAmount: i }
 }
 
-const SOURCES: FlowSource[] = ['pykrx', 'kis']
+const SOURCES: FlowSource[] = ['kiwoom', 'pykrx', 'kis']
 
 /** GET /market/investor-flow → 수급 전광판(각 Top 최대 10) */
 export function normalizeInvestorFlow(raw: unknown): InvestorFlow {

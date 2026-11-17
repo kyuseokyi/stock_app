@@ -294,3 +294,63 @@ def test_run_themes_unified_rejected_retries_krx():
     assert code == 0
     assert "오류 1511" in text and "stex_tp=1(KRX) 재시도: 1행" in text
     assert [p[0] for p in c.posts] == ["ka90001", "ka90001"]  # 목록이 없으면 구성 종목은 부르지 않음
+
+
+# ------------------------------------------------------------------ 투자자별 순매수(ka10058)
+class _InvestorClient(_FakeClient):
+    def __init__(self, data: dict):
+        super().__init__(charts={}, stocks={})
+        self.data = data  # (invsr_tp, mrkt_tp) → (rows, cont) 또는 예외
+        self.posts: list[tuple] = []
+
+    def post(self, api_id, path, body, *, cont_key=None):
+        self.posts.append((api_id, path, body, cont_key))
+        got = self.data.get((body["invsr_tp"], body["mrkt_tp"]), ([], False))
+        if isinstance(got, Exception):
+            raise got
+        rows, more = got
+        return KiwoomResponse(data={"invsr_daly_trde_stk": rows}, cont_yn=more, next_key="NK" if more else "")
+
+
+def _iv(cd, nm, qty, amt, avg):
+    return {"stk_cd": cd, "stk_nm": nm, "netslmt_qty": qty, "netslmt_amt": amt, "prsm_avg_pric": avg}
+
+
+def test_previous_weekday():
+    assert probe.previous_weekday(date(2026, 11, 17)) == date(2026, 11, 16)  # 화 → 월
+    assert probe.previous_weekday(date(2026, 11, 16)) == date(2026, 11, 13)  # 월 → 금
+
+
+def test_parse_args_investors():
+    a = probe.parse_args(["--investors", "--investors-date", "20261116"])
+    assert a.investors is True and a.investors_date == "20261116"
+    assert probe.parse_args([]).investors is False and probe.parse_args([]).investors_date is None
+
+
+def test_run_investors_top5_unit_and_errors_without_secrets():
+    rows = [_iv(f"00{i:04d}_AL", f"종목{i}", "+10", f"+{100 - i}", "100000") for i in range(7)]
+    c = _InvestorClient({
+        ("9000", "001"): (rows, True),
+        ("9000", "101"): ([_iv("247540", "에코프로비엠", "+1", "+500", "50000")], False),
+        ("9999", "001"): KiwoomApiError(1999, "조회 가능 시간이 아닙니다"),
+    })
+    code, text = _run(c, argv=["--investors", "--investors-date", "20261116"])
+    assert code == 0 and c.calls == []  # 일봉 비교 안 함
+    assert len(c.posts) == 6 and all(p[0] == "ka10058" and p[1] == "/api/dostk/stkinfo" for p in c.posts)
+    assert c.posts[0][2] == {"strt_dt": "20261116", "end_dt": "20261116", "trde_tp": "2", "mrkt_tp": "001",
+                             "invsr_tp": "9000", "stex_tp": "3"}
+    assert "외국인 코스피: 응답 7행 · cont-yn=Y" in text
+    assert "기관계 코스피: 오류 1999" in text
+    assert "연기금 코스닥: 응답 0행" in text
+    # 상위 5종목: 두 시장 합쳐 금액 내림차순 — 에코프로비엠(500) 이 1위, 종목4~6 은 잘림
+    assert text.index("에코프로비엠") < text.index("종목0") and "종목3" in text and "종목4" not in text
+    assert "단위 추정 ×10,000" in text  # 10주 × 100,000 / 100 = 10,000
+    assert "5,000,000" in text  # 에코프로비엠 500 × 1만 = 5,000,000원
+    for secret in (FAKE_KEY, FAKE_SECRET, FAKE_TOKEN):
+        assert secret not in text
+
+
+def test_run_investors_ip_error_stops():
+    c = _InvestorClient({("9000", "001"): KiwoomIpError(8010, "ip")})
+    code, text = _run(c, argv=["--investors", "--investors-date", "20261116"])
+    assert code == 0 and len(c.posts) == 1 and "등록된 IP" in text

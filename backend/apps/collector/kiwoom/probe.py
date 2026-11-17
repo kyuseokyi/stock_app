@@ -5,6 +5,8 @@
     옵션: --ticker 005930 --date 20260805 --non-nxt 293490
     대차(ka20068) 소량 실측: --lending [--lending-tickers 005930,000660] — 일봉 비교는 건너뛰고 최근 10거래일 대차 표만.
     테마(ka90001·ka90002) 소량 실측: --themes — 테마 수·앞 10개·첫 테마 구성 종목 앞 10개(일봉 비교는 건너뜀).
+    투자자별 순매수(ka10058) 소량 실측: --investors [--investors-date 20261116] — 외국인·기관계·연기금 ×
+      코스피·코스닥 첫 쪽만(6회), 투자자별 상위 5종목·원시 금액·단위 추정(일봉 비교는 건너뜀).
 
 - 키가 없으면 안내만 출력하고 종료(코드 0, 호출 없음).
 - 앱키·시크릿·토큰 값은 절대 출력하지 않는다.
@@ -19,22 +21,36 @@ from datetime import date, datetime
 from typing import Callable
 
 from apps.collector.kiwoom.client import (
+    INVESTOR_DAILY_LIST_KEY,
     KST,
+    PATH_STOCK_INFO,
     LENDING_LIST_KEY,
     PATH_SLB,
     PATH_THEME,
     THEME_GROUPS_LIST_KEY,
     THEME_MEMBERS_LIST_KEY,
+    TR_INVESTOR_DAILY,
     TR_LENDING,
     TR_THEME_GROUPS,
     TR_THEME_MEMBERS,
     KiwoomApiError,
     KiwoomClient,
     KiwoomError,
+    KiwoomIpError,
+    investor_daily_body,
     theme_groups_body,
 )
 from apps.collector.kiwoom.lending import calendar_start
-from apps.collector.kiwoom.normalize import SUFFIX_NXT, SUFFIX_SOR, daily_row, lending_row, theme_member_ticker
+from apps.collector.kiwoom.normalize import (
+    KIWOOM_FLOW_AMT_TO_WON,
+    SUFFIX_NXT,
+    SUFFIX_SOR,
+    daily_row,
+    implied_amt_unit,
+    investor_flow_row,
+    lending_row,
+    theme_member_ticker,
+)
 from shared.kiwoom_config import get_kiwoom_config
 
 NOT_CONFIGURED_MSG = ("키움 키가 설정되지 않았어요 — KIWOOM_APP_KEY·KIWOOM_APP_SECRET 을 "
@@ -44,6 +60,9 @@ CH_UNAVAILABLE = "조회 불가"
 _MARKETS = (("코스피", "0"), ("코스닥", "10"))  # ka10099 mrkt_tp
 LENDING_DAYS = 10  # --lending 표에 보여 줄 최근 거래일 수
 THEME_SHOW = 10    # --themes 에 보여 줄 앞쪽 테마·종목 수
+INVESTOR_SHOW = 5  # --investors 투자자별 상위 종목 수
+_INVESTOR_LABELS = (("foreign", "외국인"), ("institution", "기관계"), ("pension", "연기금"))
+_INVESTOR_MARKETS = (("kospi", "코스피"), ("kosdaq", "코스닥"))
 THEME_MAX_PAGES = 50  # --themes 테마 목록 연속조회 상한(소량 실측이지만 전체 테마 수를 알아야 한다)
 
 Bar = dict  # daily_row 모양(date·open·high·low·close·volume·trading_value)
@@ -74,6 +93,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                    help="대차거래추이(ka20068) 소량 실측만 — 최근 10거래일 표(일봉 비교는 건너뜀)")
     p.add_argument("--themes", action="store_true",
                    help="테마(ka90001·ka90002) 소량 실측만 — 테마 수·앞 10개·첫 테마 구성 종목(일봉 비교는 건너뜀)")
+    p.add_argument("--investors", action="store_true",
+                   help="투자자별 순매수(ka10058) 소량 실측만 — 외국인·기관계·연기금 상위 5(일봉 비교는 건너뜀)")
+    p.add_argument("--investors-date", dest="investors_date", type=_yyyymmdd, default=None,
+                   help="--investors 기준일 YYYYMMDD (기본 직전 평일 — 공휴일은 고려하지 않음)")
     p.add_argument("--lending-tickers", dest="lending_tickers", default="005930,000660",
                    help="--lending 대상 종목(쉼표, 최대 3개, 기본 005930,000660)")
     return p.parse_args(argv)
@@ -304,6 +327,88 @@ def run_themes(args: argparse.Namespace, *, client, out: Callable[[str], None]) 
     return 0
 
 
+# ------------------------------------------------------------------ 투자자별 순매수(ka10058)
+def previous_weekday(today: date) -> date:
+    """직전 평일(주말만 건너뜀 — 공휴일은 모르므로 그날이 휴장이면 --investors-date 로 지정)."""
+    from datetime import timedelta
+
+    d = today - timedelta(days=1)
+    while d.weekday() >= 5:
+        d -= timedelta(days=1)
+    return d
+
+
+def _fmt_won(v: float) -> str:
+    return f"{v:+,.0f}"
+
+
+def run_investors(args: argparse.Namespace, *, client, out: Callable[[str], None], today: date | None = None) -> int:
+    """투자자 × 시장 첫 쪽(행 수·cont-yn·오류) + 투자자별 상위 INVESTOR_SHOW(원 환산·원시 값·금액/주) + 단위 추정."""
+    ymd = args.investors_date or previous_weekday(today or datetime.now(KST).date()).strftime("%Y%m%d")
+    out("")
+    out(f"== 투자자별 순매수 (ka10058, {ymd}, trde_tp=2 순매수 · stex_tp=3 통합) ==")
+    summary: list[str] = []
+    all_rows: list[dict] = []
+    stop = False
+    for key, label in _INVESTOR_LABELS:
+        rows: list[dict] = []
+        for mkey, mlabel in _INVESTOR_MARKETS:
+            if stop:
+                break
+            try:
+                r = client.post(TR_INVESTOR_DAILY, PATH_STOCK_INFO, investor_daily_body(key, ymd, ymd, mkey))
+            except KiwoomIpError as e:
+                out(f"{label} {mlabel}: {e}")
+                summary.append(f"{label} {mlabel}: 오류 {e.code} — 이후 호출 중단")
+                stop = True
+                break
+            except KiwoomApiError as e:
+                line = f"{label} {mlabel}: 오류 {e.code}: {e.msg}"
+                out(line)
+                summary.append(line)
+                continue
+            except KiwoomError as e:
+                line = f"{label} {mlabel}: 오류: {e}"
+                out(line)
+                summary.append(line)
+                continue
+            raw = list(r.data.get(INVESTOR_DAILY_LIST_KEY) or [])
+            parsed = [x for x in (investor_flow_row(v) for v in raw) if x is not None]
+            amts = [x["raw_amt"] for x in parsed]
+            order = "내림차순" if amts == sorted(amts, reverse=True) else "정렬 아님"
+            line = (f"{label} {mlabel}: 응답 {len(raw)}행 · cont-yn={'Y' if r.cont_yn else 'N'} · "
+                    f"원시 금액 {order} · 원시 첫 stk_cd {raw[0].get('stk_cd') if raw else '-'}")
+            out(line)
+            summary.append(line)
+            rows.extend(parsed)
+        all_rows.extend(rows)
+        if stop:
+            break
+        top = sorted(rows, key=lambda x: x["net_amount"], reverse=True)[:INVESTOR_SHOW]
+        if top:
+            out(f"  {label} 상위 {INVESTOR_SHOW}: {'종목':<8} {'이름':<14} {'순매수(원)':>18} {'원시 금액':>12} "
+                f"{'수량':>12} {'추정평균가':>10} {'금액/주':>10}")
+            for x in top:
+                per = f"{x['net_amount'] / x['qty']:,.0f}" if x["qty"] else "-"
+                out(f"  {'':<14}{x['ticker']:<8} {x['name'][:14]:<14} {_fmt_won(x['net_amount']):>18} "
+                    f"{x['raw_amt']:>12,} {x['qty']:>12,} {x['avg_price']:>10,} {per:>10}")
+    unit = implied_amt_unit(all_rows)
+    unit_text = "계산 불가" if unit is None else f"×{unit:,}"
+    verdict = "" if unit is None else (" ✅ 설정과 같음" if unit == KIWOOM_FLOW_AMT_TO_WON
+                                       else f" ❌ 설정 ×{KIWOOM_FLOW_AMT_TO_WON:,} 과 다름 — normalize 상수 수정")
+    out("")
+    out(f"단위 추정 {unit_text} (수량×추정평균가÷원시 금액 중앙값){verdict}")
+
+    out("")
+    out("---- 요약 (docs/kiwoom_setup_and_dev_spec.md ④-3 실측 결과에 붙여 넣기) ----")
+    out(f"- 실측 {datetime.now(KST).strftime('%Y-%m-%d %H:%M')} KST, ka10058 기준일 {ymd}")
+    for line in summary:
+        out(f"- {line}")
+    out(f"- 금액 단위 추정 {unit_text}{verdict}")
+    out("----")
+    return 0
+
+
 # ------------------------------------------------------------------ 실행
 def run(args: argparse.Namespace, *, client, ch_fetch: Callable, out: Callable[[str], None]) -> int:
     t, dt, non_nxt = args.ticker, args.date, args.non_nxt
@@ -321,6 +426,8 @@ def run(args: argparse.Namespace, *, client, ch_fetch: Callable, out: Callable[[
         return run_lending(args, client=client, out=out)
     if getattr(args, "themes", False):
         return run_themes(args, client=client, out=out)
+    if getattr(args, "investors", False):
+        return run_investors(args, client=client, out=out)
 
     # 2) NXT 상장 종목: KRX / _NX / _AL / CH
     out("")
