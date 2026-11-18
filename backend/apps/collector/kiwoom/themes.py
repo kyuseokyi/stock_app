@@ -18,7 +18,7 @@ import time
 from typing import Callable
 
 from apps.collector.kis.reference_master import ThemeRow
-from apps.collector.kiwoom.client import KiwoomApiError, KiwoomError, KiwoomIpError, KiwoomNotConfigured
+from apps.collector.kiwoom.client import KiwoomApiError, KiwoomCircuitOpen, KiwoomError, KiwoomIpError, KiwoomNotConfigured
 from apps.collector.kiwoom.normalize import theme_group, theme_member_ticker
 from shared.market_repo import KIWOOM_THEME_MIN
 
@@ -57,7 +57,7 @@ def run_themes(*, client_factory: Callable[[], object], store: Callable[[list[Th
     try:
         try:
             groups = normalize_groups(client.list_themes())
-        except (KiwoomIpError, KiwoomNotConfigured) as e:
+        except (KiwoomCircuitOpen, KiwoomIpError, KiwoomNotConfigured) as e:
             logger.warning("[키움 테마] %s — 이번 실행을 건너뜁니다", e)
             return {"skipped": f"키움 호출 불가: {e}"}
         except KiwoomError as e:
@@ -70,7 +70,7 @@ def run_themes(*, client_factory: Callable[[], object], store: Callable[[list[Th
         for i, g in enumerate(groups):
             try:
                 tickers = member_tickers(client.theme_members(g["raw_code"]))
-            except (KiwoomIpError, KiwoomNotConfigured) as e:
+            except (KiwoomCircuitOpen, KiwoomIpError, KiwoomNotConfigured) as e:
                 logger.warning("[키움 테마] %s — 이번 실행을 멈춥니다(쓰기 없음)", e)
                 return {"skipped": f"키움 호출 불가: {e}"}
             except KiwoomApiError as e:

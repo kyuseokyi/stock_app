@@ -298,6 +298,11 @@ docker compose -f docker-compose.prod.yml run --rm celery_worker python -m apps.
   GROUP BY source;
   ```
 
+#### 공통 — 연결 실패 차단기 (2026-11-18)
+- `KiwoomClient` 는 연결 실패(5xx·타임아웃, 재시도 소진)가 **3번 연속**이면 그 뒤 호출을 네트워크 없이 바로 `KiwoomCircuitOpen` 으로 실패시킨다. 성공 한 번이면 0 으로 초기화. 클라이언트(=한 번의 실행) 단위.
+- 대차·일봉 폴백·테마·수급 전광판 루프는 이 예외를 IP 불일치와 같이 받아 **남은 호출을 멈춘다**. 장애 때 호출 하나가 재시도 포함 약 1분이라, 막지 않으면 대차 2천여 종목 루프가 20:30 파이프라인을 수십 시간 밀 수 있었다.
+- VI(5분 주기)는 매번 새 클라이언트라 영향 없음 — 자체 규칙(그날 3번 연속 실패면 중단)을 그대로 쓴다.
+
 #### ④-1 대차잔고 (ka20068, 구현 2026-11-16)
 설계: [`docs/superpowers/specs/2026-11-16-kiwoom-lending-design.md`](superpowers/specs/2026-11-16-kiwoom-lending-design.md), 동작 정리: `docs/data-collection.md` "대차잔고"
 - **명세(c7a3d25 `대차거래추이요청(종목별)(ka20068)`)**: `POST /api/dostk/slb`, body `strt_dt`·`end_dt`(YYYYMMDD, 선택)·`all_tp`("0": 입력 종목만)·`stk_cd`(필수, length 6). 응답 LIST `dbrt_trde_trnsn` — `dt`·`dbrt_trde_cntrcnt`(체결 주)·`dbrt_trde_rpy`(상환 주)·`dbrt_trde_irds`(증감 주)·`rmnd`(잔고 주)·`remn_amt`(잔고금액 **백만원**). 쪽당 행 수는 명세에 없음

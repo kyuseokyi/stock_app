@@ -78,6 +78,7 @@ _TOKEN_MARGIN_SEC = 600     # 만료 10분 전에 캐시를 비워 재발급
 _MIN_TTL = 60
 _FALLBACK_TTL = 23 * 3600   # expires_dt 를 못 읽을 때(토큰 유효 24시간)
 _MAX_LIST_PAGES = 200       # "끝까지" 받는 연속조회의 안전 상한
+CIRCUIT_THRESHOLD = 3       # 연결 실패(재시도 소진) 연속 횟수 — 넘으면 차단(KiwoomCircuitOpen)
 
 
 class KiwoomError(RuntimeError):
@@ -111,6 +112,13 @@ class KiwoomIpError(KiwoomApiError):
 
 class KiwoomConnectionError(KiwoomError):
     """5xx·타임아웃·연결 오류로 재시도를 모두 소진(KIS `KISConnectionError` 와 같은 역할)."""
+
+
+class KiwoomCircuitOpen(KiwoomConnectionError):
+    """연결 실패(재시도 소진)가 CIRCUIT_THRESHOLD 번 연속 — 이 클라이언트는 더 호출하지 않고 바로 실패한다.
+
+    키움 장애 때 호출 하나가 재시도 포함 약 1분이라, 종목 루프(대차 2천여 종목 등)가 수십 시간 밀리는 것을 막는다.
+    """
 
 
 @dataclass(frozen=True)
@@ -198,6 +206,7 @@ class KiwoomClient:
         if not self.cfg.is_configured:
             raise KiwoomNotConfigured("키움 키(KIWOOM_APP_KEY/KIWOOM_APP_SECRET)가 설정되지 않았어요.")
         self._limiter = limiter if limiter is not None else RateLimiter(self.cfg.rate_per_sec)
+        self._conn_fail_streak = 0  # 연결 실패(재시도 소진) 연속 횟수 — 성공하면 0
         self._redis = redis_client if redis_client is not None else redis.from_url(
             os.getenv("REDIS_URL", "redis://localhost:6379/0"), decode_responses=True
         )
@@ -244,6 +253,8 @@ class KiwoomClient:
     # ------------------------------------------------------------------ 요청
     def _send(self, url: str, body: dict, headers: dict) -> tuple[dict, dict]:
         """POST 1건(재시도 포함). (body dict, 소문자 응답 헤더) 반환."""
+        if self._conn_fail_streak >= CIRCUIT_THRESHOLD:
+            raise KiwoomCircuitOpen(f"키움 연결 실패 {self._conn_fail_streak}회 연속 — 이번 실행의 키움 호출 중단")
         last_exc: Exception | None = None
         for attempt in range(_MAX_RETRIES + 1):
             if attempt:
@@ -272,9 +283,11 @@ class KiwoomClient:
                 continue
             if resp.status_code >= 400:
                 raise KiwoomApiError(None, f"HTTP {resp.status_code}")
+            self._conn_fail_streak = 0
             return (data if isinstance(data, dict) else {}), resp_headers
         if isinstance(last_exc, KiwoomApiError):
             raise last_exc
+        self._conn_fail_streak += 1
         raise KiwoomConnectionError(f"키움 요청 실패(재시도 소진): {last_exc}")
 
     def _headers(self, api_id: str, token: str, cont_key: str | None) -> dict:

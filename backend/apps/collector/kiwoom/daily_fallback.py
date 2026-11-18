@@ -19,7 +19,7 @@ import os
 import threading
 from typing import Callable
 
-from apps.collector.kiwoom.client import KiwoomClient, KiwoomIpError, KiwoomNotConfigured
+from apps.collector.kiwoom.client import KiwoomCircuitOpen, KiwoomClient, KiwoomIpError, KiwoomNotConfigured
 from shared.kiwoom_config import KiwoomConfig, get_kiwoom_config
 
 logger = logging.getLogger(__name__)
@@ -96,7 +96,7 @@ class DailyFallback:
             for ticker in targets:
                 try:
                     inserted = self._store(client, ticker)
-                except (KiwoomIpError, KiwoomNotConfigured) as e:
+                except (KiwoomCircuitOpen, KiwoomIpError, KiwoomNotConfigured) as e:
                     stats["failed"] += 1
                     self._disable(e)
                     break
