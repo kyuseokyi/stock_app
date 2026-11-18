@@ -10,6 +10,7 @@
 ## 0. 시작 전에
 
 - [ ] 이 브랜치(`feature/dev-reads-prod-ch`)의 코드가 **먼저** 개발 서버에 배포되어 있어야 한다.
+  - 개발 서버 반영은 사용자가 머지한 뒤다. `main` push 로 자동 배포되거나, `Deploy Server (Backend & Workers)` 워크플로를 수동 실행한다.
   - env 를 하나도 바꾸지 않은 상태라면 새 코드는 지금과 똑같이 동작한다.
   - 코드보다 env(`CLICKHOUSE_*` → 상용)를 먼저 바꾸면, 옛 코드가 상용 읽기 전용 계정에 쓰려다 실패하면서 KIS 쿼터만 쓴다.
 - [ ] 상용 Cloudflare 쪽 준비는 이미 끝났다(설계 0절). 터널 `ch-ro.funnotedaily.com` → `tcp://localhost:8123`, Access 앱 `ch-ro`, 서비스 토큰 `dev-server-ch-readonly`. 토큰 없이 접근하면 403 이 나는 것도 확인했다.
@@ -22,7 +23,7 @@
 ### 1. 사전 확인 (읽기만, 값은 출력하지 않음)
 
 ```bash
-# 1-1. 기본 계정이 SQL 로 사용자를 만들 수 있는지 (0 이면 2장 필요, 1 이면 3장으로)
+# 1-1. 관리자 계정이 SQL 로 사용자를 만들 수 있는지 (0 이면 2장 필요, 1 이면 3장으로)
 docker exec stock_clickhouse_prod grep -o '<access_management>[0-9]</access_management>' \
   /etc/clickhouse-server/users.d/default-user.xml
 
@@ -46,15 +47,18 @@ docker ps --format '{{.Names}}\t{{.Image}}' | grep -i cloudflared
 - ClickHouse 는 users 설정 파일이 바뀌면 재시작 없이 다시 읽는다. 그래서 끊김이 없다.
 - 컨테이너를 다시 만들면 이 파일은 사라진다. SQL 로 만든 사용자는 데이터 볼륨(`/var/lib/clickhouse/access`)에 남는다.
 
+관리자 계정 이름은 문서에 고정하지 않는다. 컨테이너 자신의 `CLICKHOUSE_USER`(없으면 `default`)를 쓴다.
+- 이미지 entrypoint 는 `CLICKHOUSE_USER` 가 `default` 가 아니거나 비밀번호가 있으면 `default` 대신 그 사용자를 만든다.
+- 그런데 이름을 `default` 로 고정한 덮어쓰기 파일을 넣으면, **비밀번호 없는 `default` 를 되살릴 위험**이 있다.
+
 ```bash
-# 2-1. 기본 계정에 access_management 를 켜는 덮어쓰기 파일(이름이 default-user.xml 보다 뒤에 오게 zz-)
-docker exec -i stock_clickhouse_prod sh -c 'cat > /etc/clickhouse-server/users.d/zz-tmp-access-management.xml' <<'XML'
-<clickhouse><users><default><access_management>1</access_management></default></users></clickhouse>
-XML
+# 2-1. 관리자 계정에 access_management 를 켜는 덮어쓰기 파일(이름이 default-user.xml 보다 뒤에 오게 zz-)
+docker exec stock_clickhouse_prod sh -c 'u="${CLICKHOUSE_USER:-default}"; printf "<clickhouse><users><%s><access_management>1</access_management></%s></users></clickhouse>\n" "$u" "$u" > /etc/clickhouse-server/users.d/zz-tmp-access-management.xml'
 # 2-2. 몇 초 기다린 뒤 적용됐는지 확인 — 권한 오류 없이 목록이 나오면 켜진 것
-docker exec -it stock_clickhouse_prod clickhouse-client --user default --ask-password -q "SHOW USERS"
+docker exec -it stock_clickhouse_prod sh -c 'clickhouse-client --user "${CLICKHOUSE_USER:-default}" --ask-password -q "SHOW USERS"'
 ```
 
+- 2-2 의 `SHOW USERS` 에 **예상하지 않은 사용자**(예: 관리자 계정이 따로 있는데 `default` 가 보임)가 있으면 멈춘다. 바로 2-3 으로 파일을 지우고, 원인을 확인할 때까지 진행하지 않는다.
 - 2-2 에서 `ACCESS_DENIED` 가 계속 나오면 다른 방법을 쓴다. 상용 배포 창에서 compose 에 `CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT` 를 추가하는 방법(설계 5-2 의 1)을 **별도 결정**으로 진행한다.
 - 3장을 마치면 **반드시** 2-3 으로 파일을 지운다.
 
@@ -71,8 +75,8 @@ docker exec stock_clickhouse_prod rm /etc/clickhouse-server/users.d/zz-tmp-acces
 # 3-1. 비밀번호를 화면에 보이지 않게 입력하고 sha256 해시만 만든다(값은 비밀번호 관리자에 따로 보관)
 read -rs DEV_RO_PW; echo
 DEV_RO_HASH=$(printf %s "$DEV_RO_PW" | sha256sum | cut -d' ' -f1); unset DEV_RO_PW
-# 3-2. 기본 계정으로 접속(비밀번호는 프롬프트로)
-docker exec -it stock_clickhouse_prod clickhouse-client --user default --ask-password --multiquery
+# 3-2. 관리자 계정으로 접속(컨테이너의 CLICKHOUSE_USER, 비밀번호는 프롬프트로)
+docker exec -it stock_clickhouse_prod sh -c 'clickhouse-client --user "${CLICKHOUSE_USER:-default}" --ask-password --multiquery'
 ```
 
 접속한 뒤 아래를 실행한다. `<해시>` 자리에는 `echo $DEV_RO_HASH` 의 값을 붙여 넣는다.
@@ -258,7 +262,7 @@ docker start stock_ch_ro_tunnel     # → 1분 안에 정상으로 돌아오는�
 1. 8장에서 만든 백업으로 되돌린다. 또는 `MARKET_DATA_SOURCE` 를 지우고 `CLICKHOUSE_*` 를 `CLICKHOUSE_LOCAL_*` 값으로 되돌린다. 그다음 백엔드를 다시 배포한다. 그러면 20:30 자체 수집과 beat 가 원래대로 돌아온다.
 2. **공백 메우기**: 겹침 창은 일봉 30일, 세부 수급·대차 5거래일이다. 꺼 둔 기간이 이보다 길면 관리자 "초기 데이터 준비" 또는 해당 백필을 한 번 돌린다. 지수·CANSLIM·스크리너·패턴도 백필로 메운다.
 3. 사이드카를 내린다: `docker compose --env-file /opt/stock_app/env/ch-ro-tunnel.env -f deploy/dev/ch-ro-tunnel.yml down`
-4. 상용 `dev_ro` 계정은 남겨 둬도 무해하다. 지우려면 상용에서 `DROP USER dev_ro`(2장 권한 필요)를 실행한다. Access 서비스 토큰은 폐기하거나 회전한다.
+4. 상용 `dev_ro` 계정은 남겨 둬도 무해하다. 지우려면 상용에서 `DROP USER dev_ro` 를 실행한다. 이때 2장 권한이 필요하고, 접속은 3-2 와 같이 컨테이너의 `CLICKHOUSE_USER` 로 한다. Access 서비스 토큰은 폐기하거나 회전한다.
 
 ### 운영 규칙 (전환 뒤 계속)
 
