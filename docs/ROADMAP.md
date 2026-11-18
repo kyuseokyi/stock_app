@@ -239,11 +239,12 @@
 - [x] Phase 3 (관리자 웹 `admin_web` 전체 스크리너 상시 노출) — `feature/app-identity-nav` 구현 완료(2026-11-18, 배포·머지 전): 사용자 화면 스위치와 무관하게 관리자 웹 `시장 데이터` 사이드바에 `조건검색(/market/finder)` 및 `차트 패턴(/market/patterns)` 화면을 추가해 4대 스크리너(`주도주 · 5·20 정배열 · 조건검색 · 차트 패턴`) 전부 상시 노출
 
 
-### 트레이딩 게임 지지·저항 손절·익절·홀딩 경량화 (`SrWatcher` 팝업 최소화 + 홀딩 시 음소거)
+### 트레이딩 게임 지지·저항 경량화 · 수평추세선 · POC 시인성 개선 · 관리자 ON/OFF
 > 상세 설계 및 로드맵: [`docs/game_lightweight_sr_action_spec_and_plan.md`](game_lightweight_sr_action_spec_and_plan.md)
-- [ ] Step 1: `isMajorSrBreakEvent` 순수 함수 추가 (`5일선` 및 단순 `터치` 제외, `20일선·POC·BB·전고점/저점`의 확실한 `돌파/이탈`만 팝업 허용)
-- [ ] Step 2 (웹 `web_client`): `[✊ 홀딩]` 클릭 시 해당 포지션 종료까지 추가 팝업 차단(`mutedPositionId`) + 보유 포지션 카드(`ActivePositionCard`) 내부 1줄 상태 배너 연동
-- [ ] Step 3 (모바일 `mobile`): `[✊ 홀딩]` 클릭 시 포지션 단위 팝업 차단 + 보유 포지션 카드(`position-card.tsx`) 내부 1줄 상태 배너 연동
+- [ ] Step 1 (백엔드 & `admin_web`): 관리자 `/game/settings`에 차트 지지·저항 수평선 기본 표시(`SR_DEFAULT`) ON/OFF 스위치 추가 (클라이언트 폴백 기본값은 안 보임(`false`), 현재 테스트를 위해 서버 초기값은 `ON(true)` 설정)
+- [ ] Step 2 (차트 시각 개선 — 웹 & 모바일): 매물대 POC 막대 색상 강조 + 상단 레이어(`zOrder: 'top'`) 마커/라벨로 캔들 가림 해결, 지지·저항선은 색 구분 없이 **단일 색상의 차트 전체 폭 긴 수평 추세선**으로 변경
+- [ ] Step 3 (대응 경량화 — 웹 & 모바일): `isMajorSrBreakEvent`(`20일선·POC·BB·전고점/저점`의 돌파/이탈 시에만 1회 시트) + `[✊ 홀딩]` 클릭 시 포지션 종료까지 팝업 차단(`mutedPositionId`) + 보유 포지션 카드 1줄 상태 배너 연동
+
 
 ### 관리자 등급별 권한 제어 (RBAC — 스크리너 · 데이터 업데이트 · 앱 관리)
 > 상세 설계 및 로드맵: [`docs/admin_rbac_permissions_spec_and_plan.md`](admin_rbac_permissions_spec_and_plan.md)
