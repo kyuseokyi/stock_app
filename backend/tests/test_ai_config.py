@@ -70,3 +70,8 @@ def test_factories_with_keys(monkeypatch):
 def test_file_env_keys_include_new_secrets():
     for k in ("GEMINI_API_KEY", "NAVER_SEARCH_CLIENT_SECRET", "OPENDART_API_KEY", "KRX_PW"):
         assert k in FILE_ENV_KEYS
+
+
+def test_kiwoom_keys_allowed_as_file_env():
+    # 키움 앱키·시크릿도 `*_FILE`(도커 시크릿 파일)로 넣을 수 있어야 한다
+    assert {"KIWOOM_APP_KEY", "KIWOOM_APP_SECRET"} <= FILE_ENV_KEYS
