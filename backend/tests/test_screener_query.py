@@ -77,6 +77,7 @@ def test_latest_date_other_errors_raise(monkeypatch, caplog):
     ("double_buy_new_high", "is_new_high = 1 AND frgn_buy_days >= 1 AND orgn_buy_days >= 1"),
     ("pension_buy_10d", "pension_buy_days >= 10"),
     ("lending_drop", "lending_chg5 <= -20"),
+    ("ma5_20", "ma5 IS NOT NULL AND ma20 IS NOT NULL AND round(ma5, 2) > round(ma20, 2)"),
 ])
 def test_preset_adds_condition(ch, preset, cond):
     fake = ch()
@@ -196,8 +197,10 @@ def test_bollinger_filters(ch):
 
 
 def test_items_mapping_and_paging(ch):
-    rows = [("AAA", "KOSPI", "0013", 10500.0, 3.2, 5e9, 1e12, 2.4, 55.0, 10000.0, 200.0, 1, 1, 0, 12.5, 9.5, 1.1, 14.0),
-            ("BBB", "KOSDAQ", "", 900.0, None, 1e8, None, None, None, None, None, 0, 0, None, None, None, None, None)]
+    rows = [("AAA", "KOSPI", "0013", 10500.0, 3.2, 5e9, 1e12, 2.4, 55.0, 10000.0, 200.0, 1, 1, 0, 12.5, 9.5, 1.1, 14.0,
+             476190.0, 10250.0, 9800.0),
+            ("BBB", "KOSDAQ", "", 900.0, None, 1e8, None, None, None, None, None, 0, 0, None, None, None, None, None,
+             111111.0, None, None)]
     fake = ch([[(D,)], [(2,)], rows])
     out = sq.screen(limit=500, offset=-3)
     assert out["date"] == "2026-10-16" and out["total"] == 2 and out["bb_sigma"] == 2.0
@@ -205,8 +208,10 @@ def test_items_mapping_and_paging(ch):
         "ticker": "AAA", "name": "에이", "market": "KOSPI", "sector_name": "전기·전자", "close": 10500.0, "chg_1d": 3.2,
         "value": 5e9, "mcap": 1e12, "vol_ratio20": 2.4, "rsi14": 55.0, "ma_order": 1, "is_new_high": True,
         "gc_days": 0, "vp_above_pct": 12.5, "per": 9.5, "pbr": 1.1, "roe": 14.0,
-        "bb_position": "ABOVE", "bb_width_pct": 8.0}
+        "bb_position": "ABOVE", "bb_width_pct": 8.0,
+        "volume": 476190.0, "ma5": 10250.0, "ma20": 10000.0, "ma50": 9800.0, "ma5_20_spread_pct": 2.5}
     b = out["items"][1]
+    assert b["volume"] == 111111.0 and b["ma5"] is None and b["ma20"] is None and b["ma5_20_spread_pct"] is None
     assert b["name"] == "BBB" and b["sector_name"] is None and b["is_new_high"] is False
     assert b["bb_position"] is None and b["bb_width_pct"] is None
     sql, params = fake.queries[2]
@@ -272,3 +277,120 @@ def test_lending_preset_before_column_exists_is_empty_not_error(ch):
 
     fake.query = boom
     assert sq.screen(preset="lending_drop") == {"date": D.isoformat(), "total": 0, "bb_sigma": 2.0, "items": []}
+
+
+# ---------------------------------------------------------------- 5·20일선 정배열(관리자 스크리너)
+_MA5_20 = "ma5 IS NOT NULL AND ma20 IS NOT NULL AND round(ma5, 2) > round(ma20, 2)"
+
+
+@pytest.mark.parametrize("mode, cond", [
+    ("MA5_20", _MA5_20),
+    ("CLOSE_MA5_20", "ma5 IS NOT NULL AND ma20 IS NOT NULL AND close >= ma5 AND round(ma5, 2) > round(ma20, 2)"),
+    ("PULLBACK_MA5_20",
+     "ma5 IS NOT NULL AND ma20 IS NOT NULL AND close < ma5 AND close >= ma20 AND round(ma5, 2) > round(ma20, 2)"),
+])
+def test_ma5_20_modes_are_constant_sql(mode, cond):
+    where, params = sq.build_where(None, {"ma_order": mode})
+    assert where == ["date = %(d)s", "liquid = 1", cond]
+    assert params == {}                                                     # 상수 조건 — 바인딩 없음
+
+
+def test_perfect_reverse_keep_bound_param():
+    # 기존 PERFECT·REVERSE 는 바인딩 그대로(하위 호환)
+    for mode, code in (("PERFECT", 1), ("REVERSE", -1)):
+        where, params = sq.build_where(None, {"ma_order": mode})
+        assert where[-1] == "ma_order = %(ma_order)s" and params == {"ma_order": code}
+
+
+def test_new_range_filters_bound_with_units():
+    where, params = sq.build_where("ma5_20", {
+        "value_min": 30, "value_max": 1000, "volume_min": 10, "volume_max": 500, "chg_min": -2, "chg_max": 5,
+        "spread_5_20_min": 0, "spread_5_20_max": 3})
+    for frag in ("value >= %(value_min)s", "value <= %(value_max)s", "volume >= %(volume_min)s",
+                 "volume <= %(volume_max)s", "chg_1d >= %(chg_min)s", "chg_1d <= %(chg_max)s",
+                 "ma20 > 0 AND (ma5 - ma20) * 100 / ma20 >= %(spread_5_20_min)s",
+                 "ma20 > 0 AND (ma5 - ma20) * 100 / ma20 <= %(spread_5_20_max)s"):
+        assert frag in where, frag
+    assert params["value_min"] == 30 * sq.EOK and params["value_max"] == 1000 * sq.EOK      # 억 원
+    assert params["volume_min"] == 10 * 1e4 and params["volume_max"] == 500 * 1e4           # 만 주
+    assert params["chg_min"] == -2.0 and params["chg_max"] == 5.0                           # 음수 허용
+    assert params["spread_5_20_min"] == 0.0 and params["spread_5_20_max"] == 3.0
+
+
+def test_negative_spread_allowed_and_volume_negative_ignored():
+    where, params = sq.build_where(None, {"spread_5_20_min": -5, "volume_min": -1, "value_max": -3})
+    assert "ma20 > 0 AND (ma5 - ma20) * 100 / ma20 >= %(spread_5_20_min)s" in where
+    assert params == {"spread_5_20_min": -5.0}
+
+
+@pytest.mark.parametrize("lo, hi", [("value_min", "value_max"), ("volume_min", "volume_max"), ("chg_min", "chg_max"),
+                                    ("spread_5_20_min", "spread_5_20_max")])
+def test_new_reversed_pairs_ignored(lo, hi):
+    where, params = sq.build_where(None, {lo: 10, hi: 1})
+    assert where == ["date = %(d)s", "liquid = 1"] and params == {}
+
+
+def test_new_filters_values_never_in_sql(ch):
+    fake = ch()
+    sq.screen(preset="ma5_20", filters={"ma_order": "PULLBACK_MA5_20", "chg_min": -7.25, "volume_max": 123.5,
+                                        "spread_5_20_max": 9.75}, sort="spread_5_20")
+    sql, params = fake.queries[2]
+    assert "-7.25" not in sql and "123.5" not in sql and "9.75" not in sql
+    assert "ORDER BY (ma5 - ma20) / nullIf(ma20, 0) DESC NULLS LAST, ticker" in sql
+    assert params["chg_min"] == -7.25
+
+
+@pytest.mark.parametrize("sort, order", [
+    ("volume", "volume DESC, ticker"),
+    ("spread_5_20", "(ma5 - ma20) / nullIf(ma20, 0) DESC NULLS LAST, ticker"),
+])
+def test_new_sorts(ch, sort, order):
+    fake = ch()
+    sq.screen(sort=sort)
+    assert f"ORDER BY {order}" in fake.queries[2][0]
+
+
+def test_unknown_ma_mode_ignored():
+    where, params = sq.build_where(None, {"ma_order": "MA5_20; DROP TABLE x"})
+    assert where == ["date = %(d)s", "liquid = 1"] and params == {}
+
+
+def test_ma5_20_spread_pct():
+    assert sq.ma5_20_spread_pct(10250.0, 10000.0) == 2.5
+    assert sq.ma5_20_spread_pct(9500.0, 10000.0) == -5.0
+    assert sq.ma5_20_spread_pct(None, 1.0) is None and sq.ma5_20_spread_pct(1.0, None) is None
+    assert sq.ma5_20_spread_pct(1.0, 0.0) is None
+
+
+def test_graphql_ma5_20_fields(monkeypatch):
+    seen = []
+    item = {**ITEM, "volume": 476190.0, "ma5": 10250.0, "ma20": 10000.0, "ma50": 9800.0, "ma5_20_spread_pct": 2.5}
+
+    def fake_screen(**kw):
+        seen.append(kw)
+        return {"date": "2026-10-16", "total": 1, "bb_sigma": 2.0, "items": [item]}
+
+    monkeypatch.setattr(sq, "screen", fake_screen)
+    q = """query($f: ScreenerFilterInput) { screenerScreen(preset: "ma5_20", filters: $f, sort: "spread_5_20") {
+      items { ticker volume ma5 ma20 ma50 ma5Ma20SpreadPct } } }"""
+    res = schema.execute_sync(q, variable_values={"f": {
+        "maOrder": "CLOSE_MA5_20", "valueMax": 1000, "volumeMin": 10, "volumeMax": 500, "chgMin": -2, "chgMax": 5,
+        "ma5Ma20SpreadMin": 0, "ma5Ma20SpreadMax": 3}})
+    assert res.errors is None, res.errors
+    kw = seen[0]
+    assert kw["preset"] == "ma5_20" and kw["sort"] == "spread_5_20"
+    f = kw["filters"]
+    assert f["ma_order"] == "CLOSE_MA5_20" and f["value_max"] == 1000 and f["volume_min"] == 10
+    assert f["volume_max"] == 500 and f["chg_min"] == -2 and f["chg_max"] == 5
+    assert f["spread_5_20_min"] == 0 and f["spread_5_20_max"] == 3
+    assert res.data["screenerScreen"]["items"][0] == {"ticker": "AAA", "volume": 476190.0, "ma5": 10250.0,
+                                                      "ma20": 10000.0, "ma50": 9800.0, "ma5Ma20SpreadPct": 2.5}
+
+
+def test_graphql_old_items_without_new_fields_still_work(monkeypatch):
+    # 신규 필드가 없는 예전 모양 item 도 그대로 만들어진다(웹·앱 쿼리는 새 필드를 묻지 않음)
+    monkeypatch.setattr(sq, "screen", lambda **kw: {"date": "2026-10-16", "total": 1, "bb_sigma": 2.0, "items": [ITEM]})
+    res = schema.execute_sync("{ screenerScreen { items { ticker volume ma5 ma5Ma20SpreadPct } } }")
+    assert res.errors is None, res.errors
+    assert res.data["screenerScreen"]["items"][0] == {"ticker": "AAA", "volume": None, "ma5": None,
+                                                      "ma5Ma20SpreadPct": None}
