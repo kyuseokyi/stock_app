@@ -5,7 +5,6 @@ import { getDailyCandles } from '../api/stock'
 import { getCanslimScore } from '../api/screener'
 import { findStock, type StockHit } from '../api/stockSearch'
 import { BaseHistoryTable, CurrentBaseSummary } from '../components/patterns/PatternParts'
-import { LetterList, ScoreHistory } from '../components/screener/CanslimParts'
 import StockDailyChart from '../components/screener/StockDailyChart'
 import LendingSection from '../components/stock/LendingSection'
 import StockSearch from '../components/stock/StockSearch'
@@ -22,8 +21,11 @@ import { useDocumentTitle } from '../hooks/useDocumentTitle'
 import { useScreenerFeatures } from '../hooks/useScreenerFeatures'
 import { stockBackPath } from '../lib/screenerFeatures'
 
-// 종목 상세 — 검색창 + 헤더(이름·종가·주도주 점수) + 일봉 차트(기간 선택, 50일선·52주 고점·현재 패턴 선)
-//   + 패턴(현재 베이스·이력) + 대차잔고(데이터 없으면 숨김) + 주도주(CANSLIM 7항목·점수 추이). 스크리너 상세 패널과 같은 부품을 쓴다.
+// 종목 상세 — 검색창 + 헤더(이름·종가) + 일봉 차트(기간 선택, 50일선·52주 고점·현재 패턴 선)
+//   + 패턴(현재 베이스·이력) + 대차잔고(데이터 없으면 숨김) + 참고용 안내. 스크리너 상세 패널과 같은 부품을 쓴다.
+// 사용자 화면에서는 CANSLIM 점수 박스·주도주 분석(LetterList·ScoreHistory)을 보여 주지 않는다 — 모든 데이터는 참고용
+// (docs/app_identity_and_nav_redesign_spec.md 2-4). 부품(components/screener/CanslimParts.tsx)은 지우지 않고 보존한다.
+// 점수 응답은 계속 받는다 — 이름·업종·종가·기준일·52주 고점(차트 선)이 이 응답에서 나온다.
 // 점수·패턴은 따로 불러와 하나가 실패해도 나머지는 보인다. 일봉은 종가 기준(실시간 아님).
 
 const PERIODS = [
@@ -161,100 +163,72 @@ export default function StockDetailPage() {
               )}
             </p>
           </div>
-          {scoreData && (
-            <div className="shrink-0 text-right">
-              <div className="text-2xl font-bold text-ink">{scoreData.score}<span className="text-sm font-medium text-ink-muted">점</span></div>
-              <div className="text-xs text-ink-muted">주도주 7개 중 {scoreData.passCount}개 통과</div>
-            </div>
-          )}
         </div>
       </Card>
 
-      <div className="space-y-3 sm:space-y-4 lg:grid lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)] lg:items-start lg:gap-4 lg:space-y-0">
-        <div className="space-y-3 sm:space-y-4">
-          <Card as="section" aria-label="일봉 차트" className="space-y-2">
-            <div className="flex items-center justify-between gap-2">
-              <h2 className="font-bold text-ink">일봉</h2>
-              <div className="flex gap-1.5" role="group" aria-label="차트 기간">
-                {PERIODS.map((p) => (
-                  <button
-                    key={p.key}
-                    type="button"
-                    onClick={() => setPeriod(p.key)}
-                    aria-pressed={period === p.key}
-                    className={chipClass(period === p.key)}
-                  >
-                    {p.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-            {/* 52주 고점(점수 응답)을 알아야 일봉을 한 번만 요청하므로 점수 조회가 끝난 뒤에 그린다 */}
-            {score.state === 'loading' ? (
-              <div className="flex h-72 items-center justify-center text-sm text-ink-muted sm:h-96">차트를 불러오는 중…</div>
-            ) : (
-              <StockDailyChart
-                ticker={ticker}
-                high52w={scoreData ? high52w(scoreData.close, n?.value ?? null) : null}
-                priceLines={overlay?.priceLines}
-                markers={overlay?.markers}
-                lookbackDays={days}
-                onMarkersDropped={setDropped}
-                heightClass="h-72 sm:h-96"
-              />
-            )}
-            {current && <p className="text-xs text-ink-muted">{overlayCaption(basesData?.zones ?? null, current.pivot)}</p>}
-            {current && dropped > 0 && (
-              <p className="text-xs text-ink-muted">차트 기간 밖 꼭짓점 {dropped}개는 표시하지 않았어요 — 기간을 늘려 보세요</p>
-            )}
-          </Card>
-
-          <Card as="section" aria-label="차트 패턴" className="space-y-3">
-            <h2 className="font-bold text-ink">차트 패턴</h2>
-            {bases.state === 'loading' && (
-              <>
-                <p role="status" className="sr-only">패턴을 불러오고 있어요</p>
-                <Skeleton className="h-[23rem] sm:h-[17rem]" />
-              </>
-            )}
-            {bases.state === 'failed' && <Retry text="패턴을 불러오지 못했어요" onRetry={() => setReload((k) => k + 1)} />}
-            {basesData && (
-              basesData.bases.length === 0 ? (
-                <p className="py-4 text-center text-sm text-ink-muted">찾은 베이스(패턴)가 없어요</p>
-              ) : (
-                <>
-                  {current ? <CurrentBaseSummary base={current} /> : <p className="text-sm text-ink-muted">지금 진행 중인 베이스는 없어요</p>}
-                  <BaseHistoryTable name={name ?? ticker} bases={basesData.bases} />
-                </>
-              )
-            )}
-          </Card>
-
-          <LendingSection ticker={ticker} />
+      {/* 일봉 차트는 전체 폭, 아래 차트 패턴·대차잔고는 넓은 화면(lg+)에서 2단(대차잔고가 없으면 패턴이 전체 폭) */}
+      <Card as="section" aria-label="일봉 차트" className="space-y-2">
+        <div className="flex items-center justify-between gap-2">
+          <h2 className="font-bold text-ink">일봉</h2>
+          <div className="flex gap-1.5" role="group" aria-label="차트 기간">
+            {PERIODS.map((p) => (
+              <button
+                key={p.key}
+                type="button"
+                onClick={() => setPeriod(p.key)}
+                aria-pressed={period === p.key}
+                className={chipClass(period === p.key)}
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
         </div>
+        {/* 52주 고점(점수 응답)을 알아야 일봉을 한 번만 요청하므로 점수 조회가 끝난 뒤에 그린다 */}
+        {score.state === 'loading' ? (
+          <div className="flex h-72 items-center justify-center text-sm text-ink-muted sm:h-96">차트를 불러오는 중…</div>
+        ) : (
+          <StockDailyChart
+            ticker={ticker}
+            high52w={scoreData ? high52w(scoreData.close, n?.value ?? null) : null}
+            priceLines={overlay?.priceLines}
+            markers={overlay?.markers}
+            lookbackDays={days}
+            onMarkersDropped={setDropped}
+            heightClass="h-72 sm:h-96"
+          />
+        )}
+        {current && <p className="text-xs text-ink-muted">{overlayCaption(basesData?.zones ?? null, current.pivot)}</p>}
+        {current && dropped > 0 && (
+          <p className="text-xs text-ink-muted">차트 기간 밖 꼭짓점 {dropped}개는 표시하지 않았어요 — 기간을 늘려 보세요</p>
+        )}
+      </Card>
 
-        <Card as="section" aria-label="주도주 분석" className="space-y-3 lg:sticky lg:top-[7.5rem]">
-          <h2 className="font-bold text-ink">주도주 분석 (CANSLIM)</h2>
-          {score.state === 'loading' && (
+      <div className="space-y-3 sm:space-y-4 lg:grid lg:grid-cols-2 lg:items-start lg:gap-4 lg:space-y-0 lg:[&>*:only-child]:col-span-2">
+        <Card as="section" aria-label="차트 패턴" className="space-y-3">
+          <h2 className="font-bold text-ink">차트 패턴 <span className="text-xs font-normal text-ink-muted">참고용</span></h2>
+          {bases.state === 'loading' && (
             <>
-              <p role="status" className="sr-only">점수표를 불러오고 있어요</p>
-              <Skeleton className="h-80" />
+              <p role="status" className="sr-only">패턴을 불러오고 있어요</p>
+              <Skeleton className="h-[23rem] sm:h-[17rem]" />
             </>
           )}
-          {score.state === 'failed' && <Retry text="점수표를 불러오지 못했어요" onRetry={() => setReload((k) => k + 1)} />}
-          {score.state === 'ready' && !scoreData && (
-            <p className="py-4 text-center text-sm text-ink-muted">주도주 분석 대상(보통주)이 아니에요</p>
-          )}
-          {scoreData && (
-            <>
-              <LetterList letters={scoreData.letters} />
-              <ScoreHistory history={scoreData.history} />
-              <p className="text-xs text-ink-muted">실적(C·A)은 최신 공시 기준이라 지난 날짜의 점수에도 같은 실적이 쓰여요.</p>
-            </>
+          {bases.state === 'failed' && <Retry text="패턴을 불러오지 못했어요" onRetry={() => setReload((k) => k + 1)} />}
+          {basesData && (
+            basesData.bases.length === 0 ? (
+              <p className="py-4 text-center text-sm text-ink-muted">찾은 베이스(패턴)가 없어요</p>
+            ) : (
+              <>
+                {current ? <CurrentBaseSummary base={current} /> : <p className="text-sm text-ink-muted">지금 진행 중인 베이스는 없어요</p>}
+                <BaseHistoryTable name={name ?? ticker} bases={basesData.bases} />
+              </>
+            )
           )}
         </Card>
+
+        <LendingSection ticker={ticker} />
       </div>
-      <p className="text-xs text-ink-muted">투자 판단의 참고 자료이며, 투자 권유가 아니에요.</p>
+      <p className="rounded-field bg-fill px-3 py-2 text-xs text-ink-muted">ⓘ 모든 데이터는 투자 판단의 참고용 자료이며, 투자 권유가 아니에요.</p>
     </div>
   )
 }
