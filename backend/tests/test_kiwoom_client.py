@@ -13,6 +13,7 @@ from apps.collector.kiwoom import client as kc
 from apps.collector.kiwoom.client import (
     KiwoomApiError,
     KiwoomClient,
+    KiwoomCircuitOpen,
     KiwoomConnectionError,
     KiwoomIpError,
     KiwoomNotConfigured,
@@ -320,3 +321,29 @@ def test_investor_daily_top_path_header_and_pages(redis_client):
     call = c._session.calls[1]
     assert call["url"].endswith("/api/dostk/stkinfo") and call["headers"]["api-id"] == "ka10058"
     assert call["json"]["invsr_tp"] == "9000" and call["json"]["trde_tp"] == "2"
+
+
+def test_circuit_opens_after_consecutive_connection_failures(redis_client):
+    # 재시도 소진 3번 연속 → 4번째 호출은 네트워크 없이 바로 KiwoomCircuitOpen
+    c = _client([_token_resp()] + [requests.ConnectionError("down")] * (4 * kc.CIRCUIT_THRESHOLD), redis_client)
+    for _ in range(kc.CIRCUIT_THRESHOLD):
+        with pytest.raises(KiwoomConnectionError):
+            c.post("ka20068", "/api/dostk/slb", {})
+    sent = len(c._session.calls)
+    with pytest.raises(KiwoomCircuitOpen):
+        c.post("ka20068", "/api/dostk/slb", {})
+    assert len(c._session.calls) == sent  # 차단 뒤에는 요청을 보내지 않는다
+    assert issubclass(KiwoomCircuitOpen, KiwoomConnectionError)
+
+
+def test_success_resets_failure_streak(redis_client):
+    script = [_token_resp()] + [requests.ConnectionError("x")] * 4 + [_ok({"ok": 1})] \
+        + [requests.ConnectionError("x")] * 4 * (kc.CIRCUIT_THRESHOLD - 1) + [_ok({"ok": 2})]
+    c = _client(script, redis_client)
+    with pytest.raises(KiwoomConnectionError):
+        c.post("ka10081", "/api/dostk/chart", {})
+    assert c.post("ka10081", "/api/dostk/chart", {}).data["ok"] == 1
+    for _ in range(kc.CIRCUIT_THRESHOLD - 1):
+        with pytest.raises(KiwoomConnectionError):
+            c.post("ka10081", "/api/dostk/chart", {})
+    assert c.post("ka10081", "/api/dostk/chart", {}).data["ok"] == 2  # 성공으로 연속 횟수가 0 이 됐으므로 아직 열림 아님

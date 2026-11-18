@@ -17,7 +17,7 @@ import time
 from datetime import date, timedelta
 from typing import Callable, Iterable
 
-from apps.collector.kiwoom.client import KiwoomApiError, KiwoomIpError, KiwoomNotConfigured
+from apps.collector.kiwoom.client import KiwoomApiError, KiwoomCircuitOpen, KiwoomIpError, KiwoomNotConfigured
 from apps.collector.kiwoom.normalize import lending_row
 
 logger = logging.getLogger(__name__)
@@ -75,7 +75,7 @@ def run_lending(tickers: Iterable[str], start: date, end: date, *, client_factor
                 rows = fetch_lending(client, ticker, start, end, max_pages=max_pages)
                 inserted += store(ticker, rows)
                 ok += 1
-            except (KiwoomIpError, KiwoomNotConfigured) as e:
+            except (KiwoomCircuitOpen, KiwoomIpError, KiwoomNotConfigured) as e:
                 logger.warning("[키움 대차] %s — 이번 실행의 대차 수집을 멈춥니다", e)
                 stop = {"skipped": f"키움 호출 불가: {e}"}
                 break

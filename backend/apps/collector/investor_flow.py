@@ -122,7 +122,7 @@ def fetch_kiwoom(day: date, *, session=None, client_factory=None) -> dict | None
     cfg = get_kiwoom_config()
     if not cfg.is_configured:
         return None
-    from apps.collector.kiwoom.client import KiwoomClient, KiwoomIpError, KiwoomNotConfigured
+    from apps.collector.kiwoom.client import KiwoomCircuitOpen, KiwoomClient, KiwoomIpError, KiwoomNotConfigured
     from apps.collector.kiwoom.normalize import KIWOOM_FLOW_QTY_PRICE_RATIO, implied_amt_unit, investor_flow_row
 
     try:
@@ -142,7 +142,7 @@ def fetch_kiwoom(day: date, *, session=None, client_factory=None) -> dict | None
                         if row is not None:
                             by_ticker.setdefault(row["ticker"], row)
                 got[key] = list(by_ticker.values())
-            except (KiwoomIpError, KiwoomNotConfigured) as exc:
+            except (KiwoomCircuitOpen, KiwoomIpError, KiwoomNotConfigured) as exc:
                 log.warning("키움 투자자 순매수 호출 불가 — 남은 호출 중단: %s", exc)
                 break
             except Exception as exc:  # noqa: BLE001 — 그 투자자만 다음 출처로
