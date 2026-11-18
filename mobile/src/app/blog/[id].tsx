@@ -128,14 +128,14 @@ export default function BlogDetailScreen() {
     );
   }
 
-  // 없는 글(삭제·잘못된 주소)은 오류가 아니다 — 안내와 커뮤니티로 돌아가는 버튼만
+  // 없는 글(삭제·잘못된 주소)은 오류가 아니다 — 안내와 블로그(/community)로 돌아가는 버튼만
   if (notFound) {
     return (
       <View style={styles.center}>
         <Text style={styles.errorTitle}>글을 찾을 수 없어요</Text>
         <Text style={styles.hint}>삭제됐거나 주소가 바뀐 글이에요</Text>
         <Pressable style={styles.retry} onPress={() => router.replace('/community')}>
-          <Text style={styles.retryText}>커뮤니티로</Text>
+          <Text style={styles.retryText}>블로그로</Text>
         </Pressable>
       </View>
     );

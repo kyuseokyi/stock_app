@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { Link, Navigate } from 'react-router-dom'
+import { Link } from 'react-router-dom'
+import FundLoginRequired from '../components/fund/FundLoginRequired'
 import LegacyImportModal from '../components/fund/LegacyImportModal'
 import Button from '../components/ui/Button'
 import {
@@ -24,6 +25,7 @@ import {
   type LegacyPreview,
 } from '../lib/fundStore'
 import { fundRefresher } from '../lib/fundAutoRefresh'
+import { FUNDS_PATH } from '../lib/fundGate'
 import { useAuthStore } from '../store/auth'
 import { showToast } from '../store/toast'
 import PageHeader from '../components/ui/PageHeader'
@@ -33,7 +35,8 @@ import Card from '../components/ui/Card'
 // 목록은 로그인 계정별(2026-10-23). key={uid} 로 계정이 바뀌면 화면 상태를 새로 만든다 — 이전 계정 목록이 새 계정에 저장되지 않게.
 export default function FundListPage() {
   const uid = useAuthStore((s) => s.user?.id ?? null)
-  if (uid === null) return <Navigate to="/me" replace />
+  // 비로그인 직접 진입 — 내정보로 튕기지 않고 로그인 안내 카드(로그인하면 이 화면으로 돌아온다)
+  if (uid === null) return <FundLoginRequired returnTo={FUNDS_PATH} />
   return <FundListBody key={uid} uid={uid} />
 }
 

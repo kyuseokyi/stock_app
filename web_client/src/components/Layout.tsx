@@ -2,8 +2,9 @@ import { useEffect, useState } from 'react'
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useBoardStore } from '../store/boards'
 import { useAuthStore } from '../store/auth'
+import { openLogin, useLoginPromptStore } from '../store/loginPrompt'
 import { chipClass } from './ui/Chip'
-import { BottomTabBar, TopNav } from './AppNav'
+import { BottomTabBar, TopNav, ProfileIcon } from './AppNav'
 import { sectionOf } from '../lib/navSections'
 import LoginModal from './LoginModal'
 import NotificationToaster from './NotificationToaster'
@@ -21,7 +22,8 @@ import { titleFor } from '../lib/pageTitle'
 export default function Layout() {
   const { boards, fetchBoards, boardName } = useBoardStore()
   const { user, token, logout } = useAuthStore()
-  const [loginOpen, setLoginOpen] = useState(false)
+  // 로그인 모달은 전역 스토어 하나 — 헤더 버튼·'내 펀드' 탭·홈 카드가 같은 모달을 연다
+  const loginPrompt = useLoginPromptStore()
   const [deleteOpen, setDeleteOpen] = useState(false)
   const location = useLocation()
   const navigate = useNavigate()
@@ -71,17 +73,30 @@ export default function Layout() {
               <img src="/favicon.svg" alt="" aria-hidden className="h-6 w-6" />
               FunNote
             </Link>
-            {user ? (
-              <UserMenu nickname={user.nickname} onLogout={logout} onDeleteAccount={() => setDeleteOpen(true)} />
-            ) : (
-              <Button onClick={() => setLoginOpen(true)}>로그인</Button>
-            )}
+            <div className="flex items-center gap-1">
+              {user ? (
+                <UserMenu nickname={user.nickname} onLogout={logout} onDeleteAccount={() => setDeleteOpen(true)} />
+              ) : (
+                <Button onClick={() => openLogin()}>로그인</Button>
+              )}
+              {/* 내정보(/me) — 하단 탭에서 헤더 우측으로 옮김. 로그인 여부와 상관없이 항상(약관·정책 링크도 여기서 찾는다) */}
+              <Link
+                to="/me"
+                aria-label="내정보"
+                aria-current={section === 'me' ? 'page' : undefined}
+                className={`inline-flex h-11 w-11 items-center justify-center rounded-full transition hover:bg-fill hover:text-ink ${
+                  section === 'me' ? 'text-accent' : 'text-ink-muted'
+                }`}
+              >
+                <ProfileIcon />
+              </Link>
+            </div>
           </div>
 
-          {/* 1차 메뉴: 홈 · 마켓 · 스크리너 · 커뮤니티 · 게임 · 내정보 (데스크톱 상단 — 모바일 폭은 아래 BottomTabBar) */}
+          {/* 1차 메뉴: 홈 · 내 펀드 · 블로그 · 게임 · 시장 (+스크리너) (데스크톱 상단 — 모바일 폭은 아래 BottomTabBar) */}
           <TopNav section={section} />
 
-          {/* 커뮤니티 섹션일 때만 게시판 탭 */}
+          {/* 블로그(커뮤니티) 섹션일 때만 게시판 탭 */}
           {section === 'community' && boards.length > 1 && (
             <nav aria-label="게시판" className="mt-3">
               <ScrollRow fade="canvas">
@@ -110,7 +125,14 @@ export default function Layout() {
       <BottomTabBar section={section} />
 
       <NotificationToaster />
-      <LoginModal open={loginOpen} onClose={() => setLoginOpen(false)} />
+      <LoginModal
+        open={loginPrompt.open}
+        onClose={loginPrompt.close}
+        description={loginPrompt.description}
+        returnTo={loginPrompt.returnTo}
+        // 닉네임 로그인(개발용)은 화면 이동 없이 끝나므로 여기서 복귀 경로로 보낸다. 간편 로그인은 완료 화면이 보낸다
+        onSuccess={loginPrompt.returnTo ? () => navigate(loginPrompt.returnTo!) : undefined}
+      />
       {deleteOpen && <DeleteAccountModal onClose={() => setDeleteOpen(false)} onDeleted={handleDeleted} />}
       {/* 약관 미동의 로그인 사용자 — 닫기 없는 동의 모달(z-50). /terms·/privacy 에서는 읽을 수 있게 숨긴다 */}
       {shouldShowTermsModal(token, user, location.pathname) && <TermsModal />}

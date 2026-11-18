@@ -60,10 +60,14 @@ export function isSafeReturnPath(path: string | null): path is string {
   )
 }
 
-/** 공급자로 떠나기 직전 현재 경로를 기억 */
-export function rememberLoginReturn(): void {
+/**
+ * 공급자로 떠나기 직전 돌아올 경로를 기억 — 기본은 현재 경로.
+ * path 를 주면(예: 내 펀드 탭에서 연 로그인 → '/me/funds') 그 경로로 돌아온다. 안전하지 않은 경로면 현재 경로.
+ */
+export function rememberLoginReturn(path?: string): void {
   try {
-    sessionStorage.setItem(RETURN_KEY, window.location.pathname + window.location.search)
+    const target = path && isSafeReturnPath(path) ? path : window.location.pathname + window.location.search
+    sessionStorage.setItem(RETURN_KEY, target)
   } catch {
     // 저장 불가(사파리 프라이빗 등) → 완료 후 홈으로
   }

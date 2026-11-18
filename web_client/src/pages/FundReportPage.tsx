@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react'
-import { Link, Navigate, useParams } from 'react-router-dom'
+import { Link, useParams } from 'react-router-dom'
+import FundLoginRequired from '../components/fund/FundLoginRequired'
 import FundReportView from '../components/fund/FundReportView'
 import Button from '../components/ui/Button'
 import {
@@ -17,13 +18,15 @@ import { loadFunds, localCache, saveFunds } from '../lib/fundStore'
 import { disclosureSource } from '../lib/fundDisclosure'
 import { useAuthStore } from '../store/auth'
 import { fundRefresher } from '../lib/fundAutoRefresh'
+import { FUNDS_PATH } from '../lib/fundGate'
 import Card from '../components/ui/Card'
 
 // 펀드 리포트(/me/funds/:id) — 캐시를 먼저 보여주고 열 때마다 원본을 다시 가져온다.
 export default function FundReportPage() {
   const { id } = useParams()
   const uid = useAuthStore((s) => s.user?.id ?? null)
-  if (uid === null) return <Navigate to="/me" replace />
+  // 비로그인 직접 진입 — 목록 화면과 같은 로그인 안내 카드(로그인하면 이 리포트로 돌아온다)
+  if (uid === null) return <FundLoginRequired returnTo={id ? `${FUNDS_PATH}/${id}` : FUNDS_PATH} />
   return <FundReportBody key={`${uid}-${id}`} id={id} uid={uid} />
 }
 

@@ -11,11 +11,11 @@ import { useBlogList } from '@/features/blog/use-blog-list';
 import { boardChips, resolveBoardFilter, type BoardFilter } from '@/features/boards/filter';
 import { useBoardStore } from '@/features/boards/store';
 import { usePullRefresh } from '@/hooks/use-pull-refresh';
-import { Chip } from '@/ui';
+import { Chip, ProfileHeaderButton } from '@/ui';
 
 const PAGE_SIZE = 10;
 
-/** 커뮤니티 탭 — 기본은 '전체'(활성 게시판의 새 글), 칩으로 게시판을 고른다. '전체'일 때만 카드에 게시판 이름을 붙인다.
+/** 블로그 탭(구 커뮤니티, 라우트 /community 유지) — 기본은 '전체'(활성 게시판의 새 글), 칩으로 게시판을 고른다. '전체'일 때만 카드에 게시판 이름을 붙인다.
  *  탭 화면은 Stack 헤더가 없어 상단 안전 영역을 직접 비운다 */
 export default function CommunityScreen() {
   const insets = useSafeAreaInsets();
@@ -58,7 +58,10 @@ export default function CommunityScreen() {
 
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}>
-      <Text style={styles.title} accessibilityRole="header">커뮤니티</Text>
+      <View style={styles.titleRow}>
+        <Text style={styles.title} accessibilityRole="header">블로그</Text>
+        <ProfileHeaderButton />
+      </View>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipsBar} contentContainerStyle={styles.chips}>
         {boardChips(boards).map((c) => (
           <Chip key={c.value ?? 'all'} label={c.label} selected={c.value === filter} onPress={() => handleSelect(c.value)} />
@@ -93,7 +96,7 @@ export default function CommunityScreen() {
           ListEmptyComponent={
             error ? (
               <View style={styles.center}>
-                <Text style={styles.errorTitle}>커뮤니티를 불러오지 못했습니다</Text>
+                <Text style={styles.errorTitle}>블로그 글을 불러오지 못했습니다</Text>
                 <Text style={styles.hint}>{error}</Text>
                 <Pressable style={styles.retry} onPress={reload}>
                   <Text style={styles.retryText}>다시 시도</Text>
@@ -185,12 +188,17 @@ const styles = StyleSheet.create((theme) => ({
     color: '#ffffff',
     fontWeight: '700',
   },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: theme.gap(2),
+    paddingTop: theme.gap(2),
+  },
   title: {
     fontSize: 24,
     fontWeight: '700',
     color: theme.colors.text,
-    paddingHorizontal: theme.gap(2),
-    paddingTop: theme.gap(2),
   },
   chipsBar: { flexGrow: 0, flexShrink: 0 }, // ScrollView 기본 flexShrink:1 — 목록이 길면 칩 줄이 눌린다
   chips: { gap: theme.gap(1), paddingHorizontal: theme.gap(2), paddingVertical: theme.gap(1.5) },

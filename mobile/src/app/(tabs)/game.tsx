@@ -32,7 +32,7 @@ import type { Leverage, OrderOptions, Ratio, Side } from '@/features/game/types'
 import { useGameRules } from '@/features/game/use-game-rules';
 import { useGameSocket } from '@/features/game/use-game-socket';
 import { reasonFromCode } from '@/lib/api/session-end';
-import { BottomSheet, Button, Card, ListState } from '@/ui';
+import { BottomSheet, Button, Card, ListState, ProfileHeaderButton } from '@/ui';
 
 const RANK_POLL_MS = 30_000;
 const PRIME_CHECK_MS = 60_000;
@@ -177,7 +177,13 @@ export default function GameScreen() {
     }
   };
 
-  const header = <Text style={styles.screenTitle}>트레이딩 게임</Text>;
+  // 제목 줄 + 오른쪽 내정보 버튼(하단 탭에서 내정보가 빠짐)
+  const header = (
+    <View style={styles.titleRow}>
+      <Text style={styles.screenTitle} accessibilityRole="header">트레이딩 게임</Text>
+      <ProfileHeaderButton />
+    </View>
+  );
 
   // 준비 중/연결 실패 — 당겨서 새로고침으로 재시도
   const retryScroll = (children: ReactNode) => (
@@ -261,7 +267,11 @@ export default function GameScreen() {
         style={[styles.flex, { marginTop: insets.top }]} // 상태 표시줄 여백은 스크롤 밖(스크롤 때 겹치지 않게)
         contentContainerStyle={[styles.content, { paddingTop: 8 }]}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void onRefresh()} />}>
-        {/* 큰 제목은 생략(하단 탭이 '게임') — 차트가 첫 화면에 더 크게 들어오게 */}
+        {/* 큰 제목은 생략(하단 탭이 '게임') — 차트가 첫 화면에 더 크게 들어오게. 내정보 버튼만 얇은 줄로(스크롤하면 같이 올라감) */}
+        <View style={styles.compactRow}>
+          <Text style={styles.compactTitle} accessibilityRole="header">트레이딩 게임</Text>
+          <ProfileHeaderButton />
+        </View>
         <GameHeader
           season={season}
           account={account}
@@ -357,13 +367,20 @@ const styles = StyleSheet.create((theme) => ({
   flex: { flex: 1, backgroundColor: theme.colors.background },
   grow: { flexGrow: 1 },
   content: { paddingHorizontal: theme.gap(1.5), paddingBottom: theme.gap(4), gap: theme.gap(1) },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: theme.gap(2.5),
+    paddingTop: theme.gap(2),
+  },
   screenTitle: {
     fontSize: 24,
     fontWeight: '700',
     color: theme.colors.text,
-    paddingHorizontal: theme.gap(2.5),
-    paddingTop: theme.gap(2),
   },
+  compactRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingLeft: theme.gap(1), marginTop: -theme.gap(0.5) },
+  compactTitle: { fontSize: 15, fontWeight: '700', color: theme.colors.textSecondary },
   guestTitle: { fontSize: 16, fontWeight: '700', color: theme.colors.text },
   guestText: { fontSize: 14, lineHeight: 20, color: theme.colors.textSecondary, marginTop: theme.gap(0.5), marginBottom: theme.gap(1.5) },
   sheetText: { fontSize: 15, lineHeight: 22, color: theme.colors.textSecondary, marginBottom: theme.gap(0.5) },

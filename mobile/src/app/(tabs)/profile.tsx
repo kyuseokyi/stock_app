@@ -1,5 +1,5 @@
-import { useRouter } from 'expo-router';
-import { useEffect, useRef, useState } from 'react';
+import { useFocusEffect, useRouter, type Href } from 'expo-router';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Pressable, RefreshControl, ScrollView, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
@@ -13,6 +13,7 @@ import { startSocialLogin } from '@/features/auth/social';
 import { SocialButton } from '@/features/auth/social-button';
 import { useAuthStore } from '@/features/auth/store';
 import { INFO_NOTICE, registerReviewTap } from '@/features/auth/terms';
+import { clearLoginReturn, takeLoginReturn, useHasLoginReturn } from '@/features/fund/login-return';
 import { PolicyLinks } from '@/features/legal/policy-links';
 import { PostNoticeRow } from '@/features/push/post-notice-row';
 import { usePullRefresh } from '@/hooks/use-pull-refresh';
@@ -37,6 +38,24 @@ export default function ProfileScreen() {
   const [socialError, setSocialError] = useState('');
   const [deleteOpen, setDeleteOpen] = useState(false);
   const router = useRouter();
+  // 내 펀드 로그인 안내를 거쳐 왔거나 여기서 내 펀드 탭을 눌렀으면 로그인 영역 위에 복귀 안내
+  const returnPending = useHasLoginReturn();
+
+  // 내 펀드 로그인 안내(시트·안내 카드)를 거쳐 왔다면 로그인 성공 순간(user: null → 있음) 내 펀드로 자동 복귀.
+  // 간편 로그인·개발 게스트·심사 로그인 모두 스토어 user 가 바뀌므로 여기 한 곳에서 처리(1회 소비).
+  // 직접 내정보에 와서 로그인했으면 기억이 없어 그대로 머문다.
+  const prevUser = useRef(user);
+  useEffect(() => {
+    const wasLoggedOut = prevUser.current === null;
+    prevUser.current = user;
+    if (!wasLoggedOut || !user) return;
+    const back = takeLoginReturn();
+    if (back) router.navigate(back as Href);
+  }, [user, router]);
+
+  // 로그인하지 않고 내정보를 떠나면 기억 취소 — 다음 로그인 때 엉뚱하게 이동하지 않게.
+  // (간편 로그인의 인앱 브라우저·복귀 딥링크는 화면 포커스를 바꾸지 않으므로 로그인 도중엔 지워지지 않는다)
+  useFocusEffect(useCallback(() => () => clearLoginReturn(), []));
 
   // 비로그인일 때 간편 로그인 공급자 활성 여부 조회(키 미설정 공급자는 버튼 숨김)
   useEffect(() => {
@@ -168,6 +187,7 @@ export default function ProfileScreen() {
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
       <Text style={styles.screenTitle}>내정보</Text>
       <Text style={styles.subtitle}>간편 로그인으로 시작해 보세요.</Text>
+      {returnPending ? <Text style={styles.returnHint}>로그인하면 내 펀드로 바로 이동해요</Text> : null}
       {visibleProviders.map((p) => (
         <SocialButton
           key={p}
@@ -236,6 +256,7 @@ const styles = StyleSheet.create((theme) => ({
   content: { padding: theme.gap(2.5), gap: theme.gap(1.5) },
   screenTitle: { fontSize: 24, fontWeight: '700', color: theme.colors.text },
   subtitle: { fontSize: 14, color: theme.colors.textSecondary },
+  returnHint: { fontSize: 13, fontWeight: '600', color: theme.colors.primary },
   nickname: { fontSize: 18, fontWeight: '700', color: theme.colors.text },
   role: { fontSize: 13, color: theme.colors.textSecondary },
   rankCard: { backgroundColor: theme.colors.primarySoft },

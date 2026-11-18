@@ -10,12 +10,12 @@ import { GroupSection } from '@/features/market/sections/group-section';
 import type { MarketSession } from '@/features/market/dashboard';
 import { MarketSection } from '@/features/market/sections/market-section';
 import type { GroupKind } from '@/features/market/types';
-import { Chip } from '@/ui';
+import { Chip, ProfileHeaderButton } from '@/ui';
 
 type Tab = 'market' | 'theme' | 'sector' | 'calendar';
 const TABS: [Tab, string][] = [['market', '개요'], ['theme', '테마'], ['sector', '업종'], ['calendar', '일정']];
 
-/** 마켓 탭 — 개요(대시보드: AI 브리핑·지수 캐러셀·급등락·수급·핫 키워드·일정, 스펙 §2.1 ①~⑦)와
+/** 시장 탭(구 마켓, 참고용) — 개요(대시보드: AI 브리핑·지수 캐러셀·급등락·수급·핫 키워드·일정, 스펙 §2.1 ①~⑦)와
  *  테마·업종·일정 전체 랭킹 칩. ① 헤더의 기준 시각·장운영 뱃지는 개요 칩이 데이터를 받아 올려 준다 */
 export default function MarketScreen() {
   const insets = useSafeAreaInsets();
@@ -44,6 +44,7 @@ export default function MarketScreen() {
             {header.basis ? <Text style={styles.basis}>{header.basis}</Text> : null}
           </View>
         ) : null}
+        <ProfileHeaderButton />
       </View>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips} style={styles.chipsBar}>
         {TABS.map(([v, t]) => <Chip key={v} label={t} selected={tab === v} onPress={() => setTab(v)} />)}
@@ -62,13 +63,13 @@ const styles = StyleSheet.create((theme) => ({
   screen: { flex: 1, backgroundColor: theme.colors.background },
   titleRow: {
     flexDirection: 'row',
-    alignItems: 'flex-end',
+    alignItems: 'center',
     justifyContent: 'space-between',
     gap: theme.gap(1),
     paddingHorizontal: theme.gap(2),
     paddingTop: theme.gap(2),
   },
-  title: { fontSize: 24, fontWeight: '700', color: theme.colors.text },
+  title: { flexGrow: 1, flexShrink: 0, fontSize: 24, fontWeight: '700', color: theme.colors.text }, // 상태 뱃지가 길면 뱃지 쪽이 줄어든다
   status: { alignItems: 'flex-end', gap: 2, flexShrink: 1 },
   session: {
     fontSize: 11, fontWeight: '700', color: theme.colors.textSecondary, backgroundColor: theme.colors.fill,
