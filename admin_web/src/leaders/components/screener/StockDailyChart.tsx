@@ -1,4 +1,4 @@
-// web_client/src/components/screener/StockDailyChart.tsx 복사본 — 원본과 같이 고칠 것 (관리자 추가: shapes = 패턴 모양 — lib/patternShapes 프리미티브, focusFrom = 첫 화면 시작일)
+// web_client/src/components/screener/StockDailyChart.tsx 복사본 — 원본과 같이 고칠 것 (관리자 추가: shapes = 패턴 모양 — lib/patternShapes 프리미티브, focusFrom = 첫 화면 시작일, showMa5Ma20 = 5·20일선)
 import { useEffect, useRef, useState } from 'react'
 import { CrosshairMode, LineStyle, createChart, type IPriceLine, type ISeriesApi } from 'lightweight-charts'
 import { getDailyCandles, getDailyCandlesBefore } from '../../api/stock'
@@ -10,6 +10,8 @@ import { THEME } from '../../lib/themeColors'
 import { PatternShapesPrimitive, type PatternShape } from '../../lib/patternShapes'
 
 const MA50_COLOR = '#f97316'
+const MA5_COLOR = '#10b981' // 5일선(관리자 5·20 정배열 스크리너)
+const MA20_COLOR = '#ec4899' // 20일선
 const VP_LEGEND = 'rgba(100, 116, 139, 0.45)' // 매물대 범례 견본(차트 막대보다 조금 진하게)
 
 export interface ChartPriceLine { price: number; color: string; title?: string; dashed?: boolean }
@@ -30,6 +32,7 @@ function Swatch({ color, dashed }: { color: string; dashed?: boolean }) {
 // priceLines·markers 는 선택 — 패턴 상세가 피벗·매수/손절 선과 베이스 꼭짓점을 얹을 때 쓴다(없으면 기존과 동일).
 export default function StockDailyChart({
   ticker, high52w, priceLines, markers, shapes, shapeLegend, focusFrom, lookbackDays, onMarkersDropped, heightClass = 'h-64',
+  showMa5Ma20 = false,
 }: {
   ticker: string
   high52w: number | null
@@ -47,6 +50,8 @@ export default function StockDailyChart({
   onMarkersDropped?: (n: number) => void
   /** 차트 높이 Tailwind 클래스 — 생략하면 h-64(스크리너 상세 패널) */
   heightClass?: string
+  /** 5일선·20일선을 함께 그린다(관리자 5·20 정배열 스크리너) — 기본 false 면 기존 화면 그대로 */
+  showMa5Ma20?: boolean
 }) {
   const boxRef = useRef<HTMLDivElement>(null)
   const seriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null)
@@ -80,6 +85,13 @@ export default function StockDailyChart({
       wickUpColor: THEME.up, wickDownColor: THEME.down,
     })
     const ma50 = chart.addLineSeries({ color: MA50_COLOR, lineWidth: 1, priceLineVisible: false, lastValueVisible: false })
+    // 5·20일선 — 켰을 때만 만든다(끄면 기존 차트와 같다)
+    const shortMas = showMa5Ma20
+      ? ([[5, MA5_COLOR], [20, MA20_COLOR]] as const).map(([n, color]) => ({
+          n,
+          series: chart.addLineSeries({ color, lineWidth: 1, priceLineVisible: false, lastValueVisible: false }),
+        }))
+      : []
     const vp = new VolumeProfilePrimitive() // 매물대 — 보이는 구간 기준
     candles.attachPrimitive(vp)
     const shapePrim = new PatternShapesPrimitive() // 패턴 모양 — 캔들 위
@@ -92,6 +104,10 @@ export default function StockDailyChart({
       candles.setData(rows.map((c) => ({ time: c.date, open: c.open, high: c.high, low: c.low, close: c.close })))
       const avg = sma(rows.map((c) => c.close), 50)
       ma50.setData(rows.flatMap((c, i) => (avg[i] === null ? [] : [{ time: c.date, value: avg[i] as number }])))
+      for (const { n, series } of shortMas) {
+        const m = sma(rows.map((c) => c.close), n)
+        series.setData(rows.flatMap((c, i) => (m[i] === null ? [] : [{ time: c.date, value: m[i] as number }])))
+      }
       timesRef.current = new Set(rows.map((c) => c.date))
       vp.setPoints(rows.map((c) => ({ high: c.high, low: c.low, close: c.close, volume: c.volume ?? 0 })))
     }
@@ -138,7 +154,7 @@ export default function StockDailyChart({
       linesRef.current = []
       chart.remove()
     }
-  }, [ticker, high52w, lookbackDays, focusFrom])
+  }, [ticker, high52w, lookbackDays, focusFrom, showMa5Ma20])
 
   // 피벗·매수/손절 선과 마커 — 일봉이 도착했을 때(state=ready)와 값이 바뀔 때마다 이전 선을 지우고 다시 얹는다
   useEffect(() => {
@@ -181,6 +197,8 @@ export default function StockDailyChart({
       )}
       {/* 범례 — 선 이름을 여기 모은다. 오른쪽 가격 축(약 56px)은 비워 둔다 */}
       <div className="pointer-events-none absolute left-2 right-16 top-1 flex flex-wrap gap-x-3 text-xs text-ink-muted">
+        {showMa5Ma20 && <span className="rounded-field bg-surface/80 px-1"><Swatch color={MA5_COLOR} />5일선</span>}
+        {showMa5Ma20 && <span className="rounded-field bg-surface/80 px-1"><Swatch color={MA20_COLOR} />20일선</span>}
         <span className="rounded-field bg-surface/80 px-1"><Swatch color={MA50_COLOR} />50일선</span>
         <span className="rounded-field bg-surface/80 px-1"><span aria-hidden className="mr-1 inline-block h-2 w-3 align-middle" style={{ background: VP_LEGEND }} />매물대</span>
         {high52w !== null && <span className="rounded-field bg-surface/80 px-1"><Swatch color={THEME.inkMuted} dashed />52주 고점</span>}
