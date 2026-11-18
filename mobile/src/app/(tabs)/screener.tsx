@@ -1,6 +1,6 @@
 import { Redirect, useRouter } from 'expo-router';
 import { useState } from 'react';
-import { ScrollView, View } from 'react-native';
+import { ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StyleSheet } from 'react-native-unistyles';
 
@@ -10,7 +10,7 @@ import { PatternsSection } from '@/features/patterns/sections/patterns-section';
 import { StaleNotice } from '@/features/market/components/stale-notice';
 import { useScreenerFeaturesState } from '@/features/screener/use-screener-features';
 import { screenerChipVisible, screenerEntry, type ScreenerTab } from '@/features/screener/visibility';
-import { Chip } from '@/ui';
+import { Chip, ProfileHeaderButton } from '@/ui';
 
 type Tab = ScreenerTab;
 // 시장 묶음(개요·테마·업종·일정)은 마켓 탭으로 옮겨 갔다 — 여기는 '종목 찾기'만
@@ -38,6 +38,11 @@ export default function ScreenerScreen() {
 
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}>
+      {/* 제목 줄 + 내정보 버튼(하단 탭에서 내정보가 빠짐) */}
+      <View style={styles.titleRow}>
+        <Text style={styles.title} accessibilityRole="header">스크리너</Text>
+        <ProfileHeaderButton />
+      </View>
       {tabs.length > 1 ? (
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips} style={styles.chipsBar}>
           {tabs.map(([v, t]) => <Chip key={v} label={t} selected={current === v} onPress={() => setTab(v)} />)}
@@ -55,6 +60,14 @@ export default function ScreenerScreen() {
 
 const styles = StyleSheet.create((theme) => ({
   screen: { flex: 1, backgroundColor: theme.colors.background },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: theme.gap(2),
+    paddingTop: theme.gap(2),
+  },
+  title: { fontSize: 24, fontWeight: '700', color: theme.colors.text },
   chipsBar: { flexGrow: 0, flexShrink: 0 }, // ScrollView 기본 flexShrink:1 — 아래 본문이 길면 칩 줄이 눌려 글자가 잘렸다
   chips: { gap: theme.gap(1), paddingHorizontal: theme.gap(2), paddingVertical: theme.gap(1.5) },
   chipsGap: { height: theme.gap(1.5) }, // 칩 줄이 숨겨졌을 때 안내 문구가 상단에 붙지 않게

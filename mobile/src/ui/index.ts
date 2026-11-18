@@ -7,6 +7,7 @@ export { Chip } from './chip';
 export { HeaderBack } from './header-back';
 export { ListRow } from './list-row';
 export { ListState } from './list-state';
+export { ProfileHeaderButton } from './profile-header-button';
 export { SectionHead } from './section-head';
 export { formatPct, formatSignedWon, formatWon } from './format';
 export { AppToaster, showToast, useAppToastStore } from './app-toast';

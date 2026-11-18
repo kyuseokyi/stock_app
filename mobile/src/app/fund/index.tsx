@@ -1,8 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as Notifications from 'expo-notifications';
-import { Redirect, Stack, useFocusEffect, useRouter } from 'expo-router';
+import { Stack, useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, RefreshControl, ScrollView, Text, TextInput, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
 import { useAuthStore } from '@/features/auth/store';
@@ -14,6 +15,8 @@ import { connectResultText, errorText } from '@/features/fund/backup-text';
 import { markBackupNoticeSeen, wasBackupNoticeSeen } from '@/features/fund/backup-notice';
 import { BackupRiskBanner } from '@/features/fund/components/backup-risk-banner';
 import { BackupNoticeSheet } from '@/features/fund/components/backup-notice-sheet';
+import { FundLoginRequired } from '@/features/fund/components/fund-login-required';
+import { fundScreenGate } from '@/features/fund/fund-gate';
 import { syncBackgroundTasks } from '@/features/fund/background/tasks';
 import { usePullRefresh } from '@/hooks/use-pull-refresh';
 import {
@@ -33,7 +36,7 @@ import { LegacyImportSheet } from '@/features/fund/components/legacy-import-shee
 import { isBackupConfigured } from '@/features/fund/google-auth';
 import { deleteHistory } from '@/features/fund/history-store';
 import { loadLegacyFunds, previewLegacyImport, type LegacyImportPreview } from '@/features/fund/legacy-funds';
-import { Button, Card, ListRow, ListState, showToast } from '@/ui';
+import { Button, Card, ListRow, ListState, ProfileHeaderButton, showToast } from '@/ui';
 import { isPushConfigured } from '@/features/push/config';
 import { PushPermissionBanner } from '@/features/push/permission-banner';
 import { wasPrompted } from '@/features/push/prompt';
@@ -42,10 +45,19 @@ import { PushPromptSheet } from '@/features/push/push-prompt-sheet';
 import { syncPushRegistration } from '@/features/push/registration';
 
 // 내 펀드 수익 — 기기에 저장한 fund.ivyro.net 펀드 현황 주소 목록(추가·삭제). 서버에는 저장하지 않는다.
-export default function FundListScreen() {
+// 스택 화면(/fund — 내정보 메뉴·푸시 알림 딥링크)과 하단 탭 '내 펀드'((tabs)/funds.tsx)가 같은 화면을 쓴다.
+export default function FundListRoute() {
+  return <FundListScreen variant="stack" />;
+}
+
+/** variant — stack: 위 헤더(제목·뒤로가기)는 루트 스택이 그리고 오른쪽 아이콘만 얹는다.
+ *  tab: 탭은 헤더를 숨기므로 화면 안에 제목 줄(내 펀드 · 백업 · 내정보)을 직접 그린다 */
+export function FundListScreen({ variant }: { variant: 'stack' | 'tab' }) {
   const router = useRouter();
   const { theme } = useUnistyles();
+  const insets = useSafeAreaInsets();
   const user = useAuthStore((s) => s.user);
+  const hydrated = useAuthStore((s) => s.hydrated);
   const ownerId = user?.id ?? null; // 목록은 계정별 — 계정이 바뀌면 다시 읽는다
   // 목록은 읽은 계정(uid)과 함께 보관 — 계정이 바뀌면 곧바로 비어 보이고(null), 추가·삭제는 그 uid 로만 저장(saveFundsAs)
   const [data, setData] = useState<{ uid: number; list: FundEntry[] } | null>(null);
@@ -91,7 +103,7 @@ export default function FundListScreen() {
   // 리포트 화면에서 기본 이름이 붙을 수 있어 돌아올 때마다 다시 읽는다
   useFocusEffect(
     useCallback(() => {
-      if (ownerId === null) return; // 로그인 안 됨 — 아래 Redirect 가 처리(목록은 계정별이라 읽을 수 없다)
+      if (ownerId === null) return; // 로그인 안 됨 — 아래 로그인 안내 카드가 처리(목록은 계정별이라 읽을 수 없다)
       let alive = true;
       const uid = ownerId;
       loadFunds(uid)
@@ -146,7 +158,38 @@ export default function FundListScreen() {
     }, [ownerId]),
   );
 
-  if (!user) return <Redirect href="/profile" />;
+  const inTab = variant === 'tab';
+  // 탭 화면 제목 줄 — 백업 아이콘은 로그인했을 때만(목록이 계정별)
+  const tabHeader = (withActions: boolean) => (
+    <View style={styles.tabTitleRow}>
+      <Text style={styles.tabTitle} accessibilityRole="header">내 펀드</Text>
+      <View style={styles.tabActions}>
+        {withActions && status.running ? <ActivityIndicator /> : null}
+        {withActions ? (
+          <Pressable
+            onPress={() => router.push('/fund/backup')}
+            accessibilityRole="button"
+            accessibilityLabel="기록 백업"
+            style={styles.iconButton}
+          >
+            <Ionicons name="cloud-upload-outline" size={22} color={theme.colors.text} />
+          </Pressable>
+        ) : null}
+        <ProfileHeaderButton />
+      </View>
+    </View>
+  );
+
+  // 비로그인(딥링크·푸시·로그아웃 포함) — 다른 화면으로 튕기지 않고 가운데 안내 카드. 로그인 복원 전에는 로딩
+  if (!user) {
+    const gate = fundScreenGate(hydrated, false);
+    return (
+      <View style={[styles.flex, inTab && { paddingTop: insets.top }]}>
+        {inTab ? <View style={styles.tabHeaderPad}>{tabHeader(false)}</View> : null}
+        {gate === 'loading' ? <ListState mode="loading" /> : <FundLoginRequired />}
+      </View>
+    );
+  }
 
   const risk =
     backup !== null && backup.uid === ownerId && funds !== null
@@ -248,27 +291,30 @@ export default function FundListScreen() {
 
   return (
     <ScrollView
-      style={styles.flex}
+      style={[styles.flex, inTab && { marginTop: insets.top }]} // 탭: 상태 표시줄 여백은 스크롤 밖(홈과 같음)
       contentContainerStyle={styles.content}
       keyboardShouldPersistTaps="handled"
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
-      <Stack.Screen
-        options={{
-          headerRight: () => (
-            <View style={styles.headerActions}>
-              {status.running ? <ActivityIndicator /> : null}
-              <Pressable
-                onPress={() => router.push('/fund/backup')}
-                hitSlop={8}
-                accessibilityRole="button"
-                accessibilityLabel="기록 백업"
-              >
-                <Ionicons name="cloud-upload-outline" size={20} color={theme.colors.text} />
-              </Pressable>
-            </View>
-          ),
-        }}
-      />
+      {inTab ? tabHeader(true) : null}
+      {inTab ? null : (
+        <Stack.Screen
+          options={{
+            headerRight: () => (
+              <View style={styles.headerActions}>
+                {status.running ? <ActivityIndicator /> : null}
+                <Pressable
+                  onPress={() => router.push('/fund/backup')}
+                  hitSlop={8}
+                  accessibilityRole="button"
+                  accessibilityLabel="기록 백업"
+                >
+                  <Ionicons name="cloud-upload-outline" size={20} color={theme.colors.text} />
+                </Pressable>
+              </View>
+            ),
+          }}
+        />
+      )}
       <PushPermissionBanner />
       <Card>
         <Text style={styles.label}>펀드 현황 주소</Text>
@@ -366,6 +412,11 @@ export default function FundListScreen() {
 const styles = StyleSheet.create((theme) => ({
   flex: { flex: 1, backgroundColor: theme.colors.background },
   headerActions: { flexDirection: 'row', alignItems: 'center', gap: theme.gap(2) },
+  tabTitleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: 44 },
+  tabTitle: { fontSize: 24, fontWeight: '700', color: theme.colors.text },
+  tabActions: { flexDirection: 'row', alignItems: 'center', gap: theme.gap(0.5) },
+  tabHeaderPad: { paddingHorizontal: theme.gap(2), paddingTop: theme.gap(2) },
+  iconButton: { minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
   content: { padding: theme.gap(2), gap: theme.gap(2) },
   label: { fontSize: 13, color: theme.colors.textSecondary, marginBottom: theme.gap(0.5) },
   input: {
