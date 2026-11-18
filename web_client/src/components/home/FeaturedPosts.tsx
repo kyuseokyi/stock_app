@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { type ReactNode, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { listBlogs } from '../../api/blog'
 import { withErrorCode } from '../../lib/errorCode'
@@ -12,7 +12,18 @@ const toPreview = (html: string, n = 100) => {
 }
 
 // more=false: 커뮤니티 안 옆 칸처럼 '커뮤니티 ›' 링크가 제자리를 가리킬 때 숨긴다.
-export default function FeaturedPosts({ limit, more = true }: { limit: number; more?: boolean }) {
+// title·moreLabel: 홈은 '📌 추천 블로그 글'·'블로그 전체 보기 ›'(기본값은 기존 문구 — 커뮤니티 옆 칸 등 그대로)
+export default function FeaturedPosts({
+  limit,
+  more = true,
+  title = '추천 글',
+  moreLabel = '커뮤니티 ›',
+}: {
+  limit: number
+  more?: boolean
+  title?: ReactNode
+  moreLabel?: string
+}) {
   const [items, setItems] = useState<BlogListOut['items']>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -27,10 +38,10 @@ export default function FeaturedPosts({ limit, more = true }: { limit: number; m
   return (
     <section aria-labelledby="featured-title">
       <div className="mb-2 flex items-baseline justify-between">
-        <h2 id="featured-title" className="text-lg font-bold text-ink">추천 글</h2>
+        <h2 id="featured-title" className="text-lg font-bold text-ink">{title}</h2>
         {more && (
           <Link to="/community" className="-my-2 inline-flex min-h-11 items-center text-sm font-medium text-brand-strong">
-            커뮤니티 ›
+            {moreLabel}
           </Link>
         )}
       </div>
