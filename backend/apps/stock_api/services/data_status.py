@@ -17,7 +17,7 @@ from apps.collector.market_indices import index_specs
 from apps.collector.tasks.canslim import q_cumulative_setting
 from shared import pipeline_record
 from shared.clickhouse_schema import CLICKHOUSE_DB as DB
-from shared.clickhouse_schema import get_client
+from shared.clickhouse_schema import get_client, get_local_client, local_client_configured
 from shared.database import SyncSessionLocal
 from shared.market_models import StockEvent
 from shared.sync_redis import get_sync_redis
@@ -41,6 +41,16 @@ def _ch():
 
 def _query(sql: str, params: dict | None = None) -> list:
     return _ch().query(sql, parameters=params or {}).result_rows
+
+
+def _query_local(sql: str, params: dict | None = None) -> list:
+    """시장 그룹 두 테이블(market_group_daily·market_stock_daily) — 개발 서버가 직접 계산해 자기 CH 에 둔다.
+
+    CLICKHOUSE_LOCAL_* 가 없으면 _query 로 위임(지금과 같은 경로 — 테스트의 _ch·_query 교체도 그대로 먹는다).
+    """
+    if not local_client_configured():
+        return _query(sql, params)
+    return get_local_client().query(sql, parameters=params or {}).result_rows
 
 
 def _today() -> date:
@@ -129,7 +139,7 @@ def _latest(table: str, key: str, label: str, ref: date | None) -> dict:
 
 
 def _market_groups(ref: date | None) -> dict:
-    rows = _query(f"SELECT date, kind, uniqExact(group_id) FROM {DB}.market_group_daily FINAL "
+    rows = _query_local(f"SELECT date, kind, uniqExact(group_id) FROM {DB}.market_group_daily FINAL "
                   f"WHERE date = (SELECT max(date) FROM {DB}.market_group_daily WHERE members > 0) "
                   f"AND members > 0 GROUP BY date, kind")
     d = _day(rows[0][0]) if rows else None

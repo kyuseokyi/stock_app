@@ -25,7 +25,7 @@ from apps.collector.verify import checks
 from apps.collector.verify.checks import Bar
 from shared import market_repo
 from shared.clickhouse_schema import CLICKHOUSE_DB as DB
-from shared.clickhouse_schema import get_client
+from shared.clickhouse_schema import get_client, get_local_client, local_client_configured
 from shared.database import SyncSessionLocal
 
 log = logging.getLogger(__name__)
@@ -46,6 +46,16 @@ def _ch():
 
 def _query(sql: str, params: dict | None = None) -> list:
     return _ch().query(sql, parameters=params or {}).result_rows
+
+
+def _query_local(sql: str, params: dict | None = None) -> list:
+    """시장 그룹 두 테이블(market_group_daily·market_stock_daily) — 개발 서버가 직접 계산해 자기 CH 에 둔다.
+
+    CLICKHOUSE_LOCAL_* 가 없으면 _query 로 위임(지금과 같은 경로 — 테스트의 _ch·_query 교체도 그대로 먹는다).
+    """
+    if not local_client_configured():
+        return _query(sql, params)
+    return get_local_client().query(sql, parameters=params or {}).result_rows
 
 
 def _theme_groups() -> dict[str, tuple[str, list[str]]]:
@@ -140,7 +150,7 @@ def external_check(d: date, tickers: list[str], fetch: Callable[[str, date], Bar
 
 # ---------------------------------------------------------------- 내부 일관성
 def _stock_rows(d: date) -> dict[str, dict]:
-    rows = _query(f"SELECT ticker, close, chg_1d, sector_m FROM {DB}.market_stock_daily FINAL "
+    rows = _query_local(f"SELECT ticker, close, chg_1d, sector_m FROM {DB}.market_stock_daily FINAL "
                   "WHERE date = %(d)s", {"d": d})
     return {t: {"close": float(c), "chg_1d": None if chg is None else float(chg), "sector_m": s or ""}
             for t, c, chg, s in rows}
@@ -160,7 +170,7 @@ def _prev_closes(d: date) -> dict[str, float]:
 
 
 def _group_rows(d: date) -> list[dict]:
-    rows = _query(f"SELECT kind, group_id, name, members, chg_1d FROM {DB}.market_group_daily FINAL "
+    rows = _query_local(f"SELECT kind, group_id, name, members, chg_1d FROM {DB}.market_group_daily FINAL "
                   "WHERE date = %(d)s AND members > 0", {"d": d})
     return [{"kind": k, "group_id": g, "name": n, "members": int(m), "chg_1d": None if c is None else float(c)}
             for k, g, n, m, c in rows]

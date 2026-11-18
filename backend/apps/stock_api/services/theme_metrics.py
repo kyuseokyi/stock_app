@@ -9,7 +9,7 @@ import logging
 
 from shared import market_repo
 from shared.clickhouse_schema import CLICKHOUSE_DB as DB
-from shared.clickhouse_schema import get_client
+from shared.clickhouse_schema import get_client, get_local_client, local_client_configured
 from shared.database import SyncSessionLocal
 
 log = logging.getLogger(__name__)
@@ -17,6 +17,16 @@ log = logging.getLogger(__name__)
 
 def _query(sql: str, params: dict | None = None) -> list:
     return get_client().query(sql, parameters=params or {}).result_rows
+
+
+def _query_local(sql: str, params: dict | None = None) -> list:
+    """시장 그룹 두 테이블(market_group_daily·market_stock_daily) — 개발 서버가 직접 계산해 자기 CH 에 둔다.
+
+    CLICKHOUSE_LOCAL_* 가 없으면 _query 로 위임(지금과 같은 경로 — 테스트의 _ch·_query 교체도 그대로 먹는다).
+    """
+    if not local_client_configured():
+        return _query(sql, params)
+    return get_local_client().query(sql, parameters=params or {}).result_rows
 
 
 def _names(tickers: list[str]) -> dict[str, str]:
@@ -30,7 +40,7 @@ def _names(tickers: list[str]) -> dict[str, str]:
 def theme_metrics() -> dict:
     """{"as_of": 기준일|None, "themes": {테마 id(문자열): {rank, chg_1d, value, members, leader_ticker, leader_name}}}."""
     try:
-        rows = _query(
+        rows = _query_local(
             f"SELECT date, group_id, rank, chg_1d, value, members, leader_ticker FROM {DB}.market_group_daily FINAL "
             f"WHERE kind = 'theme' AND members > 0 "
             f"AND date = (SELECT max(date) FROM {DB}.market_group_daily WHERE kind = 'theme')")
@@ -57,7 +67,7 @@ def attach_stock_metrics(stocks: list[dict]) -> list[dict]:
         log.warning("종목 이름 조회 실패: %s", exc)
         names = {}
     try:
-        rows = _query(f"SELECT ticker, chg_1d, value FROM {DB}.market_stock_daily FINAL "
+        rows = _query_local(f"SELECT ticker, chg_1d, value FROM {DB}.market_stock_daily FINAL "
                       f"WHERE date = (SELECT max(date) FROM {DB}.market_stock_daily) AND ticker IN %(t)s",
                       {"t": tickers})
     except Exception as exc:  # noqa: BLE001
