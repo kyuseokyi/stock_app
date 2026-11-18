@@ -122,8 +122,8 @@
 | :--- | :--- | :--- | :--- |
 | **🏆 주도주** | `/market/leaders` | [`MarketLeaders.tsx`](../admin_web/src/pages/MarketLeaders.tsx) | ✅ 구현됨 (CANSLIM 7대 기준 스크리너) |
 | **📈 5·20 정배열 스크리너** | `/market/ma-screener` | [`MarketMaScreener.tsx`](../admin_web/src/pages/MarketMaScreener.tsx) | ✅ 구현됨 (5·20일선 정배열 4모드 + 시총/거래대금/거래량/등락률 필터) |
-| **🔎 조건검색** | `/market/finder` | `MarketFinder.tsx` *(신설)* | 🆕 추가 (`web_client`의 [`FinderTab.tsx`](../web_client/src/pages/screener/FinderTab.tsx)와 동일 — 프리셋 4종 + 볼린저/매물대/RSI/재무 전체 필터 + 상단 `screener` 데이터셋 상태 카드) |
-| **📐 차트 패턴** | `/market/patterns` | `MarketPatterns.tsx` *(신설)* | 🆕 추가 (`web_client`의 [`PatternsTab.tsx`](../web_client/src/pages/screener/PatternsTab.tsx)와 동일 — 컵·컵핸들·쌍바닥·플랫베이스·박스권·HTF 리포트 + 차트 위 패턴 도형 오버레이 + 상단 `patterns` 데이터셋 상태 카드) |
+| **🔎 조건검색** | `/market/finder` | [`MarketFinder.tsx`](../admin_web/src/pages/MarketFinder.tsx) | ✅ 구현됨(배포 전) (`web_client`의 [`FinderTab.tsx`](../web_client/src/pages/screener/FinderTab.tsx)와 동일 — 프리셋 4종 + 볼린저/매물대/RSI/재무 전체 필터 + 상단 `screener` 데이터셋 상태 카드) |
+| **📐 차트 패턴** | `/market/patterns` | [`MarketPatterns.tsx`](../admin_web/src/pages/MarketPatterns.tsx) | ✅ 구현됨(배포 전) (`web_client`의 [`PatternsTab.tsx`](../web_client/src/pages/screener/PatternsTab.tsx)와 동일 — 컵·컵핸들·쌍바닥·플랫베이스·박스권·HTF 리포트 + 차트 위 패턴 도형 오버레이 + 상단 `patterns` 데이터셋 상태 카드) |
 | **🗂️ 스크리너 탭 설정** | `/market/screener` | [`ScreenerSettings.tsx`](../admin_web/src/pages/ScreenerSettings.tsx) | ✅ 구현됨 (사용자 웹·앱 노출 ON/OFF 스위치) |
 
 ---
@@ -133,33 +133,34 @@
 Claude Code에서 아래 Micro-Step 순서로 안전하게 구현 및 검증을 진행합니다.
 
 ### 📍 Phase 1: 웹 클라이언트 (`web_client`) 5탭 네비게이션 · 로그인 게이트 · 홈 & 종목 상세 개편
-- [ ] **Step 1-1 (웹 5탭 네비게이션 & `내 펀드` 비로그인 안내)**:
+- [x] **Step 1-1 (웹 5탭 네비게이션 & `내 펀드` 비로그인 안내)** — ✅ `feature/app-identity-nav` 브랜치 구현 완료(2026-11-18, 배포·머지 전):
   - [`web_client/src/lib/navSections.ts`](../web_client/src/lib/navSections.ts)에 `'funds'` 섹션 추가 및 기본 5탭 순서(`['home', 'funds', 'community', 'game', 'market']`, 스크리너 스위치 ON 시 기존대로 노출 가능) 정의.
   - [`web_client/src/components/AppNav.tsx`](../web_client/src/components/AppNav.tsx)에서 라벨을 `홈 · 내 펀드 · 블로그 · 게임 · 시장`으로 변경하고, 비로그인 상태에서 `내 펀드` 탭 클릭 시 로그인 안내 모달(`LoginModal`)을 띄우도록 연결.
   - [`web_client/src/pages/FundListPage.tsx`](../web_client/src/pages/FundListPage.tsx)에서 비로그인 진입 시 즉시 리다이렉트하는 대신 친절한 로그인 안내 카드 + `[로그인하기]` 버튼을 표시하도록 개선.
   - [`web_client/src/components/Layout.tsx`](../web_client/src/components/Layout.tsx) 헤더 우측에 모바일/데스크톱 공통 `내정보(/me)` 진입 아이콘/버튼 유지.
-- [ ] **Step 1-2 (웹 홈 화면 3단 개편 & 종목 상세 CANSLIM 숨김 — 기존 컴포넌트 삭제 금지)**:
+- [x] **Step 1-2 (웹 홈 화면 3단 개편 & 종목 상세 CANSLIM 숨김 — 기존 컴포넌트 삭제 금지)** — ✅ `feature/app-identity-nav` 브랜치 구현 완료(2026-11-18, 배포·머지 전):
   - 기존 `MarketNote.tsx`는 그대로 보존한 채, `HomeFundCard.tsx`, `HomeGameEduCard.tsx`, `HomeMarketReference.tsx`를 작성하여 [`HomePage.tsx`](../web_client/src/pages/HomePage.tsx)에 배치.
   - [`web_client/src/pages/StockDetailPage.tsx`](../web_client/src/pages/StockDetailPage.tsx)에서 CANSLIM 점수 박스 및 `주도주 분석 (CANSLIM)` 카드를 비노출 처리(`CanslimParts.tsx` 파일은 보존)하고 참고용 데이터 안내 문구 표시.
   - `cd web_client && npm run build && npm test` 통과 검증.
 
 ### 📍 Phase 2: 모바일 앱 (`mobile`) 5탭 네비게이션 · 로그인 게이트 · 홈 & 종목 상세 개편
-- [ ] **Step 2-1 (모바일 5탭 & `내 펀드` 비로그인 안내 시트 & 우측 상단 내정보 아이콘)**:
+- [x] **Step 2-1 (모바일 5탭 & `내 펀드` 비로그인 안내 시트 & 우측 상단 내정보 아이콘)** — ✅ `feature/app-identity-nav` 브랜치 구현 완료(2026-11-18, 배포·머지 전):
   - `mobile/src/app/(tabs)/funds.tsx` 탭 화면 추가(기존 `fund/index.tsx` 재사용, 기존 `/fund` 스택 라우트도 100% 유지).
   - [`mobile/src/app/(tabs)/_layout.tsx`](../mobile/src/app/%28tabs%29/_layout.tsx)를 `홈 · 내 펀드 · 블로그 · 게임 · 시장` 5탭으로 구성하고 `profile` 탭은 `href: null`로 숨김 처리.
   - 비로그인 상태에서 `내 펀드` 탭 터치 시 이동을 막고 `"로그인이 필요해요"` 안내 바텀시트(`BottomSheet`)를 띄워 `[로그인하러 가기]`(`/profile`)로 안내.
   - 탭 화면 상단 우측에 공통 `ProfileHeaderButton`(`내정보` 이동 아이콘) 배치.
-- [ ] **Step 2-2 (모바일 홈 화면 개편 & 종목 상세 CANSLIM 숨김 — 기존 파일 삭제 금지)**:
+- [x] **Step 2-2 (모바일 홈 화면 개편 & 종목 상세 CANSLIM 숨김 — 기존 파일 삭제 금지)** — ✅ `feature/app-identity-nav` 브랜치 구현 완료(2026-11-18, 배포·머지 전):
   - 기존 `home-summary.tsx` 등 시황 요약 파일들은 삭제하지 않고 그대로 유지한 채, `home-fund-card.tsx`, `home-game-edu-card.tsx`, `home-market-strip.tsx`를 추가하여 [`mobile/src/app/(tabs)/index.tsx`](../mobile/src/app/%28tabs%29/index.tsx)에 연결.
   - [`mobile/src/app/stock/[ticker].tsx`](../mobile/src/app/stock/%5Bticker%5D.tsx)에서 상단 CANSLIM 점수(`scoreBox`) 및 하단 `7가지 기준(ScoreTable)` · `ScoreHistory`를 비노출 처리(컴포넌트 파일은 보존)하고 참고용 안내 문구 표시.
   - `cd mobile && npm run typecheck && npm test` 통과 검증.
 
 ### 📍 Phase 3: 관리자 웹 (`admin_web`) 전체 스크리너(`조건검색` · `차트 패턴`) 상시 메뉴 추가
-- [ ] **Step 3-1 (`admin_web` 조건검색 `/market/finder` 추가)**:
+- [x] **Step 3-1 (`admin_web` 조건검색 `/market/finder` 추가)** — ✅ `feature/app-identity-nav` 브랜치 구현 완료(2026-11-18, 배포·머지 전):
   - `web_client`의 `FinderTab` 관련 컴포넌트·API를 `admin_web`에 이식하여 `admin_web/src/pages/MarketFinder.tsx` 생성(상단 `screener` 데이터셋 상태 카드 포함, 종목 상세 링크는 `/market/verify?ticker=` 연결).
-- [ ] **Step 3-2 (`admin_web` 차트 패턴 `/market/patterns` 추가)**:
+- [x] **Step 3-2 (`admin_web` 차트 패턴 `/market/patterns` 추가)** — ✅ `feature/app-identity-nav` 브랜치 구현 완료(2026-11-18, 배포·머지 전):
   - `web_client`의 `PatternsTab` 관련 컴포넌트·API를 `admin_web`에 이식하여 `admin_web/src/pages/MarketPatterns.tsx` 생성(상단 `patterns` 데이터셋 상태 카드 + `StockDailyChart` 패턴 도형 오버레이 포함).
   - [`admin_web/src/components/Sidebar.tsx`](../admin_web/src/components/Sidebar.tsx) 및 [`admin_web/src/App.tsx`](../admin_web/src/App.tsx)에 `🔎 조건검색(/market/finder)`, `📐 차트 패턴(/market/patterns)` 상시 노출 추가 후 `cd admin_web && npm run build` 검증.
+  - 구현 메모: 상세 차트는 주도주 상세(`CanslimDetail`)와 같은 방식으로 패턴 도형(현재·지난 베이스) + 피벗·매수/손절 선 + 꼭짓점 마커를 얹고, 상단 갱신 현황 카드는 공용 `components/market/ScreenDatasetStatus.tsx`(패턴은 '형성 중' 종목 수 기준). 관리자 쿼리는 `backend/tests/test_screener_contract.py`·`test_pattern_contract.py` 계약 테스트로 실제 스키마와 대조. 사이드바 '스크리너 탭' → '스크리너 탭 설정'으로 라벨만 변경.
 
 ---
 
