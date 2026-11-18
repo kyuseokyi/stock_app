@@ -1,10 +1,11 @@
 import { Ionicons } from '@expo/vector-icons';
-import { Tabs } from 'expo-router';
+import { Tabs, usePathname } from 'expo-router';
 import { useUnistyles } from 'react-native-unistyles';
 
 import { useAuthStore } from '@/features/auth/store';
 import { FundLoginSheet } from '@/features/fund/components/fund-login-sheet';
-import { fundNavAction, openFundLoginSheet } from '@/features/fund/fund-gate';
+import { FUNDS_TAB_PATH, fundTabPressAction, openFundLoginSheet } from '@/features/fund/fund-gate';
+import { rememberLoginReturn } from '@/features/fund/login-return';
 import { useScreenerFeaturesState } from '@/features/screener/use-screener-features';
 import { screenerTabVisible } from '@/features/screener/visibility';
 
@@ -12,10 +13,13 @@ import { screenerTabVisible } from '@/features/screener/visibility';
  *  스크리너 탭은 관리자 스위치 '종목 찾기(사용자 화면)'(STOCK_FINDER)가 켜졌을 때만 시장 다음에 보인다 — 로딩 전·오류는 숨김.
  *  내정보(profile)는 탭 버튼만 숨기고(href: null) 라우트·화면은 그대로 — 탭 화면 제목 줄 오른쪽 ProfileHeaderButton 으로 연다.
  *  '내 펀드'는 비로그인이면 탭 이동을 막고 로그인 안내 시트(FundLoginSheet — 홈 카드와 같은 시트)를 띄운다.
+ *  단 이미 로그인 화면(내정보)에 있으면 시트 없이 '로그인 뒤 내 펀드로' 만 기억한다(내정보가 안내 문구를 보여 줌).
  *  (docs/app_identity_and_nav_redesign_spec.md 1장) */
 export default function TabsLayout() {
   const { theme } = useUnistyles();
   const showScreener = screenerTabVisible(useScreenerFeaturesState());
+  // 현재 경로 — 경로가 바뀌면 레이아웃이 다시 그려져 탭 리스너도 새 값을 잡는다
+  const pathname = usePathname();
 
   return (
     <>
@@ -45,10 +49,11 @@ export default function TabsLayout() {
           listeners={{
             tabPress: (e) => {
               // 눌린 순간의 로그인 상태(렌더 때 잡힌 값이 아니라 스토어의 현재 값)
-              if (fundNavAction(useAuthStore.getState().user !== null) === 'login') {
-                e.preventDefault();
-                openFundLoginSheet();
-              }
+              const action = fundTabPressAction(pathname, useAuthStore.getState().user !== null);
+              if (action === 'go') return;
+              e.preventDefault();
+              if (action === 'remember') rememberLoginReturn(FUNDS_TAB_PATH);
+              else openFundLoginSheet();
             },
           }}
         />

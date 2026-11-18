@@ -13,7 +13,7 @@ import { startSocialLogin } from '@/features/auth/social';
 import { SocialButton } from '@/features/auth/social-button';
 import { useAuthStore } from '@/features/auth/store';
 import { INFO_NOTICE, registerReviewTap } from '@/features/auth/terms';
-import { clearLoginReturn, takeLoginReturn } from '@/features/fund/login-return';
+import { clearLoginReturn, takeLoginReturn, useHasLoginReturn } from '@/features/fund/login-return';
 import { PolicyLinks } from '@/features/legal/policy-links';
 import { PostNoticeRow } from '@/features/push/post-notice-row';
 import { usePullRefresh } from '@/hooks/use-pull-refresh';
@@ -38,6 +38,8 @@ export default function ProfileScreen() {
   const [socialError, setSocialError] = useState('');
   const [deleteOpen, setDeleteOpen] = useState(false);
   const router = useRouter();
+  // 내 펀드 로그인 안내를 거쳐 왔거나 여기서 내 펀드 탭을 눌렀으면 로그인 영역 위에 복귀 안내
+  const returnPending = useHasLoginReturn();
 
   // 내 펀드 로그인 안내(시트·안내 카드)를 거쳐 왔다면 로그인 성공 순간(user: null → 있음) 내 펀드로 자동 복귀.
   // 간편 로그인·개발 게스트·심사 로그인 모두 스토어 user 가 바뀌므로 여기 한 곳에서 처리(1회 소비).
@@ -185,6 +187,7 @@ export default function ProfileScreen() {
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
       <Text style={styles.screenTitle}>내정보</Text>
       <Text style={styles.subtitle}>간편 로그인으로 시작해 보세요.</Text>
+      {returnPending ? <Text style={styles.returnHint}>로그인하면 내 펀드로 바로 이동해요</Text> : null}
       {visibleProviders.map((p) => (
         <SocialButton
           key={p}
@@ -253,6 +256,7 @@ const styles = StyleSheet.create((theme) => ({
   content: { padding: theme.gap(2.5), gap: theme.gap(1.5) },
   screenTitle: { fontSize: 24, fontWeight: '700', color: theme.colors.text },
   subtitle: { fontSize: 14, color: theme.colors.textSecondary },
+  returnHint: { fontSize: 13, fontWeight: '600', color: theme.colors.primary },
   nickname: { fontSize: 18, fontWeight: '700', color: theme.colors.text },
   role: { fontSize: 13, color: theme.colors.textSecondary },
   rankCard: { backgroundColor: theme.colors.primarySoft },

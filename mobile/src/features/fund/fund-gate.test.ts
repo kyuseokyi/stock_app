@@ -3,6 +3,7 @@ import {
   FUND_LOGIN_DESCRIPTION,
   FUND_LOGIN_TITLE,
   fundNavAction,
+  fundTabPressAction,
   fundScreenGate,
   openFundLoginSheet,
   useFundLoginSheet,
@@ -46,5 +47,25 @@ describe('문구', () => {
   it('스펙 문구 그대로', () => {
     expect(FUND_LOGIN_TITLE).toBe('로그인이 필요해요');
     expect(FUND_LOGIN_DESCRIPTION).toBe('내 펀드 수익률을 확인하고 기기에 안전하게 보관하려면 먼저 로그인해 주세요.');
+  });
+});
+
+describe('fundTabPressAction — 하단 내 펀드 탭 터치', () => {
+  it('로그인했으면 어느 화면이든 그대로 이동', () => {
+    expect(fundTabPressAction('/', true)).toBe('go');
+    expect(fundTabPressAction('/profile', true)).toBe('go');
+  });
+
+  it('비로그인으로 내정보(로그인 화면)에 있으면 시트 없이 복귀만 기억', () => {
+    expect(fundTabPressAction('/profile', false)).toBe('remember');
+    expect(fundTabPressAction('/profile/', false)).toBe('remember');
+  });
+
+  it('비로그인으로 다른 화면이면 로그인 안내 시트', () => {
+    expect(fundTabPressAction('/', false)).toBe('sheet');
+    expect(fundTabPressAction('/market', false)).toBe('sheet');
+    expect(fundTabPressAction('/profiles', false)).toBe('sheet');
+    expect(fundTabPressAction('', false)).toBe('sheet');
+    expect(fundTabPressAction(null, false)).toBe('sheet');
   });
 });

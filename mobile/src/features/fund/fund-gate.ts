@@ -18,6 +18,19 @@ export function fundNavAction(loggedIn: boolean): FundNavAction {
   return loggedIn ? 'navigate' : 'login';
 }
 
+/** 하단 '내 펀드' 탭 터치 판정(현재 경로·로그인 여부)
+ *  - go: 로그인 — 그대로 이동
+ *  - remember: 비로그인인데 이미 로그인 화면(내정보)에 있음 — 시트 없이 이동만 막고 '로그인 뒤 내 펀드로' 기억
+ *    (시트의 [로그인하러 가기]가 지금 화면으로 보내는 셈이라 시트를 또 띄우지 않는다)
+ *  - sheet: 그 밖의 화면에서 비로그인 — 이동을 막고 로그인 안내 시트 */
+export type FundTabPressAction = 'go' | 'remember' | 'sheet';
+
+export function fundTabPressAction(pathname: string | null | undefined, loggedIn: boolean): FundTabPressAction {
+  if (fundNavAction(loggedIn) === 'navigate') return 'go';
+  const path = (pathname ?? '').replace(/\/+$/, '');
+  return path === LOGIN_PATH ? 'remember' : 'sheet';
+}
+
 /** 내 펀드 화면 본문 — 로그인 복원 전(hydrated=false)은 로딩, 비로그인은 안내 카드, 로그인은 목록.
  *  복원 전에 안내 카드를 그리면 로그인 사용자가 푸시로 앱을 열 때 카드가 잠깐 깜박인다 */
 export type FundScreenGate = 'loading' | 'login' | 'list';

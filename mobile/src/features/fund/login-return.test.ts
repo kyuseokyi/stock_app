@@ -1,6 +1,7 @@
 import { FUNDS_TAB_PATH } from './fund-gate';
 import {
   clearLoginReturn,
+  hasLoginReturn,
   isAllowedReturnPath,
   LOGIN_RETURN_TTL_MS,
   rememberLoginReturn,
@@ -56,5 +57,17 @@ describe('로그인 후 돌아갈 곳(login-return)', () => {
     expect(isAllowedReturnPath('/profile')).toBe(false);
     expect(isAllowedReturnPath('')).toBe(false);
     expect(isAllowedReturnPath(null)).toBe(false);
+  });
+
+  it('들여다보기(hasLoginReturn)는 비우지 않고, 만료·취소면 false', () => {
+    expect(hasLoginReturn(0)).toBe(false);
+    rememberLoginReturn(FUNDS_TAB_PATH, 1_000);
+    expect(hasLoginReturn(2_000)).toBe(true);
+    expect(hasLoginReturn(1_000 + LOGIN_RETURN_TTL_MS + 1)).toBe(false);
+    expect(takeLoginReturn(2_000)).toBe('/funds');
+    expect(hasLoginReturn(2_000)).toBe(false);
+    rememberLoginReturn(FUNDS_TAB_PATH, 1_000);
+    clearLoginReturn();
+    expect(hasLoginReturn(2_000)).toBe(false);
   });
 });
