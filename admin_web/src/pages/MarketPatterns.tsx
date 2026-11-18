@@ -182,7 +182,7 @@ export default function MarketPatterns() {
       )}
       {state === 'loading' && <ListSkeleton />}
       {state === 'ready' && date === null && (
-        <Card><EmptyState emoji="🛠️" title="패턴 데이터를 준비하고 있어요" description="매일 장 마감 후 계산돼요. 데이터 현황에서 다시 계산할 수 있어요." /></Card>
+        <Card><EmptyState emoji="🛠️" title="패턴 데이터를 준비하고 있어요" description="매일 장 마감 후 계산돼요. 데이터 현황에서 '차트 패턴 계산'을 실행할 수 있어요." /></Card>
       )}
       {state === 'ready' && date !== null && items.length === 0 && (
         <Card><EmptyState emoji="🔎" title="조건에 맞는 종목이 없어요" description="리포트나 패턴을 바꿔 보세요." /></Card>
