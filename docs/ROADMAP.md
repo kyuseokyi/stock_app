@@ -234,8 +234,14 @@
 
 ### 앱 정체성 재정의 & 5탭 네비게이션·홈 개편 (`홈 · 내 펀드 · 블로그 · 게임 · 시장`)
 > 상세 설계 및 로드맵: [`docs/app_identity_and_nav_redesign_spec.md`](app_identity_and_nav_redesign_spec.md) · 제품 정의: [`PRODUCT.md`](../PRODUCT.md)
-- [ ] Phase 1 (웹 `web_client`): 5탭(`홈 · 내 펀드 · 블로그 · 게임 · 시장`) + 우측 상단 `내정보` 버튼 개편 및 홈 화면 3단(`① 내 펀드 수익 요약 → ② 추천 블로그 글 & 게임 교육 배너 → ③ 참고용 시장 요약`) 개편
-- [ ] Phase 2 (모바일 `mobile`): 하단 5탭(`홈 · 내 펀드 · 블로그 · 게임 · 시장`) + 상단 헤더 우측 프로필/내정보 아이콘 배치 및 홈 화면 3단 개편 (기존 푸시/딥링크 URL 100% 호환 유지)
+- [ ] Phase 1 (웹 `web_client`): 5탭(`홈 · 내 펀드 · 블로그 · 게임 · 시장`) + 우측 상단 `내정보` 버튼 개편, `내 펀드` 비로그인 시 로그인 안내 게이트, 홈 화면 3단(`① 내 펀드 수익 요약 → ② 추천 블로그 글 & 게임 교육 배너 → ③ 참고용 시장 요약`) 개편
+- [ ] Phase 2 (모바일 `mobile`): 하단 5탭(`홈 · 내 펀드 · 블로그 · 게임 · 시장`) + 상단 헤더 우측 프로필/내정보 아이콘 배치, `내 펀드` 비로그인 시 바텀시트 안내, 홈 화면 3단 개편 (기존 코드·라우트 100% 보존)
+
+### 트레이딩 게임 지지·저항 손절·익절·홀딩 경량화 (`SrWatcher` 팝업 최소화 + 홀딩 시 음소거)
+> 상세 설계 및 로드맵: [`docs/game_lightweight_sr_action_spec_and_plan.md`](game_lightweight_sr_action_spec_and_plan.md)
+- [ ] Step 1: `isMajorSrBreakEvent` 순수 함수 추가 (`5일선` 및 단순 `터치` 제외, `20일선·POC·BB·전고점/저점`의 확실한 `돌파/이탈`만 팝업 허용)
+- [ ] Step 2 (웹 `web_client`): `[✊ 홀딩]` 클릭 시 해당 포지션 종료까지 추가 팝업 차단(`mutedPositionId`) + 보유 포지션 카드(`ActivePositionCard`) 내부 1줄 상태 배너 연동
+- [ ] Step 3 (모바일 `mobile`): `[✊ 홀딩]` 클릭 시 포지션 단위 팝업 차단 + 보유 포지션 카드(`position-card.tsx`) 내부 1줄 상태 배너 연동
 
 ### 관리자 전용 5·20일선 정배열 스크리너 (`admin_web` 우선 → 추후 웹·앱 확장)
 > 상세 설계 및 로드맵: [`docs/admin_ma5_20_screener_spec_and_plan.md`](admin_ma5_20_screener_spec_and_plan.md)
@@ -253,6 +259,7 @@
 ---
 
 ## 참고 문서
+- **트레이딩 게임 지지·저항 손절·익절·홀딩 경량화 명세: `docs/game_lightweight_sr_action_spec_and_plan.md`**
 - **앱 정체성 재정의 & 5탭 네비게이션·홈 개편 명세: `docs/app_identity_and_nav_redesign_spec.md`**
 - **관리자 5·20일선 정배열 스크리너 명세 및 플랜: `docs/admin_ma5_20_screener_spec_and_plan.md`**
 - **광고 수익화 명세 및 플랜: `docs/ad_monetization_spec_and_plan.md`**
