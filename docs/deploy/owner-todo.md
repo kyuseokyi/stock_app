@@ -7,6 +7,7 @@
 ## 1. 지금 바로 (출시 일정을 정하는 일)
 
 - [ ] **Google Play 개발자 계정**(U1) — US$25, 실명 결제 프로필, 신분증 확인, 이메일·전화 OTP, Play Console 모바일 앱으로 기기 인증. 개발자 이메일은 `support@funnotedaily.com`
+- [ ] **시세 데이터 이용 계약(출시 조건)** — 증권사 개인 API 시세를 사용자에게 표시하는 것은 재배포라 계약 필요 가능성 높음. KRX·코스콤·FnGuide 문의 → 견적 비교: [`market-data-licensing.md`](market-data-licensing.md)
 - [ ] **`com.stocknote` 앱 생성**(U2) — `com.stockapp` 은 Play 에서 이미 사용 중(2026-11-18) → 상용 패키지를 `com.stocknote` 로 변경. 사용자 할 일(푸시·로그인 포함)·코드 변경 전체: [`package-rename-stocknote.md`](package-rename-stocknote.md)
 - [ ] **테스터 15~20명 모집**(U3) — Google 계정 이메일. 비공개 테스트 **12명·14일 연속**이 지나야 프로덕션 신청 가능
 
