@@ -58,3 +58,44 @@ def test_web_finder_query_matches_schema(monkeypatch):
 
 def test_mobile_finder_query_matches_schema(monkeypatch):
     _run(monkeypatch, "mobile/src/features/finder/api.ts")
+
+
+# ---------------------------------------------------------------- 관리자 5·20 정배열 스크리너
+ADMIN_ITEM = {**ITEM, "volume": 476190.0, "ma5": 10250.0, "ma20": 10000.0, "ma50": 9800.0, "ma5_20_spread_pct": 2.5}
+ADMIN_VARIABLES = {
+    "filters": {"liquidOnly": True, "maOrder": "PULLBACK_MA5_20", "market": "KOSPI", "mcapMin": 1000, "mcapMax": 50000,
+                "valueMin": 30, "valueMax": 1000, "volumeMin": 10, "volumeMax": 500, "volRatioMin": 1.5,
+                "chgMin": -2, "chgMax": 5, "ma5Ma20SpreadMin": 0, "ma5Ma20SpreadMax": 3},
+    "sort": "spread_5_20",
+    "limit": 50,
+    "offset": 0,
+}
+
+
+def test_admin_ma_screener_queries_match_schema(monkeypatch):
+    ts = (ROOT / "admin_web/src/api/maScreener.ts").read_text(encoding="utf-8")
+    queries = dict(re.findall(r"export const (\w+_QUERY) = `([^`]+)`", ts))
+    assert set(queries) == {"MA_SCREENER_QUERY", "MA_SCREENER_STATUS_QUERY"}
+    assert all("${" not in q for q in queries.values())
+
+    seen = []
+
+    def fake_screen(**kw):
+        seen.append(kw)
+        return {"date": "2026-10-16", "total": 1, "bb_sigma": 2.0, "items": [ADMIN_ITEM]}
+
+    monkeypatch.setattr(sq, "screen", fake_screen)
+    res = asyncio.run(schema.execute(queries["MA_SCREENER_QUERY"], variable_values=ADMIN_VARIABLES))
+    assert res.errors is None, res.errors
+    item = res.data["screenerScreen"]["items"][0]
+    assert item["ma5Ma20SpreadPct"] == 2.5 and item["volume"] == 476190.0 and item["ma50"] == 9800.0
+    kw = seen[0]
+    assert kw["preset"] == "ma5_20" and kw["sort"] == "spread_5_20"
+    f = kw["filters"]
+    assert f["ma_order"] == "PULLBACK_MA5_20" and f["volume_min"] == 10 and f["chg_min"] == -2
+    assert f["spread_5_20_min"] == 0 and f["spread_5_20_max"] == 3 and f["value_max"] == 1000
+
+    res = asyncio.run(schema.execute(queries["MA_SCREENER_STATUS_QUERY"]))
+    assert res.errors is None, res.errors
+    assert res.data["screenerScreen"] == {"date": "2026-10-16", "total": 1}
+    assert seen[1]["filters"]["liquid_only"] is False and seen[1]["limit"] == 1
