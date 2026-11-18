@@ -430,6 +430,10 @@ uv run pytest tests/test_universe_cooldown.py    # 특정 파일
 | `CLICKHOUSE_HOST` / `CLICKHOUSE_PORT` | backend | `localhost` / `8123` | ClickHouse 호스트·HTTP 포트 |
 | `CLICKHOUSE_USER` / `CLICKHOUSE_PASSWORD` | backend | `default` / `password` | ClickHouse 인증 |
 | `CLICKHOUSE_DB` | backend | `stock_data` | 주가 시계열 DB |
+| `CLICKHOUSE_CONNECT_TIMEOUT` / `CLICKHOUSE_SEND_RECEIVE_TIMEOUT` | backend (선택) | (라이브러리 기본 10 / 300초) | ClickHouse 접속·송수신 대기(초). 설정했을 때만 적용. 상용 CH 를 터널로 읽는 개발 서버는 짧게(예: 5 / 60) |
+| `MARKET_DATA_SOURCE` | backend·collector | `local` | `local`=자기 CH 에 수집·계산(상용·로컬·기존 개발). `prod_readonly`=**개발 서버 전용** — 상용 CH 를 읽기만 하고 쓰기 beat·태스크·관리자 계산은 건너뜀, 경량 파이프라인만 돈다. [설계](docs/superpowers/specs/2026-11-18-dev-reads-prod-clickhouse-design.md) · [절차](docs/deploy/dev-reads-prod-ch-runbook.md) |
+| `CLICKHOUSE_LOCAL_HOST` / `_PORT` / `_USER` / `_PASSWORD` | backend·collector (선택) | (없음 → `CLICKHOUSE_*` 연결 하나) | 개발 서버가 소유한 테이블(게임 분봉 `game_minute_bars`, 시장 그룹 `market_*_daily`, FRED `macro_series` 쓰기)용 자체 CH. `prod_readonly` 에서 `CLICKHOUSE_*` 가 상용을 가리킬 때 **4개 모두** 설정(USER/PASSWORD 를 `CLICKHOUSE_*` 로 대신 채우지 않음) |
+| `DEV_PIPELINE_HOUR` / `DEV_PIPELINE_MINUTE` | collector(beat) | `23` / `30` | `prod_readonly` 경량 파이프라인(마스터 동기화 → 시장 그룹 → 신고저가) 실행 시각 — 상용 20:30 파이프라인이 끝난 뒤로 |
 | `JWT_SECRET_KEY` | auth·blog | `dev-insecure-secret-change-me` | JWT 서명 키 (**서비스 간 동일값 필수**, 운영 필수 설정) |
 | `JWT_APP_EXPIRE_MINUTES` | auth | `60` | 앱(platform=app) 접근 토큰 수명(분). 웹·관리자는 `JWT_EXPIRE_HOURS`(12) |
 | `REFRESH_EXPIRE_DAYS` | auth | `30` | 앱 리프레시 토큰 수명(일, 갱신마다 새로 시작) |

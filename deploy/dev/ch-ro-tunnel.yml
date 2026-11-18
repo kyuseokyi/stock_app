@@ -1,0 +1,40 @@
+# 개발 서버 전용 — 상용 ClickHouse 읽기 전용 터널 사이드카(cloudflared access tcp).
+#
+# 개발 앱(stock_api·celery 등)이 상용 CH 를 읽을 때 이 컨테이너를 거친다:
+#   앱 → stock_ch_ro_tunnel:18123 → Cloudflare Access(서비스 토큰) → 상용 터널 → 상용 CH(dev_ro 계정, SELECT 만)
+# 배포 워크플로(deploy-server.yml)·docker-compose.prod.yml·Swarm 스택은 상용과 공용이라 이 파일을 쓰지 않는다.
+# 개발 서버에서 손으로 한 번 띄운다. 절차·확인 명령: docs/deploy/dev-reads-prod-ch-runbook.md
+# 설계: docs/superpowers/specs/2026-11-18-dev-reads-prod-clickhouse-design.md 6절
+#
+# 값은 저장소 밖 파일 하나(/opt/stock_app/env/ch-ro-tunnel.env, 권한 600)에 둔다. 이 파일을
+#   (1) --env-file 로 넘겨 아래 ${...} 를 채우고(이미지 태그·망 이름),
+#   (2) env_file 로 컨테이너에 넣는다(서비스 토큰).
+# 키(값은 이 저장소에 적지 않는다):
+#   CH_RO_CLOUDFLARED_IMAGE      cloudflare/cloudflared:<고정 태그>  — latest 금지(runbook 2단계)
+#   CH_RO_NETWORK                앱 컨테이너가 붙은 망 — Swarm 이면 stock_net, compose 면 <프로젝트>_default(runbook 1단계)
+#   TUNNEL_SERVICE_TOKEN_ID      Cloudflare Access 서비스 토큰 ID(dev-server-ch-readonly)
+#   TUNNEL_SERVICE_TOKEN_SECRET  같은 토큰의 비밀값
+#
+# 실행: docker compose --env-file /opt/stock_app/env/ch-ro-tunnel.env -f deploy/dev/ch-ro-tunnel.yml up -d
+# 중지: docker compose --env-file /opt/stock_app/env/ch-ro-tunnel.env -f deploy/dev/ch-ro-tunnel.yml down
+name: stock_ch_ro
+
+services:
+  ch_ro_tunnel:
+    image: ${CH_RO_CLOUDFLARED_IMAGE:?CH_RO_CLOUDFLARED_IMAGE 를 고정 태그로 설정하세요(runbook 2단계)}
+    container_name: stock_ch_ro_tunnel
+    # cloudflared 플래그 ↔ env: --hostname=TUNNEL_SERVICE_HOSTNAME, --url=TUNNEL_SERVICE_URL,
+    # --service-token-id=TUNNEL_SERVICE_TOKEN_ID, --service-token-secret=TUNNEL_SERVICE_TOKEN_SECRET
+    command: ["access", "tcp"]
+    environment:
+      TUNNEL_SERVICE_HOSTNAME: ch-ro.funnotedaily.com
+      TUNNEL_SERVICE_URL: 0.0.0.0:18123   # 같은 망의 앱이 stock_ch_ro_tunnel:18123 으로 붙는다(호스트 포트 공개 없음)
+    env_file:
+      - /opt/stock_app/env/ch-ro-tunnel.env
+    networks: [app_net]
+    restart: unless-stopped
+
+networks:
+  app_net:
+    external: true
+    name: ${CH_RO_NETWORK:?CH_RO_NETWORK 를 앱 컨테이너 망 이름으로 설정하세요(runbook 1단계)}

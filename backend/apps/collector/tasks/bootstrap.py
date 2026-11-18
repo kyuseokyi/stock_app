@@ -42,6 +42,7 @@ from apps.collector.tasks.screener import backfill_screener
 from apps.collector.tasks.universe import backfill_all_daily
 from shared import pipeline_record
 from shared.sync_redis import get_sync_redis
+from shared.clickhouse_schema import readonly_skip
 
 log = logging.getLogger(__name__)
 
@@ -197,4 +198,6 @@ def run_bootstrap(months: int = 37, task_id: str | None = None,
 @celery_app.task(name="collector.bootstrap_data", bind=True)
 def bootstrap_data(self, months: int = 37) -> dict:
     """초기 데이터 준비 — 관리자 '초기 데이터 준비' 버튼(admin_jobs 'bootstrap'). 1~2시간."""
+    if (skip := readonly_skip("collector.bootstrap_data")) is not None:
+        return skip
     return run_bootstrap(months, task_id=getattr(self.request, "id", None))

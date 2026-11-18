@@ -18,12 +18,15 @@ from apps.collector.celery_app import celery_app
 from apps.collector.indicators import enrich_with_ma
 from apps.collector.kis.fetcher import fetch_domestic_daily_range
 from apps.collector.repositories.clickhouse_ohlcv import count_ticker, upsert_daily_prices
+from shared.clickhouse_schema import readonly_skip
 
 
 @celery_app.task(name="collector.backfill_domestic_daily")
 def backfill_domestic_daily(
     ticker: str, months: int = 14, end: str | None = None
 ) -> dict:
+    if (skip := readonly_skip("collector.backfill_domestic_daily")) is not None:
+        return skip
     end_d = date(int(end[:4]), int(end[4:6]), int(end[6:8])) if end else date.today()
     start_d = end_d - timedelta(days=int(months) * 31)
     start_str = start_d.strftime("%Y%m%d")

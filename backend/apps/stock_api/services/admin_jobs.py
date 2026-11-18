@@ -16,6 +16,7 @@ from datetime import datetime, time, timedelta, timezone
 import redis
 
 from apps.collector.celery_app import celery_app
+from shared.clickhouse_schema import market_data_readonly
 from shared.sync_redis import get_sync_redis
 
 log = logging.getLogger("stock_api.admin_jobs")
@@ -33,17 +34,19 @@ class Job:
     confirm: str | None = None  # 실행 전 확인 창 문구(없으면 화면 기본 문구)
     window_block: tuple[str, str] | None = None  # KST "HH:MM" [시작, 끝) 에는 실행 거부
     uses_kis: bool = False  # 화면 안내용(KIS 호출 여부)
+    writes_market_data: bool = True  # 상용과 공유하는 CH 테이블에 쓰는지 — prod_readonly 개발 서버에서는 거절
 
 
 JOBS: dict[str, Job] = {j.key: j for j in (
     Job("canslim", "CANSLIM 계산", "최신 거래일 CANSLIM 점수와 시장 상태를 다시 계산해요",
         "collector.compute_canslim", "수 초", 600),
+    # 시장 그룹은 개발 서버가 자기 CH 에 계산한다(설계 Q1-a) → prod_readonly 에서도 실행 가능
     Job("market_groups", "시장 그룹 계산", "최신 거래일 테마·업종 순위를 다시 계산해요",
-        "collector.compute_market_groups", "수 초", 600),
+        "collector.compute_market_groups", "수 초", 600, writes_market_data=False),
     Job("backfill_canslim", "CANSLIM 60일 백필", "최근 60거래일 CANSLIM 을 다시 계산해요",
         "collector.backfill_canslim", "수 분", 3600, {"days": 60}),
     Job("backfill_market_groups", "시장 그룹 60일 백필", "최근 60거래일 테마·업종 순위를 다시 계산해요",
-        "collector.backfill_market_groups", "수 분", 3600, {"days": 60}),
+        "collector.backfill_market_groups", "수 분", 3600, {"days": 60}, writes_market_data=False),
     Job("screener", "조건검색 계산", "최신 거래일 조건검색 지표를 다시 계산해요",
         "collector.compute_screener", "수십 초", 600),
     Job("backfill_screener", "조건검색 60일 백필", "최근 60거래일 조건검색 지표를 다시 계산해요",
@@ -79,6 +82,18 @@ class JobWindowClosed(Exception):
         super().__init__(f"{start}~{end} 에는 정기 수집과 겹쳐 실행할 수 없어요")
         self.job = job
         self.message = str(self)
+
+
+READONLY_MESSAGE = "개발 서버는 상용 데이터를 읽기만 해요 — 이 계산은 상용 서버에서 실행돼요"
+
+
+class JobReadonly(Exception):
+    """MARKET_DATA_SOURCE=prod_readonly 개발 서버에서 상용 공유 데이터를 쓰는 작업 요청(잠금·큐 전에 거절)."""
+
+    def __init__(self, job: Job):
+        super().__init__(READONLY_MESSAGE)
+        self.job = job
+        self.message = READONLY_MESSAGE
 
 
 class JobRunning(Exception):
@@ -149,6 +164,8 @@ def run(job_key: str, actor: str) -> dict:
     job = JOBS.get(job_key)
     if job is None:
         raise UnknownJob(job_key)
+    if job.writes_market_data and market_data_readonly():  # 잠금·큐 전에 — 실패 기록이 쌓이지 않게
+        raise JobReadonly(job)
     if _window_closed(job):  # 잠금을 잡기 전에 — 차단된 요청이 잠금을 남기지 않게
         raise JobWindowClosed(job)
     r = get_sync_redis()

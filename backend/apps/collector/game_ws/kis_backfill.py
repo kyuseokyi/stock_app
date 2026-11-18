@@ -102,10 +102,10 @@ def select_backfill(
 
 
 def tick_minutes_in_ch(ticker: str, day: date, client=None, db: str | None = None) -> set[datetime]:
-    """오늘 이미 source='tick' 인 분(FINAL 기준)."""
-    from shared.clickhouse_schema import CLICKHOUSE_DB, get_client
+    """오늘 이미 source='tick' 인 분(FINAL 기준). 게임 분봉은 개발 서버 소유 → get_local_client()."""
+    from shared.clickhouse_schema import CLICKHOUSE_DB, get_local_client
 
-    rows = (client or get_client()).query(
+    rows = (client or get_local_client()).query(
         f"SELECT toUnixTimestamp(ts) FROM {db or CLICKHOUSE_DB}.game_minute_bars FINAL "
         "WHERE ticker = %(t)s AND toDate(ts) = %(d)s AND source = 'tick'",
         parameters={"t": ticker, "d": day.isoformat()},
@@ -192,10 +192,10 @@ def past_weekdays(today: date, n: int) -> list[date]:
 
 
 def dates_in_ch(ticker: str, since: date, client=None, db: str | None = None) -> set[date]:
-    """since 이후 분봉이 '완성된' 날짜 — tick 행이 있거나 16시 이후 행이 있는 날."""
-    from shared.clickhouse_schema import CLICKHOUSE_DB, get_client
+    """since 이후 분봉이 '완성된' 날짜 — tick 행이 있거나 16시 이후 행이 있는 날(get_local_client())."""
+    from shared.clickhouse_schema import CLICKHOUSE_DB, get_local_client
 
-    rows = (client or get_client()).query(
+    rows = (client or get_local_client()).query(
         f"SELECT toDate(ts) AS d FROM {db or CLICKHOUSE_DB}.game_minute_bars "
         "WHERE ticker = %(t)s AND toDate(ts) >= %(d)s GROUP BY d "
         f"HAVING countIf(source = 'tick') > 0 OR max(toHour(ts)) >= {AFTER_MARKET_HOUR}",

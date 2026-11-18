@@ -127,6 +127,11 @@ KIWOOM_RATE_PER_SEC=4  # 초당 호출 상한(기본 4, 1~5로 자름 — 키움
 ## 4. 상용 수집 + 개발서버(맥미니) 데이터 공유 아키텍처 (IP 제한 최적화)
 
 > ⏸️ **보류 (2026-11-16)** — 이 절(상용 전용 수집·개발 서버가 상용 DB 를 읽기 전용으로 공유)은 **상용 서버 정상화 후 별도 설계로 다룬다.** 그 전까지 개발 서버는 지금처럼 자체 수집을 유지하고, 키움 호출만 상용 서버에서 한다(키 없는 서버는 키움 기능이 꺼짐).
+>
+> 🔄 **갱신 (2026-11-18) — ClickHouse 공유만 별도 설계로 진행, 코드 반영 완료.** [개발 서버가 상용 ClickHouse 를 읽기 전용으로 쓰기 — 설계](superpowers/specs/2026-11-18-dev-reads-prod-clickhouse-design.md) · [서버 작업 절차(runbook)](deploy/dev-reads-prod-ch-runbook.md)
+> - 공유 범위는 **ClickHouse 주식 데이터만**이다. PostgreSQL·Redis 는 계속 분리한다(아래 다이어그램의 "PG 읽기 전용 공유"와 다르다).
+> - 연결은 상용 Cloudflare 터널(`ch-ro`) + 서비스 토큰 + 개발 서버 사이드카(`deploy/dev/ch-ro-tunnel.yml`)이다. 아래의 포트 직접 개방·IP 화이트리스트 방식은 쓰지 않는다.
+> - 스위치는 env `MARKET_DATA_SOURCE=prod_readonly`(개발 서버만)이다. 상용은 설정하지 않으므로 영향이 없다. 서버 작업(상용 `dev_ro` 계정 등)을 마칠 때까지 개발 서버는 지금처럼 자체 수집을 한다.
 
 사용자 환경의 서버 구성:
 - **상용 서버**: **오라클 클라우드 인스턴스** (`funnotedaily.com`, 공인 IP 등록)
@@ -234,6 +239,7 @@ nano /opt/stock_app/env/.env.production
 ### [Step 2-1] 개발 서버(맥미니) 설정 — 상용 DB 참조
 
 > ⏸️ **보류** — 4절과 함께 상용 정상화 후 별도 설계로 다룬다. 지금은 하지 않는다(개발 서버는 자체 수집 유지).
+> 🔄 ClickHouse 만 공유하는 방식은 [runbook](deploy/dev-reads-prod-ch-runbook.md)을 따른다(4절 갱신 참고). 이 Step 의 PG 공유·IP 개방 절차는 쓰지 않는다.
 
 개발 서버(맥미니, `haezean.com`)에서는 데이터 수집기를 돌리지 않고, 오라클 상용 서버의 ClickHouse/PostgreSQL을 바라보도록 설정합니다.
 

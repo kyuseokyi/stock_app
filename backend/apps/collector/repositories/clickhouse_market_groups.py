@@ -2,13 +2,17 @@
 
 결과 테이블은 ReplacingMergeTree(ingested_at): 같은 키를 다시 넣으면 최신 행이 남는다(관리자 보정 재계산도 같은 경로).
 행을 지울 수는 없으므로, 재계산에서 사라진 테마(숨김 등)는 members=0 행으로 덮어쓰고 조회는 members > 0 만 본다.
+
+연결: 일봉(load_bars·latest_trading_date)은 get_client(), 결과 두 테이블은 get_local_client().
+MARKET_DATA_SOURCE=prod_readonly 인 개발 서버는 상용 일봉을 읽고 결과는 개발 자체 CH 에 쓴다(테마 id 가 개발 PG 에 묶여서).
+CLICKHOUSE_LOCAL_* 가 없으면 둘은 같은 클라이언트다(지금 동작).
 """
 from __future__ import annotations
 
 from datetime import date
 
 from apps.collector.repositories.clickhouse_canslim import _since, latest_trading_date, trading_dates  # noqa: F401
-from shared.clickhouse_schema import CLICKHOUSE_DB, get_client
+from shared.clickhouse_schema import CLICKHOUSE_DB, get_client, get_local_client
 
 STOCK_COLUMNS = ["date", "ticker", "market", "sector_m", "close", "chg_1d", "chg_5d", "chg_20d", "value", "mcap"]
 GROUP_COLUMNS = ["date", "kind", "group_id", "name", "members", "chg_1d", "chg_5d", "chg_20d", "value", "mcap",
@@ -62,7 +66,7 @@ ORDER BY (date, kind, group_id)
 
 
 def ensure_market_group_tables(client=None) -> None:
-    c = client or get_client()
+    c = client or get_local_client()
     c.command(STOCK_DDL)
     c.command(GROUP_DDL)
 
@@ -85,7 +89,8 @@ def load_bars(as_of: date, days: int = 45, client=None) -> dict[str, list[tuple]
 
 def existing_group_ids(as_of: date, kind: str, client=None) -> set[str]:
     rows = _rows(f"SELECT group_id FROM {CLICKHOUSE_DB}.market_group_daily FINAL "
-                 "WHERE date = %(d)s AND kind = %(kind)s AND members > 0", {"d": as_of, "kind": kind}, client)
+                 "WHERE date = %(d)s AND kind = %(kind)s AND members > 0", {"d": as_of, "kind": kind},
+                 client or get_local_client())
     return {r[0] for r in rows}
 
 
@@ -99,7 +104,7 @@ def tombstones(as_of: date, kind: str, previous_ids: set[str], current_ids: set[
 def _insert(table: str, columns: list[str], rows: list[dict], client) -> int:
     if not rows:
         return 0
-    (client or get_client()).insert(f"{CLICKHOUSE_DB}.{table}", [[r.get(c) for c in columns] for r in rows],
+    (client or get_local_client()).insert(f"{CLICKHOUSE_DB}.{table}", [[r.get(c) for c in columns] for r in rows],
                                     column_names=columns)
     return len(rows)
 

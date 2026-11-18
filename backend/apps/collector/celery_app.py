@@ -16,6 +16,8 @@ import os
 from celery import Celery
 from celery.schedules import crontab
 
+from shared.clickhouse_schema import market_data_readonly
+
 # 로컬 개발 기본값은 docker-compose.dev.yml 의 Redis 를 가리킨다.
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 
@@ -184,3 +186,38 @@ celery_app.conf.beat_schedule = {
         "schedule": crontab(hour=16, minute=0, day_of_week="mon-fri"),
     },
 }
+
+
+# ---- 개발 서버가 상용 ClickHouse 를 읽기 전용으로 쓸 때(MARKET_DATA_SOURCE=prod_readonly)
+# 상용 CH 에 쓰는(또는 의미 없이 KIS 를 부르는) beat 를 빼고, 개발 경량 파이프라인 하나를 넣는다.
+# 설정이 없으면(상용·로컬·지금의 개발) beat_schedule 은 위 그대로다.
+# 설계 docs/superpowers/specs/2026-11-18-dev-reads-prod-clickhouse-design.md 4절
+READONLY_DISABLED_BEATS = frozenset({
+    "collect-all-daily",                   # 일일 파이프라인(일봉·지수·수급·CANSLIM·스크리너·패턴…) → 경량 파이프라인으로 대체
+    "collect-kr-indices",                  # market_index_daily
+    "collect-us-indices",                  # market_index_daily
+    "collect-us-indices-retry",
+    "collect-fundamentals",                # fundamentals_periodic
+    "compute-canslim-after-fundamentals",  # canslim_*
+})
+DEV_PIPELINE_BEAT = "dev-readonly-pipeline"
+
+
+def _env_int(name: str, default: int) -> int:
+    raw = os.getenv(name, "").strip()
+    return int(raw) if raw else default
+
+
+def readonly_beat_schedule(schedule: dict) -> dict:
+    """prod_readonly 용 beat — READONLY_DISABLED_BEATS 를 빼고 경량 파이프라인(기본 23:30, DEV_PIPELINE_HOUR/MINUTE)을 더한다."""
+    out = {name: entry for name, entry in schedule.items() if name not in READONLY_DISABLED_BEATS}
+    out[DEV_PIPELINE_BEAT] = {
+        # 마스터 동기화 → 시장 그룹(로컬 CH) → 신고저가(Redis). 상용 20:30 파이프라인이 끝난 뒤여야 당일 기준
+        "task": "collector.dev_readonly_pipeline",
+        "schedule": crontab(hour=_env_int("DEV_PIPELINE_HOUR", 23), minute=_env_int("DEV_PIPELINE_MINUTE", 30)),
+    }
+    return out
+
+
+if market_data_readonly():
+    celery_app.conf.beat_schedule = readonly_beat_schedule(celery_app.conf.beat_schedule)

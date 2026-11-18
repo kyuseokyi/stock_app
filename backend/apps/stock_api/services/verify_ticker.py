@@ -16,7 +16,7 @@ from urllib.parse import quote
 
 from shared import market_repo
 from shared.clickhouse_schema import CLICKHOUSE_DB as DB
-from shared.clickhouse_schema import get_client
+from shared.clickhouse_schema import get_client, get_local_client, local_client_configured
 from shared.database import SyncSessionLocal
 from shared.market_models import Sector, StockProfile
 from shared.sector_group import sector_group_code
@@ -61,6 +61,16 @@ def _ch():
 
 def _query(sql: str, params: dict | None = None) -> list:
     return _ch().query(sql, parameters=params or {}).result_rows
+
+
+def _query_local(sql: str, params: dict | None = None) -> list:
+    """시장 그룹 두 테이블(market_group_daily·market_stock_daily) — 개발 서버가 직접 계산해 자기 CH 에 둔다.
+
+    CLICKHOUSE_LOCAL_* 가 없으면 _query 로 위임(지금과 같은 경로 — 테스트의 _ch·_query 교체도 그대로 먹는다).
+    """
+    if not local_client_configured():
+        return _query(sql, params)
+    return get_local_client().query(sql, parameters=params or {}).result_rows
 
 
 def _stock_info(ticker: str) -> dict | None:
@@ -170,7 +180,7 @@ def _bars(ticker: str, d: date) -> list[dict]:
 
 
 def _computed(ticker: str, d: date) -> dict | None:
-    rows = _query(f"SELECT close, chg_1d, chg_5d, chg_20d, value, mcap, sector_m FROM {DB}.market_stock_daily FINAL "
+    rows = _query_local(f"SELECT close, chg_1d, chg_5d, chg_20d, value, mcap, sector_m FROM {DB}.market_stock_daily FINAL "
                   "WHERE date = %(d)s AND ticker = %(t)s", {"t": ticker, "d": d})
     if not rows:
         return None
@@ -220,7 +230,7 @@ def _memberships(ticker: str, d: date, profile: dict | None, notes: dict) -> lis
     if not wanted:
         return []
     try:
-        rows = _query(f"SELECT kind, group_id, name, rank, chg_1d, members FROM {DB}.market_group_daily FINAL "
+        rows = _query_local(f"SELECT kind, group_id, name, rank, chg_1d, members FROM {DB}.market_group_daily FINAL "
                       "WHERE date = %(d)s AND members > 0 AND group_id IN %(ids)s",
                       {"d": d, "ids": sorted({gid for _, gid, _ in wanted})})
     except Exception as exc:

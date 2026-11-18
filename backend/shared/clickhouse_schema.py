@@ -16,9 +16,12 @@ ORM(SQLAlchemy) 대상이 아니므로 Postgres 모델(shared/models.py)과 분�
 
 from __future__ import annotations
 
+import logging
 import os
 
 import clickhouse_connect
+
+log = logging.getLogger(__name__)
 
 CLICKHOUSE_HOST = os.getenv("CLICKHOUSE_HOST", "localhost")
 CLICKHOUSE_PORT = int(os.getenv("CLICKHOUSE_PORT", "8123"))
@@ -100,8 +103,11 @@ TTL toDateTime(ts) + INTERVAL 3 MONTH
 
 
 def ensure_game_minute_bars(client=None, db: str = CLICKHOUSE_DB) -> None:
-    """game_ws 시작 시 멱등 생성(init_clickhouse 를 배포에서 따로 돌리지 않아도 되게)."""
-    (client or get_client()).command(game_minute_bars_ddl(db))
+    """game_ws 시작 시 멱등 생성(init_clickhouse 를 배포에서 따로 돌리지 않아도 되게).
+
+    게임 분봉은 개발 서버가 소유하는 테이블이라 기본은 get_local_client()(설정 없으면 get_client() 와 같다).
+    """
+    (client or get_local_client()).command(game_minute_bars_ddl(db))
 
 
 def ensure_daily_prices_source(client=None, db: str = CLICKHOUSE_DB) -> None:
@@ -125,6 +131,42 @@ def ensure_daily_prices_source(client=None, db: str = CLICKHOUSE_DB) -> None:
 # 스레드 간 동시 사용에 안전하다(임시 테이블·SET 같은 세션 상태는 쓰지 않는다).
 _client = None
 _client_pid: int | None = None
+_local_client = None
+_local_client_pid: int | None = None
+
+# 시세 데이터 출처 스위치(설계 docs/superpowers/specs/2026-11-18-dev-reads-prod-clickhouse-design.md).
+#   local(기본·미설정): 지금 동작 그대로 — 자기 CH 에 수집·계산·조회.
+#   prod_readonly: 개발 서버 전용 — get_client() 는 상용 CH(읽기 전용 계정), 쓰기 태스크는 건너뛰고
+#   개발이 소유한 테이블(게임 분봉·시장 그룹)만 get_local_client() 로 개발 자체 CH 에 쓴다.
+MARKET_DATA_SOURCE_READONLY = "prod_readonly"
+READONLY_SKIPPED = {"skipped": MARKET_DATA_SOURCE_READONLY}
+
+
+def market_data_readonly() -> bool:
+    """MARKET_DATA_SOURCE=prod_readonly 인지(호출할 때마다 env 를 읽는다 — 테스트·재기동 없이 바뀌어도 맞게)."""
+    return os.getenv("MARKET_DATA_SOURCE", "local").strip().lower() == MARKET_DATA_SOURCE_READONLY
+
+
+def readonly_skip(task: str) -> dict | None:
+    """prod_readonly 면 {"skipped": "prod_readonly"}(쓰기 태스크 맨 앞에서 KIS·CH 를 건드리기 전에 끝낸다), 아니면 None."""
+    if not market_data_readonly():
+        return None
+    log.info("%s 건너뜀: 개발 서버는 상용 시세를 읽기만 해요(MARKET_DATA_SOURCE=prod_readonly)", task)
+    return dict(READONLY_SKIPPED)
+
+
+def _timeout_kwargs() -> dict:
+    """CLICKHOUSE_CONNECT_TIMEOUT·CLICKHOUSE_SEND_RECEIVE_TIMEOUT(초) — 설정했을 때만 넘긴다(없으면 라이브러리 기본값 그대로).
+
+    터널(상용 읽기)이 멈추면 기본 송수신 대기(300초) 동안 요청이 매달리므로 개발 서버에서 짧게 둔다.
+    """
+    out = {}
+    for env, key in (("CLICKHOUSE_CONNECT_TIMEOUT", "connect_timeout"),
+                     ("CLICKHOUSE_SEND_RECEIVE_TIMEOUT", "send_receive_timeout")):
+        raw = os.getenv(env, "").strip()
+        if raw:
+            out[key] = int(raw)
+    return out
 
 
 def get_client():
@@ -138,9 +180,40 @@ def get_client():
             username=CLICKHOUSE_USER,
             password=CLICKHOUSE_PASSWORD,
             autogenerate_session_id=False,
+            **_timeout_kwargs(),
         )
         _client_pid = pid  # 연결 성공 후에만 캐시 확정(실패 시 다음 호출에서 재시도)
     return _client
+
+
+def local_client_configured() -> bool:
+    """CLICKHOUSE_LOCAL_HOST 가 있으면 개발 자체 CH 를 따로 쓴다(없으면 get_client() 하나로 지금과 같다)."""
+    return bool(os.getenv("CLICKHOUSE_LOCAL_HOST", "").strip())
+
+
+def get_local_client():
+    """개발 서버가 직접 소유하는 테이블(게임 분봉·시장 그룹)용 클라이언트.
+
+    CLICKHOUSE_LOCAL_HOST 가 없으면 get_client() 를 그대로 돌려준다 → 상용·로컬·지금의 개발 동작 불변.
+    있으면 CLICKHOUSE_LOCAL_HOST/PORT/USER/PASSWORD 로 따로 연결한다. USER/PASSWORD 를 CLICKHOUSE_USER 로
+    대신 채우지 않는다(prod_readonly 에서는 그 값이 상용 읽기 전용 계정이라 섞이면 안 된다) — 4개 모두 설정한다.
+    캐시·PID 무효화·세션 없음은 get_client() 와 같은 이유.
+    """
+    if not local_client_configured():
+        return get_client()
+    global _local_client, _local_client_pid
+    pid = os.getpid()
+    if _local_client is None or _local_client_pid != pid:
+        _local_client = clickhouse_connect.get_client(
+            host=os.getenv("CLICKHOUSE_LOCAL_HOST", "").strip(),
+            port=int(os.getenv("CLICKHOUSE_LOCAL_PORT", "8123")),
+            username=os.getenv("CLICKHOUSE_LOCAL_USER", "default"),
+            password=os.getenv("CLICKHOUSE_LOCAL_PASSWORD", ""),
+            autogenerate_session_id=False,
+            **_timeout_kwargs(),
+        )
+        _local_client_pid = pid
+    return _local_client
 
 
 def init_clickhouse() -> None:

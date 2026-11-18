@@ -3,6 +3,7 @@ import { formatDateTime, formatSeconds } from '../../lib/marketFormat'
 import type { PipelineRecord } from '../../types/marketAdmin'
 
 const STEP_LABEL: Record<string, string> = {
+  master: '종목 마스터 동기화', // 개발 서버 경량 파이프라인(MARKET_DATA_SOURCE=prod_readonly)
   daily: '전종목 일봉',
   indices_kr: '국내 지수',
   investor: '투자자 순매수',

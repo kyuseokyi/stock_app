@@ -14,7 +14,7 @@ from datetime import date, datetime, timedelta
 from apps.collector.intraday_indices import KST, load_intraday, valid_value
 from apps.collector.market_indices import _BASE as INDEX_SPECS
 from shared import market_repo
-from shared.clickhouse_schema import CLICKHOUSE_DB, get_client
+from shared.clickhouse_schema import CLICKHOUSE_DB, get_client, get_local_client, local_client_configured
 from shared.database import SyncSessionLocal
 from shared.market_models import StockEvent, Theme
 from shared.sync_redis import get_sync_redis
@@ -73,6 +73,16 @@ def _ch():
 
 def _query(sql: str, params: dict | None = None) -> list:
     return _ch().query(sql, parameters=params or {}).result_rows
+
+
+def _query_local(sql: str, params: dict | None = None) -> list:
+    """시장 그룹 두 테이블(market_group_daily·market_stock_daily) — 개발 서버가 직접 계산해 자기 CH 에 둔다.
+
+    CLICKHOUSE_LOCAL_* 가 없으면 _query 로 위임(지금과 같은 경로 — 테스트의 _ch·_query 교체도 그대로 먹는다).
+    """
+    if not local_client_configured():
+        return _query(sql, params)
+    return get_local_client().query(sql, parameters=params or {}).result_rows
 
 
 def _today() -> date:
@@ -167,7 +177,7 @@ def _pick(value: str | None, allowed, default: str) -> str:
 
 def latest_date() -> date | None:
     try:
-        rows = _query(f"SELECT max(date) FROM {CLICKHOUSE_DB}.market_group_daily")
+        rows = _query_local(f"SELECT max(date) FROM {CLICKHOUSE_DB}.market_group_daily")
     except Exception:  # noqa: BLE001 — 첫 계산 전(테이블 없음)이면 '준비 중'
         return None
     d = rows[0][0] if rows else None
@@ -288,7 +298,7 @@ def _streaks(kind: str, as_of: date, ids: list[str]) -> dict[str, int]:
     """최근부터 연속으로 rank 1~STREAK_TOP 이었던 거래일 수."""
     if not ids:
         return {}
-    rows = _query(f"SELECT date, group_id, rank FROM {CLICKHOUSE_DB}.market_group_daily FINAL "
+    rows = _query_local(f"SELECT date, group_id, rank FROM {CLICKHOUSE_DB}.market_group_daily FINAL "
                   "WHERE kind = %(kind)s AND date <= %(d)s AND date > %(since)s AND group_id IN %(ids)s",
                   {"kind": kind, "d": as_of, "since": as_of - timedelta(days=HISTORY_DAYS * 2), "ids": tuple(ids)})
     dates = sorted({r[0] for r in rows}, reverse=True)
@@ -321,8 +331,8 @@ def _load_groups(kind: str, period: str, sort: str, limit: int, offset: int) -> 
     # 30개씩 나눠 받으므로 화면이 아니라 SQL 에서 정해야 전체 순서가 맞다
     order = "rank = 0, " + ("value DESC" if sort == "value" else f"{col} DESC NULLS LAST, value DESC")
     params = {"d": d, "kind": kind, "limit": max(1, min(int(limit), MAX_LIMIT)), "offset": max(0, int(offset))}
-    total = int(_query(f"SELECT count() FROM {CLICKHOUSE_DB}.market_group_daily FINAL WHERE {where}", params)[0][0])
-    rows = _query(f"SELECT group_id, name, members, {col}, value, up, down, flat, leader_ticker, leader_chg, rank "
+    total = int(_query_local(f"SELECT count() FROM {CLICKHOUSE_DB}.market_group_daily FINAL WHERE {where}", params)[0][0])
+    rows = _query_local(f"SELECT group_id, name, members, {col}, value, up, down, flat, leader_ticker, leader_chg, rank "
                   f"FROM {CLICKHOUSE_DB}.market_group_daily FINAL WHERE {where} ORDER BY {order}, group_id "
                   "LIMIT %(limit)s OFFSET %(offset)s", params)
     streaks = _streaks(kind, d, [r[0] for r in rows])
@@ -360,18 +370,18 @@ def _load_treemap(kind: str, size: str, period: str) -> dict:
     size_col = _pick(size, SIZES, "mcap")
     col = PERIODS[_pick(period, PERIODS, "1d")]
     limit = f" ORDER BY value DESC LIMIT {TREEMAP_THEMES}" if kind == "theme" else ""
-    grows = _query(f"SELECT group_id, name, {col} FROM {CLICKHOUSE_DB}.market_group_daily FINAL "
+    grows = _query_local(f"SELECT group_id, name, {col} FROM {CLICKHOUSE_DB}.market_group_daily FINAL "
                    f"WHERE date = %(d)s AND kind = %(kind)s AND members > 0{limit}", {"d": d, "kind": kind})
     if kind == "theme":
         membership = _theme_groups()
         members = {gid: membership.get(gid, ("", []))[1] for gid, _, _ in grows}
         tickers = sorted({t for ts in members.values() for t in ts})
-        srows = _query(f"SELECT ticker, {col}, {size_col} FROM {CLICKHOUSE_DB}.market_stock_daily FINAL "
+        srows = _query_local(f"SELECT ticker, {col}, {size_col} FROM {CLICKHOUSE_DB}.market_stock_daily FINAL "
                        "WHERE date = %(d)s AND ticker IN %(t)s", {"d": d, "t": tuple(tickers) or ("",)})
         by_ticker = {t: (t, c, s) for t, c, s in srows}
         per_group = {gid: [by_ticker[t] for t in ts if t in by_ticker] for gid, ts in members.items()}
     else:
-        srows = _query(f"SELECT ticker, sector_m, {col}, {size_col} FROM {CLICKHOUSE_DB}.market_stock_daily FINAL "
+        srows = _query_local(f"SELECT ticker, sector_m, {col}, {size_col} FROM {CLICKHOUSE_DB}.market_stock_daily FINAL "
                        "WHERE date = %(d)s", {"d": d})
         per_group = {}
         for t, sector, c, s in srows:
@@ -397,13 +407,13 @@ def _load_group(kind: str, group_id: str) -> dict | None:
     d = latest_date()
     if d is None or kind not in KINDS:
         return None
-    rows = _query(f"SELECT {', '.join(_GROUP_COLUMNS)} FROM {CLICKHOUSE_DB}.market_group_daily FINAL "
+    rows = _query_local(f"SELECT {', '.join(_GROUP_COLUMNS)} FROM {CLICKHOUSE_DB}.market_group_daily FINAL "
                   "WHERE date = %(d)s AND kind = %(kind)s AND group_id = %(id)s AND members > 0",
                   {"d": d, "kind": kind, "id": group_id})
     if not rows:
         return None
     g = dict(zip(_GROUP_COLUMNS, rows[0]))
-    hist = _query(f"SELECT date, chg_1d, rank FROM {CLICKHOUSE_DB}.market_group_daily FINAL "
+    hist = _query_local(f"SELECT date, chg_1d, rank FROM {CLICKHOUSE_DB}.market_group_daily FINAL "
                   "WHERE kind = %(kind)s AND group_id = %(id)s AND members > 0 AND date <= %(d)s "
                   "ORDER BY date DESC LIMIT %(n)s", {"kind": kind, "id": group_id, "d": d, "n": HISTORY_DAYS})
     cols = "ticker, close, chg_1d, chg_5d, value, mcap"
@@ -411,10 +421,10 @@ def _load_group(kind: str, group_id: str) -> dict | None:
     if kind == "theme":
         description, reasons = _theme_info(group_id)
         tickers = _theme_groups().get(group_id, ("", []))[1]
-        srows = _query(f"SELECT {cols} FROM {CLICKHOUSE_DB}.market_stock_daily FINAL "
+        srows = _query_local(f"SELECT {cols} FROM {CLICKHOUSE_DB}.market_stock_daily FINAL "
                        "WHERE date = %(d)s AND ticker IN %(t)s", {"d": d, "t": tuple(tickers) or ("",)})
     else:
-        srows = _query(f"SELECT {cols} FROM {CLICKHOUSE_DB}.market_stock_daily FINAL "
+        srows = _query_local(f"SELECT {cols} FROM {CLICKHOUSE_DB}.market_stock_daily FINAL "
                        "WHERE date = %(d)s AND sector_m = %(id)s", {"d": d, "id": group_id})
     srows = sorted(srows, key=lambda r: -(r[4] or 0))
     names = _names([r[0] for r in srows])

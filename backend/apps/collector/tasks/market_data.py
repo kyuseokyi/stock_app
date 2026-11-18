@@ -23,6 +23,7 @@ from apps.collector.kis.master import MasterStock
 from apps.collector.kiwoom import lending as kiwoom_lending
 from apps.collector.kiwoom import themes as kiwoom_themes
 from apps.collector.market_indices import collect_indices, index_specs
+from apps.collector.stock_master import load_domestic_tickers
 from apps.collector.repositories import clickhouse_market as chm
 from apps.collector.rate_limit import RateLimiter
 from apps.collector.tasks.canslim import compute_canslim
@@ -35,6 +36,7 @@ from shared import market_repo, pipeline_record
 from shared.kiwoom_config import get_kiwoom_config
 from shared.sync_redis import get_sync_redis
 from shared.database import SyncSessionLocal
+from shared.clickhouse_schema import get_local_client, local_client_configured, readonly_skip
 
 log = logging.getLogger(__name__)
 IPO_BACK_DAYS = 7
@@ -80,6 +82,8 @@ def _save_events(events: list[dict]) -> int:
 @celery_app.task(name="collector.collect_market_indices")
 def collect_market_indices(region: str = "KR") -> dict:
     """region: KR(국내 지수, 일봉 뒤) | US(미국 지수·환율·대표 종목, 07:30)."""
+    if (skip := readonly_skip("collector.collect_market_indices")) is not None:
+        return skip
     chm.ensure_market_tables()
     client = _kis_client()
     try:
@@ -151,6 +155,8 @@ def _investor_one(ticker: str, client) -> int:
 def collect_investor_daily(limit: int | None = None, rate_per_sec: float | None = None,
                            workers: int | None = None) -> dict:
     """분석 대상 종목(보통주)의 최근 약 30거래일 개인·외국인·기관 순매수 — 매일 겹쳐 받아 누적."""
+    if (skip := readonly_skip("collector.collect_investor_daily")) is not None:
+        return skip
     chm.ensure_market_tables()
     return _run_universe(_investor_one, limit, None, rate_per_sec, workers, tickers=_analysis_tickers())
 
@@ -171,6 +177,8 @@ def collect_investor_detail_daily(limit: int | None = None, rate_per_sec: float 
     `collector.backfill_investor_detail` 또는 관리자 '초기 데이터 준비'로 낮 시간에 채운다.
     end: 기준일(YYYYMMDD·YYYY-MM-DD, 기본 오늘 KST). 공유 RateLimiter 는 _run_universe 가 건다.
     """
+    if (skip := readonly_skip("collector.collect_investor_detail_daily")) is not None:
+        return skip
     if trading_day.now_kst().time() < DETAIL_OPEN_AFTER:
         log.warning("세부 수급 건너뜀: %s", DETAIL_TIME_LIMIT_MSG)
         return {"skipped": DETAIL_TIME_LIMIT_MSG}
@@ -208,6 +216,8 @@ def collect_lending_daily(days: int | None = None, end: str | None = None, limit
     days: 거래일 수(기본 LENDING_DAILY_DAYS=5, 달력일로는 kiwoom_lending.calendar_start), end: 기준일(기본 오늘 KST).
     초당 상한은 KiwoomClient 의 RateLimiter(KIWOOM_RATE_PER_SEC).
     """
+    if (skip := readonly_skip("collector.collect_lending_daily")) is not None:
+        return skip
     if not get_kiwoom_config().is_configured:
         log.info("대차잔고 수집 건너뜀: %s", LENDING_NOT_CONFIGURED)
         return {"skipped": LENDING_NOT_CONFIGURED}
@@ -259,6 +269,8 @@ def _fundamentals_one(ticker: str, client) -> int:
 def collect_fundamentals(limit: int | None = None, rate_per_sec: float | None = None,
                          workers: int | None = None) -> dict:
     """연간·분기 재무비율(EPS·ROE 등). 매주 토 + 수동. 분기 EPS 누적 여부는 원값 그대로 저장(해석은 분석 단계)."""
+    if (skip := readonly_skip("collector.collect_fundamentals")) is not None:
+        return skip
     chm.ensure_market_tables()
     return _run_universe(_fundamentals_one, limit, None, rate_per_sec, workers, tickers=_analysis_tickers())
 
@@ -294,16 +306,19 @@ def collect_macro_series(today: date | None = None) -> dict:
         log.info("FRED_API_KEY 없음 — 거시 지표 수집 건너뜀")
         return {"skipped": "FRED_API_KEY 없음"}
     today = today or date.today()
-    chm.ensure_market_tables()
+    # macro_series 쓰기는 개발 자체 CH 로(CLICKHOUSE_LOCAL_* 설정 시 — prod_readonly 에서도 FRED·발표 일정은 계속, Q3).
+    # 설정이 없으면 인자를 넘기지 않아 지금과 같은 호출이다.
+    ch = {"client": get_local_client()} if local_client_configured() else {}
+    chm.ensure_market_tables(**ch)
     client = fred.FredClient(key)
     ok, failed, inserted = [], [], 0
     releases: dict[int, tuple[str, str]] = {}
     for sid in fred.series_ids():
         try:
-            latest = chm.latest_macro_date(sid)
+            latest = chm.latest_macro_date(sid, **ch)
             start = (today - timedelta(days=MACRO_BACKFILL_DAYS) if latest is None
                      else latest - timedelta(days=MACRO_OVERLAP_DAYS))
-            inserted += chm.upsert_macro(sid, client.observations(sid, start))
+            inserted += chm.upsert_macro(sid, client.observations(sid, start), **ch)
             if sid in fred.CALENDAR_SERIES:  # 금리·스프레드(H.15 등)는 매 영업일 발표라 캘린더에 넣지 않음
                 rel = client.release_of(sid)
                 if rel is not None and rel[0] not in releases:
@@ -335,6 +350,8 @@ def daily_market_pipeline() -> dict:
 
     끝나면 단계별 성공·걸린 시간·요약을 Redis 에 남긴다(관리자 데이터 현황). 기록 실패는 결과에 영향 없음.
     """
+    if (skip := readonly_skip("collector.daily_market_pipeline")) is not None:
+        return skip
     out: dict = {}
     record: list[dict] = []
     started = datetime.now(timezone.utc)
@@ -358,5 +375,41 @@ def daily_market_pipeline() -> dict:
     try:
         pipeline_record.save(get_sync_redis(), started, datetime.now(timezone.utc), record)
     except Exception as exc:  # noqa: BLE001 — 기록 실패가 파이프라인 결과를 막지 않게
+        log.warning("파이프라인 기록 저장 실패: %s", exc)
+    return out
+
+
+# ---------------------------------------------------------------- 개발 경량 파이프라인(prod_readonly 전용)
+def _sync_master() -> dict:
+    """종목 마스터만 동기화 — .mst 파일 다운로드(KIS 시세 API·쿼터와 무관) → PG stock_meta·프로필·업종·테마. CH 쓰기 없음."""
+    return {"active": len(load_domestic_tickers())}
+
+
+@celery_app.task(name="collector.dev_readonly_pipeline")
+def dev_readonly_pipeline() -> dict:
+    """MARKET_DATA_SOURCE=prod_readonly 개발 서버의 일일 작업(beat 기본 23:30 — 상용 20:30 파이프라인이 끝난 뒤).
+
+    마스터 동기화(PG) → 시장 그룹(상용 일봉 읽기 → 개발 CH 쓰기, Q1-a) → 신고저가 특징주(상용 일봉 읽기 → 개발 Redis).
+    일봉·지수·수급·재무·CANSLIM·스크리너·패턴은 상용 CH 를 그대로 읽으므로 여기서 하지 않는다(KIS 호출 없음).
+    단계 실패 격리·관리자 데이터 현황 기록은 daily_market_pipeline 과 같다.
+    """
+    out: dict = {}
+    record: list[dict] = []
+    started = datetime.now(timezone.utc)
+    steps = (("master", _sync_master), ("market_groups", lambda: compute_market_groups()),
+             ("featured_highs", lambda: compute_featured_highs()))
+    for name, step in steps:
+        t0 = time.monotonic()
+        try:
+            out[name] = step()
+        except Exception as e:  # noqa: BLE001
+            log.exception("개발 경량 파이프라인 단계 실패: %s", name)
+            out[name] = {"error": repr(e)[:300]}
+        result = out[name]
+        record.append({"name": name, "ok": not (isinstance(result, dict) and "error" in result),
+                       "seconds": round(time.monotonic() - t0, 1), "summary": pipeline_record.summarize(result)})
+    try:
+        pipeline_record.save(get_sync_redis(), started, datetime.now(timezone.utc), record)
+    except Exception as exc:  # noqa: BLE001
         log.warning("파이프라인 기록 저장 실패: %s", exc)
     return out

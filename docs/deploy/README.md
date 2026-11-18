@@ -13,6 +13,7 @@
 | [`deploy/k8s/overlays/prod/`](../../deploy/k8s/overlays/prod) | 상용 클러스터용 (레플리카 2+, 오토스케일) |
 | [`prod-release.md`](prod-release.md) | 상용 배포 — `release/v*` 태그로 개발 서버와 분리(`.github/workflows/deploy-prod.yml`) |
 | [`environments.md`](environments.md) | 환경별 설정 — 로컬 / 개발(`haezean.com`) / 상용(`funnotedaily.com`) 변수·파일·콘솔 비교 |
+| [`dev-reads-prod-ch-runbook.md`](dev-reads-prod-ch-runbook.md) | 개발 서버가 상용 ClickHouse 를 읽기 전용으로 쓰기 — 상용 `dev_ro` 계정·개발 사이드카([`deploy/dev/ch-ro-tunnel.yml`](../../deploy/dev/ch-ro-tunnel.yml))·env 전환·되돌리기 절차 |
 
 ---
 

@@ -110,12 +110,12 @@ def to_rows(bars: list[Bar], source: str, ingested_at: datetime) -> list[list]:
 
 
 def insert_bars(bars: list[Bar], source: str, client=None, db: str | None = None) -> None:
-    """game_minute_bars 동기 insert(스레드에서 호출)."""
-    from shared.clickhouse_schema import CLICKHOUSE_DB, get_client
+    """game_minute_bars 동기 insert(스레드에서 호출). 개발 서버 소유 테이블 → get_local_client()(설정 없으면 get_client())."""
+    from shared.clickhouse_schema import CLICKHOUSE_DB, get_local_client
 
     rows = to_rows(bars, source, datetime.now(timezone.utc))
     if rows:
-        (client or get_client()).insert(f"{db or CLICKHOUSE_DB}.game_minute_bars", rows, column_names=COLUMNS)
+        (client or get_local_client()).insert(f"{db or CLICKHOUSE_DB}.game_minute_bars", rows, column_names=COLUMNS)
 
 
 def _ensure_table() -> None:
