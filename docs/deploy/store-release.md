@@ -62,7 +62,7 @@
 | 순서 | 할 일 | 비고 |
 |---|---|---|
 | U1 | **Google Play 개발자 계정**: US$25(선불카드 불가), 실명 결제 프로필, 신분증 확인, 이메일·전화 OTP, Play Console 모바일 앱으로 기기 인증 | 개발자 이메일은 `support@funnotedaily.com` |
-| U2 | 계정을 만들면 **바로 앱 생성 → `com.stockapp` 확보** | 이미 쓰이는 이름이면 바꿔야 하고, OAuth·FCM·EAS 설정을 모두 다시 맞춰야 함 |
+| U2 | 계정을 만들면 **바로 앱 생성 → `com.stocknote` 확보**(`com.stockapp` 은 이미 사용 중 — 변경 목록 [`package-rename-stocknote.md`](package-rename-stocknote.md)) | 이미 쓰이는 이름이면 바꿔야 하고, OAuth·FCM·EAS 설정을 모두 다시 맞춰야 함 |
 | U3 | **테스터 15~20명 모집**(Google 계정) → 비공개 테스트 트랙에 올리고 14일 연속 유지 → 대시보드에서 프로덕션 액세스 신청(테스트 내용 질문에 답함) | 테스트 피드백을 기록해 둔다 |
 | U4 | **Apple Developer Program**(연 US$99, 2단계 인증, 실명) → App Store Connect에서 `com.stockapp` 앱 생성, 무료 앱 약관 | |
 | U5 | **EU DSA 거래자 상태 신고**(필수). 배포 지역을 **한국만**으로 하면 비거래자로 신고해 주소 공개를 피할 수 있음(추측) | |
