@@ -18,6 +18,7 @@ import MarketStatus from './pages/MarketStatus'
 import MarketVerify from './pages/MarketVerify'
 import MarketLeaders from './pages/MarketLeaders'
 import MarketMaScreener from './pages/MarketMaScreener'
+import MarketFinder from './pages/MarketFinder'
 import ScreenerSettings from './pages/ScreenerSettings'
 import FundNoticesPage from './pages/FundNoticesPage'
 import AppVersionsPage from './pages/AppVersionsPage'
@@ -53,6 +54,7 @@ export default function App() {
         <Route path="market/verify" element={<MarketVerify />} />
         <Route path="market/leaders" element={<MarketLeaders />} />
         <Route path="market/ma-screener" element={<MarketMaScreener />} />
+        <Route path="market/finder" element={<MarketFinder />} />
         <Route path="market/screener" element={<ScreenerSettings />} />
         <Route path="fund-notices" element={<FundNoticesPage />} />
         <Route path="app/versions" element={<AppVersionsPage />} />

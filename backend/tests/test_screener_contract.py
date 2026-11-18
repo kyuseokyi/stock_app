@@ -60,6 +60,11 @@ def test_mobile_finder_query_matches_schema(monkeypatch):
     _run(monkeypatch, "mobile/src/features/finder/api.ts")
 
 
+def test_admin_finder_query_matches_schema(monkeypatch):
+    # 관리자 '조건검색'(/market/finder) — web 복사본이 실제 스키마와 맞는지
+    _run(monkeypatch, "admin_web/src/api/finder.ts")
+
+
 # ---------------------------------------------------------------- 관리자 5·20 정배열 스크리너
 ADMIN_ITEM = {**ITEM, "volume": 476190.0, "ma5": 10250.0, "ma20": 10000.0, "ma50": 9800.0, "ma5_20_spread_pct": 2.5}
 ADMIN_VARIABLES = {
