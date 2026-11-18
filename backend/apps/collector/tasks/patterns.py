@@ -13,6 +13,7 @@ from apps.collector.patterns import detect
 from apps.collector.repositories import clickhouse_patterns as cp
 from shared import market_repo
 from shared.database import SyncSessionLocal
+from shared.clickhouse_schema import readonly_skip
 
 log = logging.getLogger(__name__)
 
@@ -60,6 +61,8 @@ def _row(as_of: date, ticker: str, market: str, close: float, b, is_current: boo
 @celery_app.task(name="collector.compute_patterns")
 def compute_patterns(as_of: str | None = None) -> dict:
     """기준일(기본: 일봉 최신 거래일) 차트 패턴 계산·저장 — 같은 날을 다시 돌려도 멱등(그 날짜를 지우고 넣는다)."""
+    if (skip := readonly_skip("collector.compute_patterns")) is not None:
+        return skip
     cp.ensure_patterns_table()
     universe = _universe()
     d = date.fromisoformat(as_of) if as_of else cp.latest_trading_date()

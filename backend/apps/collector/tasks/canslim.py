@@ -15,6 +15,7 @@ from apps.collector.repositories import clickhouse_canslim as cc
 from apps.collector.repositories import clickhouse_market as chm
 from shared import market_repo
 from shared.database import SyncSessionLocal
+from shared.clickhouse_schema import readonly_skip
 
 log = logging.getLogger(__name__)
 
@@ -56,6 +57,8 @@ def _prepare():
 @celery_app.task(name="collector.compute_canslim")
 def compute_canslim(as_of: str | None = None) -> dict:
     """기준일(기본: 일봉 최신 거래일) CANSLIM 계산·저장 — 같은 날을 다시 돌려도 멱등."""
+    if (skip := readonly_skip("collector.compute_canslim")) is not None:
+        return skip
     universe, profiles, fundamentals, q_cum = _prepare()
     d = date.fromisoformat(as_of) if as_of else cc.latest_trading_date()
     if d is None:
@@ -68,6 +71,8 @@ def compute_canslim(as_of: str | None = None) -> dict:
 @celery_app.task(name="collector.backfill_canslim")
 def backfill_canslim(days: int = 60) -> dict:
     """최근 days 거래일을 채워 점수 추이를 보여준다(날짜별 실패 격리)."""
+    if (skip := readonly_skip("collector.backfill_canslim")) is not None:
+        return skip
     universe, profiles, fundamentals, q_cum = _prepare()
     latest = cc.latest_trading_date()
     if latest is None:

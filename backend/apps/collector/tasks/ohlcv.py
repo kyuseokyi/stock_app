@@ -13,6 +13,7 @@ from apps.collector.celery_app import celery_app
 from apps.collector.indicators import HISTORY_BARS, enrich_with_ma
 from apps.collector.kis.fetcher import fetch_domestic_daily
 from apps.collector.repositories.clickhouse_ohlcv import count_ticker, load_closes_before, upsert_daily_prices
+from shared.clickhouse_schema import readonly_skip
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +41,8 @@ def enrich_overlap_window(ticker: str, ohlcv: list[dict]) -> list[dict]:
 def collect_daily_ohlcv(
     ticker: str, start: str | None = None, end: str | None = None
 ) -> dict:
+    if (skip := readonly_skip("collector.collect_daily_ohlcv")) is not None:
+        return skip
     today = date.today()
     start_str = start or (today - timedelta(days=_LOOKBACK_DAYS)).strftime("%Y%m%d")
     end_str = end or (today + timedelta(days=_LOOKAHEAD_DAYS)).strftime("%Y%m%d")

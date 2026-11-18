@@ -53,6 +53,7 @@ from apps.stock_api.services import screener_query
 from apps.stock_api.services import chart as chart_service
 from apps.stock_api.services import clickhouse_source as ch_source
 from shared import stock_meta_repo
+from shared.clickhouse_schema import market_data_readonly
 from shared.database import SyncSessionLocal
 
 # MA120 등 장기 지표를 표시 시작일부터 그리려면 그 이전 거래일이 필요하다.
@@ -131,8 +132,10 @@ class Query:
             i0 = _display_start_index(candles, start_date)
             if real_only and candles[i0].date < start_date:
                 candles, i0 = [], 0  # 표시 구간엔 없고 앞쪽 버퍼에만 있음 → 이 구간은 비어 있다
-        elif real_only:
-            # 보관 기간보다 과거 — 가짜를 붙이지 않고 빈 구간으로 돌려준다(지표 함수는 빈 목록 허용)
+        elif real_only or market_data_readonly():
+            # 보관 기간보다 과거 — 가짜를 붙이지 않고 빈 구간으로 돌려준다(지표 함수는 빈 목록 허용).
+            # prod_readonly 개발 서버: 터널이 끊기면 get_candles 가 None 이라 가짜 시드가 정상 차트처럼 보인다 →
+            # 빈 차트로 장애를 드러낸다(상용·로컬은 설정이 없어 지금 동작 그대로).
             candles, i0 = [], 0
         else:
             # 온더플라이(가짜)는 버퍼 없이 표시 구간 그대로(누적 워크라 시작 변경 시 값이 달라짐)

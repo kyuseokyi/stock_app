@@ -31,7 +31,7 @@ from apps.collector.rate_limit import RateLimiter
 from apps.collector.tasks.ohlcv import enrich_overlap_window
 from apps.collector.repositories.clickhouse_ohlcv import upsert_daily_prices
 from apps.collector.stock_master import load_domestic_tickers
-from shared.clickhouse_schema import ensure_daily_prices_source
+from shared.clickhouse_schema import ensure_daily_prices_source, readonly_skip
 
 logger = logging.getLogger(__name__)
 
@@ -283,6 +283,8 @@ def collect_all_daily(
 
     키움이 켜져 있으면(키 있음 + KIWOOM_FALLBACK_ENABLED≠false) KIS 가 끝난 뒤 실패·빈 응답 종목을 키움으로 채운다.
     """
+    if (skip := readonly_skip("collector.collect_all_daily")) is not None:
+        return skip
     fallback = _daily_fallback(_kiwoom_daily_one)
     if fallback is None:
         return _run_universe(_collect_daily_one, limit, source, rate_per_sec, workers)
@@ -307,6 +309,8 @@ def backfill_all_daily(
     end(YYYYMMDD) 미지정이면 마지막 확정 거래일(KST 평일 20:30 이후 오늘, 아니면 직전 평일) — 장중 미완성 봉 방지.
     시작·끝 날짜는 한 번만 정한다(실행이 20:30 을 넘겨도 종목마다 끝 날짜가 갈리지 않게).
     """
+    if (skip := readonly_skip("collector.backfill_all_daily")) is not None:
+        return skip
     end_day = (datetime.strptime(end, "%Y%m%d").date() if end
                else trading_day.last_confirmed_trading_day())
     start_s = (end_day - timedelta(days=int(months) * 31)).strftime("%Y%m%d")

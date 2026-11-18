@@ -13,6 +13,7 @@ from apps.collector.repositories import clickhouse_screener as cs
 from apps.collector.screener.compute import compute_day
 from shared import market_repo
 from shared.database import SyncSessionLocal
+from shared.clickhouse_schema import readonly_skip
 
 log = logging.getLogger(__name__)
 
@@ -72,6 +73,8 @@ def _prepare():
 @celery_app.task(name="collector.compute_screener")
 def compute_screener(as_of: str | None = None) -> dict:
     """기준일(기본: 일봉 최신 거래일) 스크리너 지표 계산·저장 — 같은 날을 다시 돌려도 멱등."""
+    if (skip := readonly_skip("collector.compute_screener")) is not None:
+        return skip
     universe, profiles, fundamentals = _prepare()
     d = date.fromisoformat(as_of) if as_of else cs.latest_trading_date()
     if d is None:
@@ -86,6 +89,8 @@ def compute_screener(as_of: str | None = None) -> dict:
 @celery_app.task(name="collector.backfill_screener")
 def backfill_screener(days: int = 60) -> dict:
     """최근 days 거래일을 채운다(날짜별 실패 격리)."""
+    if (skip := readonly_skip("collector.backfill_screener")) is not None:
+        return skip
     universe, profiles, fundamentals = _prepare()
     latest = cs.latest_trading_date()
     if latest is None:
