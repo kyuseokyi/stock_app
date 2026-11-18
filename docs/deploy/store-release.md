@@ -1,6 +1,6 @@
 # 스토어 출시 체크리스트 — Google Play · Apple App Store
 
-> 2026-11-13 기준. 두 스토어의 정책 원문을 확인하고 우리 코드와 대조한 결과다(출처는 맨 아래).
+> 2026-11-13 기준(11-18 D9·R4 갱신). 두 스토어의 정책 원문을 확인하고 우리 코드와 대조한 결과다(출처는 맨 아래).
 > 스토어 정책은 자주 바뀌므로 콘솔에서 설문을 작성할 때 원문을 다시 확인한다. "(추측)"은 원문 근거 없이 판단한 것이다.
 > 사용자가 직접 할 일만 모은 목록: [`owner-todo.md`](owner-todo.md).
 > 서버 쪽 상용 준비는 [`prod-release.md`](prod-release.md), 환경별 값은 [`environments.md`](environments.md).
@@ -32,6 +32,7 @@
 | D6 ✅ | **권한 정리**: `android.blockedPermissions`에 `SYSTEM_ALERT_WINDOW`(Expo 템플릿이 넣지만 쓰지 않음), 쓰지 않는 `READ/WRITE_EXTERNAL_STORAGE` | Android | `mobile/app.config.js` | 소 | Play 민감 권한 정책 |
 | D7 | **iOS 설정**: `ios.privacyManifests`(Required Reason API — UserDefaults·FileTimestamp·SystemBootTime·DiskSpace), 암호화 선언(`ITSAppUsesNonExemptEncryption=false`), `supportsTablet` 결정, Google 로그인 `iosUrlScheme` 실제 값(지금 `com.googleusercontent.apps.unset`이라 iOS Drive 백업이 동작하지 않음) | iOS | `mobile/app.config.js` | 소 | Apple Privacy Manifest(2024-05~), 수출 규정, 2.1 |
 | D8 ✅ | **댓글 신고·차단 + 어드민 신고 처리 + 댓글 기본값 끄기**(`boards.comments_enabled` 기본 `true` → `false`, 기존 값은 유지). 댓글은 **이 기능을 배포한 뒤에만** 켠다 | 공통 | blog 서버, 앱, 웹, 어드민 | 대 | Play UGC, Apple 1.2(필터·신고·차단·연락처) |
+| D9 | **스토어용 빌드가 상용 설정을 빠뜨림**: `build:android:prod`(`eas build --local`)는 `.gitignore` 규칙으로 프로젝트를 복사해 `.env.production`·`secrets/google-services.json` 이 빠진다 → 주소 localhost·푸시 꺼진 AAB. EAS `production` 환경 변수도 비어 있음(2026-11-18 확인). `.easignore` 또는 EAS 환경 변수·파일 변수로 넣고, 빌드 후 AAB 안 주소·projectId 를 검사(`build-preview-apk.sh` 와 같은 방식) | Android(iOS 도 같음) | `mobile/eas.json`, 빌드 스크립트 | 소 | 2026-11-17 상용 테스트 APK 에서 같은 원인으로 404·푸시 미등록 |
 
 ### 🟡 반려 위험을 줄이는 것
 
@@ -40,7 +41,7 @@
 | R1 ✅ | 앱 안에 **"정보 제공 전용 · 매매·투자 자문 아님 · 모의투자는 가상 자금"** 고지(내정보 또는 첫 실행) | Apple 3.2.1(viii)·5.1.1(ix): 투자·자산 관리 앱은 금융기관·법인이 제출해야 한다는 조항이 개인에게 걸릴 수 있음 |
 | R2 ✅ | **닉네임 금칙어 필터** 또는 관리자가 닉네임을 바꿀 수 있는 수단 | 랭킹에 공개되는 닉네임도 사용자 콘텐츠로 볼 여지(추측) |
 | R3 ✅ | AI 시황 요약에 **원 기사 출처** 표시 | Play가 "AI 뉴스 모음 앱"으로 보고 뉴스 선언을 요구할 경우 대비 |
-| R4 | 쓰지 않으면 iOS **무음 푸시 백그라운드 모드**(`enableBackgroundRemoteNotifications`) 제거, 광고성 푸시는 별도 동의 | Apple 2.5.4, 4.5.4 |
+| R4 | iOS **무음 푸시 백그라운드 모드**는 펀드 공시 알림의 무음 깨우기(`features/fund/background/tasks.ts`)가 **실제로 쓰므로 유지**(2026-11-18 확인) → 심사 메모(U12)에 목적을 적는다. 광고성 푸시를 보내게 되면 별도 동의 | Apple 2.5.4, 4.5.4 |
 
 ### 🟢 나중에
 
