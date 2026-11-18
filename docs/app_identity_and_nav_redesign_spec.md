@@ -98,6 +98,20 @@
 ### 2-3. 섹션 ③ [하단 3순위 — 참고용] `컴팩트 오늘 시장 참고` (`HomeMarketReference`)
 - 기존에 만들어 둔 지수 조회 훅/컴포넌트(`HomeIndices` 등)를 재활용하여, 홈 최하단에 **코스피 · 코스닥 · 미국 대표 지수 · 원/달러 환율**만 작고 가볍게 표시하고 우측에 `[시장 더보기 ›]` (`/market`) 링크를 둔다.
 
+### 2-4. 사용자 종목 상세 화면 (`/stock/:ticker`, `stock/[ticker].tsx`) CANSLIM 비노출 및 참고용 정체성 반영
+- **배경**: 일반 사용자 화면에서는 모든 시장·종목 데이터가 단순 참고용 자료여야 하므로, 종목 상세 화면에서 특정 종목을 평가/추천하는 인상을 줄 수 있는 **CANSLIM 점수 및 7가지 기준 판정표를 사용자 화면에서 숨깁니다.**
+- **변경 명세 (기존 컴포넌트 파일은 삭제 금지 — `Zero Deletion`)**:
+  1. **웹 ([`web_client/src/pages/StockDetailPage.tsx`](../web_client/src/pages/StockDetailPage.tsx))**:
+     - 상단 헤더 카드 우측의 `{scoreData.score}점 / 주도주 7개 중 N개 통과` 점수 박스를 렌더링하지 않는다.
+     - 우측(또는 하단)의 `<Card as="section" aria-label="주도주 분석"> (주도주 분석 CANSLIM · LetterList · ScoreHistory)` 섹션을 렌더링하지 않고, 일봉 차트·차트 패턴(참고용)·대차잔고만 깔끔한 단일(또는 균형) 레이아웃으로 보여준다.
+     - 단, [`CanslimParts.tsx`](../web_client/src/components/screener/CanslimParts.tsx) 등 기존 컴포넌트 파일은 추후 재사용 및 관리자 웹 연동을 위해 **절대 삭제하지 않는다.**
+  2. **모바일 ([`mobile/src/app/stock/[ticker].tsx`](../mobile/src/app/stock/%5Bticker%5D.tsx))**:
+     - 상단 헤더 카드 우측의 `scoreBox`(`{data.score}점`, `7개 중 N개 통과`)를 숨긴다.
+     - 하단의 `7가지 기준 (<ScoreTable />)`, `<ScoreHistory />`, `"주도주 분석 대상이 아니에요"` 카드를 숨기고, 종목 기본 정보(이름·티커·시장·업종·종가) + 일봉 차트 + 패턴 요약(있을 때) + 대차잔고 + 하단 참고용 안내 문구(*"모든 데이터는 투자 판단의 참고용 자료이며, 투자 권유가 아니에요."*)만 표시한다.
+     - 단, `score-table.tsx`, `score-history.tsx` 파일 자체는 **절대 삭제하지 않고 그대로 보존**한다.
+  3. **관리자 웹 (`admin_web`)**:
+     - 관리자 웹의 `주도주(/market/leaders)` 및 `데이터 검증(/market/verify)`에서는 기존과 동일하게 CANSLIM 점수와 7가지 기준을 100% 열람할 수 있다.
+
 ---
 
 ## 3. 관리자 웹 (`admin_web`) 전체 스크리너 상시 노출 명세
@@ -118,24 +132,26 @@
 
 Claude Code에서 아래 Micro-Step 순서로 안전하게 구현 및 검증을 진행합니다.
 
-### 📍 Phase 1: 웹 클라이언트 (`web_client`) 5탭 네비게이션 · 로그인 게이트 · 홈 개편
+### 📍 Phase 1: 웹 클라이언트 (`web_client`) 5탭 네비게이션 · 로그인 게이트 · 홈 & 종목 상세 개편
 - [ ] **Step 1-1 (웹 5탭 네비게이션 & `내 펀드` 비로그인 안내)**:
   - [`web_client/src/lib/navSections.ts`](../web_client/src/lib/navSections.ts)에 `'funds'` 섹션 추가 및 기본 5탭 순서(`['home', 'funds', 'community', 'game', 'market']`, 스크리너 스위치 ON 시 기존대로 노출 가능) 정의.
   - [`web_client/src/components/AppNav.tsx`](../web_client/src/components/AppNav.tsx)에서 라벨을 `홈 · 내 펀드 · 블로그 · 게임 · 시장`으로 변경하고, 비로그인 상태에서 `내 펀드` 탭 클릭 시 로그인 안내 모달(`LoginModal`)을 띄우도록 연결.
   - [`web_client/src/pages/FundListPage.tsx`](../web_client/src/pages/FundListPage.tsx)에서 비로그인 진입 시 즉시 리다이렉트하는 대신 친절한 로그인 안내 카드 + `[로그인하기]` 버튼을 표시하도록 개선.
   - [`web_client/src/components/Layout.tsx`](../web_client/src/components/Layout.tsx) 헤더 우측에 모바일/데스크톱 공통 `내정보(/me)` 진입 아이콘/버튼 유지.
-- [ ] **Step 1-2 (웹 홈 화면 3단 개편 — 기존 `MarketNote.tsx` 삭제 금지)**:
+- [ ] **Step 1-2 (웹 홈 화면 3단 개편 & 종목 상세 CANSLIM 숨김 — 기존 컴포넌트 삭제 금지)**:
   - 기존 `MarketNote.tsx`는 그대로 보존한 채, `HomeFundCard.tsx`, `HomeGameEduCard.tsx`, `HomeMarketReference.tsx`를 작성하여 [`HomePage.tsx`](../web_client/src/pages/HomePage.tsx)에 배치.
+  - [`web_client/src/pages/StockDetailPage.tsx`](../web_client/src/pages/StockDetailPage.tsx)에서 CANSLIM 점수 박스 및 `주도주 분석 (CANSLIM)` 카드를 비노출 처리(`CanslimParts.tsx` 파일은 보존)하고 참고용 데이터 안내 문구 표시.
   - `cd web_client && npm run build && npm test` 통과 검증.
 
-### 📍 Phase 2: 모바일 앱 (`mobile`) 5탭 네비게이션 · 로그인 게이트 · 홈 개편
+### 📍 Phase 2: 모바일 앱 (`mobile`) 5탭 네비게이션 · 로그인 게이트 · 홈 & 종목 상세 개편
 - [ ] **Step 2-1 (모바일 5탭 & `내 펀드` 비로그인 안내 시트 & 우측 상단 내정보 아이콘)**:
   - `mobile/src/app/(tabs)/funds.tsx` 탭 화면 추가(기존 `fund/index.tsx` 재사용, 기존 `/fund` 스택 라우트도 100% 유지).
   - [`mobile/src/app/(tabs)/_layout.tsx`](../mobile/src/app/%28tabs%29/_layout.tsx)를 `홈 · 내 펀드 · 블로그 · 게임 · 시장` 5탭으로 구성하고 `profile` 탭은 `href: null`로 숨김 처리.
   - 비로그인 상태에서 `내 펀드` 탭 터치 시 이동을 막고 `"로그인이 필요해요"` 안내 바텀시트(`BottomSheet`)를 띄워 `[로그인하러 가기]`(`/profile`)로 안내.
   - 탭 화면 상단 우측에 공통 `ProfileHeaderButton`(`내정보` 이동 아이콘) 배치.
-- [ ] **Step 2-2 (모바일 홈 화면 개편 — 기존 `home-summary.tsx` 등 삭제 금지)**:
+- [ ] **Step 2-2 (모바일 홈 화면 개편 & 종목 상세 CANSLIM 숨김 — 기존 파일 삭제 금지)**:
   - 기존 `home-summary.tsx` 등 시황 요약 파일들은 삭제하지 않고 그대로 유지한 채, `home-fund-card.tsx`, `home-game-edu-card.tsx`, `home-market-strip.tsx`를 추가하여 [`mobile/src/app/(tabs)/index.tsx`](../mobile/src/app/%28tabs%29/index.tsx)에 연결.
+  - [`mobile/src/app/stock/[ticker].tsx`](../mobile/src/app/stock/%5Bticker%5D.tsx)에서 상단 CANSLIM 점수(`scoreBox`) 및 하단 `7가지 기준(ScoreTable)` · `ScoreHistory`를 비노출 처리(컴포넌트 파일은 보존)하고 참고용 안내 문구 표시.
   - `cd mobile && npm run typecheck && npm test` 통과 검증.
 
 ### 📍 Phase 3: 관리자 웹 (`admin_web`) 전체 스크리너(`조건검색` · `차트 패턴`) 상시 메뉴 추가
@@ -153,7 +169,7 @@ Claude Code에 아래 명령어를 그대로 입력하면 Phase 1부터 Phase 3�
 
 ```text
 docs/app_identity_and_nav_redesign_spec.md 와 PRODUCT.md 문서를 읽고, Phase 1(웹) → Phase 2(모바일) → Phase 3(관리자 웹 전체 스크리너 상시 노출)까지 순서대로 Micro-Step 단위로 구현해줘.
-특히 (1) '내 펀드' 탭/카드는 로그인 후에만 이동 가능하고 비로그인 시 로그인 안내가 뜨도록 구현하고, (2) 기존에 만들어 둔 시황/스크리너/내정보 코드는 절대 삭제하지 말고 보존(Zero Deletion)하며, (3) 관리자 웹(admin_web)에는 모든 스크리너 기능(주도주·5·20 정배열·조건검색·차트 패턴)이 스위치와 무관하게 항상 노출되도록 구현해줘.
+특히 (1) '내 펀드' 탭/카드는 로그인 후에만 이동 가능하고 비로그인 시 로그인 안내가 뜨도록 구현하고, (2) 사용자 종목 상세 화면(/stock/:ticker, stock/[ticker].tsx)에서는 CANSLIM 점수·7가지 기준·점수 추이가 보이지 않도록 숨기되, (3) 기존에 만들어 둔 시황/스크리너/CANSLIM/내정보 컴포넌트 파일과 코드는 절대 삭제하지 말고 보존(Zero Deletion)하며, (4) 관리자 웹(admin_web)에는 모든 스크리너 기능(주도주·5·20 정배열·조건검색·차트 패턴)이 스위치와 무관하게 항상 노출되도록 구현해줘.
 각 단계 완료 시 테스트(vitest / jest / tsc --noEmit) 실행 후 한국어로 요약 보고해줘.
 ```
 
