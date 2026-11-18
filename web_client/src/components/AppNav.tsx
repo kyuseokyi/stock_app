@@ -61,6 +61,7 @@ function useGatedClick() {
   const loggedIn = useAuthStore((s) => s.user !== null)
   return (key: Section) => (e: MouseEvent<HTMLAnchorElement>) => {
     if (!isLoginGatedSection(key) || fundNavAction(loggedIn) === 'navigate') return
+    if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return // 새 탭·창 열기는 그대로(직접 진입 안내 카드로)
     e.preventDefault()
     openLogin({ description: FUND_LOGIN_DESCRIPTION, returnTo: FUNDS_PATH })
   }

@@ -31,9 +31,17 @@ const ix = (code: string, region: string): MarketIndex => ({
 })
 
 describe('homeReferenceIndices (홈 시장 참고 지수)', () => {
-  it('코스피 · 코스닥 · 미국 첫 지수 · 원/달러 순서', () => {
-    const all = [ix('US:SPX', 'US'), ix('FX:USDKRW', 'FX'), ix('KR:1001', 'KR'), ix('US:IXIC', 'US'), ix('KR:0001', 'KR')]
+  it('코스피 · 코스닥 · 미국 대표(S&P500 우선) · 원/달러 순서 — 응답 순서와 무관', () => {
+    const all = [
+      ix('US:VIX', 'US'), ix('US:SOX', 'US'), ix('FX:USDKRW', 'FX'), ix('KR:1001', 'KR'),
+      ix('US:COMP', 'US'), ix('US:SPX', 'US'), ix('KR:0001', 'KR'),
+    ]
     expect(homeReferenceIndices(all).map((i) => i.code)).toEqual(['KR:0001', 'KR:1001', 'US:SPX', 'FX:USDKRW'])
+  })
+  it('S&P500 이 없으면 나스닥 종합, 대표 지수가 모두 없으면 VIX·반도체는 고르지 않는다', () => {
+    expect(homeReferenceIndices([ix('US:VIX', 'US'), ix('US:COMP', 'US')]).map((i) => i.code)).toEqual(['US:COMP'])
+    expect(homeReferenceIndices([ix('US:VIX', 'US'), ix('US:SOX', 'US')])).toEqual([])
+    expect(homeReferenceIndices([ix('US:VIX', 'US'), ix('US:NDX', 'US')]).map((i) => i.code)).toEqual(['US:NDX'])
   })
   it('없는 지수는 건너뛴다', () => {
     expect(homeReferenceIndices([ix('KR:0001', 'KR')]).map((i) => i.code)).toEqual(['KR:0001'])

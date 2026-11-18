@@ -20,17 +20,28 @@ export function homeFundCardState(uid: number | null, funds: FundEntry[]): HomeF
 
 const KOSPI = 'KR:0001'
 const KOSDAQ = 'KR:1001'
+/** 미국 대표 지수 우선순위 — S&P500 → 나스닥 종합 → 다우(backend collector/market_indices.py 의 코드) */
+const US_HEADLINE = ['US:SPX', 'US:COMP', 'US:DJI']
+const US_NOT_HEADLINE = ['US:VIX', 'US:SOX'] // 변동성·업종 지수는 '대표 지수'가 아니다
 
 /**
- * 홈 하단 '오늘 시장 참고' — 코스피 · 코스닥 · 미국 대표 지수(US 첫 항목) · 원/달러(FX 첫 항목).
+ * 홈 하단 '오늘 시장 참고' — 코스피 · 코스닥 · 미국 대표 지수(S&P500 우선, 없으면 나스닥 종합·다우, 그것도 없으면 VIX·반도체를 뺀 US 첫 항목) · 원/달러(FX 첫 항목).
  * 없는 것은 건너뛴다(지어내지 않음). 홈 시장 노트의 noteIndices(미국 지수 없음)와는 별개.
  */
 export function homeReferenceIndices(indices: MarketIndex[]): MarketIndex[] {
   const pick = [
     indices.find((i) => i.code === KOSPI),
     indices.find((i) => i.code === KOSDAQ),
-    indices.find((i) => i.region === 'US'),
+    usHeadline(indices),
     indices.find((i) => i.region === 'FX'),
   ]
   return pick.filter((i): i is MarketIndex => i != null)
+}
+
+function usHeadline(indices: MarketIndex[]): MarketIndex | undefined {
+  for (const code of US_HEADLINE) {
+    const hit = indices.find((i) => i.code === code)
+    if (hit) return hit
+  }
+  return indices.find((i) => i.region === 'US' && !US_NOT_HEADLINE.includes(i.code))
 }
