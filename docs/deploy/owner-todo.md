@@ -7,7 +7,7 @@
 ## 1. 지금 바로 (출시 일정을 정하는 일)
 
 - [ ] **Google Play 개발자 계정**(U1) — US$25, 실명 결제 프로필, 신분증 확인, 이메일·전화 OTP, Play Console 모바일 앱으로 기기 인증. 개발자 이메일은 `support@funnotedaily.com`
-- [ ] **`com.stockapp` 앱 생성**(U2) — 계정을 만들면 바로. 이미 쓰이는 이름이면 알려 줄 것(패키지 이름을 바꿔야 함)
+- [ ] **`com.stocknote` 앱 생성**(U2) — `com.stockapp` 은 Play 에서 이미 사용 중(2026-11-18) → 상용 패키지를 `com.stocknote` 로 변경. 사용자 할 일(푸시·로그인 포함)·코드 변경 전체: [`package-rename-stocknote.md`](package-rename-stocknote.md)
 - [ ] **테스터 15~20명 모집**(U3) — Google 계정 이메일. 비공개 테스트 **12명·14일 연속**이 지나야 프로덕션 신청 가능
 
 ## 2. 상용 데이터·자동 배포
