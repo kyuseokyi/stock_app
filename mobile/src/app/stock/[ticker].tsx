@@ -20,7 +20,19 @@ import { usePullRefresh } from '@/hooks/use-pull-refresh';
 import { Button, ListState } from '@/ui';
 
 /**
- * 범용 종목 상세 — 머리(이름·종가·점수) · 일봉 차트(50일선·52주 고점) · 대차잔고(데이터 없으면 숨김) · 7항목 점수표 · 점수 추이.
+ * 사용자 화면에서 CANSLIM 점수 박스·7가지 기준(ScoreTable)·점수 추이(ScoreHistory)·'주도주 분석 대상이 아니에요' 카드를 보이지 않는다 —
+ * 모든 시장·종목 데이터는 참고용(docs/app_identity_and_nav_redesign_spec.md 2-4, 웹 StockDetailPage 와 같음).
+ * 코드·부품(score-table·score-history)은 지우지 않고 이 스위치로 렌더링에서만 뺀다. 관리자 웹에서는 계속 100% 열람.
+ * 점수 조회는 계속한다 — 이름·업종·종가·기준일·52주 고점(차트 선)이 이 응답에서 나온다.
+ */
+const SHOW_CANSLIM = false;
+
+/** 모든 종목 상세 하단 공통 안내 */
+const REFERENCE_NOTE = '모든 데이터는 투자 판단의 참고용 자료이며, 투자 권유가 아니에요.';
+
+/**
+ * 범용 종목 상세 — 머리(이름·종가) · 일봉 차트(50일선·52주 고점) · 패턴 요약(있을 때) · 대차잔고(데이터 없으면 숨김) · 참고용 안내.
+ * (SHOW_CANSLIM 을 켜면 예전처럼 머리 점수 · 7항목 점수표 · 점수 추이도 보인다)
  * 점수와 차트는 따로 조회한다(한쪽이 실패해도 다른 쪽은 보인다). 점수가 null 이면 분석 비대상(ETF·우선주 등).
  * 진입: 스크리너 '주도주' 목록, 테마·업종 상세의 구성 종목. name 파라미터는 비대상 종목의 제목용.
  */
@@ -102,7 +114,7 @@ function StockDetailBody({ ticker, fallbackName }: { ticker: string; fallbackNam
             </Text>
           ) : null}
         </View>
-        {data ? (
+        {SHOW_CANSLIM && data ? (
           <View style={styles.scoreBox}>
             <Text style={styles.score}>
               {data.score}
@@ -130,20 +142,20 @@ function StockDetailBody({ ticker, fallbackName }: { ticker: string; fallbackNam
       ) : null}
       {view === 'error' ? (
         <View style={styles.card}>
-          <Text style={styles.msgTitle}>점수표를 불러오지 못했어요</Text>
+          <Text style={styles.msgTitle}>종목 정보를 불러오지 못했어요</Text>
           <Text style={styles.meta}>잠시 후 다시 시도해 주세요 (오류: {score.error})</Text>
           <Pressable onPress={() => void score.reload()} accessibilityRole="button" style={styles.retry}>
             <Text style={styles.retryText}>다시 시도</Text>
           </Pressable>
         </View>
       ) : null}
-      {view === 'none' ? (
+      {SHOW_CANSLIM && view === 'none' ? (
         <View style={styles.card}>
           <Text style={styles.msgTitle}>주도주 분석 대상이 아니에요</Text>
           <Text style={styles.meta}>보통주만 분석해요</Text>
         </View>
       ) : null}
-      {view === 'ready' && data ? (
+      {SHOW_CANSLIM && view === 'ready' && data ? (
         <>
           <View style={styles.card}>
             <Text style={styles.section}>7가지 기준</Text>
@@ -153,6 +165,7 @@ function StockDetailBody({ ticker, fallbackName }: { ticker: string; fallbackNam
           <Text style={styles.note}>실적(C·A)은 최신 공시 기준이며, 투자 권유가 아니에요.</Text>
         </>
       ) : null}
+      {SHOW_CANSLIM ? null : <Text style={styles.note}>{REFERENCE_NOTE}</Text>}
     </ScrollView>
   );
 }
