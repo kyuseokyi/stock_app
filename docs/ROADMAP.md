@@ -232,6 +232,11 @@
 - [x] Phase 5: 프론트엔드(웹/앱) 시황 및 스크리너 카드 연동
 - [x] 토요일 주간 마감 브리핑 — `ai.generate_weekly_briefing`(토 08:30), 금요일 미국 마감·5거래일 등락률, 같은 표에 토요일 행이라 주말 내내 표시, 헤드라인 '주간 마감:' (2026-11-09, `deploy/2026-11-09-1`). 첫 결과는 11-14 확인
 
+### 앱 정체성 재정의 & 5탭 네비게이션·홈 개편 (`홈 · 내 펀드 · 블로그 · 게임 · 시장`)
+> 상세 설계 및 로드맵: [`docs/app_identity_and_nav_redesign_spec.md`](app_identity_and_nav_redesign_spec.md) · 제품 정의: [`PRODUCT.md`](../PRODUCT.md)
+- [ ] Phase 1 (웹 `web_client`): 5탭(`홈 · 내 펀드 · 블로그 · 게임 · 시장`) + 우측 상단 `내정보` 버튼 개편 및 홈 화면 3단(`① 내 펀드 수익 요약 → ② 추천 블로그 글 & 게임 교육 배너 → ③ 참고용 시장 요약`) 개편
+- [ ] Phase 2 (모바일 `mobile`): 하단 5탭(`홈 · 내 펀드 · 블로그 · 게임 · 시장`) + 상단 헤더 우측 프로필/내정보 아이콘 배치 및 홈 화면 3단 개편 (기존 푸시/딥링크 URL 100% 호환 유지)
+
 ### 관리자 전용 5·20일선 정배열 스크리너 (`admin_web` 우선 → 추후 웹·앱 확장)
 > 상세 설계 및 로드맵: [`docs/admin_ma5_20_screener_spec_and_plan.md`](admin_ma5_20_screener_spec_and_plan.md)
 - [ ] Step 1: 백엔드 `screener_query.py` & GraphQL `screenerScreen` 확장 (`ma5_20` 정배열 4모드, 시가총액·거래대금·거래량·등락률·5·20 이격도 필터 및 정렬 추가, CH 마이그레이션 불필요)
@@ -248,6 +253,7 @@
 ---
 
 ## 참고 문서
+- **앱 정체성 재정의 & 5탭 네비게이션·홈 개편 명세: `docs/app_identity_and_nav_redesign_spec.md`**
 - **관리자 5·20일선 정배열 스크리너 명세 및 플랜: `docs/admin_ma5_20_screener_spec_and_plan.md`**
 - **광고 수익화 명세 및 플랜: `docs/ad_monetization_spec_and_plan.md`**
 - **광고 수익화 사전 준비 가이드(AdSense/AdMob): `docs/ad_monetization_setup_guide.md`**
