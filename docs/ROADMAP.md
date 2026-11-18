@@ -245,6 +245,12 @@
 - [ ] Step 2 (웹 `web_client`): `[✊ 홀딩]` 클릭 시 해당 포지션 종료까지 추가 팝업 차단(`mutedPositionId`) + 보유 포지션 카드(`ActivePositionCard`) 내부 1줄 상태 배너 연동
 - [ ] Step 3 (모바일 `mobile`): `[✊ 홀딩]` 클릭 시 포지션 단위 팝업 차단 + 보유 포지션 카드(`position-card.tsx`) 내부 1줄 상태 배너 연동
 
+### 관리자 등급별 권한 제어 (RBAC — 스크리너 · 데이터 업데이트 · 앱 관리)
+> 상세 설계 및 로드맵: [`docs/admin_rbac_permissions_spec_and_plan.md`](admin_rbac_permissions_spec_and_plan.md)
+- [ ] Step 1: 백엔드 `User.admin_tier`(`SUPER_ADMIN · OPERATOR · ANALYST · EDITOR`), `admin_tier_policies` 테이블 및 `require_permission(perm)` 가드 구현 (기존 `ADMIN` 계정은 `SUPER_ADMIN` 자동 승격)
+- [ ] Step 2: 주요 서비스(`stock_api`, `blog`, `trading_game`)의 데이터 수집/재계산(`DATA_PIPELINE`), 스크리너 스위치(`SCREENER_SETTINGS`), 앱 버전(`APP_UPDATE_MANAGE`), 광고 설정(`AD_MANAGE`) API에 세부 권한 가드 적용
+- [ ] Step 3: 관리자 웹(`admin_web`) 권한별 사이드바/버튼 제어, `관리자 권한 설정(/admin/roles)` 매트릭스 편집 UI 및 `회원 관리(/members)` 등급 지정 드롭다운 구현
+
 ### 관리자 전용 5·20일선 정배열 스크리너 (`admin_web` 우선 → 추후 웹·앱 확장)
 > 상세 설계 및 로드맵: [`docs/admin_ma5_20_screener_spec_and_plan.md`](admin_ma5_20_screener_spec_and_plan.md)
 - [x] Step 1: 백엔드 `screener_query.py` & GraphQL `screenerScreen` 확장 (`ma5_20` 정배열 4모드, 시가총액·거래대금·거래량·등락률·5·20 이격도 필터 및 정렬 추가, CH 마이그레이션 불필요)
@@ -261,6 +267,7 @@
 ---
 
 ## 참고 문서
+- **관리자 등급별 권한 제어(RBAC) 명세 및 플랜: `docs/admin_rbac_permissions_spec_and_plan.md`**
 - **트레이딩 게임 지지·저항 손절·익절·홀딩 경량화 명세: `docs/game_lightweight_sr_action_spec_and_plan.md`**
 - **앱 정체성 재정의 & 5탭 네비게이션·홈 개편 명세: `docs/app_identity_and_nav_redesign_spec.md`**
 - **관리자 5·20일선 정배열 스크리너 명세 및 플랜: `docs/admin_ma5_20_screener_spec_and_plan.md`**
