@@ -1,6 +1,7 @@
 # 개발 서버가 상용 ClickHouse 주식 데이터를 읽기 전용으로 쓰기 — 설계
 
-- 작성: 2026-11-18 · 상태: **권장안 채택(사용자 2026-11-18) — 구현 중** · 관련: `docs/kiwoom_setup_and_dev_spec.md` 4절(범위 C, 보류 중이던 항목)
+- 작성: 2026-11-18 · 상태: **권장안 채택(사용자 2026-11-18) — 코드·문서 구현 완료(7절 1~5·8단계), 서버 작업(6·7단계) 대기** · 관련: `docs/kiwoom_setup_and_dev_spec.md` 4절(범위 C, 보류 중이던 항목)
+- 서버 작업 절차: [`docs/deploy/dev-reads-prod-ch-runbook.md`](../../deploy/dev-reads-prod-ch-runbook.md)
 - 비밀값(토큰·비밀번호)·IP 는 이 문서에 적지 않는다. 키 이름만 적는다.
 
 ## 0. 목표와 결정
@@ -338,6 +339,20 @@ networks:
 | 6 | 상용 서버 | 5-1 확인 → (필요하면) access_management 켜기 → 5-2 SQL → 7-1 의 상용 시험 → 5-4 바인딩 변경(별도 배포 창) |
 | 7 | 개발 서버 | `/opt/stock_app/env/ch-ro-tunnel.env`(토큰 키 2개, 권한 600) → `docker compose -f deploy/dev/ch-ro-tunnel.yml up -d` → 연결 시험 → `.env.production` 키 변경 → 백엔드 재배포 |
 | 8 | 문서 | `README.md` 환경변수 표(`CLICKHOUSE_LOCAL_*`·`MARKET_DATA_SOURCE` 등), `docs/kiwoom_setup_and_dev_spec.md` 4절의 "보류" 표시를 갱신하고 이 문서를 링크한다 |
+
+### 구현 상태 (2026-11-18, 브랜치 `feature/dev-reads-prod-ch`)
+
+| # | 상태 | 반영 위치 · 설계와 다른 점 |
+|---|---|---|
+| 1 | ✅ | `shared/clickhouse_schema.py`: `market_data_readonly()`·`readonly_skip()`·`local_client_configured()`·`get_local_client()`·타임아웃 env. 로컬 판정은 `CLICKHOUSE_LOCAL_HOST` 하나로 하고, `LOCAL_USER/PASSWORD` 는 `CLICKHOUSE_USER/PASSWORD` 로 대신 채우지 않는다(readonly 에서는 그 값이 `dev_ro` 라서). 타임아웃은 env 가 있을 때만 넘긴다 |
+| 2 | ✅ | 게임 분봉: 리포지토리 기본값을 `get_local_client()` 로 바꿨다(`ensure_game_minute_bars` 포함) |
+| 3 | ✅ | 시장 그룹(Q1-a): `clickhouse_market_groups` 의 결과 쓰기·`existing_group_ids` → 로컬, `load_bars` → 상용. 화면은 `market_query`(11곳)·`theme_metrics`·`verify_ticker`·`data_status` 에 더해 **`collector/verify/spot_check`(로컬 CLI)** 도 `_query_local` 로 바꿨다. `_query_local` 은 로컬이 미설정이면 기존 `_query` 로 위임한다 |
+| 4 | ✅ | `celery_app.py` 의 `READONLY_DISABLED_BEATS`(6개)·`readonly_beat_schedule()`. 경량 파이프라인 `collector.dev_readonly_pipeline` 은 새 파일 대신 **`tasks/market_data.py`** 에 두었다(include 변경 없음). 마스터 동기화는 `.mst` 파일 다운로드 → PG 뿐이고 KIS 시세 API·CH 쓰기가 없다 |
+| 5 | ✅ | 쓰기 태스크 18개 early-return(`backfill_investor_detail`·`backfill_lending` 은 위임 대상이 막는다). `admin_jobs.run` → `JobReadonly` → 409 `JOB_READONLY`. 시장 그룹 두 작업은 허용한다. **FRED**(Q3 계속): 4절의 "이벤트만 저장" 분리 대신, `CLICKHOUSE_LOCAL_*` 가 있으면 `macro_series` 를 개발 CH 에 쓴다(화면은 상용 `macro_series` 를 읽는다) |
+| 6-1 보완 | ✅ | 차트 시드 폴백: readonly 에서는 실데이터가 없을 때 가짜 캔들 대신 빈 candles 를 준다(`graphql/schema.py`). `get_candles` 의 None 의미는 정산·RSI·코치가 쓰므로 그대로 둔다 |
+| 6 | ⏳ | 상용 서버 — runbook 1~3장 |
+| 7 | ⏳ | 개발 서버 — runbook 4~6장. 사이드카 `deploy/dev/ch-ro-tunnel.yml`(이미지 태그·망 이름은 env 파일에서 받는다) |
+| 8 | ✅ | README 환경변수 표, `kiwoom_setup_and_dev_spec.md` 4절·Step 2-1 갱신, runbook |
 
 ---
 
