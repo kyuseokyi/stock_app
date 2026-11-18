@@ -33,7 +33,7 @@ KIWOOM_MAX_PAGES = 2  # 시장·투자자당 연속조회 상한(POOL_N 50 을 �
 # ⚠️ 미검증: KIS inquire-investor 의 *_ntby_tr_pbmn(순매수 거래대금) 단위.
 # 저장소 안에는 근거가 없다(docs/superpowers/plans/2026-10-19-market-data-verification.md:48 "단위는 확인되지 않아 변환하지 않는다").
 # KIS 문서상 거래대금(pbmn) 필드는 백만원 단위로 알려져 있어 ×1,000,000 으로 원 환산한다.
-# 검증 방법: 같은 날짜 |frgn_amt × 1e6 / frgn_qty| 가 daily_prices 종가 근처면 백만원이 맞다(종가 ×1e-6 근처면 원 단위 → 1 로 고칠 것).
+# 검증 방법: 같은 날짜 |frgn_amt × 1e6 / frgn_qty| 가 daily_prices 종가 근처면 백만원이 맞다(종가 ×1e6 근처면 원 단위 → 1 로 고칠 것).
 KIS_AMT_TO_WON = 1_000_000
 
 
