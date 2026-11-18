@@ -11,6 +11,10 @@ interface LoginModalProps {
   open: boolean
   onClose: () => void
   onSuccess?: () => void
+  /** 제목 아래 안내 문구 — 없으면 기본 문구(예: 내 펀드 게이트는 '내 펀드 수익률을 확인하려면 로그인이 필요해요') */
+  description?: string
+  /** 간편 로그인 완료 후 돌아올 내부 경로 — 없으면 지금 경로. 닉네임 로그인의 이동은 onSuccess 가 맡는다 */
+  returnTo?: string
 }
 
 type ProvidersState =
@@ -25,13 +29,13 @@ const SOCIAL_BUTTONS: { provider: SocialProvider; label: string; className: stri
 
 // 로그인 모달 — 카카오·네이버 간편 로그인 + (개발용) 닉네임 로그인
 // 공용 Modal(z-50 층) 위에 올려 대화상자 역할·ESC·포커스 가두기/복원·스크롤 잠금을 그대로 쓴다.
-export default function LoginModal({ open, onClose, onSuccess }: LoginModalProps) {
+export default function LoginModal({ open, onClose, onSuccess, description, returnTo }: LoginModalProps) {
   if (!open) return null
-  return <LoginDialog onClose={onClose} onSuccess={onSuccess} />
+  return <LoginDialog onClose={onClose} onSuccess={onSuccess} description={description} returnTo={returnTo} />
 }
 
 // 열릴 때만 마운트 — 닫으면 입력·오류·조회 상태가 함께 정리된다
-function LoginDialog({ onClose, onSuccess }: Omit<LoginModalProps, 'open'>) {
+function LoginDialog({ onClose, onSuccess, description, returnTo }: Omit<LoginModalProps, 'open'>) {
   const login = useAuthStore((s) => s.login)
   const nicknameId = useId()
   const nicknameErrorId = useId()
@@ -88,7 +92,7 @@ function LoginDialog({ onClose, onSuccess }: Omit<LoginModalProps, 'open'>) {
       setSocialError('이 브라우저에서는 간편 로그인을 시작할 수 없어요. 설정을 확인해 주세요.')
       return
     }
-    rememberLoginReturn()
+    rememberLoginReturn(returnTo)
     window.location.assign(socialStartUrl(provider, cc))
   }
 
@@ -116,7 +120,7 @@ function LoginDialog({ onClose, onSuccess }: Omit<LoginModalProps, 'open'>) {
   }
 
   return (
-    <Modal title="로그인" description="간편 로그인으로 댓글·게임에 참여하세요." onClose={onClose} layer="top" narrow>
+    <Modal title="로그인" description={description ?? '간편 로그인으로 댓글·게임에 참여하세요.'} onClose={onClose} layer="top" narrow>
       <div className="space-y-2" aria-busy={providersState.status === 'loading'}>
         {providersState.status === 'loading' && (
           <p role="status" className="py-2 text-center text-sm text-ink-muted">

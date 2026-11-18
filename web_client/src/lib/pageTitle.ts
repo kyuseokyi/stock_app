@@ -19,11 +19,11 @@ export function titleFor(pathname: string, boardName: (id: number) => string): s
   const [section, sub] = pathname.split('/').filter(Boolean)
   switch (section) {
     case undefined:
-      return withBrand('오늘 시장 노트')
+      return withBrand('홈')
     case 'community':
-      return withBrand('커뮤니티')
+      return withBrand('블로그')
     case 'boards':
-      return withBrand(boardName(Number(sub)) || '커뮤니티')
+      return withBrand(boardName(Number(sub)) || '블로그')
     case 'posts':
       return withBrand('게시글')
     case 'game':

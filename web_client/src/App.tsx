@@ -33,7 +33,7 @@ export default function App() {
   return (
     <Routes>
       <Route path="/" element={<Layout />}>
-        {/* 메뉴: 홈(/) · 마켓(/market) · 스크리너(/screener, 종목 찾기 스위치가 켜졌을 때만) · 커뮤니티(/community → 첫 게시판) · 게임(/game) · 내정보(/me) */}
+        {/* 메뉴: 홈(/) · 내 펀드(/me/funds, 비로그인은 로그인 모달) · 블로그(/community → 첫 게시판) · 게임(/game) · 시장(/market) · 스크리너(/screener, 종목 찾기 스위치가 켜졌을 때만). 내정보(/me)는 헤더 우측 버튼 */}
         <Route index element={<HomePage />} />
         <Route path="community" element={<CommunityPage />} />
         <Route path="me" element={<MyPage />} />
