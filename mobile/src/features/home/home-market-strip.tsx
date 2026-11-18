@@ -30,8 +30,10 @@ export function useHomeMarketStrip() {
   const silent = overview.silentRefresh;
   useAutoRefresh(useCallback(async () => (loadingRef.current ? undefined : silent()), [silent]));
 
-  const { refresh: refreshOverview, reload } = overview;
-  const refresh = useCallback(() => refreshOverview().catch(() => undefined), [refreshOverview]);
+  // 당겨서 새로고침은 reload — throw 하지 않고, 실패하면 error 를 남겨 '다시 시도'로 이어진다
+  // (refresh 는 실패 시 상태를 안 써서 첫 로딩과 겹치면 자리 표시에서 멈출 수 있다). 받아 둔 값은 유지된다
+  const { reload } = overview;
+  const refresh = reload;
 
   return {
     indices,
