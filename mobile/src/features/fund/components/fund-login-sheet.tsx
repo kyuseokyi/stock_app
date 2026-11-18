@@ -4,7 +4,8 @@ import { StyleSheet } from 'react-native-unistyles';
 
 import { BottomSheet, Button } from '@/ui';
 
-import { closeFundLoginSheet, FUND_LOGIN_DESCRIPTION, FUND_LOGIN_TITLE, LOGIN_PATH, useFundLoginSheet } from '../fund-gate';
+import { closeFundLoginSheet, FUND_LOGIN_DESCRIPTION, FUND_LOGIN_TITLE, FUNDS_TAB_PATH, LOGIN_PATH, useFundLoginSheet } from '../fund-gate';
+import { rememberLoginReturn } from '../login-return';
 
 /**
  * 비로그인으로 '내 펀드' 탭·홈 카드를 눌렀을 때의 로그인 안내 시트 — 게임 탭 로그인 시트와 같은 모양.
@@ -15,6 +16,7 @@ export function FundLoginSheet() {
   if (!open) return null;
   const goLogin = () => {
     closeFundLoginSheet();
+    rememberLoginReturn(FUNDS_TAB_PATH); // 로그인 성공하면 내 펀드로 자동 복귀(내정보가 1회 소비)
     router.push(LOGIN_PATH);
   };
   return (

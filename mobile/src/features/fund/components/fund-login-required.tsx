@@ -4,7 +4,14 @@ import { StyleSheet } from 'react-native-unistyles';
 
 import { Button, Card } from '@/ui';
 
-import { FUND_LOGIN_DESCRIPTION, FUND_LOGIN_TITLE, LOGIN_PATH } from '../fund-gate';
+import { FUND_LOGIN_DESCRIPTION, FUND_LOGIN_TITLE, FUNDS_TAB_PATH, LOGIN_PATH } from '../fund-gate';
+import { rememberLoginReturn } from '../login-return';
+
+/** 로그인 성공하면 내 펀드로 자동 복귀하도록 기억(내정보가 1회 소비)하고 내정보로 간다 */
+function goLogin() {
+  rememberLoginReturn(FUNDS_TAB_PATH);
+  router.push(LOGIN_PATH);
+}
 
 /**
  * 비로그인으로 내 펀드 화면(탭 /funds, 스택 /fund — 딥링크 포함)에 들어왔을 때 화면 가운데 안내 카드.
@@ -22,7 +29,7 @@ export function FundLoginRequired() {
         </Text>
         <Text style={styles.text}>{FUND_LOGIN_DESCRIPTION}</Text>
         <View style={styles.action}>
-          <Button label="로그인하러 가기" onPress={() => router.push(LOGIN_PATH)} />
+          <Button label="로그인하러 가기" onPress={goLogin} />
         </View>
       </Card>
     </View>
