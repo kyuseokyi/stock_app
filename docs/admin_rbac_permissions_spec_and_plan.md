@@ -94,6 +94,25 @@
 - `GET /api/v1/auth/admin/role-policies`: 등급별 권한 매트릭스 및 전체 권한 키 메타데이터 조회 (`require_admin`)
 - `PUT /api/v1/auth/admin/role-policies/{tier}`: 특정 등급(`OPERATOR`, `ANALYST`, `EDITOR`)의 허용 권한 목록 수정 (`require_permission("ADMIN_ROLE_MANAGE")`)
 - `PATCH /api/v1/auth/admin/users/{user_id}/admin-role`: 특정 회원의 `role`(`FREE` ↔ `ADMIN`) 및 `admin_tier`(`SUPER_ADMIN` / `OPERATOR` / `ANALYST` / `EDITOR`), `custom_permissions` 지정 (`require_permission("ADMIN_ROLE_MANAGE")`, 자기 자신의 `SUPER_ADMIN` 박탈 금지 안전장치 포함)
+- `POST /api/v1/auth/admin/users`: 최고 관리자가 이메일·비밀번호·닉네임·관리자 등급(`OPERATOR` / `ANALYST` / `EDITOR` / `SUPER_ADMIN`)을 입력해 새 관리자 계정을 직접 생성하는 API (`require_permission("ADMIN_ROLE_MANAGE")`)
+
+### 2-4. 첫 번째 최고 관리자(`SUPER_ADMIN`) 생성 및 부트스트랩 방법
+
+1. **자동 마이그레이션 승격 (이미 운영/개발 중인 DB)**:
+   - Alembic 마이그레이션(`alembic upgrade head`) 실행 시 아래 SQL이 자동 실행되어, **기존에 이미 생성되어 있던 `role = 'ADMIN'` 계정(예: `admin@stock.app`)은 별도 명령어 없이 즉시 `admin_tier = 'SUPER_ADMIN'`(최고 관리자)으로 자동 지정**됩니다:
+     ```sql
+     UPDATE users SET admin_tier = 'SUPER_ADMIN' WHERE role = 'ADMIN' AND admin_tier IS NULL;
+     ```
+2. **시드 스크립트 실행 (최초 구축 또는 비밀번호/등급 초기화 시 — [`backend/apps/auth/seed_admin.py`](../backend/apps/auth/seed_admin.py))**:
+   - [`seed_admin.py`](../backend/apps/auth/seed_admin.py)가 실행될 때 `role = UserRole.ADMIN`과 함께 **`user.admin_tier = "SUPER_ADMIN"`**을 명시적으로 설정하고, 4개 등급 기본 권한 정책(`admin_tier_policies`)도 함께 멱등(Idempotent) 시드하도록 확장합니다:
+     ```bash
+     cd backend
+     # 기본값: admin@stock.app / admin1234 (환경변수 ADMIN_EMAIL, ADMIN_PASSWORD 로 변경 가능)
+     uv run python -m apps.auth.seed_admin
+     ```
+3. **두 번째 이후 관리자 추가 방법 (2가지 경로 모두 지원)**:
+   - **경로 A (관리자 웹에서 직접 계정 생성)**: 최고 관리자로 로그인 후 `관리자 권한 설정(/admin/roles)` 또는 `회원 관리(/members)`의 **`[+ 새 관리자 계정 만들기]`** 버튼을 눌러 이메일·비밀번호·등급(`운영 관리자` / `분석 관리자` / `에디터`)을 지정해 즉시 생성.
+   - **경로 B (기존 가입 회원 승격)**: 일반 웹/앱에서 소셜 로그인으로 가입한 회원을 `회원 관리(/members)`에서 검색해 등급 드롭다운으로 관리자 등급 부여.
 
 ---
 
@@ -115,6 +134,7 @@
 
 ### 3-2. 신규 화면 1: `관리자 등급·권한 설정` (`/admin/roles` — `AdminRolesPage.tsx`)
 - 사이드바 `'회원 관리'` 그룹 아래에 **`🔐 관리자 권한 설정` (`/admin/roles`)** 메뉴를 추가합니다.
+- **상단 `[+ 새 관리자 계정 생성]` 모달/폼**: 이메일, 비밀번호, 닉네임, 부여할 등급(`OPERATOR` / `ANALYST` / `EDITOR` / `SUPER_ADMIN`)을 입력해 새 관리자를 바로 생성할 수 있습니다.
 - **등급별 권한 매트릭스 표**:
   - 행(Row): 8대 주요 권한(`스크리너 열람`, `스크리너 탭 스위치`, `앱 데이터 수집·재계산`, `앱 버전·점검 관리`, `광고 설정`, `블로그·신고·알림 관리`, `트레이딩 게임 관리`, `관리자 권한 관리`)
   - 열(Column): `👑 최고 관리자(고정)` | `🛠️ 운영 관리자` | `📊 분석/스크리너 관리자` | `✍️ 콘텐츠 에디터`
@@ -129,10 +149,11 @@
 
 Claude Code에서 아래 Micro-Step 순서대로 구현 및 테스트를 진행합니다.
 
-### 📍 Step 1: 백엔드 DB 모델(`admin_tier`, `admin_tier_policies`) 및 권한 가드(`require_permission`) 구현
-- [ ] `backend/shared/models.py`에 `User.admin_tier`, `User.custom_permissions` 및 `AdminTierPolicy` 모델 추가 + Alembic 마이그레이션 작성(기존 `ADMIN` 유저는 `'SUPER_ADMIN'` 자동 부여 및 4개 등급 기본 정책 시드).
+### 📍 Step 1: 백엔드 DB 모델(`admin_tier`, `admin_tier_policies`), `seed_admin.py` 및 권한 가드(`require_permission`) 구현
+- [ ] `backend/shared/models.py`에 `User.admin_tier`, `User.custom_permissions` 및 `AdminTierPolicy` 모델 추가 + Alembic 마이그레이션 작성(기존 `ADMIN` 유저는 `'SUPER_ADMIN'` 자동 백필 및 4개 등급 기본 정책 시드).
+- [ ] [`backend/apps/auth/seed_admin.py`](../backend/apps/auth/seed_admin.py)가 실행될 때 첫 번째 관리자에게 `admin_tier = 'SUPER_ADMIN'`을 설정하도록 업데이트.
 - [ ] `backend/shared/auth.py`에 `ALL_ADMIN_PERMISSIONS`, `get_user_permissions`, `require_permission(perm)` 구현.
-- [ ] `backend/apps/auth`에 `/api/v1/auth/me` 권한 배열 반환, `GET/PUT /api/v1/auth/admin/role-policies`, `PATCH /api/v1/auth/admin/users/{id}/admin-role` 구현 및 `pytest` 단위 테스트 검증.
+- [ ] `backend/apps/auth`에 `/api/v1/auth/me` 권한 배열 반환, `GET/PUT /api/v1/auth/admin/role-policies`, `PATCH /api/v1/auth/admin/users/{id}/admin-role`, `POST /api/v1/auth/admin/users`(신규 관리자 생성) 구현 및 `pytest` 단위 테스트 검증.
 
 ### 📍 Step 2: 주요 서비스(`stock_api`, `blog`, `trading_game`) 관리자 API에 세부 권한 가드 연결
 - [ ] `stock_api`의 데이터 수집/재계산(`market_admin.py` `POST /jobs/*`) 및 테마 수정(`themes_admin.py`)에 `require_permission("DATA_PIPELINE")` 적용.
@@ -142,7 +163,7 @@ Claude Code에서 아래 Micro-Step 순서대로 구현 및 테스트를 진행�
 
 ### 📍 Step 3: 관리자 웹(`admin_web`) 권한별 메뉴 제어 및 `AdminRolesPage` · `MembersPage` 등급 설정 UI 구현
 - [ ] `admin_web/src/types/api.ts` 및 `admin_web/src/api/auth.ts`에 `admin_tier`, `permissions`, `hasPermission(perm)` 헬퍼 추가 (초기 로그인 시 및 새로고침 시 `/auth/me`로 최신 권한 동기화).
-- [ ] `admin_web/src/pages/AdminRolesPage.tsx` (`/admin/roles` — 등급별 권한 매트릭스 편집 UI) 생성 및 [`MembersPage.tsx`](../admin_web/src/pages/MembersPage.tsx)에 회원별 관리자 등급 변경 드롭다운 추가.
+- [ ] `admin_web/src/pages/AdminRolesPage.tsx` (`/admin/roles` — 신규 관리자 계정 생성 폼 + 등급별 권한 매트릭스 편집 UI) 생성 및 [`MembersPage.tsx`](../admin_web/src/pages/MembersPage.tsx)에 회원별 관리자 등급 변경 드롭다운 추가.
 - [ ] [`Sidebar.tsx`](../admin_web/src/components/Sidebar.tsx)에서 권한별 메뉴 노출 제어 및 [`MarketStatus.tsx`](../admin_web/src/pages/MarketStatus.tsx)의 수동 수집/재계산 버튼에 `DATA_PIPELINE` 권한 체크 적용.
 - [ ] `cd admin_web && npm run build && npm run lint` 통과 검증.
 
