@@ -236,6 +236,8 @@
 > 상세 설계 및 로드맵: [`docs/app_identity_and_nav_redesign_spec.md`](app_identity_and_nav_redesign_spec.md) · 제품 정의: [`PRODUCT.md`](../PRODUCT.md)
 - [ ] Phase 1 (웹 `web_client`): 5탭(`홈 · 내 펀드 · 블로그 · 게임 · 시장`) + 우측 상단 `내정보` 버튼 개편, `내 펀드` 비로그인 시 로그인 안내 게이트, 홈 화면 3단(`① 내 펀드 수익 요약 → ② 추천 블로그 글 & 게임 교육 배너 → ③ 참고용 시장 요약`) 개편
 - [ ] Phase 2 (모바일 `mobile`): 하단 5탭(`홈 · 내 펀드 · 블로그 · 게임 · 시장`) + 상단 헤더 우측 프로필/내정보 아이콘 배치, `내 펀드` 비로그인 시 바텀시트 안내, 홈 화면 3단 개편 (기존 코드·라우트 100% 보존)
+- [ ] Phase 3 (관리자 웹 `admin_web` 전체 스크리너 상시 노출): 사용자 화면 스위치와 무관하게 관리자 웹 `시장 데이터` 사이드바에 `조건검색(/market/finder)` 및 `차트 패턴(/market/patterns)` 화면을 추가해 4대 스크리너(`주도주 · 5·20 정배열 · 조건검색 · 차트 패턴`) 전부 상시 노출
+
 
 ### 트레이딩 게임 지지·저항 손절·익절·홀딩 경량화 (`SrWatcher` 팝업 최소화 + 홀딩 시 음소거)
 > 상세 설계 및 로드맵: [`docs/game_lightweight_sr_action_spec_and_plan.md`](game_lightweight_sr_action_spec_and_plan.md)

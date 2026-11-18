@@ -20,9 +20,11 @@
 1. **기존 홈 시황 컴포넌트 보존**:
    - 웹의 [`MarketNote.tsx`](../web_client/src/components/home/MarketNote.tsx)와 모바일의 [`home-summary.tsx`](../mobile/src/features/home/home-summary.tsx), [`home-brief-banner.tsx`](../mobile/src/features/home/home-brief-banner.tsx), [`home-indices.tsx`](../mobile/src/features/home/home-indices.tsx), [`home-movers.tsx`](../mobile/src/features/home/home-movers.tsx) 등 **기존에 만들어 둔 모든 컴포넌트 파일과 코드는 단 한 줄도 삭제하지 않고 그대로 보존**한다.
    - 추후 언제든 다시 홈에 전체 시황 노트를 켜거나 다른 화면에서 재사용할 수 있도록 모듈과 테스트를 그대로 유지한다.
-2. **기존 `내정보` 내부 링크 및 `스크리너` 기능 보존**:
+2. **기존 `내정보` 내부 링크 및 `스크리너` 기능 보존 + 관리자 웹(`admin_web`) 상시 노출**:
    - [`MyPage.tsx`](../web_client/src/pages/MyPage.tsx)(웹 `/me`)와 [`profile.tsx`](../mobile/src/app/%28tabs%29/profile.tsx)(모바일 `/profile`) 내부에 있는 `🎮 트레이딩 게임`, `💰 내 펀드 수익`, `🚫 차단한 사용자` 메뉴 행은 삭제하지 않고 그대로 유지한다.
-   - `스크리너`(`주도주 · 조건검색 · 차트 패턴`)의 모든 화면·라우트·관리자 스위치(`STOCK_FINDER`, `FINDER`, `PATTERNS`) 로직도 삭제 없이 100% 보존하여, 나중에 관리자 스위치를 켜면 언제든 다시 사용할 수 있도록 유지한다.
+   - `스크리너`(`주도주 · 5·20 정배열 · 조건검색 · 차트 패턴`)의 모든 화면·라우트·관리자 스위치(`STOCK_FINDER`, `FINDER`, `PATTERNS`) 로직도 삭제 없이 100% 보존한다.
+   - **[핵심 규칙] 관리자 웹(`admin_web`)에는 모든 스크리너 기능을 항상 노출**:
+     - 사용자 웹/앱에서 스크리너가 숨겨져 있더라도, 관리자 웹(`admin_web`)의 `시장 데이터` 사이드바에는 현재 있는 **`주도주(/market/leaders)`**와 **`5·20 정배열 스크리너(/market/ma-screener)`**뿐 아니라, 아직 관리자 웹에 빠져 있는 **`조건검색(/market/finder)`**과 **`차트 패턴(/market/patterns)`** 화면까지 모두 상시 메뉴로 추가하여 관리자는 언제나 모든 스크리너를 볼 수 있게 한다.
 
 ---
 
@@ -98,7 +100,21 @@
 
 ---
 
-## 3. 단계별 구현 로드맵 (Claude Code 작업 플랜)
+## 3. 관리자 웹 (`admin_web`) 전체 스크리너 상시 노출 명세
+
+사용자 웹(`web_client`)과 모바일 앱(`mobile`)에서는 스크리너가 숨겨져 있더라도, **관리자 웹(`admin_web`)에서는 모든 스크리너 기능을 스위치와 무관하게 언제나 사용할 수 있도록** `시장 데이터` 사이드바([`admin_web/src/components/Sidebar.tsx`](../admin_web/src/components/Sidebar.tsx))와 라우터([`admin_web/src/App.tsx`](../admin_web/src/App.tsx))에 전체 스크리너 메뉴를 상시 배치합니다:
+
+| 메뉴명 | 경로 | 파일 | 상태 및 설명 |
+| :--- | :--- | :--- | :--- |
+| **🏆 주도주** | `/market/leaders` | [`MarketLeaders.tsx`](../admin_web/src/pages/MarketLeaders.tsx) | ✅ 구현됨 (CANSLIM 7대 기준 스크리너) |
+| **📈 5·20 정배열 스크리너** | `/market/ma-screener` | [`MarketMaScreener.tsx`](../admin_web/src/pages/MarketMaScreener.tsx) | ✅ 구현됨 (5·20일선 정배열 4모드 + 시총/거래대금/거래량/등락률 필터) |
+| **🔎 조건검색** | `/market/finder` | `MarketFinder.tsx` *(신설)* | 🆕 추가 (`web_client`의 [`FinderTab.tsx`](../web_client/src/pages/screener/FinderTab.tsx)와 동일 — 프리셋 4종 + 볼린저/매물대/RSI/재무 전체 필터 + 상단 `screener` 데이터셋 상태 카드) |
+| **📐 차트 패턴** | `/market/patterns` | `MarketPatterns.tsx` *(신설)* | 🆕 추가 (`web_client`의 [`PatternsTab.tsx`](../web_client/src/pages/screener/PatternsTab.tsx)와 동일 — 컵·컵핸들·쌍바닥·플랫베이스·박스권·HTF 리포트 + 차트 위 패턴 도형 오버레이 + 상단 `patterns` 데이터셋 상태 카드) |
+| **🗂️ 스크리너 탭 설정** | `/market/screener` | [`ScreenerSettings.tsx`](../admin_web/src/pages/ScreenerSettings.tsx) | ✅ 구현됨 (사용자 웹·앱 노출 ON/OFF 스위치) |
+
+---
+
+## 4. 단계별 구현 로드맵 (Claude Code 작업 플랜)
 
 Claude Code에서 아래 Micro-Step 순서로 안전하게 구현 및 검증을 진행합니다.
 
@@ -122,14 +138,22 @@ Claude Code에서 아래 Micro-Step 순서로 안전하게 구현 및 검증을 
   - 기존 `home-summary.tsx` 등 시황 요약 파일들은 삭제하지 않고 그대로 유지한 채, `home-fund-card.tsx`, `home-game-edu-card.tsx`, `home-market-strip.tsx`를 추가하여 [`mobile/src/app/(tabs)/index.tsx`](../mobile/src/app/%28tabs%29/index.tsx)에 연결.
   - `cd mobile && npm run typecheck && npm test` 통과 검증.
 
+### 📍 Phase 3: 관리자 웹 (`admin_web`) 전체 스크리너(`조건검색` · `차트 패턴`) 상시 메뉴 추가
+- [ ] **Step 3-1 (`admin_web` 조건검색 `/market/finder` 추가)**:
+  - `web_client`의 `FinderTab` 관련 컴포넌트·API를 `admin_web`에 이식하여 `admin_web/src/pages/MarketFinder.tsx` 생성(상단 `screener` 데이터셋 상태 카드 포함, 종목 상세 링크는 `/market/verify?ticker=` 연결).
+- [ ] **Step 3-2 (`admin_web` 차트 패턴 `/market/patterns` 추가)**:
+  - `web_client`의 `PatternsTab` 관련 컴포넌트·API를 `admin_web`에 이식하여 `admin_web/src/pages/MarketPatterns.tsx` 생성(상단 `patterns` 데이터셋 상태 카드 + `StockDailyChart` 패턴 도형 오버레이 포함).
+  - [`admin_web/src/components/Sidebar.tsx`](../admin_web/src/components/Sidebar.tsx) 및 [`admin_web/src/App.tsx`](../admin_web/src/App.tsx)에 `🔎 조건검색(/market/finder)`, `📐 차트 패턴(/market/patterns)` 상시 노출 추가 후 `cd admin_web && npm run build` 검증.
+
 ---
 
-## 4. Claude Code 실행용 프롬프트 템플릿
+## 5. Claude Code 실행용 프롬프트 템플릿
 
-Claude Code에 아래 명령어를 그대로 입력하면 Phase 1부터 Phase 2까지 안전하게 구현합니다:
+Claude Code에 아래 명령어를 그대로 입력하면 Phase 1부터 Phase 3까지 안전하게 구현합니다:
 
 ```text
-docs/app_identity_and_nav_redesign_spec.md 와 PRODUCT.md 문서를 읽고, Phase 1(웹)부터 Phase 2(모바일)까지 순서대로 Micro-Step 단위로 구현해줘.
-특히 (1) '내 펀드' 탭/카드는 로그인 후에만 이동 가능하고 비로그인 시 로그인 안내가 뜨도록 구현하고, (2) 기존에 만들어 둔 시황/스크리너/내정보 컴포넌트와 라우트 코드는 나중에 다시 쓸 수 있도록 절대 삭제하지 말고 보존(Zero Deletion)해줘.
+docs/app_identity_and_nav_redesign_spec.md 와 PRODUCT.md 문서를 읽고, Phase 1(웹) → Phase 2(모바일) → Phase 3(관리자 웹 전체 스크리너 상시 노출)까지 순서대로 Micro-Step 단위로 구현해줘.
+특히 (1) '내 펀드' 탭/카드는 로그인 후에만 이동 가능하고 비로그인 시 로그인 안내가 뜨도록 구현하고, (2) 기존에 만들어 둔 시황/스크리너/내정보 코드는 절대 삭제하지 말고 보존(Zero Deletion)하며, (3) 관리자 웹(admin_web)에는 모든 스크리너 기능(주도주·5·20 정배열·조건검색·차트 패턴)이 스위치와 무관하게 항상 노출되도록 구현해줘.
 각 단계 완료 시 테스트(vitest / jest / tsc --noEmit) 실행 후 한국어로 요약 보고해줘.
 ```
+
