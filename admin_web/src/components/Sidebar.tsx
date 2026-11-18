@@ -40,7 +40,8 @@ const NAV_GROUPS: NavGroup[] = [
       { to: '/market/ma-screener', label: '5·20 정배열 스크리너', icon: '📈' },
       // 조건검색·차트 패턴 — 사용자 화면 노출 스위치(스크리너 탭)와 무관하게 관리자에게는 항상 보인다
       { to: '/market/finder', label: '조건검색', icon: '🔎' },
-      { to: '/market/screener', label: '스크리너 탭', icon: '🗂️' },
+      { to: '/market/patterns', label: '차트 패턴', icon: '📐' },
+      { to: '/market/screener', label: '스크리너 탭 설정', icon: '🗂️' },
     ],
   },
   {

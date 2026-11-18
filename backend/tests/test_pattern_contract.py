@@ -149,3 +149,8 @@ def test_web_pattern_queries_match_schema(monkeypatch):
 
 def test_mobile_pattern_queries_match_schema(monkeypatch):
     _run_client(monkeypatch, "mobile/src/features/patterns/api.ts")
+
+
+def test_admin_pattern_queries_match_schema(monkeypatch):
+    # 관리자 주도주 상세·차트 패턴 화면(/market/patterns)이 쓰는 web 복사본 쿼리
+    _run_client(monkeypatch, "admin_web/src/leaders/api/patterns.ts")

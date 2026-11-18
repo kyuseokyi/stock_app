@@ -1,7 +1,17 @@
-// web_client/src/types/patterns.ts 복사본 — 원본과 같이 고칠 것 (주도주 '오늘 볼 10개'·상세 차트 패턴이 쓰는 타입만)
+// web_client/src/types/patterns.ts 복사본 — 원본과 같이 고칠 것 (주도주 '오늘 볼 10개'·상세 차트 패턴 + 관리자 차트 패턴 화면 PatternReport·PatternSort·PatternQuery)
 // 차트 패턴(stock_api GraphQL patternScreen) 타입 — 모바일과 같은 필드.
+import type { MarketFilter } from './screener'
 
+export type PatternReport = 'forming' | 'near_pivot' | 'breakout_today' | 'recent_breakouts'
 export type PatternKind = 'cup' | 'cup_with_handle' | 'double_bottom' | 'flat_base' | 'consolidation' | 'htf'
+export type PatternSort = 'pivot_dist' | 'breakout_vol' | 'depth' | 'length'
+
+export interface PatternQuery {
+  report: PatternReport
+  patternType: PatternKind | null // null = 전체
+  market: MarketFilter
+  sort: PatternSort
+}
 
 export interface PatternItem {
   ticker: string
