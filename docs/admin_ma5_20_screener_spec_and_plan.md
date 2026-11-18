@@ -4,6 +4,16 @@
 >
 > **확장성 원칙**: 현재는 **관리자 페이지(`admin_web`)에서만 노출**하지만, 백엔드 API는 공용 GraphQL(`screenerScreen`)을 확장하여 구현하므로 추후 일반 웹(`web_client`)과 모바일 앱(`mobile`)에 노출할 때 백엔드 재작업 없이 프론트엔드 UI만 연결하면 즉시 확장됩니다.
 
+> **진행 상태 (2026-11-18)**: Step 1~3 구현 완료(`feature/admin-ma-screener`, 백엔드 pytest 2401 통과·admin_web tsc/build 통과). 실데이터 화면 확인은 개발 서버 DB 연결 후.
+>
+> **구현하며 명세와 다르게 한 점**
+> - **갱신 현황 카드**: 데이터 현황(`GET /admin/market/status`)에 `screener` 항목이 없다. 백엔드 현황 목록(`/market/status` 화면 카드)을 늘리지 않으려고, 공개 GraphQL `screenerScreen(filters:{liquidOnly:false}, limit:1){date total}` 로 기준일·전체 종목 수를 세고 현황의 `ref_date`(기준 거래일)와 비교해 정상/오래됨/없음을 판정한다.
+> - **배열 모드 SQL**: `PERFECT`·`REVERSE` 는 기존처럼 `ma_order = %(ma_order)s` 바인딩을 그대로 두고, 새 3모드(`MA5_20`·`CLOSE_MA5_20`·`PULLBACK_MA5_20`)만 상수 맵 `_MA_ORDER_SQL` 로 더했다(하위 호환).
+> - **GraphQL 이름**: 기본 변환이 `spread520Min`·`ma520SpreadPct` 로 나와 `ma5Ma20SpreadMin`·`ma5Ma20SpreadMax`·`ma5Ma20SpreadPct` 로 명시했다(파이썬 키는 `spread_5_20_min/max`·`ma5_20_spread_pct` 그대로).
+> - **새 `ScreenerItem` 필드**(`volume`·`ma5`·`ma20`·`ma50`·`ma5Ma20SpreadPct`)는 모두 nullable·기본 None — 예전 모양 item 과 웹·앱 계약이 그대로 통과한다. `volume` 도 명세의 `float` 대신 `float | None`.
+> - **이격도 범위 필터**: `ma20 > 0 AND (ma5 - ma20) * 100 / ma20 >= / <= %(…)s` 로 가드를 조건마다 붙였다.
+> - **`npm run lint`**: admin_web 에 lint 스크립트·ESLint 설정이 없어 `tsc --noEmit` + 빌드로 대신 검증했다.
+
 ---
 
 ## 0. 기존 시스템 분석 및 아키텍처 결정 사항
@@ -179,22 +189,22 @@
 Claude Code에서 아래 Micro-Step 순서대로 구현 및 테스트를 진행합니다.
 
 ### 📍 Step 1: 백엔드 `screener_query.py` 및 GraphQL 스키마 확장 + 단위 테스트
-- [ ] [`backend/apps/stock_api/services/screener_query.py`](../backend/apps/stock_api/services/screener_query.py)에 `PRESETS["ma5_20"]`, `_MA_ORDER_SQL`(`MA5_20`, `CLOSE_MA5_20`, `PULLBACK_MA5_20`), `_RANGES`(`value_max`, `volume_min/max`, `chg_min/max`, `spread_5_20_min/max`), `SORTS`(`volume`, `spread_5_20`), 반환 필드(`volume`, `ma5`, `ma20`, `ma50`, `ma5_20_spread_pct`) 추가.
-- [ ] [`backend/apps/stock_api/graphql/types.py`](../backend/apps/stock_api/graphql/types.py)의 `ScreenerFilterInput`, `ScreenerItem`에 신규 필드 반영.
-- [ ] `backend/tests/` 내 스크리너 쿼리 단위 테스트 및 GraphQL 계약 테스트 추가 후 `uv run pytest` 통과 확인.
+- [x] [`backend/apps/stock_api/services/screener_query.py`](../backend/apps/stock_api/services/screener_query.py)에 `PRESETS["ma5_20"]`, `_MA_ORDER_SQL`(`MA5_20`, `CLOSE_MA5_20`, `PULLBACK_MA5_20`), `_RANGES`(`value_max`, `volume_min/max`, `chg_min/max`, `spread_5_20_min/max`), `SORTS`(`volume`, `spread_5_20`), 반환 필드(`volume`, `ma5`, `ma20`, `ma50`, `ma5_20_spread_pct`) 추가.
+- [x] [`backend/apps/stock_api/graphql/types.py`](../backend/apps/stock_api/graphql/types.py)의 `ScreenerFilterInput`, `ScreenerItem`에 신규 필드 반영.
+- [x] `backend/tests/` 내 스크리너 쿼리 단위 테스트 및 GraphQL 계약 테스트 추가 후 `uv run pytest` 통과 확인.
 
 ### 📍 Step 2: 관리자 웹 `StockDailyChart` 5일·20일선 표시 옵션 추가
-- [ ] [`admin_web/src/leaders/components/screener/StockDailyChart.tsx`](../admin_web/src/leaders/components/screener/StockDailyChart.tsx)에 선택적 prop `showMa5Ma20?: boolean`을 추가하여 활성화 시 `sma(closes, 5)`와 `sma(closes, 20)` 라인 시리즈 및 범례(`5일선`, `20일선`)를 렌더링하도록 확장 (기본값 `false`로 기존 화면 영향 0%).
+- [x] [`admin_web/src/leaders/components/screener/StockDailyChart.tsx`](../admin_web/src/leaders/components/screener/StockDailyChart.tsx)에 선택적 prop `showMa5Ma20?: boolean`을 추가하여 활성화 시 `sma(closes, 5)`와 `sma(closes, 20)` 라인 시리즈 및 범례(`5일선`, `20일선`)를 렌더링하도록 확장 (기본값 `false`로 기존 화면 영향 0%).
 
 ### 📍 Step 3: 관리자 웹 `MarketMaScreener` 페이지 및 라우트·사이드바 구현
-- [ ] `admin_web/src/api/maScreener.ts` (GraphQL `screenerScreen` 호출 클라이언트 및 타입 정의) 생성.
-- [ ] `admin_web/src/pages/MarketMaScreener.tsx` 구현:
+- [x] `admin_web/src/api/maScreener.ts` (GraphQL `screenerScreen` 호출 클라이언트 및 타입 정의) 생성.
+- [x] `admin_web/src/pages/MarketMaScreener.tsx` 구현:
   - 상단 `screener` 데이터셋 갱신 현황 카드
   - 정배열 모드 칩 4종 (`MA5_20`, `CLOSE_MA5_20`, `PULLBACK_MA5_20`, `PERFECT`)
   - 시가총액·거래대금·거래량·등락률·이격도 필터 패널 + 원클릭 빠른 칩
   - 좌측 종목 목록 + 우측 `StockDailyChart (showMa5Ma20)` 스플릿 뷰
-- [ ] [`admin_web/src/components/Sidebar.tsx`](../admin_web/src/components/Sidebar.tsx) 및 [`admin_web/src/App.tsx`](../admin_web/src/App.tsx)에 `/market/ma-screener` 연결.
-- [ ] `cd admin_web && npm run build` (`tsc --noEmit` 포함) 및 `npm run lint` 통과 검증.
+- [x] [`admin_web/src/components/Sidebar.tsx`](../admin_web/src/components/Sidebar.tsx) 및 [`admin_web/src/App.tsx`](../admin_web/src/App.tsx)에 `/market/ma-screener` 연결.
+- [x] `cd admin_web && npm run build` (`tsc --noEmit` 포함) 및 `npm run lint` 통과 검증.
 
 ---
 

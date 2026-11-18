@@ -162,7 +162,7 @@ class ScreenerFilterInput:
     vol_ratio_min: float | None = None
     rsi_min: float | None = None
     rsi_max: float | None = None
-    ma_order: str | None = None  # PERFECT | REVERSE
+    ma_order: str | None = None  # PERFECT | REVERSE | MA5_20 | CLOSE_MA5_20 | PULLBACK_MA5_20
     bb_sigma: float | None = None  # 1 · 1.5 · 2 · 2.5 · 3 (그 밖은 2)
     bb_position: str | None = None  # ABOVE | BELOW | INSIDE
     bb_width_max: float | None = None
@@ -174,6 +174,14 @@ class ScreenerFilterInput:
     pbr_max: float | None = None
     debt_ratio_max: float | None = None
     sales_growth_min: float | None = None
+    value_max: float | None = None  # 거래대금 최대(억 원)
+    volume_min: float | None = None  # 당일 거래량 최소(만 주)
+    volume_max: float | None = None  # 당일 거래량 최대(만 주)
+    chg_min: float | None = None  # 당일 등락률 최소(%, 음수 허용)
+    chg_max: float | None = None  # 당일 등락률 최대(%, 음수 허용)
+    # 5·20 이격도(%) — 기본 변환(spread520Min)이 읽기 어려워 이름을 정해 둔다
+    spread_5_20_min: float | None = strawberry.field(default=None, name="ma5Ma20SpreadMin")
+    spread_5_20_max: float | None = strawberry.field(default=None, name="ma5Ma20SpreadMax")
 
 
 @strawberry.type
@@ -197,6 +205,12 @@ class ScreenerItem:
     roe: float | None
     bb_position: str | None  # 요청 σ 기준 ABOVE | BELOW | INSIDE
     bb_width_pct: float | None
+    # 5·20 정배열 스크리너용 — 예전 모양 item(웹·앱 계약 테스트)과 호환되게 기본값 None
+    volume: float | None = None  # 당일 거래량(주)
+    ma5: float | None = None  # 5일 이동평균(원)
+    ma20: float | None = None  # 20일 이동평균(원)
+    ma50: float | None = None  # 50일 이동평균(원)
+    ma5_20_spread_pct: float | None = strawberry.field(default=None, name="ma5Ma20SpreadPct")  # (MA5-MA20)/MA20×100
 
 
 @strawberry.type

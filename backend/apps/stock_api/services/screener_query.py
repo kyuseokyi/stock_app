@@ -21,6 +21,7 @@ log = logging.getLogger(__name__)
 _EPOCH = date(1970, 1, 1)
 MAX_LIMIT = 200
 EOK = 1e8                    # 억 원 — 시총·거래대금 필터 단위
+MAN_SHARES = 1e4             # 만 주 — 거래량 필터 단위
 VOLUME_SURGE_RATIO = 2.0     # 차트 퀴즈 신호(scripts/generate_chart_quiz.VOLUME_SURGE_RATIO)와 같은 기준
 OVERSOLD_RSI = 30.0
 BB_SIGMAS = (1.0, 1.5, 2.0, 2.5, 3.0)
@@ -29,8 +30,14 @@ FOREIGN_BUY_DAYS = 5         # 외국인 연속 순매수 프리셋 기준(거�
 PENSION_BUY_DAYS = 10        # 연기금 연속 순매수(수량) 프리셋 기준(거래일)
 LENDING_DROP_PCT = -20       # 대차잔고 5거래일 증감률(%) 급감 프리셋 기준(키움 ka20068 — 상용에서만 데이터)
 
+# 5일선 > 20일선(소수 둘째 자리 반올림 비교 — indicators.ma_order_code 와 같은 방식)
+_MA5_GT_MA20 = "ma5 IS NOT NULL AND ma20 IS NOT NULL AND round(ma5, 2) > round(ma20, 2)"
+# 5·20 이격도(%) — ma20 이 0 이하인 행은 조건에서 빠진다
+_SPREAD_5_20 = "(ma5 - ma20) * 100 / ma20"
+
 # 프리셋 = 서버 상수 조건 묶음(필터와 AND). 키는 웹·앱 상수와 같은 문자열
 PRESETS = {
+    "ma5_20": _MA5_GT_MA20,  # 관리자 5·20 정배열 스크리너(웹·앱은 아직 노출 안 함)
     "volume_surge": f"vol_ratio20 >= {VOLUME_SURGE_RATIO}",
     "golden_cross": "gc_days IS NOT NULL",
     "oversold": f"rsi14 <= {OVERSOLD_RSI}",
@@ -42,17 +49,23 @@ PRESETS = {
 }
 SORTS = {
     "value": "value DESC, ticker",
+    "volume": "volume DESC, ticker",
+    "spread_5_20": "(ma5 - ma20) / nullIf(ma20, 0) DESC NULLS LAST, ticker",
     "chg": "chg_1d DESC NULLS LAST, ticker",
     "vol_ratio": "vol_ratio20 DESC NULLS LAST, ticker",
     "rsi": "rsi14 DESC NULLS LAST, ticker",
     "mcap": "mcap DESC NULLS LAST, ticker",
     "vp_above": "vp_above_pct ASC NULLS LAST, ticker",
 }
-# (입력 키, 컬럼, 비교, 배수, 음수 허용) — ROE·매출성장률만 음수가 정상 값
+# (입력 키, 컬럼(또는 상수 수식), 비교, 배수, 음수 허용) — ROE·매출성장률·등락률·이격도는 음수가 정상 값
 _RANGES = (
     ("price_min", "close", ">=", 1, False), ("price_max", "close", "<=", 1, False),
     ("mcap_min", "mcap", ">=", EOK, False), ("mcap_max", "mcap", "<=", EOK, False),
-    ("value_min", "value", ">=", EOK, False),
+    ("value_min", "value", ">=", EOK, False), ("value_max", "value", "<=", EOK, False),
+    ("volume_min", "volume", ">=", MAN_SHARES, False), ("volume_max", "volume", "<=", MAN_SHARES, False),
+    ("chg_min", "chg_1d", ">=", 1, True), ("chg_max", "chg_1d", "<=", 1, True),
+    ("spread_5_20_min", f"ma20 > 0 AND {_SPREAD_5_20}", ">=", 1, True),
+    ("spread_5_20_max", f"ma20 > 0 AND {_SPREAD_5_20}", "<=", 1, True),
     ("vol_ratio_min", "vol_ratio20", ">=", 1, False),
     ("rsi_min", "rsi14", ">=", 1, False), ("rsi_max", "rsi14", "<=", 1, False),
     ("vp_above_max", "vp_above_pct", "<=", 1, False),
@@ -63,15 +76,24 @@ _RANGES = (
     ("sales_growth_min", "sales_growth", ">=", 1, True),
 )
 _PAIRS = (("price_min", "price_max"), ("mcap_min", "mcap_max"), ("rsi_min", "rsi_max"), ("per_min", "per_max"),
-          ("pbr_min", "pbr_max"))
-_MA_ORDERS = {"PERFECT": 1, "REVERSE": -1}
+          ("pbr_min", "pbr_max"), ("value_min", "value_max"), ("volume_min", "volume_max"), ("chg_min", "chg_max"),
+          ("spread_5_20_min", "spread_5_20_max"))
+_MA_ORDERS = {"PERFECT": 1, "REVERSE": -1}  # ma_order 컬럼 값(바인딩)
+# 5·20 정배열 모드 — 서버 상수 조건(화이트리스트). PERFECT·REVERSE 는 위 _MA_ORDERS 그대로
+_MA_ORDER_SQL = {
+    "MA5_20": _MA5_GT_MA20,
+    "CLOSE_MA5_20": "ma5 IS NOT NULL AND ma20 IS NOT NULL AND close >= ma5 AND round(ma5, 2) > round(ma20, 2)",
+    "PULLBACK_MA5_20": ("ma5 IS NOT NULL AND ma20 IS NOT NULL AND close < ma5 AND close >= ma20 "
+                        "AND round(ma5, 2) > round(ma20, 2)"),
+}
 _BB_POSITION_SQL = {
     "ABOVE": "close > ma20 + %(bb_k)s * std20",
     "BELOW": "close < ma20 - %(bb_k)s * std20",
     "INSIDE": "close BETWEEN ma20 - %(bb_k)s * std20 AND ma20 + %(bb_k)s * std20",
 }
 _SCREEN_COLUMNS = ["ticker", "market", "sector_m", "close", "chg_1d", "value", "mcap", "vol_ratio20", "rsi14", "ma20",
-                   "std20", "ma_order", "is_new_high", "gc_days", "vp_above_pct", "per", "pbr", "roe"]
+                   "std20", "ma_order", "is_new_high", "gc_days", "vp_above_pct", "per", "pbr", "roe",
+                   "volume", "ma5", "ma50"]
 
 
 def _ch():
@@ -156,6 +178,13 @@ def bb_width_pct(ma20: float | None, std20: float | None, k: float) -> float | N
     return 2 * k * std20 * 100 / ma20
 
 
+def ma5_20_spread_pct(ma5: float | None, ma20: float | None) -> float | None:
+    """5·20 이격도(%) = (MA5 - MA20) / MA20 × 100. 값이 없거나 MA20 이 0 이하면 None."""
+    if ma5 is None or ma20 is None or ma20 <= 0:
+        return None
+    return (ma5 - ma20) * 100 / ma20
+
+
 def build_where(preset: str | None, filters: dict) -> tuple[list[str], dict]:
     """프리셋(서버 상수) + 필터(화이트리스트) → WHERE 조각과 바인딩 값. 맨 앞은 기준일 조건."""
     where, params = ["date = %(d)s"], {}
@@ -177,6 +206,8 @@ def build_where(preset: str | None, filters: dict) -> tuple[list[str], dict]:
     if filters.get("ma_order") in _MA_ORDERS:
         where.append("ma_order = %(ma_order)s")
         params["ma_order"] = _MA_ORDERS[filters["ma_order"]]
+    elif filters.get("ma_order") in _MA_ORDER_SQL:
+        where.append(_MA_ORDER_SQL[filters["ma_order"]])
     k = bb_sigma(filters)
     if filters.get("bb_position") in _BB_POSITION_SQL:
         where.append(_BB_POSITION_SQL[filters["bb_position"]])
@@ -218,5 +249,7 @@ def screen(preset: str | None = None, filters: dict | None = None, sort: str = "
         "per": r["per"], "pbr": r["pbr"], "roe": r["roe"],
         "bb_position": bb_position(r["close"], r["ma20"], r["std20"], k),
         "bb_width_pct": bb_width_pct(r["ma20"], r["std20"], k),
+        "volume": r["volume"], "ma5": r["ma5"], "ma20": r["ma20"], "ma50": r["ma50"],
+        "ma5_20_spread_pct": ma5_20_spread_pct(r["ma5"], r["ma20"]),
     } for r in records]
     return {"date": d.isoformat(), "total": total, "bb_sigma": k, "items": items}

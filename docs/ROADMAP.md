@@ -239,9 +239,9 @@
 
 ### 관리자 전용 5·20일선 정배열 스크리너 (`admin_web` 우선 → 추후 웹·앱 확장)
 > 상세 설계 및 로드맵: [`docs/admin_ma5_20_screener_spec_and_plan.md`](admin_ma5_20_screener_spec_and_plan.md)
-- [ ] Step 1: 백엔드 `screener_query.py` & GraphQL `screenerScreen` 확장 (`ma5_20` 정배열 4모드, 시가총액·거래대금·거래량·등락률·5·20 이격도 필터 및 정렬 추가, CH 마이그레이션 불필요)
-- [ ] Step 2: 관리자 웹 `StockDailyChart`에 `showMa5Ma20` 옵션 추가 (캔들 차트 위 5일선·20일선·50일선 동시 표시)
-- [ ] Step 3: 관리자 웹 `/market/ma-screener` (`MarketMaScreener.tsx`) 구현 (데이터 갱신 상태 카드 + 정배열 모드 칩 + 빠른 필터 + 좌측 목록/우측 차트 스플릿 뷰)
+- [x] Step 1: 백엔드 `screener_query.py` & GraphQL `screenerScreen` 확장 (`ma5_20` 정배열 4모드, 시가총액·거래대금·거래량·등락률·5·20 이격도 필터 및 정렬 추가, CH 마이그레이션 불필요)
+- [x] Step 2: 관리자 웹 `StockDailyChart`에 `showMa5Ma20` 옵션 추가 (캔들 차트 위 5일선·20일선·50일선 동시 표시)
+- [x] Step 3: 관리자 웹 `/market/ma-screener` (`MarketMaScreener.tsx`) 구현 (데이터 갱신 상태 카드 + 정배열 모드 칩 + 빠른 필터 + 좌측 목록/우측 차트 스플릿 뷰) — 2026-11-18 dev 구현(`feature/admin-ma-screener`), 실데이터 화면 확인 대기
 
 ### 광고 수익화 (웹 Google AdSense · 모바일 Google AdMob · 관리자 원격 제어)
 > 상세 설계 및 로드맵: [`docs/ad_monetization_spec_and_plan.md`](ad_monetization_spec_and_plan.md) · 사전 준비 가이드: [`docs/ad_monetization_setup_guide.md`](ad_monetization_setup_guide.md)
