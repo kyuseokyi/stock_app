@@ -1,0 +1,154 @@
+# A안 — 시세 비노출 무료 운영 전환 설계 (2026-11-19)
+
+> 결정: 유료 시세 라이선스는 사지 않는다. **데이터 비용 0원 + 광고 유지(상업)**. 근거·출처별 가능 범위는 [`../../deploy/market-data-licensing.md`](../../deploy/market-data-licensing.md) 0·0-1절, 네이버 약관은 [`../../naver-search-api-terms-issue.md`](../../naver-search-api-terms-issue.md).
+> 이 문서가 A안 작업의 **단일 목록**이다(ROADMAP·라이선스 문서는 여기를 가리킨다).
+> 조사 기준 커밋: dev `5c18ebc`. 파일 경로는 저장소 루트 기준.
+
+## 1. 목표와 원칙
+
+1. **서버에서 막는다.** 시세 엔드포인트는 모두 인증 없는 공개 API다(GraphQL 전체, `/api/v1/market/*`, `/api/v1/ai/*`, `/api/v1/stocks/*/lending`, `/api/game/candles*`, `/api/game/market-status`, `/ws/game/stream`). 화면에서 숨겨도 API 가 KIS 데이터를 내주면 재배포다.
+2. **기본은 닫힘(fail-closed).** 서버: 스위치 행이 없거나 DB 오류면 OFF. 클라이언트: 스위치 조회가 실패하면 숨김.
+3. **지우지 않고 숨긴다.** 수집·계산·관리자 화면은 그대로(운영자 본인 이용). 나중에 라이선스를 사면 스위치만 켠다.
+4. **개발 서버도 같다.** 개발 서버(haezean)·개발 APK·상용 테스트(preview) APK·Play 비공개 테스터는 모두 제3자다 → **개발·상용 모두 OFF**.
+5. **일정: P1 을 Play 비공개 테스트(14일) 시작 전에 배포한다.** 테스트 빌드 자체가 위반이 되지 않게.
+
+## 2. 스위치 설계
+
+### 2-1. stock_api: `screener_features` 에 `market_data` 키 추가
+기존 체계를 넓힌다(테이블 `screener_features`·서비스 `backend/apps/stock_api/services/screener_features.py` `KNOWN`·30초 캐시·관리자 `PUT /api/v1/admin/screener/features/{key}`·admin `ScreenerSettings.tsx`). 이미 웹·앱이 앱 시작 때 `screenerFeatures` 를 읽는다.
+
+- `KNOWN` 에 `market_data` 추가, GraphQL `ScreenerFeatures` 타입(`backend/apps/stock_api/graphql/types.py`)에 `marketData: Boolean!`.
+- 의미: **ON = 일반 사용자에게 시세 공개**, OFF(기본) = 비공개. 행 없음·오류 = OFF(기존 의미와 같음).
+- 관리자 UI 문구: "사용자 시세 노출 — 켜려면 KRX/코스콤 라이선스 필요".
+- 스크리너 탭 키(`stock_finder`·`finder`·`patterns`)는 별개로 두되, `market_data` OFF 면 서버가 스크리너 쿼리도 막으므로 탭도 숨긴다(클라이언트에서 `marketData && 탭키`).
+
+### 2-2. 관리자 우회 (P1 필수)
+`admin_web/src/api/stockClient.ts` 는 토큰을 보내지 않는다 → 막는 순간 **블로그 차트 삽입(`ChartSnapshotModal`)·퀴즈 관리(`TradingGameQuizzes`)·관리자 스크리너**가 깨진다.
+- admin_web 의 stock GraphQL·REST 호출에 `Authorization: Bearer <관리자 토큰>` 추가.
+- stock_api 에 "선택적 관리자 판별" 의존성(토큰이 있고 관리자면 통과, 없으면 일반 사용자) — 기존 `require_admin` 검증 로직 재사용.
+- 판정: `market_data ON` **또는** 관리자 → 정상 응답. 그 외 → 차단 응답(2-3).
+
+### 2-3. 차단 응답 모양 (설치된 옛 앱 대비)
+현장에 깔린 개발·preview APK 는 새 스위치를 모른다. 차단이 **빈 화면은 되어도 앱이 죽으면 안 된다.**
+- GraphQL: 해당 필드·리졸버가 **빈 목록 또는 null**(오류 아님). 예: `marketGroups` → `[]`, `getChartData` → 빈 캔들, `canslimScreen` → 빈 목록.
+- REST(`/api/v1/market/*`, `/api/v1/ai/screener-analysis/*`, `/api/v1/stocks/*/lending`): **403 `{"detail":"market_data_disabled"}`**.
+- 검증 단계에 "지금 설치된 preview APK 가 각 화면에서 어떻게 보이는지"를 넣는다(빈 섹션 OK, 크래시·무한 재시도 NG).
+
+### 2-4. `marketOverview` 는 필드 단위로 막는다
+홈 시장 참고·시장 탭 거시 카드가 같은 리졸버를 쓴다. 통째로 막으면 합법인 FRED 거시까지 사라진다.
+- OFF 일 때 응답: **FRED 거시 지표 + ECOS 원/달러**만 채우고, KIS 국내 지수·미국 지수·미국 대표 종목·장중 Redis 값(`intraday_indices`)은 null/빈 목록.
+- ECOS 는 아직 코드가 없다 → 수집기 신규(5절). **"30초 갱신" 문구는 환율에서 제거**(731Y001 은 일별).
+
+### 2-5. trading_game: `game_feature_flags` 에 `REAL_MARKET` 키 추가
+게임은 별도 서비스라 기존 `KNOWN_FLAGS=("QUIZ","STREAK")`(`backend/apps/trading_game/services/feature_flag_service.py`, 관리자 `TradingGameSettings.tsx`) 패턴을 따른다.
+- 기본값을 키별로 둔다: 기존 QUIZ·STREAK 는 "행 없음 = ON" 유지, **`REAL_MARKET` 만 "행 없음 = OFF"**.
+- `REAL_MARKET` OFF: `/ws/game/stream` 이 틱·심리를 발행하지 않음(연결은 받되 `market_disabled` 상태 1회 후 종료), `/api/game/candles*`·`/api/game/market-status` 403, 주문 API 403.
+- `/api/game/seasons/active` 의 `features` 에 `realMarket` 추가 → 앱·웹이 게임 탭을 숨긴다.
+- **QUIZ 도 OFF**: 퀴즈는 정규화·익명이지만 제출 뒤 `ticker`·`base_date`·`actual_change` 를 공개하므로 KRX 파생이다. 가상 시세 퀴즈는 P2.
+
+## 3. 화면별 처리표
+
+### 3-1. 홈
+| 화면 | 지금 | P1 |
+|---|---|---|
+| 오늘 시장 참고 `mobile/src/features/home/home-market-strip.tsx`, 웹 `web_client/src/components/home/HomeMarketReference.tsx` | KOSPI·KOSDAQ·미국 지수·원/달러(KIS, 30초) | **원/달러(ECOS 731Y001, 전일)** + FRED 거시 1~2개(미 10년물·기준금리). 지수 칸 숨김. 출처 "한국은행 ECOS"·"FRED" 표기 |
+| 내 펀드 카드 | 펀드 기준가 | 유지 |
+| 옛 시황 요약(`home-summary` 등) | 미사용 | 그대로 미사용 |
+
+### 3-2. 시장 탭 (`mobile/src/app/(tabs)/market.tsx`, 웹 `web_client/src/pages/market/*`)
+| 섹션 | P1 |
+|---|---|
+| 지수 카드·스파크라인(`index-card`, `index-chip-card`, 웹 `IndexCards`) | 숨김 |
+| 거시 카드(MacroCard, FRED) | **유지** |
+| AI 브리핑(`brief-card`, 웹 `BriefCard`) | **유지 — 텍스트 전용.** 입력은 4절대로 교체 |
+| 급등락(`movers-board`, `/movers`) | **숨김·서버 차단** — 가격·등락률 + 네이버 기반 AI 원인 |
+| 수급 전광판(`flow-board`, `/investor-flow`) | 숨김·차단 |
+| 특징주(`featured-board`, `/featured`) | 숨김·차단 |
+| 핫 키워드(`hot-keywords`) | 숨김 |
+| 테마·업종 칩, 상세 `app/market/[kind]/[id].tsx`, 웹 `GroupTab` | 숨김·차단 |
+| 일정(`calendar-section`, 웹 `CalendarTab`) | **경제지표(FRED) 유지, 공모주 행 숨김**(출처 KIS 예탁원 `ksdinfo/pub-offer`) — 서버에서 `source='kis'` 제외. DART 기반 공모 일정은 P2 |
+
+OFF 일 때 시장 탭 = "브리핑 + 거시 + 경제 일정". 칩 구성·탭 이름은 9절 결정.
+
+### 3-3. 스크리너 탭 (주도주·조건검색·패턴)
+- 사용자 탭 숨김, 서버 차단(빈 목록). 관리자만.
+- 모바일 `/api/v1/ai/screener-analysis/{ticker}`(종목 AI 분석) 차단 — 입력에 네이버 뉴스.
+
+### 3-4. 종목 상세 `/stock/[ticker]` (모바일 `mobile/src/app/stock/[ticker].tsx`, 웹 `web_client/src/pages/StockDetailPage.tsx`)
+- P1: 일봉 차트·52주 고가·CANSLIM 점수·대차잔고·패턴 숨김. 남는 것: 종목명·코드 + **"시세는 증권사 앱에서" 링크아웃** 버튼.
+- `searchStocks` 응답에 가격 필드가 없는지 확인(있으면 OFF 일 때 제거).
+- P2: **DART 기반 종목 화면** — 기업개황(업종·설립·상장일), 재무 요약(매출·영업이익·순이익, 연·분기), 최근 공시 목록, 최대주주·지분 변동.
+
+### 3-5. 게임
+- P1: 게임 탭 숨김(`realMarket` false), 서버 차단(2-5), QUIZ OFF.
+- P2: **가상 종목 게임** — 합성 시세 생성기(무작위 보행 + 변동성 국면 + 패턴 템플릿), 가상 종목명, 기존 주문·랭킹·시즌 로직 재사용. 가상 시세 퀴즈.
+
+### 3-6. 블로그
+- 새 차트 삽입: `market_data` OFF 면 admin `ChartSnapshotModal` 비활성 + 안내 문구.
+- **기존 글의 PNG 차트는 스위치로 못 끈다**(본문 HTML 에 `data:image/png` 로 박혀 있음) → 관리자 점검: 차트 포함 글 목록 조회 → 이미지 제거 또는 비공개.
+
+## 4. 네이버 뉴스 약관 대응 (P1 — 광고가 있는 A안이라 필수)
+네이버 검색 API(2026-09-07 개정)는 **AI 입력·요약·저장·광고 화면 노출**을 금지한다.
+
+| 기능 | 파일 | P1 |
+|---|---|---|
+| 모닝 브리핑 | `backend/apps/ai_analyst/services/morning_brief.py` | 프롬프트에서 네이버 뉴스 제거. 대체 입력: **DART 주요 공시**(전일), **정책브리핑 보도자료 제목**(공공누리 1유형 — 가공 허용), **FRED·ECOS 지표**, KIS 지수 등락률(내부 입력 — 출력은 문장 인용 수준). 출력은 지금처럼 텍스트 전용, `sources` 는 DART·정책브리핑 링크 |
+| 급등락 원인 | `backend/apps/ai_analyst/services/market_movers.py` | 화면이 없어지므로 **생성 중단**(스케줄 끔). 관리자용이 필요하면 뉴스 없이 |
+| 종목 정성 분석 | `backend/apps/ai_analyst/services/stock_qualitative.py` | 사용자 노출 중단(3-3). 관리자용은 뉴스 입력 제거 |
+| 참고 기사 목록(R3) | 브리핑·급등락 | P1 에서는 네이버 결과를 빼고 DART·정책브리핑 링크로 대체. 네이버 결과를 다시 쓰려면 **가공·저장 없이, 광고 없는 화면에서**, 네이버 BI 표시 |
+| AI 결과 캐시 | `backend/apps/ai_analyst/cache.py` | 뉴스 원문 필드가 저장되는지 확인 → 있으면 제거 |
+
+## 5. 새로 필요한 것
+
+| 항목 | 내용 | 누가 |
+|---|---|---|
+| ECOS 인증키 | 무료 발급(ecos.bok.or.kr) → 서버 env `ECOS_API_KEY` | **사용자** |
+| ECOS 수집기 | `backend/apps/collector/ecos.py`(신규): 731Y001 원/달러 매매기준율 일별 → OFF 일 때 노출하는 `FX:USDKRW` 를 ECOS 값으로. 출처 문구 "출처: 한국은행 경제통계시스템(ECOS)" | Claude |
+| 정책브리핑 수집 | 보도자료 목록 주소 확인 필요(11-18 실측 때 RSS 404) → 제목·링크·부처·일시만 | Claude(P1 은 브리핑 입력용 최소 범위) |
+| DART | 키 이미 있음(서버 등록 완료). 전일 주요 공시 조회 함수 | Claude |
+
+## 6. 작업 순서
+
+### P1 — Play 비공개 테스트 전 필수
+1. stock_api 스위치(`market_data`)·관리자 우회·리졸버/라우터 차단·`marketOverview` 필드 단위 차단 + 테스트
+2. admin_web 토큰 첨부(stockClient·REST), 관리자 UI 스위치 문구, 블로그 차트 모달 비활성
+3. trading_game `REAL_MARKET` 플래그·WS/캔들/상태/주문 차단 + 테스트, QUIZ OFF
+4. ECOS 수집기 + 홈 시장 참고 교체(모바일·웹)
+5. 앱·웹 화면 숨김(시장 탭·스크리너·종목 상세·게임 탭·일정 공모주) + 종목 상세 링크아웃, `searchStocks` 가격 필드 확인
+6. 네이버 뉴스 AI 입력 제거(브리핑 입력 교체, 급등락 생성 중단, 정성 분석 노출 중단)
+7. 블로그 기존 글 차트 점검(관리자 조회) — 정리는 사용자
+8. 개발 배포 → 검증(7절) → OTA(dev·preview) → 상용 배포는 사용자 요청 시
+
+### P2 — 출시 뒤 콘텐츠 보강
+- DART 기반 종목 화면, DART 공모 일정, 정책 이슈 카드, 가상 종목 게임·퀴즈, 브리핑 입력 고도화
+
+### P3 — 선택
+- 사용자 본인 KIS 키(BYOK) 실험, 테마 분류를 운영자 자체 분류로 전환(KIS·키움 테마 원천 제거)
+
+## 7. 테스트와 검증
+
+**백엔드 테스트**(stock_api·trading_game 둘 다):
+- 스위치 OFF + 토큰 없음 → GraphQL 빈 값 / REST 403 `market_data_disabled`
+- 스위치 OFF + 관리자 토큰 → 정상
+- 스위치 OFF + 일반 사용자 토큰 → 차단
+- 스위치 ON → 정상
+- `marketOverview` OFF: 거시·ECOS 환율만 채워지고 지수·미국 종목·장중 값은 비어 있음
+- 스위치 행 없음·DB 오류 → OFF 로 동작
+- `REAL_MARKET` OFF: WS 틱 미발행, candles·market-status·orders 403, `seasons/active.features.realMarket=false`
+
+**배포 후 개발 서버 확인(curl 체크리스트)**: GraphQL `marketGroups`·`getChartData`·`canslimScreen` 빈 값, `/api/v1/market/movers`·`/investor-flow`·`/featured`·`/api/v1/stocks/005930/lending` 403, `/api/game/candles` 403, `screenerFeatures.marketData=false`, 관리자 토큰으로 같은 호출이 정상.
+
+**설치된 앱 확인**: 지금 깔린 preview APK·개발 APK 가 각 화면에서 빈 섹션으로 보이는지(크래시·무한 로딩 없음) → 그다음 OTA 로 새 화면.
+
+**사용자 단계**: ECOS 키 발급·등록, 배포 승인, 관리자 화면에서 스위치 OFF 확인(기본 OFF 라 행이 없으면 자동), QUIZ OFF, 블로그 차트 글 정리.
+
+## 8. 이 설계가 바꾸지 않는 것
+- 수집·계산 파이프라인(KIS·키움 수집, ClickHouse 적재, 주도주·패턴 계산, 장중 지수 Redis) — 운영자 본인 이용으로 계속
+- 관리자 웹 전체 기능
+- 내 펀드, 게시판·댓글, 인증, 광고 설정
+- 스위치를 켜면 지금과 똑같이 돌아온다(라이선스 구매 시)
+
+## 9. 남은 결정
+- 시장 탭 OFF 상태의 이름·구성("시황" 한 화면으로 합칠지)
+- 홈 시장 참고에 FRED 지표 몇 개를 둘지
+- 개발 서버에서 게임 실측(장중 테스트)이 필요할 때 방법 — 관리자 계정으로만 WS 허용하는 옵션(P1 범위 밖, 필요 시 추가)
