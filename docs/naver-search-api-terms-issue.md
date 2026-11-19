@@ -44,7 +44,13 @@
 ## 5. 할 일
 1. [ ] 공식 원문 확인: [약관 개정 공지](https://developers.naver.com/notice/article/33400), [NAVER API 서비스 이용약관](https://developers.naver.com/products/terms/) — AI 입력·저장·가공 조항 문구
 2. [ ] **A·B 설계 → 구현 → 배포**(개발 먼저, 상용은 "상용 배포" 요청 시)
-3. [ ] AI 결과 캐시·참고 기사 저장 방식 점검(21일·24시간 예외 범위 안인지)
+   - [x] A 구현(2026-11-19, `fix/naver-news-ai-input`) — 세 기능 모두 네이버 호출 경로 제거. 급등락 원인·핫 키워드는 생성 중단(기본 꺼짐),
+     브리핑·정성 분석은 우리 데이터만. 자세한 내용: 설계 [`2026-11-19-market-data-off-plan-a-design.md`](superpowers/specs/2026-11-19-market-data-off-plan-a-design.md) 6절 6번
+   - [ ] B(관련 뉴스 목록 분리 표시) — 미착수. 다시 쓸 때 조건은 `backend/apps/ai_analyst/clients/naver_news.py` 머리말
+   - [ ] 개발 배포 → 상용 배포
+3. [x] AI 결과 캐시·참고 기사 저장 방식 점검(2026-11-19) — 새로 저장하는 곳 없음(sources 언제나 `[]`, Redis 원인 캐시에도 근거 기사 필드 없음).
+   남은 옛 데이터: Redis 키는 TTL(최대 4일)로 사라지고 응답에서는 이미 뺀다. PG `ai_daily_briefings.sources`·`ai_stock_evaluations.sources` 는
+   TTL 이 없어 **배포 후 정리 필요**(사용자 확인 뒤 `sources` 를 비우는 운영 작업). 옛 브리핑·평가 본문도 뉴스 요약 산출물이라 함께 판단.
 4. [ ] C·D·E 출처 조사 → 테마 뉴스 레이더 재설계 여부 결정
 
 ## 출처
