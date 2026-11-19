@@ -136,4 +136,6 @@ def test_client_query_contract(monkeypatch, rel_path):
     monkeypatch.setattr(sf, "enabled_map", lambda: {"STOCK_FINDER": True, "FINDER": True, "PATTERNS": False})
     res = asyncio.run(schema.execute(queries["SCREENER_FEATURES_QUERY"]))
     assert res.errors is None, res.errors
-    assert res.data == {"screenerFeatures": {"stockFinder": True, "finder": True, "patterns": False}}
+    # marketData·marketIndexKr 는 요청자 기준 — context 없는 직접 실행은 스위치만 본다(conftest 가 MARKET_DATA 를 ON 으로 둠)
+    assert res.data == {"screenerFeatures": {"stockFinder": True, "finder": True, "patterns": False,
+                                             "marketData": True, "marketIndexKr": True}}

@@ -2,6 +2,8 @@ import { useRouter } from 'expo-router';
 import { Pressable, Text, View } from 'react-native';
 import { StyleSheet } from 'react-native-unistyles';
 
+import { gameVisible } from '@/features/market-access/access';
+import { useGameAccess } from '@/features/market-access/use-game-access';
 import { Card } from '@/ui';
 
 /**
@@ -11,6 +13,8 @@ import { Card } from '@/ui';
 export function HomeGameEduCard() {
   const router = useRouter();
   const goGame = () => router.push('/game');
+  // 실제 시세 게임이 열려 있지 않으면(A안 — real_market 거짓·모름) 카드째 숨긴다(게임 탭과 같은 판단값)
+  if (!gameVisible(useGameAccess())) return null;
   return (
     <View style={styles.section}>
       <Text style={styles.title} accessibilityRole="header">🎮 오늘의 실전 투자 교육</Text>

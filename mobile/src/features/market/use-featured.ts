@@ -6,8 +6,9 @@ import { useAutoRefresh } from './use-auto-refresh';
 import { useRestResource } from './use-rest-resource';
 
 /** 오늘 특징주(신고가·신저가 + VI 발동). 장중 자동 갱신은 화면이 useFeaturedAutoRefresh 를 건다 */
-export function useFeatured() {
-  return useRestResource(fetchFeatured);
+/** enabled=false(시세 비노출, A안)면 요청하지 않는다 */
+export function useFeatured(enabled = true) {
+  return useRestResource(fetchFeatured, enabled);
 }
 
 /** 자동 갱신 주기 — 서버 VI 수집이 5분 주기라 그에 맞춘다 */

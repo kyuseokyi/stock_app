@@ -1,6 +1,6 @@
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
-import { ActivityIndicator, Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
+import { ActivityIndicator, Linking, Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
 import { high52w, resolveTickerParam, scoreView } from '@/features/leaders/canslim';
@@ -9,6 +9,7 @@ import { ScoreHistory } from '@/features/leaders/components/score-history';
 import { ScoreTable } from '@/features/leaders/components/score-table';
 import { StockDailyChart } from '@/features/leaders/components/stock-daily-chart';
 import { useCanslimScore } from '@/features/leaders/use-canslim-score';
+import { marketDataVisible, stockLinkOutUrl } from '@/features/market-access/access';
 import { StaleNotice } from '@/features/market/components/stale-notice';
 import { formatIndex } from '@/features/market/format';
 import { PatternSummary } from '@/features/patterns/components/pattern-summary';
@@ -43,7 +44,35 @@ export default function StockDetailScreen() {
   const ticker = resolveTickerParam(params.ticker as string | string[] | undefined);
   const name = typeof params.name === 'string' ? params.name.trim() : '';
   if (!ticker) return <NotFound />;
-  return <StockDetailBody ticker={ticker} fallbackName={name || ticker} />;
+  return <MarketDataGate ticker={ticker} fallbackName={name || ticker} />;
+}
+
+/**
+ * 시세 비노출(A안 설계 3-4) — 요청자가 시세를 볼 수 없으면 차트·종가·52주·패턴·대차를 요청도 하지 않고
+ * 종목명·코드 + "시세는 증권사 앱에서" 링크아웃만. 판단값을 묻는 동안은 로딩(시세가 잠깐 비치지 않게).
+ */
+function MarketDataGate({ ticker, fallbackName }: { ticker: string; fallbackName: string }) {
+  const access = useScreenerFeaturesState();
+  if (access === null) return <ListState mode="loading" />;
+  if (!marketDataVisible(access)) return <StockLinkOutBody ticker={ticker} name={fallbackName} />;
+  return <StockDetailBody ticker={ticker} fallbackName={fallbackName} />;
+}
+
+function StockLinkOutBody({ ticker, name }: { ticker: string; name: string }) {
+  const href = stockLinkOutUrl(ticker);
+  return (
+    <ScrollView style={styles.flex} contentContainerStyle={styles.content}>
+      <Stack.Screen options={{ title: name }} />
+      <View style={styles.card}>
+        <Text style={styles.name} numberOfLines={1}>{name}</Text>
+        <Text style={styles.meta}>{ticker}</Text>
+        <Text style={styles.meta}>시세·차트는 증권사 앱이나 포털에서 확인해 주세요.</Text>
+        {href ? (
+          <Button label="시세는 증권사 앱에서 ↗" variant="secondary" onPress={() => void Linking.openURL(href).catch(() => {})} />
+        ) : null}
+      </View>
+    </ScrollView>
+  );
 }
 
 function NotFound() {
