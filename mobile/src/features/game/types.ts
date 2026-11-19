@@ -23,7 +23,9 @@ export interface Season {
   /** 시즌 기간 — quarter 일 때만 월간 랭킹 탭. 구 서버 응답엔 없을 수 있어 optional(없으면 month 취급) */
   period?: SeasonPeriod;
   /** 관리자 기능 on/off(게임 설정) — 꺼진 기능은 버튼·배너를 숨긴다(구 서버 응답엔 없음 → 켜짐) */
-  features?: { quiz: boolean; streak: boolean };
+  /** real_market: 요청자 기준 실제 시세 게임 열람 가능 여부(A안 — 서버 REAL_MARKET 플래그·관리자·시세 열람 권한 회원).
+   *  false 면 시세·주문 API 가 403. 구 서버 응답엔 없음 → 화면 숨김 처리는 별도 단계에서 */
+  features?: { quiz: boolean; streak: boolean; real_market?: boolean };
 }
 
 export type SeasonPeriod = 'month' | 'quarter';
