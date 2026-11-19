@@ -89,6 +89,8 @@ class AdminUserOut(BaseModel):
     is_active: bool
     comment_banned: bool
     comment_banned_at: datetime | None
+    # 시세 열람 권한(A안 — 운영자 본인 확인용). 관리자는 이 값과 무관하게 항상 허용(화면은 '항상 허용' 표시)
+    market_data_access: bool = False
     created_at: datetime
 
 
@@ -101,6 +103,10 @@ class AdminUserListOut(BaseModel):
 
 class CommentBanRequest(BaseModel):
     banned: bool
+
+
+class MarketDataAccessRequest(BaseModel):
+    enabled: bool
 
 
 class NicknameUpdate(BaseModel):

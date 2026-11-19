@@ -211,12 +211,14 @@ def admin_user_out(u: User) -> ms.AdminUserOut:
     return ms.AdminUserOut(
         id=u.id, email=u.email, nickname=u.nickname, role=u.role, provider=u.provider, is_active=u.is_active,
         comment_banned=u.comment_banned_at is not None, comment_banned_at=u.comment_banned_at,
-        created_at=u.created_at,
+        market_data_access=bool(u.market_data_access), created_at=u.created_at,
     )
 
 
-async def admin_list_users(db: AsyncSession, q: str | None, page: int, size: int) -> ms.AdminUserListOut:
-    total, users = await repo.list_users(db, q=(q or "").strip() or None, page=page, size=size)
+async def admin_list_users(db: AsyncSession, q: str | None, page: int, size: int,
+                           market_data_access: bool | None = None) -> ms.AdminUserListOut:
+    total, users = await repo.list_users(db, q=(q or "").strip() or None, page=page, size=size,
+                                         market_data_access=market_data_access)
     return ms.AdminUserListOut(total=total, page=page, size=size, items=[admin_user_out(u) for u in users])
 
 
@@ -232,6 +234,18 @@ async def set_comment_ban(db: AsyncSession, user_id: int, banned: bool) -> ms.Ad
     if banned and user.role == UserRole.ADMIN:
         raise ModerationError(400, "CANNOT_BAN_ADMIN", "운영자는 댓글 금지할 수 없어요.")
     user.comment_banned_at = _ban_value(banned, user.comment_banned_at)
+    await db.commit()
+    await db.refresh(user)
+    return admin_user_out(user)
+
+
+async def set_market_data_access(db: AsyncSession, user_id: int, enabled: bool) -> ms.AdminUserOut:
+    """회원별 시세 열람 권한 켜기·끄기(A안 — 운영자 본인 확인용). 관리자는 항상 허용이라 바꿀 수 없다(400).
+    stock_api 는 요청마다 DB 를 읽어 판정하므로 바로 반영된다(apps/stock_api/services/market_access.py)."""
+    user = await _get_user_or_404(db, user_id)
+    if user.role == UserRole.ADMIN:
+        raise ModerationError(400, "ADMIN_ALWAYS_ALLOWED", "관리자는 항상 시세를 볼 수 있어요.")
+    user.market_data_access = enabled
     await db.commit()
     await db.refresh(user)
     return admin_user_out(user)
