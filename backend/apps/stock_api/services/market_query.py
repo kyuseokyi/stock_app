@@ -13,6 +13,7 @@ from datetime import date, datetime, timedelta
 
 from apps.collector.intraday_indices import KST, load_intraday, valid_value
 from apps.collector.market_indices import _BASE as INDEX_SPECS
+from shared.market_viewer import KR_PUBLIC_INDEX_CODES
 from shared import market_repo
 from shared.clickhouse_schema import CLICKHOUSE_DB, get_client, get_local_client, local_client_configured
 from shared.database import SyncSessionLocal
@@ -292,6 +293,12 @@ def _macro() -> list[dict]:
 
 def overview() -> dict:
     return {"indices": _indices(), "macro": _macro()}
+
+
+def kr_indices() -> list[dict]:
+    """국내 지수 공개 스위치용 — 코스피·코스닥(장중 값 포함)만. 미국 지수·원/달러·코스피200 은 내보내지 않는다."""
+    allowed = set(KR_PUBLIC_INDEX_CODES)
+    return [i for i in _indices() if i["code"] in allowed]
 
 
 def macro() -> list[dict]:

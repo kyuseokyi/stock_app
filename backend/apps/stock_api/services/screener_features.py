@@ -4,6 +4,8 @@
 
 MARKET_DATA = 사용자 시세 노출 전체 스위치(A안, 켜려면 KRX/코스콤 라이선스 필요). 이것만은 서버가 판정해 시세 API 를
 막는다 — apps/stock_api/services/market_access.py. 끄면(기본) 관리자·열람 권한 회원만 시세를 받는다.
+MARKET_INDEX_KR = 국내 지수(코스피·코스닥) 공개 스위치. MARKET_DATA 가 꺼져 있어도 이것을 켜면 익명·일반 회원에게
+marketOverview 의 코스피·코스닥 지수(장중 값 포함)만 연다. 개별 종목·업종·테마는 계속 막힌다(기본 OFF).
 
 DB(screener_features) 원장. 행이 없으면 OFF(숨김) — 다듬는 중인 탭을 기본으로 막아 둔다.
 stock_api 는 Redis 를 쓰지 않으므로 공개 조회는 프로세스 안 30초 캐시. 관리자가 바꾸면 이 프로세스 캐시는 바로 비우고,
@@ -20,7 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from shared.database import SyncSessionLocal
 from shared.market_models import ScreenerFeature
 
-KNOWN = ("STOCK_FINDER", "FINDER", "PATTERNS", "MARKET_DATA")
+KNOWN = ("STOCK_FINDER", "FINDER", "PATTERNS", "MARKET_DATA", "MARKET_INDEX_KR")
 CACHE_TTL_SECONDS = 30
 
 _cache: tuple[float, dict[str, bool]] | None = None
@@ -36,7 +38,7 @@ def _fill(rows: list[ScreenerFeature]) -> dict[str, bool]:
 
 
 def enabled_map() -> dict[str, bool]:
-    """공개 조회(동기) — {'STOCK_FINDER': bool, 'FINDER': bool, 'PATTERNS': bool, 'MARKET_DATA': bool}.
+    """공개 조회(동기) — {'STOCK_FINDER': bool, 'FINDER': bool, 'PATTERNS': bool, 'MARKET_DATA': bool, 'MARKET_INDEX_KR': bool}.
     DB 오류면 전부 OFF(숨김 쪽이 안전)."""
     global _cache
     now = time.monotonic()

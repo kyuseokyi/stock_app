@@ -296,12 +296,17 @@ class Query:
 
     # ------------------------------------------------------------ 시장 탭 (공개)
     @strawberry.field(description="시장 요약 — 국내·미국 지수(20일 스파크라인)·미국 거시 지표. "
-                                  "시세 비노출이면 지수(KIS·장중 값)는 빈 목록, FRED 거시만")
+                                  "시세 비노출이면 지수(KIS·장중 값)는 빈 목록, FRED 거시만 — 국내 지수 공개 스위치가 켜지면 코스피·코스닥만")
     async def market_overview(self, info: strawberry.Info) -> MarketOverview:
         # 동기 함수(CH·Redis 접속, Redis 무응답 시 최대 3초)를 스레드풀에서 — 이벤트 루프를 막지 않는다
         if not _market_ok(info):
-            # 필드 단위 차단(설계 2-4) — 지수·원/달러(KIS)·장중 Redis 값은 아예 읽지 않고 FRED 거시만
-            return MarketOverview(indices=[], macro=[MacroValue(**m) for m in await run_in_threadpool(market_query.macro)])
+            # 필드 단위 차단(설계 2-4) — FRED 거시만. 국내 지수 공개 스위치(MARKET_INDEX_KR)가 켜져 있으면
+            # 코스피·코스닥(장중 값 포함)만 더한다. 미국 지수·원/달러(KIS)는 계속 비운다.
+            macro = [MacroValue(**m) for m in await run_in_threadpool(market_query.macro)]
+            indices: list[MarketIndex] = []
+            if await run_in_threadpool(market_access.context_kr_index_allowed, info.context):
+                indices = [MarketIndex(**i) for i in await run_in_threadpool(market_query.kr_indices)]
+            return MarketOverview(indices=indices, macro=macro)
         out = await run_in_threadpool(market_query.overview)
         return MarketOverview(indices=[MarketIndex(**i) for i in out["indices"]],
                               macro=[MacroValue(**m) for m in out["macro"]])
@@ -340,7 +345,9 @@ class Query:
     async def screener_features(self, info: strawberry.Info) -> ScreenerFeatures:
         m = await run_in_threadpool(screener_features.enabled_map)
         return ScreenerFeatures(stock_finder=m["STOCK_FINDER"], finder=m["FINDER"], patterns=m["PATTERNS"],
-                                market_data=_market_ok(info))
+                                market_data=_market_ok(info),
+                                market_index_kr=await run_in_threadpool(market_access.context_kr_index_allowed,
+                                                                        info.context))
 
     @strawberry.field(description="일정 — 공모주·경제지표(최대 92일). 시세 비노출이면 공모주(KIS 예탁원 출처) 제외")
     def market_calendar(self, info: strawberry.Info, start: str, end: str,

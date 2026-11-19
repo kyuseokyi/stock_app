@@ -56,6 +56,8 @@ def _market_data_switch_on(monkeypatch):
     from apps.stock_api.services import market_access
 
     monkeypatch.setattr(market_access, "market_data_switch_on", lambda: True)
+    # 국내 지수 공개 스위치(MARKET_INDEX_KR)는 기본 OFF 그대로 — DB 를 읽지 않게 판정 지점만 고정
+    monkeypatch.setattr(market_access, "kr_index_switch_on", lambda: False)
     yield
 
 

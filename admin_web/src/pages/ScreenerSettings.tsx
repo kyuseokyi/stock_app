@@ -25,6 +25,12 @@ const META: Record<ScreenerFeatureKey, { title: string; description: string; war
       '끄면(기본) 서버가 일반 사용자에게 시세(지수·차트·순위·스크리너·대차·급등락 등)를 주지 않아요. 관리자와 회원 관리에서 시세 열람 권한을 준 계정은 계속 볼 수 있어요.',
     warning: '켜려면 KRX/코스콤 라이선스 필요',
   },
+  MARKET_INDEX_KR: {
+    title: '국내 지수 공개(코스피·코스닥)',
+    description:
+      '켜면 시세 노출이 꺼져 있어도 일반 사용자(로그인 전 포함)에게 홈·시장 탭의 코스피·코스닥 지수만 보여요. 개별 종목·업종·테마 시세는 계속 막혀요.',
+    warning: '국내 지수(코스피·코스닥)도 KRX 시세 — Play 비공개 테스트 전 OFF 확인',
+  },
 }
 
 export default function ScreenerSettings() {
@@ -53,6 +59,7 @@ export default function ScreenerSettings() {
     const next = !item.enabled
     // 사용자 시세 노출을 켜면 일반 사용자에게 KIS 시세가 나간다 — 라이선스 없이 켜면 재배포(A안 설계)
     if (item.key === 'MARKET_DATA' && next && !confirm('사용자 시세 노출을 켤까요?\nKRX/코스콤 시세 라이선스가 있어야 켤 수 있어요.')) return
+    if (item.key === 'MARKET_INDEX_KR' && next && !confirm('국내 지수(코스피·코스닥)를 모든 사용자에게 공개할까요?\n지수도 KRX 시세예요. Play 비공개 테스트 전에는 꺼 두세요.')) return
     setPending(item.key)
     setItems((prev) => prev.map((f) => (f.key === item.key ? { ...f, enabled: next } : f)))
     try {
