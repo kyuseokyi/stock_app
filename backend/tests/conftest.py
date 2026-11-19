@@ -46,3 +46,14 @@ def _isolate_auth_redis(monkeypatch):
 
     monkeypatch.setattr(auth_deps, "_redis", fake_aioredis.FakeRedis(decode_responses=True))
     yield
+
+
+@pytest.fixture(autouse=True)
+def _market_data_switch_on(monkeypatch):
+    """A안 시세 스위치(MARKET_DATA)는 기본 OFF 지만, 기존 시세 테스트는 '공개 상태'의 동작을 검증한다 → 기본 ON.
+    판정 지점(market_access.market_data_switch_on)만 바꿔 enabled_map 의 '행 없음·DB 오류 = OFF' 규칙은 그대로 시험된다.
+    OFF 동작은 tests/test_market_access.py 가 이 함수를 다시 덮어써 검증한다."""
+    from apps.stock_api.services import market_access
+
+    monkeypatch.setattr(market_access, "market_data_switch_on", lambda: True)
+    yield

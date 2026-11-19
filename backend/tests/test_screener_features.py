@@ -30,15 +30,17 @@ def _fresh_cache():
 
 
 def test_known_order():
-    # 관리자 화면 목록 순서 = KNOWN 순서(종목 찾기 전체가 맨 위)
-    assert sf.KNOWN == ("STOCK_FINDER", "FINDER", "PATTERNS")
+    # 관리자 화면 목록 순서 = KNOWN 순서(종목 찾기 전체가 맨 위, A안 사용자 시세 노출 스위치가 맨 아래)
+    assert sf.KNOWN == ("STOCK_FINDER", "FINDER", "PATTERNS", "MARKET_DATA")
 
 
 def test_missing_rows_are_off():
     assert sf._fill([ScreenerFeature(key="PATTERNS", enabled=True)]) == {
-        "STOCK_FINDER": False, "FINDER": False, "PATTERNS": True}
+        "STOCK_FINDER": False, "FINDER": False, "PATTERNS": True, "MARKET_DATA": False}
     # STOCK_FINDER 도 행이 없으면 꺼짐 — 사용자 화면 종목 찾기는 기본 숨김
     assert sf._fill([])["STOCK_FINDER"] is False
+    # MARKET_DATA(사용자 시세 노출)도 행이 없으면 꺼짐 — fail-closed
+    assert sf._fill([])["MARKET_DATA"] is False
 
 
 def test_db_failure_hides_everything(monkeypatch):
@@ -46,7 +48,7 @@ def test_db_failure_hides_everything(monkeypatch):
         raise RuntimeError("db down")
 
     monkeypatch.setattr(sf, "SyncSessionLocal", boom)
-    assert sf.enabled_map() == {"STOCK_FINDER": False, "FINDER": False, "PATTERNS": False}
+    assert sf.enabled_map() == {"STOCK_FINDER": False, "FINDER": False, "PATTERNS": False, "MARKET_DATA": False}
 
 
 def test_enabled_map_caches(monkeypatch):
@@ -68,7 +70,7 @@ def test_enabled_map_caches(monkeypatch):
             return _Rows()
 
     monkeypatch.setattr(sf, "SyncSessionLocal", _Session)
-    assert sf.enabled_map() == {"STOCK_FINDER": False, "FINDER": True, "PATTERNS": False}
+    assert sf.enabled_map() == {"STOCK_FINDER": False, "FINDER": True, "PATTERNS": False, "MARKET_DATA": False}
     assert sf.enabled_map()["FINDER"] is True
     assert len(calls) == 1  # 30초 안 두 번째는 캐시
     sf.clear_cache()

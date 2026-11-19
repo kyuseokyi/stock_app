@@ -23,7 +23,8 @@ _EPOCH = date(1970, 1, 1)
 KINDS = ("theme", "sector")
 PERIODS = {"1d": "chg_1d", "5d": "chg_5d", "20d": "chg_20d"}
 SIZES = ("mcap", "value")
-CATEGORIES = ("공모주", "경제지표")
+IPO_CATEGORY = "공모주"  # 출처 KIS(예탁원) — 시세 비노출이면 일정에서 뺀다
+CATEGORIES = (IPO_CATEGORY, "경제지표")
 MAX_LIMIT = 100
 TREEMAP_STOCKS = 30
 TREEMAP_THEMES = 30
@@ -291,6 +292,11 @@ def _macro() -> list[dict]:
 
 def overview() -> dict:
     return {"indices": _indices(), "macro": _macro()}
+
+
+def macro() -> list[dict]:
+    """FRED 거시 지표만 — 시세 비노출일 때 marketOverview 가 쓴다(KIS 지수·장중 Redis 를 읽지 않음)."""
+    return _macro()
 
 
 # ---------------------------------------------------------------- 순위

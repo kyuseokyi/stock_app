@@ -1,6 +1,8 @@
 """AI 시황 공개 REST(인증 없음) — stock_api 에 마운트. 라우터는 서비스 호출만 한다.
 
 외부 키 없음·Redis/PG/ClickHouse 장애에도 200 + 빈 값(500 금지). 입력 형식 오류만 422 `{code, message}`.
+시세 기반(급등락·수급·히트맵·특징주·종목 AI 분석)은 시세 열람 판정(market_access)이 거짓이면 403 `{"detail":"market_data_disabled"}`
+(A안 설계 2-3). 모닝 브리핑은 텍스트 전용이라 막지 않는다(설계 3-2).
 동기 서비스는 스레드풀에서 돌고, PG 세션은 호출마다 열고 닫는다.
 """
 from __future__ import annotations
@@ -8,13 +10,14 @@ from __future__ import annotations
 import logging
 from datetime import datetime
 
-from fastapi import APIRouter, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException, Response
 from fastapi.concurrency import run_in_threadpool
 
 from apps.ai_analyst.services import investor_flow_ai, market_movers, morning_brief, stock_qualitative
 from apps.ai_analyst.schemas import InvestorFlowResponse
 from apps.collector.intraday_indices import KST
 from apps.stock_api.services import featured_query, market_query, verify_ticker
+from apps.stock_api.services.market_access import MarketAccess, cache_control, require_market_data
 from shared.database import SyncSessionLocal
 
 log = logging.getLogger(__name__)
@@ -59,21 +62,22 @@ async def get_morning_brief(response: Response):
 
 
 @market_router.get("/movers")
-async def get_movers(response: Response):
+async def get_movers(response: Response, access: MarketAccess = Depends(require_market_data)):
     """급등·급락 Top 10 + AI 원인 + 핫 키워드(Redis). 장 마감 뒤엔 마지막 결과."""
-    response.headers["Cache-Control"] = CACHE_CONTROL
+    response.headers["Cache-Control"] = cache_control(access, CACHE_CONTROL)
     return await _safe(market_movers.get_cached, dict(_EMPTY_MOVERS))
 
 
 @market_router.get("/investor-flow")
-async def get_investor_flow(response: Response):
+async def get_investor_flow(response: Response, access: MarketAccess = Depends(require_market_data)):
     """외국인·기관·연기금 순매수 Top 10, 쌍끌이, AI 수급 해설(Redis)."""
-    response.headers["Cache-Control"] = CACHE_CONTROL
+    response.headers["Cache-Control"] = cache_control(access, CACHE_CONTROL)
     return await _safe(investor_flow_ai.get_cached, InvestorFlowResponse().model_dump())
 
 
 @market_router.get("/heatmap")
-async def get_heatmap(response: Response, kind: str = "sector", size: str = "mcap", period: str = "1d"):
+async def get_heatmap(response: Response, kind: str = "sector", size: str = "mcap", period: str = "1d",
+                      access: MarketAccess = Depends(require_market_data)):
     """섹터·테마 트리맵 — GraphQL marketTreemap 과 같은 서비스(market_query.treemap) 결과."""
     if kind not in market_query.KINDS:
         raise _invalid("INVALID_KIND", f"kind 는 {', '.join(market_query.KINDS)} 중 하나예요.")
@@ -81,24 +85,25 @@ async def get_heatmap(response: Response, kind: str = "sector", size: str = "mca
         raise _invalid("INVALID_SIZE", f"size 는 {', '.join(market_query.SIZES)} 중 하나예요.")
     if period not in market_query.PERIODS:
         raise _invalid("INVALID_PERIOD", f"period 는 {', '.join(market_query.PERIODS)} 중 하나예요.")
-    response.headers["Cache-Control"] = CACHE_CONTROL
+    response.headers["Cache-Control"] = cache_control(access, CACHE_CONTROL)
     return await _safe(market_query.treemap, dict(_EMPTY_TREEMAP), kind, size, period)
 
 
 @market_router.get("/featured")
-async def get_featured(response: Response):
+async def get_featured(response: Response, access: MarketAccess = Depends(require_market_data)):
     """오늘 특징주 — 52주 신고가·신저가(20:30 계산, 장중엔 직전 거래일) + 오늘 VI 발동(키움, 없으면 vi=null)."""
-    response.headers["Cache-Control"] = CACHE_CONTROL
+    response.headers["Cache-Control"] = cache_control(access, CACHE_CONTROL)
     return await _safe(featured_query.get_featured, featured_query.empty())
 
 
 # ---------------------------------------------------------------- /api/v1/ai
 @ai_router.get("/screener-analysis/{ticker}")
-async def get_screener_analysis(ticker: str, response: Response):
+async def get_screener_analysis(ticker: str, response: Response,
+                                access: MarketAccess = Depends(require_market_data)):
     """종목의 최근 AI 정성 분석(실적 품질·지뢰). 없으면 analysis=null."""
     try:
         t = verify_ticker.normalize_ticker(ticker)
     except verify_ticker.InvalidTicker:
         raise _invalid("INVALID_TICKER", "종목 코드는 영문·숫자 6자리예요.")
-    response.headers["Cache-Control"] = CACHE_CONTROL
+    response.headers["Cache-Control"] = cache_control(access, CACHE_CONTROL)
     return {"analysis": await _safe(_screener_analysis, None, t)}
