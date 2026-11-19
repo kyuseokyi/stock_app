@@ -201,6 +201,8 @@ export interface AdminUserOut {
   is_active: boolean
   comment_banned: boolean
   comment_banned_at: string | null
+  /** 시세 열람 권한(A안 — 운영자 본인 확인용). 관리자는 이 값과 무관하게 항상 허용. 옛 서버 응답엔 없을 수 있다 */
+  market_data_access?: boolean
   created_at: string
 }
 

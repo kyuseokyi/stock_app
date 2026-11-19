@@ -220,6 +220,40 @@ async def test_admin_list_users(client, world):
     assert body["total"] == 5 and body["page"] == 1 and body["size"] == 2 and len(body["items"]) == 2
     assert body["items"][0]["id"] == admin.id  # 최근 가입순
     assert set(body["items"][0].keys()) == {"id", "email", "nickname", "role", "provider", "is_active",
-                                            "comment_banned", "comment_banned_at", "created_at"}
+                                            "comment_banned", "comment_banned_at", "market_data_access", "created_at"}
     found = (await client.get("/api/v1/admin/users", params={"q": "작성"}, headers=_auth(admin))).json()
     assert found["total"] == 1 and found["items"][0]["id"] == world["author"].id
+
+
+# ── 회원: 시세 열람 권한(A안 — 운영자 본인 확인용) ─────
+
+
+async def test_market_data_access_toggle_and_filter(client, maker, world):
+    admin, author = world["admin"], world["author"]
+    url = f"/api/v1/admin/users/{author.id}/market-data-access"
+    listed = (await client.get("/api/v1/admin/users", headers=_auth(admin))).json()
+    assert all(u["market_data_access"] is False for u in listed["items"])  # 기본 false
+    r = await client.patch(url, json={"enabled": True}, headers=_auth(admin))
+    assert r.status_code == 200, r.text
+    assert r.json()["market_data_access"] is True
+    async with maker() as db:
+        assert (await db.get(User, author.id)).market_data_access is True
+    only = (await client.get("/api/v1/admin/users", params={"market_data_access": "true"}, headers=_auth(admin))).json()
+    assert only["total"] == 1 and only["items"][0]["id"] == author.id
+    r = await client.patch(url, json={"enabled": False}, headers=_auth(admin))
+    assert r.json()["market_data_access"] is False
+    only = (await client.get("/api/v1/admin/users", params={"market_data_access": "true"}, headers=_auth(admin))).json()
+    assert only["total"] == 0
+
+
+async def test_market_data_access_admin_400_404_403(client, world):
+    admin, author = world["admin"], world["author"]
+    r = await client.patch(f"/api/v1/admin/users/{admin.id}/market-data-access", json={"enabled": False},
+                           headers=_auth(admin))
+    assert r.status_code == 400 and r.json()["detail"]["code"] == "ADMIN_ALWAYS_ALLOWED"
+    r = await client.patch("/api/v1/admin/users/9999/market-data-access", json={"enabled": True}, headers=_auth(admin))
+    assert r.status_code == 404
+    # 일반 회원은 자기 자신에게도 권한을 줄 수 없다
+    r = await client.patch(f"/api/v1/admin/users/{author.id}/market-data-access", json={"enabled": True},
+                           headers=_auth(author))
+    assert r.status_code == 403

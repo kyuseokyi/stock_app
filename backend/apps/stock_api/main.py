@@ -10,13 +10,14 @@
 
 from __future__ import annotations
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from strawberry.fastapi import GraphQLRouter
 
 from apps.ai_analyst.router import ai_router, market_router
 from apps.stock_api.graphql.schema import schema
 from apps.stock_api.routers import market_admin, screener_admin, stocks, themes_admin
+from apps.stock_api.services.market_access import MarketAccess, market_access
 from shared.cors import build_allowed_origins
 from shared.health import add_health_routes
 
@@ -31,8 +32,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+
+async def graphql_context(access: MarketAccess = Depends(market_access)) -> dict:
+    """GraphQL 요청마다 시세 열람 판정을 한 번 — 리졸버는 info.context['market_access'] 를 읽는다(A안 설계 2-2)."""
+    return {"market_access": access}
+
+
 # GraphQL: searchStocks / getChartData (어드민 차트 삽입 · 클라이언트 차트 조회)
-graphql_app = GraphQLRouter(schema)
+graphql_app = GraphQLRouter(schema, context_getter=graphql_context)
 app.include_router(graphql_app, prefix="/graphql")
 
 # 테마 관리자 보정(관리자 JWT) — KIS 테마 숨김·이름 수정, 관리자 테마, 종목 추가·제외

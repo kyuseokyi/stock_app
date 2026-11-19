@@ -6,7 +6,7 @@ import { showToast } from '../lib/toast'
 
 // 스크리너 탭 보이기 — 다듬는 중인 탭을 사용자 화면(웹·앱)에서 숨기거나 다시 연다. 기본은 꺼짐.
 // 목록 순서는 서버(KNOWN) 순서 — 종목 찾기 전체가 맨 위. 관리자 화면(주도주·패턴 관리 등)은 이 스위치와 무관하게 항상 보인다.
-const META: Record<ScreenerFeatureKey, { title: string; description: string }> = {
+const META: Record<ScreenerFeatureKey, { title: string; description: string; warning?: string }> = {
   STOCK_FINDER: {
     title: '종목 찾기(사용자 화면)',
     description: '끄면 웹·앱에서 주도주·조건검색·패턴이 모두 숨겨져요(관리자 화면은 그대로)',
@@ -18,6 +18,12 @@ const META: Record<ScreenerFeatureKey, { title: string; description: string }> =
   PATTERNS: {
     title: '차트 패턴 탭',
     description: '끄면 "종목 찾기"에서 패턴 탭이 사라집니다. 종목 상세의 차트 패턴 카드와 주도주의 "오늘 볼 10개"는 그대로 보입니다.',
+  },
+  MARKET_DATA: {
+    title: '사용자 시세 노출',
+    description:
+      '끄면(기본) 서버가 일반 사용자에게 시세(지수·차트·순위·스크리너·대차·급등락 등)를 주지 않아요. 관리자와 회원 관리에서 시세 열람 권한을 준 계정은 계속 볼 수 있어요.',
+    warning: '켜려면 KRX/코스콤 라이선스 필요',
   },
 }
 
@@ -45,6 +51,8 @@ export default function ScreenerSettings() {
 
   const toggle = async (item: ScreenerFeature) => {
     const next = !item.enabled
+    // 사용자 시세 노출을 켜면 일반 사용자에게 KIS 시세가 나간다 — 라이선스 없이 켜면 재배포(A안 설계)
+    if (item.key === 'MARKET_DATA' && next && !confirm('사용자 시세 노출을 켤까요?\nKRX/코스콤 시세 라이선스가 있어야 켤 수 있어요.')) return
     setPending(item.key)
     setItems((prev) => prev.map((f) => (f.key === item.key ? { ...f, enabled: next } : f)))
     try {
@@ -93,6 +101,9 @@ export default function ScreenerSettings() {
                   </span>
                 </p>
                 <p className="mt-1 text-sm text-slate-500">{META[item.key].description}</p>
+                {META[item.key].warning && (
+                  <p className="mt-1 text-sm font-medium text-amber-700">⚠️ {META[item.key].warning}</p>
+                )}
                 <p className="mt-1 text-xs text-slate-400">마지막 변경: {item.updated_at ? formatDateTime(item.updated_at) : '변경 이력 없음'}</p>
               </div>
               <button

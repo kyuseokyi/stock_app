@@ -122,6 +122,11 @@ class User(Base, TimestampMixin):
     terms_agreed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     # 댓글 작성 금지 시각(관리자 조치). NULL=정상. 설정되면 댓글 작성·수정 403 COMMENT_BANNED
     comment_banned_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # 시세 열람 권한(관리자 부여) — 전체 시세 스위치(MARKET_DATA)가 꺼져 있어도 stock_api 시세를 볼 수 있다.
+    # 운영자 본인 확인용. 관리자(ADMIN)는 이 값과 무관하게 항상 허용. 판정은 apps/stock_api/services/market_access.py
+    market_data_access: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=false(), nullable=False
+    )
 
     # 관계
     # author_id 가 nullable(SET NULL)이므로 delete-orphan 대신 연결만 관리.

@@ -126,12 +126,17 @@ async def list_blocks(db: AsyncSession, blocker_id: int) -> list:
 # --------------------------------------------------------------------------- #
 # 회원(관리자)
 # --------------------------------------------------------------------------- #
-async def list_users(db: AsyncSession, *, q: str | None, page: int, size: int) -> tuple[int, list[User]]:
+async def list_users(db: AsyncSession, *, q: str | None, page: int, size: int,
+                     market_data_access: bool | None = None) -> tuple[int, list[User]]:
     base = select(User)
     count_stmt = select(func.count()).select_from(User)
     if q:
         like = f"%{q}%"
         cond = or_(User.nickname.ilike(like), User.email.ilike(like))
+        base = base.where(cond)
+        count_stmt = count_stmt.where(cond)
+    if market_data_access is not None:  # 시세 열람 권한 보유 회원만(또는 없는 회원만) 보기
+        cond = User.market_data_access.is_(market_data_access)
         base = base.where(cond)
         count_stmt = count_stmt.where(cond)
     total = int((await db.execute(count_stmt)).scalar_one())

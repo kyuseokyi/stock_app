@@ -110,8 +110,15 @@ OFF 일 때 시장 탭 = "브리핑 + 거시 + 경제 일정". 칩 구성·탭 �
 ## 6. 작업 순서
 
 ### P1 — Play 비공개 테스트 전 필수
-1. stock_api 스위치(`market_data`)·관리자 우회·리졸버/라우터 차단·`marketOverview` 필드 단위 차단 + 테스트
-2. admin_web 토큰 첨부(stockClient·REST), 관리자 UI 스위치 문구, 블로그 차트 모달 비활성
+1. ✅ (2026-11-19, `feature/market-data-switch`) stock_api 스위치(`MARKET_DATA`)·관리자 우회·리졸버/라우터 차단·`marketOverview` 필드 단위 차단 + 테스트
+   - **+ 회원별 시세 열람 권한**(사용자 요청 — 운영자 본인이 앱에서 보기): `users.market_data_access`(마이그레이션 `a7c9e1b3d5f8`),
+     관리자 API `PATCH /api/v1/admin/users/{id}/market-data-access`(blog), admin 회원 관리 화면 토글·경고 문구. 관리자는 항상 허용.
+   - 판정: `backend/apps/stock_api/services/market_access.py` — 스위치 ON **또는** 관리자 **또는** 열람 권한 회원. 토큰 만료·무효는 401 이 아니라 익명(차단).
+   - `screenerFeatures.marketData` = **요청자 기준** 열람 가능 여부(5번 화면 숨김이 이 값을 쓴다. 로그인·로그아웃 뒤 다시 읽어야 함).
+     전역 스위치 값은 관리자 REST `/api/v1/admin/screener/features` 로 본다.
+   - 차단 범위 밖(남은 일): trading_game(3번), 화면 숨김(5번), ECOS(4번) — OFF 일 때 marketOverview 지수 칸은 ECOS 전까지 빈 목록.
+   - web_client·mobile 도 로그인 상태면 stock GraphQL·시세 REST 에 토큰을 붙인다(권한 회원이 앱·웹에서 보도록).
+2. admin_web 토큰 첨부(stockClient·REST) ✅, 관리자 UI 스위치 문구 ✅, 블로그 차트 모달 비활성(남음)
 3. trading_game `REAL_MARKET` 플래그·WS/캔들/상태/주문 차단 + 테스트, QUIZ OFF
 4. ECOS 수집기 + 홈 시장 참고 교체(모바일·웹)
 5. 앱·웹 화면 숨김(시장 탭·스크리너·종목 상세·게임 탭·일정 공모주) + 종목 상세 링크아웃, `searchStocks` 가격 필드 확인

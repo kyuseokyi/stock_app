@@ -334,6 +334,10 @@ class ScreenerFeatures:
     stock_finder: bool = strawberry.field(description="사용자 화면 종목 찾기(주도주·조건검색·패턴) 전체 — 꺼지면 finder·patterns 와 무관하게 모두 숨김")
     finder: bool
     patterns: bool
+    market_data: bool = strawberry.field(
+        default=False,
+        description="요청자 기준 시세 열람 가능 여부 — 전체 스위치 ON, 또는 로그인 사용자가 관리자·시세 열람 권한 보유면 true. "
+                    "false 면 시세 API 가 빈 값·403 을 준다(화면 숨김 판정용)")
 
 
 @strawberry.type
