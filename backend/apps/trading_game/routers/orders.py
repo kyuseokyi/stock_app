@@ -21,7 +21,7 @@ from apps.trading_game.schemas.game_dtos import (
 )
 from apps.trading_game.services import (
     account_service, academy_service, market_clock, market_status, nudge_engine, order_engine, position_cache, pricing,
-    quest_service, ranking_service, rsi_service, streak_service,
+    quest_service, ranking_service, real_market, rsi_service, streak_service,
 )
 
 router = APIRouter(prefix="/api/game", tags=["trading-game"])
@@ -169,7 +169,11 @@ async def _safe_rollback(db: AsyncSession) -> None:
         log.warning("훅 실패 후 rollback 실패", exc_info=True)
 
 
-@router.post("/orders", response_model=OrderResultResponse, status_code=status.HTTP_201_CREATED)
+# A안: REAL_MARKET OFF 면 주문·청산 403(관리자·시세 열람 권한 회원 제외) — 인증 401 이 먼저
+@router.post(
+    "/orders", response_model=OrderResultResponse, status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(real_market.require_real_market_user)],
+)
 async def open_order(
     body: OrderRequest,
     user: User = Depends(get_current_user),
@@ -216,7 +220,10 @@ async def open_order(
     return OrderResultResponse(**dto.model_dump(), nudges=nudges)
 
 
-@router.post("/positions/{position_id}/close", response_model=OrderResultResponse)
+@router.post(
+    "/positions/{position_id}/close", response_model=OrderResultResponse,
+    dependencies=[Depends(real_market.require_real_market_user)],
+)
 async def close_order(
     position_id: uuid.UUID,
     body: ClosePositionRequest | None = None,  # 본문 없음 = 전량(옛 앱 호환)
@@ -310,7 +317,10 @@ async def active_positions(
     )
     positions = list(rows.scalars().all())
     season = await db.get(GameSeason, season_id)
-    cur = await _read_latest_price(deps.get_redis(), season.ticker) if season else None
+    redis = deps.get_redis()
+    # A안: 볼 수 없는 사용자에겐 실시간 가격에서 나온 수익률·손익을 비운다(가격이 없을 때와 같은 모양)
+    can_view = await real_market.allowed_for_user(db, redis, user)
+    cur = await _read_latest_price(redis, season.ticker) if season and can_view else None
     out = []
     for p in positions:
         roi = pnl = None

@@ -12,15 +12,22 @@ from shared.game_models import GameSeason, HallOfFame
 from apps.trading_game import deps
 from apps.trading_game.schemas.game_dtos import ActiveSeason, GameFeatures
 from apps.trading_game.services import (
-    account_service, board_cache, feature_flag_service, monthly_service, ranking_service, weekly_service,
+    account_service, board_cache, feature_flag_service, monthly_service, ranking_service, real_market, weekly_service,
 )
 
 router = APIRouter(prefix="/api/game", tags=["trading-game-ranking"])
 
 
 @router.get("/seasons/active", response_model=ActiveSeason | None)
-async def active_season(db: AsyncSession = Depends(get_db)):
-    """현재 ACTIVE 시즌(공개) + 기능 on/off. 없으면 null — 유저 웹/앱 게임 화면 헤더용."""
+async def active_season(
+    db: AsyncSession = Depends(get_db),
+    can_view: bool = Depends(real_market.real_market_access),
+):
+    """현재 ACTIVE 시즌(공개) + 기능 on/off. 없으면 null — 유저 웹/앱 게임 화면 헤더용.
+
+    features.real_market = 요청자 기준 실제 시세 게임 열람 가능 여부(A안 — 토큰 선택, 꺼져 있으면 앱·웹이 게임 탭을 숨긴다).
+    퀴즈도 같은 판정을 통과해야 켜짐으로 내려간다.
+    """
     s = await account_service.get_active_season(db)
     if s is None:
         return None
@@ -30,8 +37,9 @@ async def active_season(db: AsyncSession = Depends(get_db)):
         status=s.status, start_at=s.start_at, end_at=s.end_at,
         period=s.period,
         features=GameFeatures(
-            quiz=await feature_flag_service.is_enabled(db, redis, "QUIZ"),
+            quiz=can_view and await feature_flag_service.is_enabled(db, redis, "QUIZ"),
             streak=await feature_flag_service.is_enabled(db, redis, "STREAK"),
+            real_market=can_view,
         ),
     )
 

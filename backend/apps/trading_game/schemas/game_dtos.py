@@ -149,6 +149,8 @@ class GameFeatures(BaseModel):
 
     quiz: bool = True
     streak: bool = True
+    # A안: 요청자 기준 실제 시세 게임 열람 가능 여부(REAL_MARKET 플래그 또는 관리자·시세 열람 권한 회원)
+    real_market: bool = False
 
 
 class ActiveSeason(SeasonOption):

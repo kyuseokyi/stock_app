@@ -9,9 +9,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from shared.database import get_db
 from apps.trading_game import deps
-from apps.trading_game.services import account_service, market_clock, market_status
+from apps.trading_game.services import account_service, market_clock, market_status, real_market
 
-router = APIRouter(prefix="/api/game", tags=["trading-game-market-status"])
+# A안: REAL_MARKET OFF 면 관리자·시세 열람 권한 회원만(그 외 403 market_data_disabled)
+router = APIRouter(
+    prefix="/api/game", tags=["trading-game-market-status"],
+    dependencies=[Depends(real_market.require_real_market)],
+)
 
 
 @router.get("/market-status")

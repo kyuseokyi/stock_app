@@ -5,6 +5,13 @@ token 선택: 없으면 비로그인 공개 연결(틱·시장심리만), 있으
 세션이 끝났으면(로그아웃·리프레시 재사용 감지·비활성 — 세션 행 없음) 4401(SESSION_ENDED), 연결 중이면 같은 버스의 종료 알림으로 닫는다.
 무효 토큰·없는/비활성 사용자는 4401(TOKEN_INVALID), 만료는 4401(TOKEN_EXPIRED).
 공개 연결 상한: IP당 GAME_WS_PUBLIC_PER_IP(3)·전체 GAME_WS_PUBLIC_MAX(2000), 초과 시 4429.
+
+A안(설계 2-5): REAL_MARKET 플래그 OFF 이고 요청자가 관리자·시세 열람 권한 회원이 아니면(익명 포함)
+연결은 받되 틱·손익·심리 구독에 등록하지 않고 {"type":"market_disabled"} 를 1회 보낸 뒤,
+GAME_WS_DISABLED_HOLD_SEC(600초) 동안 조용히 열어 두었다가 4429(MARKET_DISABLED)로 닫는다.
+  - 바로 닫지 않는 이유: 설치된 앱은 연결이 열리면 재연결 간격을 1초로 되돌리고 캔들·계좌를 다시 불러온다 →
+    즉시 닫으면 1초 간격 재연결·재조회가 무한 반복된다. 4429 는 설치된 앱이 긴 간격(5초→30초)으로 재시도하는 코드.
+  - 4401 은 쓰지 않는다(로그인 연결이면 앱이 로그아웃·토큰 갱신을 탄다). 무효·만료 토큰은 지금처럼 4401.
 """
 from __future__ import annotations
 
@@ -30,7 +37,8 @@ from shared.sessions import (
 )
 from shared.models import User, UserSession
 from shared.game_models import GameAccount, GamePosition
-from apps.trading_game.services import account_service, ws_bus
+from apps.trading_game import deps
+from apps.trading_game.services import account_service, real_market, ws_bus
 from apps.trading_game.services.connection_manager import (  # noqa: F401 — SENTIMENT_INTERVAL 재노출
     SENTIMENT_INTERVAL, manager, sentiment_from_counts,
 )
@@ -40,6 +48,14 @@ log = logging.getLogger("trading_game.sentiment")
 
 DEFAULT_PUBLIC_PER_IP = 3
 DEFAULT_PUBLIC_MAX = 2000
+DEFAULT_DISABLED_HOLD_SEC = 600
+MARKET_DISABLED_MESSAGE = {
+    "type": "market_disabled",
+    "detail": real_market.DISABLED_DETAIL,
+    "message": "실시간 시세 게임은 현재 운영하지 않습니다.",
+}
+REASON_MARKET_DISABLED = "MARKET_DISABLED"
+_disabled_open = 0  # 이 프로세스에서 '시세 비공개' 안내로 열어 둔 연결 수(상한 = GAME_WS_PUBLIC_MAX)
 
 
 def _env_int(name: str, default: int) -> int:
@@ -69,6 +85,35 @@ async def _keepalive(ws: WebSocket) -> None:
             await ws.receive_text()  # 클라이언트 keep-alive(수신 무시)
     except WebSocketDisconnect:
         pass
+
+
+async def _serve_market_disabled(ws: WebSocket) -> None:
+    """틱·심리 구독 없이 안내 1회 → 유휴 보관 → 4429(MARKET_DISABLED). manager 에 등록하지 않는다(브로드캐스트 미수신)."""
+    global _disabled_open
+    await ws.accept()
+    if _disabled_open >= public_limits()[1]:
+        await ws.close(code=4429, reason=REASON_MARKET_DISABLED)
+        return
+    _disabled_open += 1
+    try:
+        try:
+            await ws.send_json(MARKET_DISABLED_MESSAGE)
+        except Exception:  # noqa: BLE001 — 보내기 전에 끊긴 연결
+            return
+        try:
+            await asyncio.wait_for(_keepalive(ws), timeout=_env_int("GAME_WS_DISABLED_HOLD_SEC", DEFAULT_DISABLED_HOLD_SEC))
+            return  # 클라이언트가 먼저 끊음
+        except asyncio.TimeoutError:
+            pass
+        with contextlib.suppress(Exception):
+            await ws.close(code=4429, reason=REASON_MARKET_DISABLED)
+    finally:
+        _disabled_open -= 1
+
+
+async def _real_market_flag_on() -> bool:
+    async with AsyncSessionLocal() as db:
+        return await real_market.flag_on(db, deps.get_redis())
 
 
 async def _serve_public(ws: WebSocket) -> None:
@@ -113,6 +158,9 @@ async def _sentiment_loop(stop: asyncio.Event) -> None:
 @router.websocket("/ws/game/stream")
 async def game_stream(ws: WebSocket, token: str | None = Query(None)):
     if token is None:  # 비로그인 공개 연결(빈 문자열 ?token= 은 잘못된 토큰 → 4401)
+        if not await _real_market_flag_on():  # A안: 익명은 플래그가 켜져 있어야만 시세를 받는다
+            await _serve_market_disabled(ws)
+            return
         await _serve_public(ws)
         return
     try:
@@ -131,10 +179,13 @@ async def game_stream(ws: WebSocket, token: str | None = Query(None)):
         return
     # REST 와 동일하게 유저 존재·활성 + 단일 세션 검증(같은 플랫폼에서 다시 로그인한 이전 토큰 차단)
     state = None
+    can_view = False
     async with AsyncSessionLocal() as db:
         user = await db.get(User, user_id)
         if user is not None and user.is_active:
             state = await check_session(db, user_id, payload)
+            if state == SESSION_OK:  # A안: 플래그 ON 또는 관리자·시세 열람 권한 회원만 스트림
+                can_view = await real_market.allowed_for_user(db, deps.get_redis(), user)
     if user is None or not user.is_active:
         await ws.accept()
         await ws.close(code=4401, reason=TOKEN_INVALID)
@@ -143,6 +194,9 @@ async def game_stream(ws: WebSocket, token: str | None = Query(None)):
         await ws.accept()
         # 4401 재사용 — 설치된 클라이언트가 재연결을 멈추는 코드
         await ws.close(code=4401, reason=_session_reason(state))
+        return
+    if not can_view:
+        await _serve_market_disabled(ws)
         return
     await manager.connect(user_id, ws, platform=payload.get("plt"), sid=payload.get("sid"))
     try:

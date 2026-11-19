@@ -15,7 +15,7 @@ from apps.trading_game.schemas.game_dtos import (
     StreakRewardDTO,
 )
 from apps.trading_game.services import (
-    feature_flag_service, position_cache, quiz_insight, quiz_service, streak_reward_service, streak_service,
+    feature_flag_service, position_cache, quiz_insight, quiz_service, real_market, streak_reward_service, streak_service,
 )
 
 router = APIRouter(prefix="/api/game", tags=["trading-game-quiz"])
@@ -59,8 +59,13 @@ async def _streak_dto(db: AsyncSession, user_id: int, enabled: bool) -> StreakRe
     )
 
 
-async def _require_quiz_enabled(db: AsyncSession) -> None:
-    if not await feature_flag_service.is_enabled(db, deps.get_redis(), "QUIZ"):
+async def _require_quiz_enabled(db: AsyncSession, user: User) -> None:
+    # A안(설계 2-5): 퀴즈는 제출 뒤 실제 종목·날짜·등락률을 공개하는 KRX 파생 → REAL_MARKET 판정도 통과해야 한다.
+    # 막힐 때는 QUIZ OFF 와 같은 503 FEATURE_DISABLED(설치된 앱이 이미 처리하는 모양)
+    redis = deps.get_redis()
+    if not await feature_flag_service.is_enabled(db, redis, "QUIZ") or not await real_market.allowed_for_user(
+        db, redis, user
+    ):
         raise HTTPException(
             status.HTTP_503_SERVICE_UNAVAILABLE,
             detail={"code": "FEATURE_DISABLED", "message": "야간 차트 퀴즈는 현재 운영하지 않습니다."},
@@ -88,7 +93,7 @@ async def random_quiz(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    await _require_quiz_enabled(db)
+    await _require_quiz_enabled(db, user)
     try:
         quiz = await quiz_service.serve_random(
             db, user.id, horizons=_parse_horizons(horizons), types=_parse_types(types)
@@ -109,7 +114,7 @@ async def submit_quiz(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    await _require_quiz_enabled(db)
+    await _require_quiz_enabled(db, user)
     try:
         res = await quiz_service.submit(db, user.id, quiz_id, body.choice, redis=deps.get_redis())
     except quiz_service.QuizError as e:

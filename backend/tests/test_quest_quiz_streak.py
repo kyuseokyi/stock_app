@@ -378,12 +378,12 @@ async def test_router_feature_flags_admin_only(api, maker, fake_redis):
     set_user(admin)
     r = await client.get("/api/game/admin/feature-flags")
     assert r.status_code == 200
-    assert [(f["key"], f["enabled"]) for f in r.json()] == [("QUIZ", True), ("STREAK", True)]
+    assert [(f["key"], f["enabled"]) for f in r.json()] == [("QUIZ", True), ("STREAK", True), ("REAL_MARKET", False)]
 
     r = await client.put("/api/game/admin/feature-flags/QUIZ", json={"enabled": False})
     assert r.status_code == 200 and r.json()["enabled"] is False and r.json()["updated_at"]
     r = await client.get("/api/game/admin/feature-flags")
-    assert [(f["key"], f["enabled"]) for f in r.json()] == [("QUIZ", False), ("STREAK", True)]
+    assert [(f["key"], f["enabled"]) for f in r.json()] == [("QUIZ", False), ("STREAK", True), ("REAL_MARKET", False)]
 
     assert (await client.put("/api/game/admin/feature-flags/NOPE", json={"enabled": True})).status_code == 404
 
