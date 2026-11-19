@@ -173,7 +173,7 @@ describe('shouldPollMaintenance', () => {
 
 describe('resolveStoreUrl', () => {
   it('서버 주소가 있으면 그대로', () => {
-    expect(resolveStoreUrl('https://x.test/app', 'android', 'com.stockapp')).toBe('https://x.test/app');
+    expect(resolveStoreUrl('https://x.test/app', 'android', 'com.stocknote')).toBe('https://x.test/app');
   });
   it('없으면 Android 는 패키지 기반 Play 주소', () => {
     expect(resolveStoreUrl(null, 'android', 'com.stockapp.dev')).toBe(
@@ -181,7 +181,7 @@ describe('resolveStoreUrl', () => {
     );
   });
   it('iOS·패키지 모름·이상한 패키지명이면 null(안내만)', () => {
-    expect(resolveStoreUrl(null, 'ios', 'com.stockapp')).toBeNull();
+    expect(resolveStoreUrl(null, 'ios', 'com.stocknote')).toBeNull();
     expect(resolveStoreUrl(null, 'android', null)).toBeNull();
     expect(defaultStoreUrl('android', 'com.x&y=1')).toBeNull();
   });

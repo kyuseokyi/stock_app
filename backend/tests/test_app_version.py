@@ -23,6 +23,8 @@ from shared.models import AppVersionConfig, Base, User, UserRole
 
 VERSIONS_DIR = Path(__file__).resolve().parents[1] / "alembic" / "versions"
 MIGRATION = VERSIONS_DIR / "f4a5b6c7d8e9_app_version_configs.py"
+# 상용 패키지 com.stockapp → com.stocknote 로 android store_url 교체(데이터 마이그레이션)
+RENAME_MIGRATION = VERSIONS_DIR / "e6f8a0b2c4d7_app_version_store_url_stocknote.py"
 
 
 # ── SemVer ──────────────────────────────────────────────────────────────────
@@ -139,7 +141,7 @@ def _body(**kw) -> dict:
         "latest_version": "1.0.1",
         "min_supported_version": "1.0.0",
         "force_update_enabled": False,
-        "store_url": "https://play.google.com/store/apps/details?id=com.stockapp",
+        "store_url": "https://play.google.com/store/apps/details?id=com.stocknote",
         "store_title": "최신 버전 출시 안내",
         "store_message": "더 좋아진 StockApp을 만나보세요.",
         "ota_policy": "OPTIONAL",
@@ -368,8 +370,8 @@ async def test_admin_put_invalid_platform_422(api, maker):
 
 
 # ── 마이그레이션 ─────────────────────────────────────────────────────────────
-def _load_migration():
-    spec = importlib.util.spec_from_file_location("mig_app_version_configs", MIGRATION)
+def _load_migration(path: Path = MIGRATION):
+    spec = importlib.util.spec_from_file_location(f"mig_{path.stem}", path)
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod
@@ -421,9 +423,16 @@ def test_migration_upgrade_seeds_and_downgrade_on_sqlite():
         for r in rows:
             assert r[1] == "1.0.0" and r[2] == "1.0.0" and not r[3] and r[5] == "SILENT" and not r[6]
             assert r[7] is not None
-        assert rows[0][4] == DEFAULTS["android"]["store_url"]
+        # 옛 시드는 옛 상용 패키지(com.stockapp) 주소 — 이후 rename 마이그레이션이 서비스 기본값으로 맞춘다
+        assert rows[0][4] == mod._ANDROID_URL
         assert rows[1][4] == DEFAULTS["ios"]["store_url"]
+        rename = _load_migration(RENAME_MIGRATION)
         with Operations.context(MigrationContext.configure(conn)):
+            rename.upgrade()
+        urls = dict(conn.execute(sa.text("SELECT platform, store_url FROM app_version_configs")).all())
+        assert urls == {"android": DEFAULTS["android"]["store_url"], "ios": DEFAULTS["ios"]["store_url"]}
+        with Operations.context(MigrationContext.configure(conn)):
+            rename.downgrade()
             mod.downgrade()
         assert "app_version_configs" not in sa.inspect(conn).get_table_names()
 
@@ -434,8 +443,46 @@ def test_migration_seed_matches_service_defaults():
     assert mod._STORE_MESSAGE == DEFAULTS["android"]["store_message"]
     assert mod._OTA_TITLE == DEFAULTS["android"]["ota_title"]
     assert mod._OTA_MESSAGE == DEFAULTS["android"]["ota_message"]
-    assert mod._ANDROID_URL == DEFAULTS["android"]["store_url"]
+    # android 주소는 옛 시드(com.stockapp) → rename 마이그레이션의 새 주소가 서비스 기본값
+    rename = _load_migration(RENAME_MIGRATION)
+    assert mod._ANDROID_URL == rename._OLD_URL
+    assert rename._NEW_URL == DEFAULTS["android"]["store_url"]
     assert mod._IOS_URL == DEFAULTS["ios"]["store_url"]
+
+
+def test_rename_migration_parent_and_reversible_on_sqlite():
+    """com.stocknote 교체는 옛 기본 주소인 android 행만 — 관리자가 바꾼 주소·ios 는 그대로, downgrade 는 역방향."""
+    from alembic.migration import MigrationContext
+    from alembic.operations import Operations
+
+    rename = _load_migration(RENAME_MIGRATION)
+    assert rename.revision == "e6f8a0b2c4d7" and rename.down_revision == "d5e7f9a1b3c5"
+    engine = sa.create_engine("sqlite://")
+    with engine.begin() as conn:
+        conn.execute(sa.text("CREATE TABLE app_version_configs (platform VARCHAR(20), store_url VARCHAR(255))"))
+
+        def urls() -> dict[str, str]:
+            return dict(conn.execute(sa.text("SELECT platform, store_url FROM app_version_configs")).all())
+
+        # ① 옛 기본 주소 → 교체
+        conn.execute(sa.text("INSERT INTO app_version_configs VALUES ('android', :u), ('ios', :i)"),
+                     {"u": rename._OLD_URL, "i": rename._OLD_URL})
+        with Operations.context(MigrationContext.configure(conn)):
+            rename.upgrade()
+        assert urls() == {"android": rename._NEW_URL, "ios": rename._OLD_URL}  # ios 는 플랫폼이 달라 그대로
+        with Operations.context(MigrationContext.configure(conn)):
+            rename.downgrade()
+        assert urls() == {"android": rename._OLD_URL, "ios": rename._OLD_URL}
+
+        # ② 관리자가 다른 주소로 바꿔 둔 행은 upgrade·downgrade 모두 건드리지 않음
+        custom = "https://example.com/funnote"
+        conn.execute(sa.text("UPDATE app_version_configs SET store_url = :c WHERE platform = 'android'"), {"c": custom})
+        with Operations.context(MigrationContext.configure(conn)):
+            rename.upgrade()
+        assert urls()["android"] == custom
+        with Operations.context(MigrationContext.configure(conn)):
+            rename.downgrade()
+        assert urls()["android"] == custom
 
 
 async def test_version_check_no_store_header(api, maker):

@@ -37,10 +37,12 @@ export default {
     ios: {
       icon: './assets/images/icon.png', // FunNote 앱 아이콘(라벤더 바탕 + 웃는 수익률 기호)
       supportsTablet: true,
-      bundleIdentifier: isDev ? 'com.stockapp.dev' : 'com.stockapp',
+      // 상용 패키지·번들 ID 는 com.stocknote(com.stockapp 은 Play 에서 이미 사용 중 — docs/deploy/package-rename-stocknote.md).
+      // 개발은 com.stockapp.dev 그대로(기기 데이터·Firebase·EAS 설정 유지), 스킴·slug 도 그대로.
+      bundleIdentifier: isDev ? 'com.stockapp.dev' : 'com.stocknote',
     },
     android: {
-      package: isDev ? 'com.stockapp.dev' : 'com.stockapp',
+      package: isDev ? 'com.stockapp.dev' : 'com.stocknote',
       adaptiveIcon: {
         backgroundColor: '#F7F5FF',
         foregroundImage: './assets/images/android-icon-foreground.png',
