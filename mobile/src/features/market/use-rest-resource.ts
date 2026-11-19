@@ -14,15 +14,21 @@ export type ResourceState<T> = { data: T | null; loading: boolean; error: string
  * - silentRefresh: 자동 새로고침 — 번호를 올리지 않아 진행 중인 전체 새로고침을 막지 않는다
  * - fetchedAt: 마지막 조회가 끝난 시각 — 복귀 재조회(useReturnRefresh) 판정용
  * 요청 번호(createLatest)로 늦게 도착한 옛 응답이 새 결과를 덮지 않게 한다.
+ * - enabled: false 면 요청하지 않고 빈 상태(로딩·오류 아님)로 둔다 — 시세 비노출(A안)로 숨긴 섹션이 403 을 부르지 않게.
+ *   true 로 바뀌면(로그인 등) 그때 불러온다. 기본 true(지금과 같음)
  */
-export function useRestResource<T>(fetcher: () => Promise<T>) {
-  const [state, setState] = useState<ResourceState<T>>({ data: null, loading: true, error: null });
+export function useRestResource<T>(fetcher: () => Promise<T>, enabled = true) {
+  const [state, setState] = useState<ResourceState<T>>({ data: null, loading: enabled, error: null });
   const [gate] = useState(createLatest);
   const fetchedAt = useRef<number | null>(null);
   const load = useCallback(() => stampFetch(fetchedAt, fetcher), [fetcher]);
 
   const reload = useCallback(async () => {
     const id = gate.next();
+    if (!enabled) {
+      setState({ data: null, loading: false, error: null });
+      return;
+    }
     setState((s) => ({ ...s, loading: true, error: null }));
     try {
       const data = await load();
@@ -30,19 +36,21 @@ export function useRestResource<T>(fetcher: () => Promise<T>) {
     } catch (e) {
       if (gate.isLatest(id)) setState((s) => ({ data: s.data, loading: false, error: errorCode(e) }));
     }
-  }, [load, gate]);
+  }, [load, gate, enabled]);
 
   const refresh = useCallback(async () => {
+    if (!enabled) return;
     const id = gate.next();
     const data = await load();
     if (gate.isLatest(id)) setState({ data, loading: false, error: null });
-  }, [load, gate]);
+  }, [load, gate, enabled]);
 
   const silentRefresh = useCallback(async () => {
+    if (!enabled) return;
     const id = gate.current();
     const data = await load();
     if (gate.isLatest(id)) setState((s) => ({ ...s, data, error: null }));
-  }, [load, gate]);
+  }, [load, gate, enabled]);
 
   useEffect(() => {
     void reload();

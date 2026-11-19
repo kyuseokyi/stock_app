@@ -8,6 +8,8 @@ import { showToast } from '../store/toast'
 import PageHeader from '../components/ui/PageHeader'
 import Card from '../components/ui/Card'
 import { INFO_NOTICE } from '../lib/terms'
+import { useGameAccess } from '../hooks/useGameAccess'
+import { gameVisible } from '../lib/marketAccess'
 
 // 내정보(/me) — 앱 내정보 탭과 같은 자리. 비로그인: 간편 로그인 / 로그인: 닉네임·게임 바로가기·로그아웃·탈퇴.
 // 헤더의 닉네임 메뉴(UserMenu)도 그대로 둔다(데스크톱 동선).
@@ -16,6 +18,7 @@ export default function MyPage() {
   const [loginOpen, setLoginOpen] = useState(false)
   const [deleteOpen, setDeleteOpen] = useState(false)
   const navigate = useNavigate()
+  const showGame = gameVisible(useGameAccess()) // 실제 시세 게임이 닫혀 있으면(A안) 게임 줄을 숨긴다
 
   const handleDeleted = () => {
     setDeleteOpen(false)
@@ -50,11 +53,13 @@ export default function MyPage() {
       </Card>
 
       <Card padding="none" className="mt-3 overflow-hidden">
-        <Link to="/game" className="flex items-center justify-between px-5 py-4 text-ink hover:bg-line">
-          <span>🎮 트레이딩 게임</span>
-          <span className="text-ink-muted">›</span>
-        </Link>
-        <Link to="/me/funds" className="flex items-center justify-between border-t border-line px-5 py-4 text-ink hover:bg-line">
+        {showGame && (
+          <Link to="/game" className="flex items-center justify-between border-b border-line px-5 py-4 text-ink hover:bg-line">
+            <span>🎮 트레이딩 게임</span>
+            <span className="text-ink-muted">›</span>
+          </Link>
+        )}
+        <Link to="/me/funds" className="flex items-center justify-between px-5 py-4 text-ink hover:bg-line">
           <span>💰 내 펀드 수익</span>
           <span className="text-ink-muted">›</span>
         </Link>

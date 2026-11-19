@@ -5,9 +5,10 @@ import type { ScreenerFeatures } from './api';
 
 export type ScreenerTab = 'leaders' | 'finder' | 'patterns';
 
-/** 하단 탭에 스크리너를 보일지 — STOCK_FINDER 가 확실히 켜졌을 때만(로딩·오류는 숨김 쪽이 안전) */
+/** 하단 탭에 스크리너를 보일지 — STOCK_FINDER 가 확실히 켜졌고 요청자가 시세를 볼 수 있을 때만(로딩·오류는 숨김 쪽이 안전).
+ *  시세 비노출(marketData=false)이면 서버가 스크리너 쿼리를 빈 목록으로 막으므로 탭도 숨긴다(A안 설계 2-1) */
 export function screenerTabVisible(features: ScreenerFeatures | null): boolean {
-  return features?.stockFinder === true;
+  return features?.stockFinder === true && features.marketData === true;
 }
 
 /** 스크리너 화면 안의 칩 — STOCK_FINDER 가 켜져 있으면 주도주는 항상, 조건검색·패턴은 각자 스위치대로 */

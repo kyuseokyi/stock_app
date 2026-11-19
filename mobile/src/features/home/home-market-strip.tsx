@@ -3,12 +3,14 @@ import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { StyleSheet } from 'react-native-unistyles';
 
+import { anyIndexVisible, marketDataVisible, visibleIndices } from '@/features/market-access/access';
 import { fetchMarketOverview } from '@/features/market/api';
 import { formatChg, formatIndex } from '@/features/market/format';
 import { indexTone } from '@/features/market/overview-groups';
 import type { MarketIndex } from '@/features/market/types';
 import { useAutoRefresh } from '@/features/market/use-auto-refresh';
 import { useRestResource } from '@/features/market/use-rest-resource';
+import type { ScreenerFeatures } from '@/features/screener/api';
 import { Card } from '@/ui';
 
 import { homeReferenceIndices, marketStripPhase } from './home-sections';
@@ -17,10 +19,20 @@ import { homeReferenceIndices, marketStripPhase } from './home-sections';
  * 홈 최하단 '오늘 시장 참고' 데이터 — 시장 개요 1건만 받는다(예전 홈 요약의 브리핑·급등락 조회는 하지 않음).
  * 지수는 홈이 포커스·앱이 앞에 있을 때 30초마다 조용히 갱신(예전 홈과 같은 주기).
  * 홈 화면이 들고 당겨서 새로고침에 함께 넘긴다 — 실패해도 throw 하지 않는다(이 칸만 다시 시도).
+ * 시세 비노출(A안): 시세 열람이면 지금과 같고, 아니면 국내 지수 공개 스위치일 때 코스피·코스닥만. 볼 수 있는 지수가 없으면
+ * 요청하지 않고(visible=false) 섹션째 숨긴다. 열람 범위가 바뀌면(로그인 등) 다시 불러온다.
  */
-export function useHomeMarketStrip() {
-  const overview = useRestResource(fetchMarketOverview);
-  const indices = useMemo(() => homeReferenceIndices(overview.data?.indices ?? []), [overview.data]);
+export function useHomeMarketStrip(access: ScreenerFeatures | null) {
+  const showMarket = marketDataVisible(access);
+  const enabled = anyIndexVisible(access);
+  // 열람 범위가 바뀌면 fetcher 가 바뀌어 다시 불러온다(관리자로 로그인하면 미국 지수·환율까지)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const fetcher = useCallback(() => fetchMarketOverview(), [showMarket]);
+  const overview = useRestResource(fetcher, enabled);
+  const indices = useMemo(
+    () => visibleIndices(access, homeReferenceIndices(overview.data?.indices ?? [])),
+    [access, overview.data],
+  );
 
   // 첫 로딩 중이면 자동 갱신을 건너뛰어 개요를 두 번 받지 않게(use-home-summary 와 같은 방식)
   const loadingRef = useRef(true);
@@ -35,9 +47,12 @@ export function useHomeMarketStrip() {
   const { reload } = overview;
   const refresh = reload;
 
+  const phase = marketStripPhase(overview.loading, overview.data !== null, overview.error !== null);
   return {
     indices,
-    phase: marketStripPhase(overview.loading, overview.data !== null, overview.error !== null),
+    // 볼 수 있는 지수가 없으면(판단값 모름·둘 다 꺼짐, 또는 시세 비노출에서 받은 지수 없음) 섹션째 숨김
+    visible: enabled && !(phase === 'ready' && indices.length === 0 && !showMarket),
+    phase,
     reload,
     refresh,
   };
@@ -53,6 +68,7 @@ export type HomeMarketStripData = ReturnType<typeof useHomeMarketStrip>;
 export function HomeMarketStrip({ strip }: { strip: HomeMarketStripData }) {
   const router = useRouter();
   const goMarket = () => router.push('/market');
+  if (!strip.visible) return null;
   return (
     <View style={styles.section}>
       <View style={styles.head}>

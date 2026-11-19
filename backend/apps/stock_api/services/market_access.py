@@ -31,6 +31,7 @@ from shared.models import User
 log = logging.getLogger(__name__)
 
 SWITCH_KEY = "MARKET_DATA"
+KR_INDEX_SWITCH_KEY = "MARKET_INDEX_KR"  # 국내 지수(코스피·코스닥)만 공개 — 개별 시세는 SWITCH_KEY 로만
 DISABLED_DETAIL = "market_data_disabled"
 # 토큰 덕분에(스위치 OFF) 열람이 허용된 응답 — 공유 캐시가 익명 사용자에게 되돌려주지 않게
 PRIVATE_CACHE_CONTROL = "private, max-age=30"
@@ -45,6 +46,11 @@ class MarketAccess:
 def market_data_switch_on() -> bool:
     """전체 스위치(동기·30초 캐시). 행 없음·DB 오류 = OFF."""
     return bool(screener_features.enabled_map().get(SWITCH_KEY, False))
+
+
+def kr_index_switch_on() -> bool:
+    """국내 지수 공개 스위치(동기·30초 캐시). 행 없음·DB 오류 = OFF."""
+    return bool(screener_features.enabled_map().get(KR_INDEX_SWITCH_KEY, False))
 
 
 async def load_viewer(creds: HTTPAuthorizationCredentials) -> User | None:
@@ -102,3 +108,11 @@ def context_allowed(context: object) -> bool:
         if isinstance(access, MarketAccess):
             return access.allowed
     return market_data_switch_on()
+
+
+def context_kr_index_allowed(context: object) -> bool:
+    """GraphQL 리졸버용(동기 — 스레드풀에서 부른다) — 국내 지수(코스피·코스닥)를 보여 줄 수 있는가.
+    시세 전체 열람이 허용되면 스위치를 보지 않는다."""
+    if context_allowed(context):
+        return True
+    return market_viewer.kr_index_visible(False, kr_index_switch_on())

@@ -4,6 +4,8 @@ import { RefreshControl, ScrollView, Text, View } from 'react-native';
 import { StyleSheet } from 'react-native-unistyles';
 
 import { kstDateString } from '@/features/game/lib/format';
+import { marketDataVisible, visibleIndices } from '@/features/market-access/access';
+import type { ScreenerFeatures } from '@/features/screener/api';
 import { usePullRefresh } from '@/hooks/use-pull-refresh';
 import { Chip, ListState, SectionHead } from '@/ui';
 
@@ -43,6 +45,8 @@ type Props = {
   onOpenGroup: (kind: GroupKind, id: string) => void;
   /** ① 헤더(타이틀 줄)에 붙일 기준 시각·장운영 뱃지 — 문자열(원시값)만 넘긴다 */
   onHeader?: (basis: string | null, session: MarketSession | null) => void;
+  /** 요청자 기준 시세 열람 판단값(screenerFeatures, A안). null(모름)·실패는 숨김 */
+  access: ScreenerFeatures | null;
 };
 
 /**
@@ -50,25 +54,30 @@ type Props = {
  * ② AI 장전 브리핑 → ③ 지수 캐러셀(+ 돈의 흐름·경제지표) → ⑤ 급등락 & AI 원인 → ⑤-2 수급 전광판
  * → ⑤-3 오늘 특징주 → ⑥ 핫 키워드·주도 테마 → ⑦ 다가오는 일정.
  * 섹션마다 따로 불러와 하나가 실패해도 나머지는 보인다. 전부 실패했을 때만 전체 오류 화면.
+ * 시세 비노출(A안, marketData=false)이면 급등락·수급·특징주는 요청하지 않고, 이들과 핫 키워드·주도 테마는 섹션째 그리지 않는다.
+ * 남는 것: AI 브리핑(텍스트) · 국내 지수(국내 지수 공개 스위치일 때 코스피·코스닥) · 미국 거시(FRED) · 일정(공모주는 서버가 뺌).
  */
 /** 수급 전광판 출처 라벨 */
 const FLOW_SOURCE_LABEL: Record<FlowSource, string> = { kiwoom: '키움', pykrx: 'KRX(pykrx)', kis: 'KIS' };
 
-export function MarketSection({ onMore, onOpenGroup, onHeader }: Props) {
+export function MarketSection({ onMore, onOpenGroup, onHeader, access }: Props) {
   const router = useRouter();
+  const showMarket = marketDataVisible(access);
   const overview = useMarketOverview();
   const brief = useMorningBrief();
-  const movers = useMovers();
-  const flow = useInvestorFlow();
-  const featured = useFeatured();
+  const movers = useMovers(showMarket);
+  const flow = useInvestorFlow(showMarket);
+  const featured = useFeatured(showMarket);
   const today = kstDateString();
 
-  const indices = useMemo(() => overview.data?.overview.indices ?? [], [overview.data]);
+  // 서버가 이미 거른 지수를 화면도 한 번 더 거른다(판단값을 묻는 동안·스위치 변경 직후에 시세가 비치지 않게)
+  const indices = useMemo(() => visibleIndices(access, overview.data?.overview.indices ?? []), [access, overview.data]);
   const macro = overview.data?.overview.macro ?? [];
   const session = marketSession(indices);
 
   // 당겨서 새로고침 — 모든 섹션을 함께, 전부 실패했을 때만 토스트(일부 실패는 그 섹션만 이전 값 유지)
-  const sources = [overview, brief, movers, flow, featured];
+  // 숨긴(요청하지 않는) 섹션은 빼야 '전부 실패'·'아직 없음' 판정이 맞는다
+  const sources = showMarket ? [overview, brief, movers, flow, featured] : [overview, brief];
   const refreshAll = async () => {
     const results = await Promise.allSettled(sources.map((s) => s.refresh()));
     if (results.every((r) => r.status === 'rejected')) throw (results[0] as PromiseRejectedResult).reason;
@@ -125,7 +134,7 @@ export function MarketSection({ onMore, onOpenGroup, onHeader }: Props) {
   const fl = flow.data;
   const fd = featured.data;
   const hasFlow = fl != null && (fl.foreignTop.length + fl.institutionTop.length + fl.pensionTop.length + fl.doubleBuy.length > 0);
-  const themes = overview.data?.themes ?? [];
+  const themes = showMarket ? overview.data?.themes ?? [] : [];
   const events = overview.data?.events ?? [];
 
   return (
@@ -167,7 +176,7 @@ export function MarketSection({ onMore, onOpenGroup, onHeader }: Props) {
       ) : null}
 
       {/* ⑤ 급등락 & AI 원인 */}
-      {mv && mv.gainers.length + mv.losers.length > 0 ? (
+      {!showMarket ? null : mv && mv.gainers.length + mv.losers.length > 0 ? (
         <View style={styles.card}>
           <SectionHead title="급등락 & AI 원인" caption={formatBasis(mv.updatedAt)} />
           <MoversBoard gainers={mv.gainers} losers={mv.losers} onOpenStock={openStock} />
@@ -177,7 +186,7 @@ export function MarketSection({ onMore, onOpenGroup, onHeader }: Props) {
       ) : null}
 
       {/* ⑤-2 투자자별 수급 전광판 */}
-      {fl && hasFlow ? (
+      {!showMarket ? null : fl && hasFlow ? (
         <View style={styles.card}>
           <SectionHead
             title="수급 전광판"
@@ -192,7 +201,7 @@ export function MarketSection({ onMore, onOpenGroup, onHeader }: Props) {
       ) : null}
 
       {/* ⑤-3 오늘 특징주 — 신고가·신저가(20:30 계산) + VI 발동(키움, 없으면 그 탭 숨김) */}
-      {hasFeatured(fd) ? (
+      {!showMarket ? null : hasFeatured(fd) ? (
         <View style={styles.card}>
           <SectionHead title="오늘 특징주" />
           <FeaturedBoard featured={fd} today={today} onOpenStock={openStock} />
@@ -202,7 +211,7 @@ export function MarketSection({ onMore, onOpenGroup, onHeader }: Props) {
       ) : null}
 
       {/* ⑥ 핫 키워드 & 주도 테마 */}
-      {(mv?.keywords.length ?? 0) > 0 || themes.length > 0 ? (
+      {showMarket && ((mv?.keywords.length ?? 0) > 0 || themes.length > 0) ? (
         <View style={styles.card}>
           <SectionHead title="핫 키워드 & 주도 테마" onMore={themes.length > 0 ? () => onMore('theme') : undefined} />
           {mv && mv.keywords.length > 0 ? (

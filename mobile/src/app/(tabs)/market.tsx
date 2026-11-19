@@ -10,17 +10,25 @@ import { GroupSection } from '@/features/market/sections/group-section';
 import type { MarketSession } from '@/features/market/dashboard';
 import { MarketSection } from '@/features/market/sections/market-section';
 import type { GroupKind } from '@/features/market/types';
+import { marketDataVisible } from '@/features/market-access/access';
+import { useScreenerFeaturesState } from '@/features/screener/use-screener-features';
 import { Chip, ProfileHeaderButton } from '@/ui';
 
 type Tab = 'market' | 'theme' | 'sector' | 'calendar';
 const TABS: [Tab, string][] = [['market', '개요'], ['theme', '테마'], ['sector', '업종'], ['calendar', '일정']];
+/** 시세로만 이루어진 칩 — 시세 비노출(A안)이면 칩째 숨긴다 */
+const MARKET_ONLY: ReadonlySet<Tab> = new Set(['theme', 'sector']);
 
 /** 시장 탭(구 마켓, 참고용) — 개요(대시보드: AI 브리핑·지수 캐러셀·급등락·수급·핫 키워드·일정, 스펙 §2.1 ①~⑦)와
  *  테마·업종·일정 전체 랭킹 칩. ① 헤더의 기준 시각·장운영 뱃지는 개요 칩이 데이터를 받아 올려 준다 */
 export default function MarketScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const [tab, setTab] = useState<Tab>('market');
+  const [selected, setTab] = useState<Tab>('market');
+  const access = useScreenerFeaturesState();
+  const showMarket = marketDataVisible(access);
+  // 로그아웃 등으로 시세가 닫히면 테마·업종에 있던 화면도 개요로 돌아간다
+  const tab: Tab = !showMarket && MARKET_ONLY.has(selected) ? 'market' : selected;
   const [header, setHeader] = useState<{ basis: string | null; session: MarketSession | null }>({ basis: null, session: null });
   const onHeader = useCallback(
     (basis: string | null, session: MarketSession | null) =>
@@ -47,11 +55,13 @@ export default function MarketScreen() {
         <ProfileHeaderButton />
       </View>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips} style={styles.chipsBar}>
-        {TABS.map(([v, t]) => <Chip key={v} label={t} selected={tab === v} onPress={() => setTab(v)} />)}
+        {TABS.filter(([v]) => showMarket || !MARKET_ONLY.has(v)).map(([v, t]) => (
+          <Chip key={v} label={t} selected={tab === v} onPress={() => setTab(v)} />
+        ))}
       </ScrollView>
       <StaleNotice />
       {/* 섹션 본문 — MarketSection 의 '더보기'(테마·일정)는 이 화면 안 칩 전환으로 연결 */}
-      {tab === 'market' ? <MarketSection onMore={setTab} onOpenGroup={openGroup} onHeader={onHeader} /> : null}
+      {tab === 'market' ? <MarketSection onMore={setTab} onOpenGroup={openGroup} onHeader={onHeader} access={access} /> : null}
       {tab === 'theme' ? <GroupSection key="theme" kind="theme" onOpenGroup={openGroup} /> : null}
       {tab === 'sector' ? <GroupSection key="sector" kind="sector" onOpenGroup={openGroup} /> : null}
       {tab === 'calendar' ? <CalendarSection /> : null}

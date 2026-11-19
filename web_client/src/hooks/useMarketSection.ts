@@ -14,15 +14,25 @@ export interface SectionState<T> {
  * - silentRefresh: 자동 갱신·복귀 재조회. 실패는 삼키고 이전 값을 유지, 앞 요청이 끝나기 전에는 건너뛴다
  * - keepCurrent: true 를 돌려주면 자동 갱신 결과로 화면을 바꾸지 않는다(히트맵: 기준일이 같으면 들어가 있던 종목 보기를 유지)
  * - fetchedAt: 마지막 조회가 끝난 시각(복귀 재조회 판정용) — 실패해도 찍어야 첫 로드 실패 뒤에도 복귀 재조회가 돈다
+ * - enabled: false 면 요청하지 않고 빈 상태(로딩·실패 아님)로 둔다 — 시세 비노출(A안)로 숨긴 섹션이 403 을 부르지 않게.
+ *   true 로 바뀌면(로그인 등) 그때 불러온다. 기본 true(지금과 같음)
  */
-export function useMarketSection<T>(fetcher: (timeoutMs?: number) => Promise<T>, keepCurrent?: (cur: T, next: T) => boolean) {
-  const [state, setState] = useState<SectionState<T>>({ data: null, loading: true, failed: false })
+export function useMarketSection<T>(
+  fetcher: (timeoutMs?: number) => Promise<T>,
+  keepCurrent?: (cur: T, next: T) => boolean,
+  enabled = true,
+) {
+  const [state, setState] = useState<SectionState<T>>({ data: null, loading: enabled, failed: false })
   const seq = useRef(0)
   const busy = useRef(false)
   const fetchedAt = useRef<number | null>(null)
 
   const reload = useCallback(async () => {
     const id = ++seq.current
+    if (!enabled) {
+      setState({ data: null, loading: false, failed: false })
+      return
+    }
     setState((s) => ({ ...s, loading: true, failed: false }))
     try {
       const data = await fetcher()
@@ -32,10 +42,10 @@ export function useMarketSection<T>(fetcher: (timeoutMs?: number) => Promise<T>,
     } finally {
       fetchedAt.current = Date.now()
     }
-  }, [fetcher])
+  }, [fetcher, enabled])
 
   const silentRefresh = useCallback(async () => {
-    if (busy.current) return
+    if (busy.current || !enabled) return
     busy.current = true
     const id = seq.current
     try {
@@ -52,7 +62,7 @@ export function useMarketSection<T>(fetcher: (timeoutMs?: number) => Promise<T>,
       busy.current = false
       fetchedAt.current = Date.now()
     }
-  }, [fetcher, keepCurrent])
+  }, [fetcher, keepCurrent, enabled])
 
   useEffect(() => {
     void reload()

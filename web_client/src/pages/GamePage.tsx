@@ -23,7 +23,9 @@ import QuizBanner from '../components/game/QuizBanner'
 import SentimentBar from '../components/game/SentimentBar'
 import StreakRewardModal from '../components/game/StreakRewardModal'
 import TradingChart from '../components/game/TradingChart'
+import { useGameAccess } from '../hooks/useGameAccess'
 import { useGameRules } from '../hooks/useGameRules'
+import { gameVisible } from '../lib/marketAccess'
 import { useGameWebSocket } from '../hooks/useGameWebSocket'
 import { canPartialClose } from '../lib/partialClose'
 import { isQuizPrimeTime } from '../lib/quiz'
@@ -37,9 +39,27 @@ const PRIME_CHECK_MS = 60_000
 type ActiveModal = 'ranking' | 'rules' | 'quest' | 'academy' | 'quiz' | 'streak' | null
 type PrivateModal = Exclude<ActiveModal, 'ranking' | 'rules' | null>
 
+// 실제 시세 게임 게이트(A안 설계 3-5) — 요청자 기준 features.real_market 이 true 일 때만 게임 화면을 마운트한다.
+// 게임 화면은 마운트되자마자 WS·캔들·장운영 상태를 부르므로, 허용 전에는 마운트하지 않아야 403·WS 차단 요청이 생기지 않는다.
+// 메뉴에서는 숨지만 주소로 바로 들어오면 안내 카드. 판단값을 묻는 동안은 '불러오는 중'.
+export default function GamePage() {
+  const access = useGameAccess()
+  if (access === null) return <p className="py-16 text-center text-ink-muted">불러오는 중…</p>
+  if (!gameVisible(access)) {
+    return (
+      <EmptyState
+        emoji="🎮"
+        title="지금은 게임을 이용할 수 없어요"
+        description="실제 시세로 하는 트레이딩 게임은 현재 열려 있지 않아요."
+      />
+    )
+  }
+  return <GameScreen />
+}
+
 // 실시간 트레이딩 게임 — 상태별 분기: 서버 미설정/시즌 없음 → 준비 중, 연결 실패 → 재시도, 정상 → 트레이딩 화면
 // 모달은 한 번에 하나(activeModal). 랭킹·규칙은 공개, 퀘스트·아카데미·퀴즈는 로그인 필요.
-export default function GamePage() {
+function GameScreen() {
   const token = useAuthStore((s) => s.token)
   const userId = useAuthStore((s) => s.user?.id ?? null)
   const expireSession = useAuthStore((s) => s.expireSession)

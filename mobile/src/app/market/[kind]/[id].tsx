@@ -2,6 +2,7 @@ import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
 import { StyleSheet } from 'react-native-unistyles';
 
+import { marketDataVisible } from '@/features/market-access/access';
 import { BasisNote } from '@/features/market/components/basis-note';
 import { BreadthBar } from '@/features/market/components/breadth-bar';
 import { StaleNotice } from '@/features/market/components/stale-notice';
@@ -9,6 +10,7 @@ import { closeBasis } from '@/features/market/dashboard';
 import { formatAmount, formatChg, formatIndex, toneOf } from '@/features/market/format';
 import type { GroupKind } from '@/features/market/types';
 import { useGroupDetail } from '@/features/market/use-group-detail';
+import { useScreenerFeaturesState } from '@/features/screener/use-screener-features';
 import { usePullRefresh } from '@/hooks/use-pull-refresh';
 import { Button, ListState } from '@/ui';
 
@@ -18,16 +20,24 @@ export default function GroupDetailScreen() {
   const id = String(params.id ?? '');
   // theme/sector 가 아닌 kind 는 조회하지 않고 "찾을 수 없음" 으로 보낸다(딥링크·잘못된 URL 방어)
   if (params.kind !== 'theme' && params.kind !== 'sector') return <NotFound />;
-  return <GroupDetailBody kind={params.kind} id={id} />;
+  return <MarketDataGate kind={params.kind} id={id} />;
 }
 
-function NotFound() {
+/** 시세 비노출(A안) — 테마·업종 상세는 시세로만 이루어져 있어 열람 불가면 조회하지 않고 안내만(딥링크 대비) */
+function MarketDataGate({ kind, id }: { kind: GroupKind; id: string }) {
+  const access = useScreenerFeaturesState();
+  if (access === null) return <ListState mode="loading" />;
+  if (!marketDataVisible(access)) return <NotFound title="지금은 테마·업종 정보를 볼 수 없어요" hint="시장 탭에서 다른 정보를 확인해 주세요" />;
+  return <GroupDetailBody kind={kind} id={id} />;
+}
+
+function NotFound({ title = '이 그룹 정보를 찾을 수 없어요', hint = '목록이 바뀌었을 수 있어요' }: { title?: string; hint?: string }) {
   const router = useRouter();
   // 딥링크로 들어와 스택이 이 화면뿐이면 back() 이 동작하지 않으므로 마켓 탭으로 보낸다(테마·업종 목록이 마켓 탭으로 옮겨 감)
   const goBack = () => (router.canGoBack() ? router.back() : router.replace('/market'));
   return (
     <View style={styles.center}>
-      <ListState mode="empty" emoji="🔍" title="이 그룹 정보를 찾을 수 없어요" hint="목록이 바뀌었을 수 있어요" />
+      <ListState mode="empty" emoji="🔍" title={title} hint={hint} />
       <Button label="뒤로 가기" variant="secondary" fullWidth={false} onPress={goBack} />
     </View>
   );

@@ -4,7 +4,7 @@ import { gql } from './screener'
 // 이 파일에서 그대로 읽어 실제 스키마로 실행한다 — `export const X_QUERY = \`...\`` 형식을 바꾸지 말 것.
 
 export const SCREENER_FEATURES_QUERY = `query ScreenerFeatures {
-  screenerFeatures { stockFinder finder patterns }
+  screenerFeatures { stockFinder finder patterns marketData marketIndexKr }
 }`
 
 export interface ScreenerFeatures {
@@ -12,6 +12,10 @@ export interface ScreenerFeatures {
   stockFinder: boolean
   finder: boolean
   patterns: boolean
+  /** 요청자 기준 시세 열람 가능(A안 — 스위치 ON·관리자·열람 권한 회원). false 면 시세 섹션·탭 자체를 그리지 않는다 */
+  marketData: boolean
+  /** 요청자 기준 국내 지수(코스피·코스닥) 열람 가능 — marketData 이거나 관리자가 '국내 지수 공개'를 켰을 때 */
+  marketIndexKr: boolean
 }
 
 export async function getScreenerFeatures(): Promise<ScreenerFeatures> {

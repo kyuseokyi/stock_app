@@ -31,6 +31,8 @@ import { useTradingGameStore } from '@/features/game/store';
 import type { Leverage, OrderOptions, Ratio, Side } from '@/features/game/types';
 import { useGameRules } from '@/features/game/use-game-rules';
 import { useGameSocket } from '@/features/game/use-game-socket';
+import { gameVisible } from '@/features/market-access/access';
+import { useGameAccess } from '@/features/market-access/use-game-access';
 import { reasonFromCode } from '@/lib/api/session-end';
 import { BottomSheet, Button, Card, ListState, ProfileHeaderButton } from '@/ui';
 
@@ -42,7 +44,34 @@ type PrivateModal = Exclude<ActiveModal, 'ranking' | 'rules' | null>;
 
 // 실시간 트레이딩 게임 — 상태별 분기: 서버 미설정/시즌 없음 → 준비 중, 연결 실패 → 재시도, 정상 → 트레이딩 화면.
 // 시트(RN Modal)는 한 번에 하나(activeModal). 랭킹·규칙은 공개, 퀘스트·아카데미·퀴즈·주문은 로그인 필요(내정보 탭으로 이동).
-export default function GameScreen() {
+// 실제 시세 게임 게이트(A안 설계 3-5) — 요청자 기준 features.real_market 이 true 일 때만 게임 화면을 마운트한다.
+// 게임 화면은 마운트되자마자 WS·캔들·장운영 상태를 부르므로, 허용 전에는 마운트하지 않아야 403·WS 차단 요청이 생기지 않는다.
+// 탭 버튼은 숨지만(탭 레이아웃) 홈 카드·링크로 바로 들어오면 안내 카드. 판단값을 묻는 동안은 로딩.
+export default function GameTab() {
+  const insets = useSafeAreaInsets();
+  const access = useGameAccess();
+  if (gameVisible(access)) return <GameScreen />;
+  return (
+    <View style={[styles.flex, { paddingTop: insets.top }]}>
+      <View style={styles.titleRow}>
+        <Text style={styles.screenTitle} accessibilityRole="header">트레이딩 게임</Text>
+        <ProfileHeaderButton />
+      </View>
+      {access === null ? (
+        <ListState mode="loading" />
+      ) : (
+        <ListState
+          mode="empty"
+          emoji="🎮"
+          title="지금은 게임을 이용할 수 없어요"
+          hint="실제 시세로 하는 트레이딩 게임은 현재 열려 있지 않아요."
+        />
+      )}
+    </View>
+  );
+}
+
+function GameScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const token = useAuthStore((s) => s.token);

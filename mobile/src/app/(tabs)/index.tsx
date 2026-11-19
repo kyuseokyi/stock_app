@@ -11,6 +11,9 @@ import type { BlogPost } from '@/features/blog/types';
 import { useFeaturedPosts } from '@/features/blog/use-featured-posts';
 import { HomeFundCard } from '@/features/home/home-fund-card';
 import { HomeGameEduCard } from '@/features/home/home-game-edu-card';
+import { gameVisible } from '@/features/market-access/access';
+import { useGameAccess } from '@/features/market-access/use-game-access';
+import { useScreenerFeaturesState } from '@/features/screener/use-screener-features';
 import { HomeMarketStrip, useHomeMarketStrip } from '@/features/home/home-market-strip';
 import { HOME_POST_LIMIT } from '@/features/home/home-sections';
 import { HomePushPrompt } from '@/features/push/home-push-prompt';
@@ -33,7 +36,9 @@ export default function HomeScreen() {
   const router = useRouter();
   const { data: allPosts, loading, error, reload, refresh } = useFeaturedPosts();
   const data = allPosts.slice(0, HOME_POST_LIMIT); // 아래 교육 카드·시장 참고가 너무 멀어지지 않게
-  const strip = useHomeMarketStrip();
+  // 시세 비노출(A안) — 판단값(요청자 기준)으로 시장 참고·게임 교육 카드를 섹션째 숨긴다(로그인·로그아웃 때 다시 물음)
+  const strip = useHomeMarketStrip(useScreenerFeaturesState());
+  const showGame = gameVisible(useGameAccess());
   const ads = useAdConfig();
 
   // 시장 참고 칸은 실패해도 받아 둔 값을 유지하고 그 칸에서만 다시 시도한다 — 토스트는 지금까지처럼 추천 글이 실패했을 때만
@@ -84,12 +89,16 @@ export default function HomeScreen() {
             {data.length >= HOME_FEED_MIN_POSTS ? (
               <HouseAdSlot config={ads} slotKey="MOB_HOME_FEED_NATIVE" style={styles.adGap} />
             ) : null}
-            <View style={styles.sectionGap}>
-              <HomeGameEduCard />
-            </View>
-            <View style={styles.sectionGap}>
-              <HomeMarketStrip strip={strip} />
-            </View>
+            {showGame ? (
+              <View style={styles.sectionGap}>
+                <HomeGameEduCard />
+              </View>
+            ) : null}
+            {strip.visible ? (
+              <View style={styles.sectionGap}>
+                <HomeMarketStrip strip={strip} />
+              </View>
+            ) : null}
           </>
         }
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}

@@ -38,6 +38,7 @@ from shared.security import create_access_token
 
 # conftest 가 테스트마다 ON 으로 덮어쓰기 전의 진짜 판정 함수(행 없음·DB 오류 → OFF 검증용)
 REAL_SWITCH = market_access.market_data_switch_on
+REAL_KR_SWITCH = market_access.kr_index_switch_on
 
 GROUPS = {"date": "2026-11-18", "total": 1, "items": [
     {"id": "T1", "name": "반도체", "members": 10, "chg": 1.5, "value": 1e12, "up": 7, "down": 2, "flat": 1,
@@ -328,3 +329,104 @@ def test_schema_execute_without_context_uses_switch(switch, calls):
     switch["on"] = True
     res = asyncio.run(gql_schema.schema.execute("{ marketGroups { total } screenerFeatures { marketData } }"))
     assert res.data == {"marketGroups": {"total": 1}, "screenerFeatures": {"marketData": True}}
+
+
+# ---------------------------------------------------------------- 국내 지수 공개 스위치(MARKET_INDEX_KR)
+KR_INDICES = [
+    {"code": "KR:0001", "name": "KOSPI", "region": "KR", "date": "2026-11-19", "close": 2600.0, "chg1d": 0.5,
+     "spark": [2590.0, 2600.0], "live": True, "as_of": "10:30"},
+    {"code": "KR:1001", "name": "KOSDAQ", "region": "KR", "date": "2026-11-19", "close": 800.0, "chg1d": -0.2,
+     "spark": [801.0, 800.0], "live": True, "as_of": "10:30"},
+]
+KR_GQL = """{
+  screenerFeatures { marketData marketIndexKr }
+  marketOverview { indices { code live } macro { seriesId } }
+  marketGroups { total }
+  getChartData(symbol: "005930", startDate: "2026-11-01", endDate: "2026-11-18") { candles { date } }
+}"""
+
+
+@pytest.fixture
+def kr_switch(monkeypatch):
+    state = {"on": False}
+    monkeypatch.setattr(market_access, "kr_index_switch_on", lambda: state["on"])
+    return state
+
+
+async def _kr_gql(client, headers=None) -> dict:
+    r = await client.post("/graphql", json={"query": KR_GQL}, headers=headers or {})
+    body = r.json()
+    assert r.status_code == 200 and body.get("errors") is None, body
+    return body["data"]
+
+
+async def test_kr_index_switch_off_anonymous_no_indices(client, switch, kr_switch, calls, monkeypatch):
+    monkeypatch.setattr(market_query, "kr_indices", _boom)  # OFF 면 지수를 읽지도 않는다
+    data = await _kr_gql(client)
+    assert data["screenerFeatures"] == {"marketData": False, "marketIndexKr": False}
+    assert data["marketOverview"] == {"indices": [], "macro": [{"seriesId": "DGS10"}]}
+
+
+async def test_kr_index_switch_on_anonymous_only_kr_indices(client, switch, kr_switch, calls, monkeypatch):
+    kr_switch["on"] = True
+    monkeypatch.setattr(market_query, "kr_indices", lambda: [dict(i) for i in KR_INDICES])
+    monkeypatch.setattr(market_query, "overview", _boom)  # 전체 지수(미국·원/달러 포함)는 읽지 않는다
+    data = await _kr_gql(client)
+    assert data["screenerFeatures"] == {"marketData": False, "marketIndexKr": True}
+    assert data["marketOverview"] == {
+        "indices": [{"code": "KR:0001", "live": True}, {"code": "KR:1001", "live": True}],
+        "macro": [{"seriesId": "DGS10"}],
+    }
+    # 개별 시세는 여전히 차단
+    assert data["marketGroups"] == {"total": 0}
+    assert data["getChartData"] == {"candles": []}
+    assert not {"groups", "candles"} & set(calls)
+    for path, r in (await _rest_statuses(client)).items():
+        assert r.status_code == 403, path
+
+
+async def test_kr_index_switch_on_free_user_same_as_anonymous(client, switch, kr_switch, calls, users, monkeypatch):
+    kr_switch["on"] = True
+    monkeypatch.setattr(market_query, "kr_indices", lambda: [dict(i) for i in KR_INDICES])
+    data = await _kr_gql(client, users["free"])
+    assert data["screenerFeatures"] == {"marketData": False, "marketIndexKr": True}
+    assert [i["code"] for i in data["marketOverview"]["indices"]] == ["KR:0001", "KR:1001"]
+    assert data["marketGroups"] == {"total": 0}
+
+
+async def test_kr_index_granted_or_switch_on_sees_everything(client, switch, kr_switch, calls, users, monkeypatch):
+    """시세 전체 열람(관리자·권한 회원·스위치 ON)은 지금과 똑같다 — 국내 지수 스위치를 보지도 않는다."""
+    monkeypatch.setattr(market_access, "kr_index_switch_on", _boom)
+    data = await _kr_gql(client, users["admin"])
+    assert data["screenerFeatures"]["marketIndexKr"] is True
+    assert data["marketOverview"]["indices"] == [{"code": "KR:KOSPI", "live": False}]  # 전체 overview 경로
+    switch["on"] = True
+    data = await _kr_gql(client)
+    assert data["screenerFeatures"] == {"marketData": True, "marketIndexKr": True}
+
+
+def test_kr_index_switch_missing_row_or_db_error_is_off(monkeypatch):
+    def boom():
+        raise RuntimeError("db down")
+
+    screener_features.clear_cache()
+    monkeypatch.setattr(screener_features, "SyncSessionLocal", boom)
+    try:
+        assert REAL_KR_SWITCH() is False
+    finally:
+        screener_features.clear_cache()
+
+
+def test_kr_index_visible_rules():
+    from shared import market_viewer
+
+    assert market_viewer.kr_index_visible(False, False) is False
+    assert market_viewer.kr_index_visible(False, True) is True
+    assert market_viewer.kr_index_visible(True, False) is True
+    assert market_viewer.KR_PUBLIC_INDEX_CODES == ("KR:0001", "KR:1001")
+
+
+def test_kr_indices_filters_to_kospi_kosdaq(monkeypatch):
+    rows = [{"code": c} for c in ("KR:0001", "KR:1001", "KR:2001", "US:SPX", "FX:USDKRW", "USSTK:AAPL")]
+    monkeypatch.setattr(market_query, "_indices", lambda: rows)
+    assert [r["code"] for r in market_query.kr_indices()] == ["KR:0001", "KR:1001"]

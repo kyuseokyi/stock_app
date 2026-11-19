@@ -20,12 +20,25 @@ from shared.models import User, UserRole
 
 log = logging.getLogger(__name__)
 
+# 국내 지수 공개 스위치(stock_api screener_features.MARKET_INDEX_KR)로 익명·일반 회원에게 열리는 지수 — 코스피·코스닥만.
+# 코스피200·미국 지수·원/달러·개별 종목 시세는 이 스위치와 무관하게 계속 막힌다.
+KR_PUBLIC_INDEX_CODES: tuple[str, ...] = ("KR:0001", "KR:1001")
+
 
 def user_can_view(user: User | None) -> bool:
     """스위치가 꺼져 있을 때 이 사용자가 시세를 볼 수 있는가 — 관리자 또는 열람 권한 보유."""
     if user is None or not user.is_active:
         return False
     return user.role == UserRole.ADMIN or bool(getattr(user, "market_data_access", False))
+
+
+def kr_index_visible(market_allowed: bool, kr_index_switch_on: bool) -> bool:
+    """국내 지수(코스피·코스닥)를 이 요청자에게 보여 줄 수 있는가.
+
+    시세 전체를 볼 수 있으면(스위치 ON·관리자·열람 권한) 당연히 보이고, 아니면 '국내 지수 공개' 스위치가 켜졌을 때만.
+    지수 전용 판정이다 — 이 값이 참이어도 개별 종목·업종·테마 시세는 market_allowed 로만 연다.
+    """
+    return bool(market_allowed) or bool(kr_index_switch_on)
 
 
 async def load_viewer(creds: HTTPAuthorizationCredentials | None, db: AsyncSession) -> User | None:

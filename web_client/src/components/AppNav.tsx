@@ -1,6 +1,7 @@
 import type { MouseEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { useScreenerFeatures } from '../hooks/useScreenerFeatures'
+import { useGameAccess } from '../hooks/useGameAccess'
 import { FUND_LOGIN_DESCRIPTION, FUNDS_PATH, fundNavAction, isLoginGatedSection } from '../lib/fundGate'
 import { visibleSections, type Section } from '../lib/navSections'
 import { useAuthStore } from '../store/auth'
@@ -50,9 +51,9 @@ const ITEMS: { key: Section; to: string; label: string; icon: JSX.Element }[] = 
   { key: 'screener', to: '/screener', label: '스크리너', icon: icon('M4 19h16M7 16V9M12 16V5M17 16v-4') },
 ]
 
-/** 스위치에 맞는 메뉴 — 묻는 중·실패면 스크리너를 뺀다 */
+/** 스위치에 맞는 메뉴 — 묻는 중·실패면 스크리너·게임을 뺀다 */
 function useNavItems() {
-  const visible = visibleSections(useScreenerFeatures())
+  const visible = visibleSections(useScreenerFeatures(), useGameAccess())
   return ITEMS.filter((it) => visible.includes(it.key))
 }
 

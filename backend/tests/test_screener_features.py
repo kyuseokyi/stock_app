@@ -31,12 +31,12 @@ def _fresh_cache():
 
 def test_known_order():
     # 관리자 화면 목록 순서 = KNOWN 순서(종목 찾기 전체가 맨 위, A안 사용자 시세 노출 스위치가 맨 아래)
-    assert sf.KNOWN == ("STOCK_FINDER", "FINDER", "PATTERNS", "MARKET_DATA")
+    assert sf.KNOWN == ("STOCK_FINDER", "FINDER", "PATTERNS", "MARKET_DATA", "MARKET_INDEX_KR")
 
 
 def test_missing_rows_are_off():
     assert sf._fill([ScreenerFeature(key="PATTERNS", enabled=True)]) == {
-        "STOCK_FINDER": False, "FINDER": False, "PATTERNS": True, "MARKET_DATA": False}
+        "STOCK_FINDER": False, "FINDER": False, "PATTERNS": True, "MARKET_DATA": False, "MARKET_INDEX_KR": False}
     # STOCK_FINDER 도 행이 없으면 꺼짐 — 사용자 화면 종목 찾기는 기본 숨김
     assert sf._fill([])["STOCK_FINDER"] is False
     # MARKET_DATA(사용자 시세 노출)도 행이 없으면 꺼짐 — fail-closed
@@ -48,7 +48,7 @@ def test_db_failure_hides_everything(monkeypatch):
         raise RuntimeError("db down")
 
     monkeypatch.setattr(sf, "SyncSessionLocal", boom)
-    assert sf.enabled_map() == {"STOCK_FINDER": False, "FINDER": False, "PATTERNS": False, "MARKET_DATA": False}
+    assert sf.enabled_map() == {"STOCK_FINDER": False, "FINDER": False, "PATTERNS": False, "MARKET_DATA": False, "MARKET_INDEX_KR": False}
 
 
 def test_enabled_map_caches(monkeypatch):
@@ -70,7 +70,7 @@ def test_enabled_map_caches(monkeypatch):
             return _Rows()
 
     monkeypatch.setattr(sf, "SyncSessionLocal", _Session)
-    assert sf.enabled_map() == {"STOCK_FINDER": False, "FINDER": True, "PATTERNS": False, "MARKET_DATA": False}
+    assert sf.enabled_map() == {"STOCK_FINDER": False, "FINDER": True, "PATTERNS": False, "MARKET_DATA": False, "MARKET_INDEX_KR": False}
     assert sf.enabled_map()["FINDER"] is True
     assert len(calls) == 1  # 30초 안 두 번째는 캐시
     sf.clear_cache()
@@ -136,4 +136,6 @@ def test_client_query_contract(monkeypatch, rel_path):
     monkeypatch.setattr(sf, "enabled_map", lambda: {"STOCK_FINDER": True, "FINDER": True, "PATTERNS": False})
     res = asyncio.run(schema.execute(queries["SCREENER_FEATURES_QUERY"]))
     assert res.errors is None, res.errors
-    assert res.data == {"screenerFeatures": {"stockFinder": True, "finder": True, "patterns": False}}
+    # marketData·marketIndexKr 는 요청자 기준 — context 없는 직접 실행은 스위치만 본다(conftest 가 MARKET_DATA 를 ON 으로 둠)
+    assert res.data == {"screenerFeatures": {"stockFinder": True, "finder": True, "patterns": False,
+                                             "marketData": True, "marketIndexKr": True}}

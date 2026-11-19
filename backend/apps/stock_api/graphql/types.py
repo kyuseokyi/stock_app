@@ -338,6 +338,10 @@ class ScreenerFeatures:
         default=False,
         description="요청자 기준 시세 열람 가능 여부 — 전체 스위치 ON, 또는 로그인 사용자가 관리자·시세 열람 권한 보유면 true. "
                     "false 면 시세 API 가 빈 값·403 을 준다(화면 숨김 판정용)")
+    market_index_kr: bool = strawberry.field(
+        default=False,
+        description="요청자 기준 국내 지수(코스피·코스닥) 열람 가능 여부 — market_data 가 true 이거나 관리자가 '국내 지수 공개'를 "
+                    "켰으면 true. true 여도 개별 종목·업종·테마 시세는 market_data 로만 열린다(화면 숨김 판정용)")
 
 
 @strawberry.type

@@ -2,19 +2,27 @@ import { describe, expect, it } from 'vitest'
 import { sectionOf, visibleSections } from './navSections'
 
 describe('visibleSections (스위치 → 메뉴 노출)', () => {
-  const on = { stockFinder: true, finder: false, patterns: false }
-  const off = { stockFinder: false, finder: true, patterns: true }
+  const on = { stockFinder: true, finder: false, patterns: false, marketData: true, marketIndexKr: true }
+  const off = { stockFinder: false, finder: true, patterns: true, marketData: true, marketIndexKr: true }
+  const noMarket = { stockFinder: true, finder: true, patterns: true, marketData: false, marketIndexKr: true }
   it('켜져 있으면 기본 5탭 뒤(시장 옆)에 스크리너를 보인다', () => {
-    expect(visibleSections(on)).toEqual(['home', 'funds', 'community', 'game', 'market', 'screener'])
+    expect(visibleSections(on, true)).toEqual(['home', 'funds', 'community', 'game', 'market', 'screener'])
   })
   it('꺼져 있거나 아직 모르면(null) 기본 5탭 — 홈 · 내 펀드 · 블로그 · 게임 · 시장', () => {
     for (const f of [off, null]) {
-      expect(visibleSections(f)).toEqual(['home', 'funds', 'community', 'game', 'market'])
+      expect(visibleSections(f, true)).toEqual(['home', 'funds', 'community', 'game', 'market'])
     }
   })
+  it('시세 비노출이면 종목 찾기 스위치와 무관하게 스크리너를 숨긴다(A안)', () => {
+    expect(visibleSections(noMarket, true)).toEqual(['home', 'funds', 'community', 'game', 'market'])
+  })
+  it('게임은 실제 시세 게임 허용(real_market=true)일 때만 — 거짓·모름(null)은 숨김(A안)', () => {
+    expect(visibleSections(on, false)).toEqual(['home', 'funds', 'community', 'market', 'screener'])
+    expect(visibleSections(null, null)).toEqual(['home', 'funds', 'community', 'market'])
+  })
   it('내정보는 탭에 없다(헤더 우측 버튼으로 이동)', () => {
-    expect(visibleSections(on)).not.toContain('me')
-    expect(visibleSections(null)).not.toContain('me')
+    expect(visibleSections(on, true)).not.toContain('me')
+    expect(visibleSections(null, null)).not.toContain('me')
   })
 })
 
