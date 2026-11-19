@@ -17,6 +17,7 @@ from apps.ai_analyst import cache
 from apps.ai_analyst import repository as repo
 from apps.ai_analyst import router as ai_router
 from apps.ai_analyst.schemas import MorningBriefingResponse, ScreenerQualitativeResponse
+from apps.ai_analyst.services import market_movers
 from apps.stock_api.main import app
 from apps.stock_api.services import market_query
 from shared.ai_models import AiDailyBriefing, AiStockEvaluation
@@ -112,19 +113,33 @@ MOVERS = {"updated_at": "2026-10-30T10:00:00+09:00",
 KEYWORDS = [{"keyword": "HBM", "background": "b", "tickers": ["005930"]}]
 # 옛 캐시(sources 없음)도 API 는 sources: [] 를 붙여 내려준다(R3 호환)
 MOVERS_OUT = {**MOVERS, "gainers": [{**MOVERS["gainers"][0], "sources": []}]}
+# 기본값(원인 분석·핫 키워드 꺼짐 — 네이버 약관): 옛 캐시의 원인·키워드는 응답에서 빠진다
+MOVERS_OUT_OFF = {**MOVERS, "gainers": [{**MOVERS["gainers"][0], "sources": [], "reason_summary": None,
+                                         "category": None, "reliability": None, "risk_warning": None}]}
 
 
-async def test_movers_today_cache(client, fake_redis):
+@pytest.fixture(params=[False, True], ids=["off", "on"])
+def ai_enabled(request, monkeypatch):
+    monkeypatch.setattr(market_movers, "MOVER_REASONS_ENABLED", request.param)
+    monkeypatch.setattr(market_movers, "HOT_KEYWORDS_ENABLED", request.param)
+    return request.param
+
+
+def _movers_expected(enabled: bool) -> dict:
+    return {**MOVERS_OUT, "keywords": KEYWORDS} if enabled else {**MOVERS_OUT_OFF, "keywords": []}
+
+
+async def test_movers_today_cache(client, fake_redis, ai_enabled):
     cache.put_json(cache.MOVERS_KEY, MOVERS, 600)
     cache.put_json(cache.KEYWORDS_KEY, KEYWORDS, 1800)
     cache.put_json(cache.MOVERS_LAST_KEY, {**MOVERS, "updated_at": "옛날"}, 100)
-    assert (await client.get("/api/v1/market/movers")).json() == {**MOVERS_OUT, "keywords": KEYWORDS}
+    assert (await client.get("/api/v1/market/movers")).json() == _movers_expected(ai_enabled)
 
 
-async def test_movers_falls_back_to_last(client, fake_redis):
+async def test_movers_falls_back_to_last(client, fake_redis, ai_enabled):
     cache.put_json(cache.MOVERS_LAST_KEY, MOVERS, cache.LAST_TTL)
     cache.put_json(cache.KEYWORDS_LAST_KEY, KEYWORDS, cache.LAST_TTL)
-    assert (await client.get("/api/v1/market/movers")).json() == {**MOVERS_OUT, "keywords": KEYWORDS}
+    assert (await client.get("/api/v1/market/movers")).json() == _movers_expected(ai_enabled)
 
 
 async def test_investor_flow_cache(client, fake_redis):

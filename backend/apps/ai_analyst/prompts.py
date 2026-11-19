@@ -1,19 +1,21 @@
 """Gemini 프롬프트 — 시스템 프롬프트 상수 + 유저 프롬프트 빌더(순수 함수).
 
-입력은 dict/list(뉴스는 NewsItem dataclass 또는 dict 모두 허용)로 받아 간결한 텍스트로 만든다.
-뉴스는 종목·키워드당 최대 NEWS_PER_ITEM 건, 설명은 DESC_MAX 자로 자른다(토큰 절약).
+입력은 dict/list(공시는 Disclosure dataclass 또는 dict 모두 허용)로 받아 간결한 텍스트로 만든다.
+긴 문자열은 DESC_MAX 자로 자른다(토큰 절약).
+
+뉴스는 어떤 프롬프트에도 넣지 않는다 — 네이버 검색 API 약관 개정(2026-09-07 시행)으로 검색 결과를 LLM 입력·요약에
+쓰는 것이 금지됐다(docs/naver-search-api-terms-issue.md). 시세·지표·수급·공시 같은 우리 데이터만 넣는다.
 """
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
 
-NEWS_PER_ITEM = 5
 DESC_MAX = 120
 
 SYSTEM_PROMPT = """너는 한국 주식시장 전문 애널리스트다. 다음 원칙을 반드시 지켜라.
-1. 제공된 데이터(시세·지표·뉴스·공시)에 있는 사실만 근거로 쓴다. 추측·소문·과장 금지.
+1. 제공된 데이터(시세·지표·수급·공시)에 있는 사실만 근거로 쓴다. 추측·소문·과장 금지.
 2. 모든 문장은 한국어로, 짧고 명확하게 쓴다. 매수·매도 추천이나 목표가는 쓰지 않는다.
-3. 뉴스·공시에 근거가 없으면 지어내지 말고, 원인은 "단순수급", 신뢰도(reliability)는 "하"로 둔다.
+3. 공시 등 제공된 데이터에 근거가 없으면 지어내지 말고, 원인은 "단순수급", 신뢰도(reliability)는 "하"로 둔다.
 4. 숫자는 제공된 값만 인용한다. 없는 수치를 만들지 않는다.
 5. 응답은 지정된 JSON 스키마를 정확히 따른다."""
 
@@ -48,15 +50,6 @@ def _pct(v) -> str:
         return str(v)
 
 
-def _news_lines(news: Iterable | None, indent: str = "  ") -> list[str]:
-    lines = []
-    for n in list(news or [])[:NEWS_PER_ITEM]:
-        title = _cut(_get(n, "title"), DESC_MAX)
-        desc = _cut(_get(n, "description"), DESC_MAX)
-        lines.append(f"{indent}- {title}" + (f" — {desc}" if desc else ""))
-    return lines or [f"{indent}- (관련 뉴스 없음)"]
-
-
 def _amount_eok(v) -> str:
     """원 → 억 원 표기."""
     try:
@@ -65,7 +58,7 @@ def _amount_eok(v) -> str:
         return "-"
 
 
-def morning_brief_prompt(indices: Iterable[Mapping], macro: Iterable[Mapping], us_news: Iterable | None = None) -> str:
+def morning_brief_prompt(indices: Iterable[Mapping], macro: Iterable[Mapping]) -> str:
     """indices: [{name, close, change_rate}], macro: [{name, value, change_rate?}]."""
     out = ["[전일 해외·국내 지수]"]
     for i in indices or []:
@@ -76,9 +69,6 @@ def morning_brief_prompt(indices: Iterable[Mapping], macro: Iterable[Mapping], u
         if _get(m, "change_rate") is not None:
             line += f" ({_pct(_get(m, 'change_rate'))})"
         out.append(line)
-    if us_news is not None:
-        out.append("[미국 증시 관련 뉴스]")
-        out.extend(_news_lines(us_news, indent=""))
     out.append(
         "위 데이터만 근거로 오늘 아침 한국 투자자용 모닝 브리핑을 작성하라. "
         "뉴욕증시 마감 요약, 한국 증시 영향, 수혜 섹터·주의 섹터(각 이유 1문장), 거시 체크포인트를 담아라."
@@ -86,7 +76,7 @@ def morning_brief_prompt(indices: Iterable[Mapping], macro: Iterable[Mapping], u
     return "\n".join(out)
 
 
-def weekly_brief_prompt(indices: Iterable[Mapping], macro: Iterable[Mapping], us_news: Iterable | None = None) -> str:
+def weekly_brief_prompt(indices: Iterable[Mapping], macro: Iterable[Mapping]) -> str:
     """토요일 아침 주간 마감 브리핑. indices: [{name, close, change_rate, week_change_rate?}], macro 는 모닝과 같다.
     응답 스키마는 모닝 브리핑과 같고 각 필드를 주간 관점(금요일 마감·한 주 흐름·다음 주)으로 채우게 한다."""
     out = ["[이번 주 마지막 거래일 해외·국내 지수]"]
@@ -98,9 +88,6 @@ def weekly_brief_prompt(indices: Iterable[Mapping], macro: Iterable[Mapping], us
     out.append("[거시 지표]")
     for m in macro or []:
         out.append(f"- {_get(m, 'name')}: {_num(_get(m, 'value'))}")
-    if us_news is not None:
-        out.append("[미국 증시 관련 뉴스]")
-        out.extend(_news_lines(us_news, indent=""))
     out.append(
         "오늘은 토요일이다. 위 데이터만 근거로 한국 투자자용 주간 마감 브리핑을 작성하라. "
         "headline 은 '주간 마감: ' 으로 시작해 한 주를 요약하는 1줄(앱 배지가 '장전 브리핑' 으로 고정이라 주간판임을 드러낸다), us_market_summary 는 금요일 뉴욕증시 마감과 이번 주 흐름, "
@@ -110,43 +97,36 @@ def weekly_brief_prompt(indices: Iterable[Mapping], macro: Iterable[Mapping], us
     return "\n".join(out)
 
 
-def _mover_block(title: str, movers: Iterable[Mapping], news_by_ticker: Mapping) -> list[str]:
+def _mover_block(title: str, movers: Iterable[Mapping]) -> list[str]:
     out = [f"[{title}]"]
     for m in movers or []:
         t = _get(m, "ticker")
         out.append(f"* {t} {_get(m, 'name') or _get(m, 'stock_name')} 등락률 {_pct(_get(m, 'change_rate'))}")
-        out.extend(_news_lines((news_by_ticker or {}).get(t)))
     return out
 
 
-def movers_prompt(gainers: Iterable[Mapping], losers: Iterable[Mapping], news_by_ticker: Mapping) -> str:
-    """gainers/losers: [{ticker, name, change_rate}], news_by_ticker: {ticker: [뉴스]}."""
-    out = _mover_block("급등 종목", gainers, news_by_ticker)
-    out += _mover_block("급락 종목", losers, news_by_ticker)
+def movers_prompt(gainers: Iterable[Mapping], losers: Iterable[Mapping]) -> str:
+    """gainers/losers: [{ticker, name, change_rate}]. 뉴스 없이 시세만 — 원인은 추정이라 신뢰도를 낮게 둔다."""
+    out = _mover_block("급등 종목", gainers)
+    out += _mover_block("급락 종목", losers)
     out.append(
-        "각 종목마다 급등·급락의 핵심 원인을 30자 내외 1문장으로 요약하라(items 에 위 모든 종목). "
+        "뉴스 근거는 제공되지 않는다. 각 종목마다 급등·급락 원인을 시세·업종·테마 정황으로만 30자 내외 1문장으로 "
+        "추정하라(items 에 위 모든 종목). 사실처럼 단정하지 말고 '추정' 임이 드러나게 쓴다. "
         "ticker·stock_name·change_rate 는 위 값을 그대로 쓴다. "
         "category 는 수주계약 | 실적호조 | 실적부진 | 테마수급 | 경영권 | 유상증자/악재 | 단순수급 중 하나, "
-        "reliability 는 뉴스 실체가 분명하면 상, 정황뿐이면 중, 근거 없으면 하. "
+        "reliability 는 뉴스·공시 근거가 없으므로 하. "
         "단기 추격매수 위험이 있으면 risk_warning 에 쓴다."
     )
     return "\n".join(out)
 
 
-def hot_keywords_prompt(movers: Iterable[Mapping], news: Iterable | None) -> str:
-    """movers: 오늘 급등락 종목 [{ticker, name, change_rate}], news: 시장 전반 뉴스."""
+def hot_keywords_prompt(movers: Iterable[Mapping]) -> str:
+    """movers: 오늘 급등락 종목 [{ticker, name, change_rate}]. 뉴스 없이 종목 목록만(기능은 기본 꺼짐)."""
     out = ["[오늘 급등락 종목]"]
     for m in movers or []:
         out.append(f"- {_get(m, 'ticker')} {_get(m, 'name') or _get(m, 'stock_name')} {_pct(_get(m, 'change_rate'))}")
-    out.append("[관련 뉴스]")
-    news = list(news or [])
-    lines = []
-    for n in news[: NEWS_PER_ITEM * 4]:
-        title, desc = _cut(_get(n, "title")), _cut(_get(n, "description"))
-        lines.append(f"- {title}" + (f" — {desc}" if desc else ""))
-    out.extend(lines or ["- (관련 뉴스 없음)"])
     out.append(
-        "위 종목과 뉴스에서 오늘 시장의 핫 키워드(테마·이슈)를 최대 10개 뽑아라. "
+        "위 종목 목록에서 오늘 시장의 핫 키워드(테마·이슈)를 최대 10개 뽑아라. "
         "각 키워드에 떠오른 배경 1문장과 관련 종목 코드(위 목록에 있는 것만)를 붙여라."
     )
     return "\n".join(out)
@@ -194,7 +174,7 @@ def _fund_line(f: Mapping) -> str:
 
 def stock_qualitative_prompt(ticker: str, name: str, canslim_summary: Mapping | str | None,
                              disclosures: Iterable | None, red_flag_hints: Iterable[str] | None,
-                             news: Iterable | None, *, fundamentals: Iterable[Mapping] | None = None) -> str:
+                             *, fundamentals: Iterable[Mapping] | None = None) -> str:
     """canslim_summary: {항목: 값} 또는 문자열, disclosures: Disclosure 또는 dict(report_nm, rcept_dt).
     fundamentals: [{period(Q|Y), stac_yymm, sales_growth, op_growth, ni_growth, roe, debt_ratio}] — 증가율은 전년 동기 대비 %."""
     out = [f"[종목] {name}({ticker})", "[CANSLIM 요약]"]
@@ -220,8 +200,6 @@ def stock_qualitative_prompt(ticker: str, name: str, canslim_summary: Mapping | 
         out.extend(f"- {h}" for h in hints)
     else:
         out.append("- (없음)")
-    out.append("[최근 뉴스]")
-    out.extend(_news_lines(news, indent=""))
     out.append(
         "이 종목이 스크리너에 포착된 사유를 1줄(hook_summary)로 쓰고, 실적 품질(growth_quality)을 "
         "본업성장/일회성이익/불확실 중 하나로 판정하라. 판정 기준: 매출과 영업이익 증가율이 함께 플러스(최근 분기 중심)면 본업성장, "

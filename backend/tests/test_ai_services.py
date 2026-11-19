@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 
 from apps.ai_analyst import cache
 from apps.ai_analyst import repository as repo
+from apps.ai_analyst.clients import naver_news
 from apps.ai_analyst.clients.opendart import Disclosure
 from apps.ai_analyst.schemas import (
     HotKeywordsResponse,
@@ -47,12 +48,14 @@ class FakeGemini:
 
 
 class FakeNews:
+    """네이버 뉴스 가짜 — 약관상 AI 입력 금지라 search 가 불리면 실패한다."""
+
     def __init__(self):
         self.queries = []
 
     def search(self, query, *, display=5, sort="date"):
         self.queries.append((query, display, sort))
-        return [{"title": f"{query} 기사", "description": "요약"}]
+        raise AssertionError("네이버 뉴스 검색이 호출됨")
 
 
 class FakeDart:
@@ -93,8 +96,9 @@ def _isolate(monkeypatch):
     monkeypatch.setattr(cache, "get_sync_redis", lambda: fake)
     for mod in (mb, mm, flow, sq):
         monkeypatch.setattr(mod, "_gemini", lambda: None)
-    for mod in (mb, mm, sq):
-        monkeypatch.setattr(mod, "_news", lambda: None)
+    # 네이버 뉴스는 어떤 경로로도 부르면 안 된다 — 키가 있어도 클라이언트 생성·검색이 불리면 실패
+    monkeypatch.setattr(naver_news, "get_naver_news_client", _boom)
+    monkeypatch.setattr(naver_news.NaverNewsClient, "search", _boom)
     monkeypatch.setattr(sq, "_dart", lambda: None)
     monkeypatch.setattr(mb, "_overview", _boom)
     monkeypatch.setattr(mm, "_universe", _boom)
@@ -178,14 +182,18 @@ def test_brief_without_indices_skips(session, monkeypatch):
     assert mb.generate(DAY, session=session) is None and g.calls == []
 
 
-def test_brief_with_news_includes_section(session, monkeypatch):
+def test_brief_never_includes_news_even_with_naver_key(session, monkeypatch):
+    """네이버 키가 있어도 뉴스를 조회·입력하지 않는다(약관 개정 2026-09-07 시행)."""
+    monkeypatch.setenv("NAVER_SEARCH_CLIENT_ID", "x")
+    monkeypatch.setenv("NAVER_SEARCH_CLIENT_SECRET", "y")
     g = FakeGemini({MorningBriefingResponse: _brief_resp})
-    news = FakeNews()
     monkeypatch.setattr(mb, "_gemini", lambda: g)
-    monkeypatch.setattr(mb, "_news", lambda: news)
     monkeypatch.setattr(mb, "_overview", lambda: OVERVIEW)
-    mb.generate(DAY, session=session)
-    assert news.queries == [("뉴욕증시", 5, "date")] and "미국 증시 관련 뉴스" in g.calls[0][1]
+    for weekly in (False, True):
+        got = mb.generate(DAY, session=session, force=True, weekly=weekly)
+        assert got["sources"] == []
+    assert len(g.calls) == 2 and all("뉴스" not in c[1] for c in g.calls)
+    assert not hasattr(mb, "_news")
 
 
 def test_week_change():
@@ -258,15 +266,26 @@ def test_fetch_movers_sorts_by_change_rate():
     assert [r["change_rate"] for r in l] == [-13.75, -13.32, -9.0]
 
 
+def test_movers_reasons_off_by_default_no_gemini(monkeypatch):
+    """기본값: 원인 분석·핫 키워드 꺼짐 — Gemini 를 부르지 않고 원인 없는 목록만 캐시한다."""
+    assert mm.MOVER_REASONS_ENABLED is False and mm.HOT_KEYWORDS_ENABLED is False
+    monkeypatch.setattr(mm, "_gemini", _boom)
+    monkeypatch.setattr(mm, "_universe", lambda: UNIVERSE)
+    out = mm.analyze(NOW, kis_client=FakeKis(UP, DOWN), force=True)
+    assert len(out["gainers"]) == 10 and all(m["reason_summary"] is None for m in out["gainers"] + out["losers"])
+    assert out["keywords"] == [] and mm.hot_keywords(out, force=True) == []
+    assert cache.get_json(cache.MOVERS_REASONS_KEY) is None and cache.get_json(cache.KEYWORDS_KEY) is None
+    assert not hasattr(mm, "_news")
+
+
 def test_movers_one_gemini_call_and_ticker_match(monkeypatch, _isolate):
+    monkeypatch.setattr(mm, "MOVER_REASONS_ENABLED", True)
     g = FakeGemini({MoverReasonsResponse: _reasons})
-    news = FakeNews()
     monkeypatch.setattr(mm, "_gemini", lambda: g)
-    monkeypatch.setattr(mm, "_news", lambda: news)
     monkeypatch.setattr(mm, "_universe", lambda: UNIVERSE)
     out = mm.analyze(NOW, kis_client=FakeKis(UP, DOWN))
     assert len(g.calls) == 1
-    assert len(news.queries) == 20 and news.queries[0] == ("상승1 특징주", 5, "date")
+    assert "관련 뉴스" not in g.calls[0][1] and "뉴스 근거는 제공되지 않는다" in g.calls[0][1]
     by = {m["ticker"]: m for m in out["gainers"] + out["losers"]}
     assert by["000001"]["reason_summary"] is None  # 응답에서 빠진 종목
     assert by["000002"]["reason_summary"] == "000002 원인"  # 'A000002' 도 매칭
@@ -332,6 +351,8 @@ class _UnEmptyKis(FakeKis):
 
 @pytest.fixture
 def movers_env(monkeypatch):
+    # 원인 병합 규칙 검증 — 기능은 기본 꺼짐이지만 다시 켤 때를 대비해 규칙은 유지·검증한다(뉴스 없이)
+    monkeypatch.setattr(mm, "MOVER_REASONS_ENABLED", True)
     monkeypatch.setattr(mm, "_universe", lambda: {"000001", "000002", "000003", "000101"})
 
 
@@ -345,8 +366,7 @@ def _down(*tickers):
 
 def test_refresh_list_only_kis(monkeypatch):
     monkeypatch.setattr(mm, "_universe", lambda: UNIVERSE)
-    monkeypatch.setattr(mm, "_gemini", _boom)  # 뉴스·Gemini 는 불리면 안 된다
-    monkeypatch.setattr(mm, "_news", _boom)
+    monkeypatch.setattr(mm, "_gemini", _boom)  # Gemini 는 불리면 안 된다(네이버는 _isolate 가 막는다)
     kis = FakeKis(UP, DOWN)
     out = mm.refresh_list(NOW, kis_client=kis)
     assert kis.calls == 2  # 상승·하락 UN 각 1건
@@ -359,7 +379,6 @@ def test_refresh_list_only_kis(monkeypatch):
 def test_refresh_list_j_fallback(monkeypatch):
     monkeypatch.setattr(mm, "_universe", lambda: UNIVERSE)
     monkeypatch.setattr(mm, "_gemini", _boom)
-    monkeypatch.setattr(mm, "_news", _boom)
     kis = _UnEmptyKis(UP, DOWN)
     out = mm.refresh_list(NOW, kis_client=kis)
     assert kis.calls == 4 and len(out["gainers"]) == 10
@@ -469,6 +488,8 @@ def test_yesterday_reason_not_attached(monkeypatch, movers_env):
 
 
 def test_hot_keywords_gemini_and_cache(monkeypatch):
+    monkeypatch.setattr(mm, "HOT_KEYWORDS_ENABLED", True)  # 기본 꺼짐 — 켰을 때 뉴스 없이 동작하는지
+
     def kw(_p):
         return HotKeywordsResponse(keywords=[{"keyword": "AI", "background": "b", "tickers": ["1", "999999"]}])
 
