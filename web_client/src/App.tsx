@@ -2,6 +2,7 @@ import { lazy, Suspense } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import Layout from './components/Layout'
 import LegacyMarketRedirect from './components/market/LegacyMarketRedirect'
+import MarketDataGate from './components/market/MarketDataGate'
 import ScreenerFeatureGate from './components/screener/ScreenerFeatureGate'
 import AuthCompletePage from './pages/AuthCompletePage'
 import CommunityPage from './pages/CommunityPage'
@@ -66,8 +67,9 @@ export default function App() {
         }>
           {/* 칩: 개요 · 테마 · 업종 · 일정 */}
           <Route index element={<OverviewTab />} />
-          <Route path="themes" element={<GroupTab key="theme" kind="theme" />} />
-          <Route path="sectors" element={<GroupTab key="sector" kind="sector" />} />
+          {/* 테마·업종은 시세 열람(marketData)일 때만 — 아니면 개요로(A안) */}
+          <Route path="themes" element={<MarketDataGate><GroupTab key="theme" kind="theme" /></MarketDataGate>} />
+          <Route path="sectors" element={<MarketDataGate><GroupTab key="sector" kind="sector" /></MarketDataGate>} />
           <Route path="calendar" element={<CalendarTab />} />
           <Route path="*" element={<Navigate to="/market" replace />} />
         </Route>

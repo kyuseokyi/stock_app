@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { getMarketOverview } from '../../api/market'
+import { useScreenerFeatures } from '../../hooks/useScreenerFeatures'
+import { marketDataVisible, visibleIndices } from '../../lib/marketAccess'
 import { formatPct, pnlClass } from '../../lib/format'
 import { homeReferenceIndices } from '../../lib/homeSections'
 import { MARKET_REQUEST_TIMEOUT_MS } from '../../lib/marketLive'
@@ -11,12 +13,23 @@ import { Skeleton } from '../ui/Skeleton'
 // 홈 최하단 '오늘 시장 참고' — 코스피 · 코스닥 · 미국 대표 지수 · 원/달러만 작게. 전체 시장은 시장 탭(/market).
 // 이 칸만 따로 불러와 실패해도 위 펀드·교육 카드는 그대로 보이고, 이 칸에서만 다시 시도한다.
 // (예전 홈의 '오늘 시장 노트'(MarketNote)는 지우지 않고 보존 — 다시 켤 때 HomePage 에서 바꿔 끼우면 된다)
+// 시세 비노출(A안): 시세 열람이면 지금과 같고, 아니면 국내 지수 공개 스위치일 때 코스피·코스닥만. 보일 지수가 없으면
+// 빈 카드 대신 섹션째 그리지 않는다(판단값을 묻는 동안·조회 실패도 숨김).
 
 const fmtIndex = (n: number) => n.toLocaleString('ko-KR', { maximumFractionDigits: 2 })
 
 type Load = { state: 'loading' } | { state: 'ready'; indices: MarketIndex[] } | { state: 'failed' }
 
 export default function HomeMarketReference() {
+  const access = useScreenerFeatures()
+  const showMarket = marketDataVisible(access)
+  const showAny = showMarket || access?.marketIndexKr === true
+  if (!showAny) return null
+  // 로그인으로 열람 범위가 바뀌면 다시 불러오게 key 로 새로 그린다
+  return <MarketReferenceBody key={showMarket ? 'all' : 'kr'} access={access} showMarket={showMarket} />
+}
+
+function MarketReferenceBody({ access, showMarket }: { access: Parameters<typeof visibleIndices>[0]; showMarket: boolean }) {
   const [load, setLoad] = useState<Load>({ state: 'loading' })
 
   const fetchOnce = useCallback(() => {
@@ -30,6 +43,10 @@ export default function HomeMarketReference() {
   }, [])
 
   useEffect(() => fetchOnce(), [fetchOnce])
+
+  const indices = load.state === 'ready' ? visibleIndices(access, load.indices) : []
+  // 시세 비노출에서 받은 지수가 없으면(수집 전 등) 섹션째 숨김 — 시세 열람이면 지금처럼 안내 카드
+  if (load.state === 'ready' && indices.length === 0 && !showMarket) return null
 
   return (
     <section aria-labelledby="home-market-title">
@@ -64,13 +81,13 @@ export default function HomeMarketReference() {
       )}
 
       {load.state === 'ready' &&
-        (load.indices.length === 0 ? (
+        (indices.length === 0 ? (
           <Card>
             <p className="text-sm text-ink-muted">시장 데이터는 매일 장 마감 후 갱신돼요.</p>
           </Card>
         ) : (
           <ul className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-            {load.indices.map((ix) => (
+            {indices.map((ix) => (
               <li key={ix.code}>
                 <Card padding="sm" className="h-full">
                   <p className="truncate text-xs font-medium text-ink-muted">{ix.name}</p>

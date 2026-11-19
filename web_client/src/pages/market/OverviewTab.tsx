@@ -16,12 +16,14 @@ import { Skeleton } from '../../components/ui/Skeleton'
 import { getMarketCalendar, getMarketGroups, getMarketOverview } from '../../api/market'
 import { getFeatured, getInvestorFlow, getMorningBrief, getMovers } from '../../api/marketRest'
 import { useMarketSection } from '../../hooks/useMarketSection'
+import { useScreenerFeatures } from '../../hooks/useScreenerFeatures'
 import { useReturnRefresh } from '../../hooks/useReturnRefresh'
 import { useVisibleInterval } from '../../hooks/useVisibleInterval'
 import { hasFeatured } from '../../lib/featured'
 import { closeBasisLabel, formatPct, kstDateString, pnlClass } from '../../lib/format'
 import { flowCaption, formatBasis, hasFlowData, indexHeaderBasis, marketSession, splitOverview, tickerNames } from '../../lib/marketDashboard'
 import { MARKET_REFRESH_MS } from '../../lib/marketLive'
+import { marketDataVisible, visibleIndices } from '../../lib/marketAccess'
 import type { GroupKind, MacroValue, MarketIndex } from '../../types/market'
 
 // 오르는 게 좋은 일이 아닌 지표 — 핑크(상승) 대신 회색에 부호, 뜻을 한 줄로(Pink-Is-a-Point)
@@ -98,7 +100,11 @@ function Pair({ left, right }: { left: ReactNode; right: ReactNode }) {
 
 // 마켓 개요 — 앱 마켓 탭과 같은 순서: 브리핑 → 지수 → 돈의 흐름·경제지표 → 급등락 → 수급 → 오늘 특징주 → 핫 키워드·주도 테마 → 일정.
 // 섹션마다 따로 불러와 하나가 실패해도 나머지는 보이고, 실패한 칸에만 '다시 시도'를 둔다.
+// 시세 비노출(A안, marketData=false)이면 급등락·수급·특징주·핫 키워드·주도 테마는 요청도 하지 않고 섹션째 그리지 않는다.
+// 남는 것: 브리핑(텍스트) · 국내 지수(국내 지수 공개 스위치일 때 코스피·코스닥) · 미국 거시(FRED) · 일정(공모주는 서버가 뺌).
 export default function OverviewTab() {
+  const access = useScreenerFeatures()
+  const showMarket = marketDataVisible(access)
   const today = kstDateString()
   const [openGroup, setOpenGroup] = useState<{ kind: GroupKind; id: string } | null>(null)
 
@@ -106,13 +112,14 @@ export default function OverviewTab() {
 
   const overview = useMarketSection(getMarketOverview)
   const brief = useMarketSection(getMorningBrief)
-  const movers = useMarketSection(getMovers)
-  const flow = useMarketSection(getInvestorFlow)
-  const featured = useMarketSection(getFeatured)
-  const themes = useMarketSection(fetchThemes)
+  const movers = useMarketSection(getMovers, undefined, showMarket)
+  const flow = useMarketSection(getInvestorFlow, undefined, showMarket)
+  const featured = useMarketSection(getFeatured, undefined, showMarket)
+  const themes = useMarketSection(fetchThemes, undefined, showMarket)
   const events = useMarketSection(fetchEvents)
 
-  const indices = useMemo(() => overview.data?.indices ?? [], [overview.data])
+  // 서버가 이미 거른 지수를 화면도 한 번 더 거른다(판단값을 묻는 동안·스위치 변경 직후에 시세가 비치지 않게)
+  const indices = useMemo(() => visibleIndices(access, overview.data?.indices ?? []), [access, overview.data])
   const session = marketSession(indices)
 
   // 지수 30초(기존), 급등락은 정규장일 때만 60초 — 탭이 보이는 동안만. 나머지는 탭 복귀 때 마지막 조회 후 10분이 지났으면 1회만.

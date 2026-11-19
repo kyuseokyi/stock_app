@@ -1,4 +1,5 @@
 import type { ScreenerFeatures } from '../api/screenerFeatures'
+import { gameVisible } from './marketAccess'
 import { screenerMenuVisible } from './screenerFeatures'
 
 // 1차 메뉴 판정 — 순수 함수. 순서는 앱 하단 탭과 같다.
@@ -9,9 +10,12 @@ export type Section = 'home' | 'funds' | 'market' | 'screener' | 'community' | '
 
 const SECTIONS: Section[] = ['home', 'funds', 'community', 'game', 'market', 'screener']
 
-/** 지금 보여 줄 메뉴 — 스크리너는 종목 찾기 스위치가 켜졌을 때만(로딩·오류는 숨김) */
-export function visibleSections(features: ScreenerFeatures | null): Section[] {
-  return SECTIONS.filter((s) => s !== 'screener' || screenerMenuVisible(features))
+/** 지금 보여 줄 메뉴 — 스크리너는 종목 찾기 스위치가 켜지고 시세 열람일 때만, 게임은 실제 시세 게임 허용
+ *  (seasons/active features.real_market, A안)일 때만. 로딩·오류는 숨김 */
+export function visibleSections(features: ScreenerFeatures | null, realMarket: boolean | null): Section[] {
+  return SECTIONS.filter(
+    (s) => (s !== 'screener' || screenerMenuVisible(features)) && (s !== 'game' || gameVisible(realMarket)),
+  )
 }
 
 /**

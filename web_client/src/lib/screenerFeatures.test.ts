@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest'
 import type { ScreenerFeatures } from '../api/screenerFeatures'
 import { screenerMenuVisible, stockBackPath, stockTabGate, stockTabVisible } from './screenerFeatures'
 
-const f = (stockFinder: boolean, finder: boolean, patterns: boolean): ScreenerFeatures => ({ stockFinder, finder, patterns })
+const f = (stockFinder: boolean, finder: boolean, patterns: boolean, marketData = true): ScreenerFeatures => ({
+  stockFinder, finder, patterns, marketData, marketIndexKr: marketData,
+})
 
 describe('종목 찾기 노출 판정', () => {
   it('STOCK_FINDER 가 꺼지면 FINDER·PATTERNS 와 무관하게 모두 숨기고 마켓으로 보낸다', () => {
@@ -38,6 +40,16 @@ describe('종목 찾기 노출 판정', () => {
     for (const x of [f(false, true, true), null]) {
       expect(screenerMenuVisible(x)).toBe(false)
       expect(stockBackPath(x)).toBe('/market')
+    }
+  })
+
+  it('시세 비노출(marketData=false)이면 종목 찾기 스위치가 켜져 있어도 메뉴·탭을 숨기고 마켓으로 보낸다(A안)', () => {
+    const x = f(true, true, true, false)
+    expect(screenerMenuVisible(x)).toBe(false)
+    expect(stockBackPath(x)).toBe('/market')
+    for (const t of ['leaders', 'finder', 'patterns'] as const) {
+      expect(stockTabVisible(x, t)).toBe(false)
+      expect(stockTabGate(x, t)).toBe('/market') // 주도주로 보내면 다시 막혀 되돌아오므로 마켓으로
     }
   })
 })

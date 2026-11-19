@@ -20,6 +20,8 @@ import { Skeleton } from '../components/ui/Skeleton'
 import { useDocumentTitle } from '../hooks/useDocumentTitle'
 import { useScreenerFeatures } from '../hooks/useScreenerFeatures'
 import { stockBackPath } from '../lib/screenerFeatures'
+import { marketDataVisible, stockLinkOutUrl } from '../lib/marketAccess'
+import type { ScreenerFeatures } from '../api/screenerFeatures'
 
 // 종목 상세 — 검색창 + 헤더(이름·종가) + 일봉 차트(기간 선택, 50일선·52주 고점·현재 패턴 선)
 //   + 패턴(현재 베이스·이력) + 대차잔고(데이터 없으면 숨김) + 참고용 안내. 스크리너 상세 패널과 같은 부품을 쓴다.
@@ -39,12 +41,87 @@ const TICKER_RE = /^[0-9A-Z]{6}$/
 
 type Load<T> = { state: 'loading' } | { state: 'ready'; data: T } | { state: 'failed' }
 
+// 시세 비노출(A안 설계 3-4): 요청자가 시세를 볼 수 없으면 차트·종가·52주·패턴·대차를 요청도 하지 않고
+// 종목명·코드 + "시세는 증권사 앱에서" 링크아웃만 그린다. 판단값을 묻는 동안은 기다린다(시세가 잠깐 비치지 않게).
 export default function StockDetailPage() {
+  const features = useScreenerFeatures()
+  if (features === null) return <p className="py-16 text-center text-ink-muted">불러오는 중…</p>
+  if (!marketDataVisible(features)) return <StockLinkOutPage features={features} />
+  return <StockMarketDetail features={features} />
+}
+
+function useGoBack(features: ScreenerFeatures | null) {
+  const navigate = useNavigate()
+  return () => {
+    // 직접 들어온 경우(뒤로 갈 곳 없음)는 스크리너가 보일 때만 스크리너로, 아니면 마켓으로
+    const idx = (window.history.state as { idx?: number } | null)?.idx ?? 0
+    if (idx > 0) navigate(-1)
+    else navigate(stockBackPath(features))
+  }
+}
+
+/** 시세 없이 종목명·코드 + 링크아웃 — 이름은 검색(searchStocks, 가격 필드 없음)으로 채운다 */
+function StockLinkOutPage({ features }: { features: ScreenerFeatures }) {
   const { ticker: raw = '' } = useParams()
   const ticker = raw.toUpperCase()
   const valid = TICKER_RE.test(ticker)
-  const navigate = useNavigate()
-  const features = useScreenerFeatures()
+  const goBack = useGoBack(features)
+  const [info, setInfo] = useState<StockHit | null>(null)
+
+  useEffect(() => {
+    if (!valid) return
+    let cancelled = false
+    setInfo(null)
+    findStock(ticker)
+      .then((h) => !cancelled && setInfo(h))
+      .catch(() => undefined) // 이름을 못 찾으면 코드만 보여 준다
+    return () => {
+      cancelled = true
+    }
+  }, [ticker, valid])
+
+  useDocumentTitle(valid ? info?.name : null)
+  const href = stockLinkOutUrl(ticker)
+
+  return (
+    <div className="space-y-3 sm:space-y-4">
+      <div className="flex items-center gap-2">
+        <button type="button" onClick={goBack} aria-label="뒤로" className="shrink-0 rounded-btn bg-fill px-3 py-2 text-sm font-medium text-ink">
+          ←
+        </button>
+        <div className="min-w-0 flex-1">
+          <StockSearch />
+        </div>
+      </div>
+      {!valid ? (
+        <p className="py-16 text-center text-sm text-ink-muted">종목 코드가 올바르지 않아요</p>
+      ) : (
+        <Card className="space-y-3">
+          <div className="flex flex-wrap items-baseline gap-x-1.5">
+            <h1 className="truncate text-2xl font-bold text-ink">{info?.name ?? ticker}</h1>
+            <span className="text-xs text-ink-muted">{ticker}{info?.market ? ` · ${info.market}` : ''}</span>
+          </div>
+          <p className="text-sm text-ink-muted">시세·차트는 증권사 앱이나 포털에서 확인해 주세요.</p>
+          {href && (
+            <a
+              href={href}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex min-h-11 items-center rounded-btn bg-fill px-4 text-sm font-semibold text-brand-strong"
+            >
+              시세는 증권사 앱에서 ↗
+            </a>
+          )}
+        </Card>
+      )}
+    </div>
+  )
+}
+
+function StockMarketDetail({ features }: { features: ScreenerFeatures }) {
+  const { ticker: raw = '' } = useParams()
+  const ticker = raw.toUpperCase()
+  const valid = TICKER_RE.test(ticker)
 
   const [score, setScore] = useState<Load<CanslimScore | null>>({ state: 'loading' })
   const [bases, setBases] = useState<Load<PatternBases>>({ state: 'loading' })
@@ -118,12 +195,7 @@ export default function StockDetailPage() {
   const dayChange = i >= 1 && recent[i - 1].close > 0 ? ((recent[i].close - recent[i - 1].close) / recent[i - 1].close) * 100 : null
   const days = PERIODS.find((p) => p.key === period)?.days ?? 370
 
-  const goBack = () => {
-    // 직접 들어온 경우(뒤로 갈 곳 없음)는 스크리너가 보일 때만 스크리너로, 아니면 마켓으로
-    const idx = (window.history.state as { idx?: number } | null)?.idx ?? 0
-    if (idx > 0) navigate(-1)
-    else navigate(stockBackPath(features))
-  }
+  const goBack = useGoBack(features)
 
   return (
     <div className="space-y-3 sm:space-y-4">
