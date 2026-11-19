@@ -23,9 +23,10 @@ from fastapi.concurrency import run_in_threadpool
 from fastapi.security import HTTPAuthorizationCredentials
 
 from apps.stock_api.services import screener_features
-from shared import database
-from shared.auth import bearer_scheme, get_current_user
-from shared.models import User, UserRole
+from shared import database, market_viewer
+from shared.auth import bearer_scheme
+from shared.market_viewer import user_can_view  # 회원 판정은 trading_game 과 공유
+from shared.models import User
 
 log = logging.getLogger(__name__)
 
@@ -46,21 +47,12 @@ def market_data_switch_on() -> bool:
     return bool(screener_features.enabled_map().get(SWITCH_KEY, False))
 
 
-def user_can_view(user: User | None) -> bool:
-    """스위치 OFF 일 때 이 사용자가 시세를 볼 수 있는가 — 관리자 또는 열람 권한 보유."""
-    if user is None or not user.is_active:
-        return False
-    return user.role == UserRole.ADMIN or bool(getattr(user, "market_data_access", False))
-
-
 async def load_viewer(creds: HTTPAuthorizationCredentials) -> User | None:
-    """토큰 → 회원(get_current_user 재사용). 어떤 실패든 None(익명)."""
+    """토큰 → 회원(shared.market_viewer — trading_game 과 같은 규칙). 어떤 실패든 None(익명)."""
     try:
         async with database.AsyncSessionLocal() as db:
-            return await get_current_user(creds, db)
-    except HTTPException:
-        return None
-    except Exception as exc:  # noqa: BLE001 — DB 장애 등은 닫힘 쪽(익명)으로
+            return await market_viewer.load_viewer(creds, db)
+    except Exception as exc:  # noqa: BLE001 — 세션 열기 실패 등은 닫힘 쪽(익명)으로
         log.warning("시세 열람 판정 중 회원 조회 실패: %s", type(exc).__name__)
         return None
 

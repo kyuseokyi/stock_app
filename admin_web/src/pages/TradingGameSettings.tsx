@@ -16,6 +16,11 @@ const FLAG_META: Record<FeatureFlagKey, { title: string; description: string }> 
     title: '🔥 연속 출석(Streak)',
     description: '끄면 매매·퀴즈를 해도 연속 출석 일수가 갱신되지 않습니다. 기존 기록은 보존됩니다.',
   },
+  REAL_MARKET: {
+    title: '📈 실제 시세 게임 공개',
+    description:
+      '켜려면 KRX/코스콤 시세 라이선스가 필요합니다. 꺼져 있으면(기본) 일반 사용자는 게임 시세 스트림·분봉·장운영 상태·주문·퀴즈가 막힙니다(게임 탭 숨김은 앱·웹 화면 업데이트 뒤). 관리자와 회원 관리에서 시세 열람 권한을 준 회원은 계속 이용할 수 있습니다. 정산·랭킹 등 서버 내부 작업은 영향이 없습니다.',
+  },
 }
 
 const errorMessage = (caught: unknown): string => {
@@ -54,6 +59,7 @@ function SettingsPanel() {
 
   const toggle = async (flag: FeatureFlag) => {
     const next = !flag.enabled
+    if (flag.key === 'REAL_MARKET' && next && !confirm('실제 시세 게임을 모든 사용자에게 공개할까요?\nKRX/코스콤 시세 라이선스가 있어야 켤 수 있어요.')) return
     setPending(flag.key)
     setFlags((prev) => prev.map((f) => (f.key === flag.key ? { ...f, enabled: next } : f)))
     try {

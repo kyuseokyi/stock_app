@@ -1,6 +1,7 @@
 """기능 on/off 플래그 (Phase 5b) — DB 원장 + Redis 30초 캐시.
 
-행이 없으면 ON(마이그레이션 시드와 동일). Redis 장애 시 DB 를 직접 읽어 판정을 계속한다.
+행이 없으면 키별 기본값(DEFAULTS): QUIZ·STREAK 는 ON(마이그레이션 시드와 동일),
+REAL_MARKET(A안 — 실제 시세 게임)은 OFF(설계 2-5). Redis 장애 시 DB 를 직접 읽어 판정을 계속한다.
 """
 from __future__ import annotations
 
@@ -14,7 +15,9 @@ from shared.game_models import GameFeatureFlag
 
 log = logging.getLogger("trading_game.flags")
 
-KNOWN_FLAGS = ("QUIZ", "STREAK")
+KNOWN_FLAGS = ("QUIZ", "STREAK", "REAL_MARKET")
+# 행이 없을 때의 값 — REAL_MARKET 만 닫힘(KRX/코스콤 라이선스 없이 실제 시세를 내보내지 않게)
+DEFAULTS = {"QUIZ": True, "STREAK": True, "REAL_MARKET": False}
 CACHE_TTL_SECONDS = 30
 
 
@@ -28,7 +31,7 @@ def _cache_key(flag: str) -> str:
 
 async def _read_db(db: AsyncSession, flag: str) -> bool:
     row = await db.get(GameFeatureFlag, flag)
-    return True if row is None else bool(row.enabled)
+    return DEFAULTS.get(flag, True) if row is None else bool(row.enabled)
 
 
 async def is_enabled(db: AsyncSession, redis, flag: str) -> bool:
@@ -52,8 +55,11 @@ async def list_flags(db: AsyncSession) -> list[GameFeatureFlag]:
         await db.execute(select(GameFeatureFlag).where(GameFeatureFlag.key.in_(KNOWN_FLAGS)))
     ).scalars().all()
     by_key = {r.key: r for r in rows}
-    # 행이 없는 플래그는 ON(미저장 객체)으로 채워 항상 KNOWN_FLAGS 순서로 반환
-    return [by_key.get(k) or GameFeatureFlag(key=k, enabled=True, updated_at=None) for k in KNOWN_FLAGS]
+    # 행이 없는 플래그는 키별 기본값(미저장 객체)으로 채워 항상 KNOWN_FLAGS 순서로 반환
+    return [
+        by_key.get(k) or GameFeatureFlag(key=k, enabled=DEFAULTS.get(k, True), updated_at=None)
+        for k in KNOWN_FLAGS
+    ]
 
 
 async def set_flag(db: AsyncSession, redis, flag: str, enabled: bool) -> GameFeatureFlag:

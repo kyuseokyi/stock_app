@@ -74,7 +74,8 @@ export interface GameSettings {
 export type ChartInterval = 'day' | '1m' | '5m' | '15m' | '60m'
 
 // 기능 on/off (Phase 5b). 출처: game_dtos.FeatureFlagResponse
-export type FeatureFlagKey = 'QUIZ' | 'STREAK'
+// REAL_MARKET = 실제 시세 게임(A안 — 기본 꺼짐, 켜려면 KRX/코스콤 라이선스 필요)
+export type FeatureFlagKey = 'QUIZ' | 'STREAK' | 'REAL_MARKET'
 
 export interface FeatureFlag {
   key: FeatureFlagKey

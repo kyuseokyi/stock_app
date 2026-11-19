@@ -57,3 +57,17 @@ def _market_data_switch_on(monkeypatch):
 
     monkeypatch.setattr(market_access, "market_data_switch_on", lambda: True)
     yield
+
+
+@pytest.fixture(autouse=True)
+def _real_market_flag_on(monkeypatch):
+    """A안 게임 REAL_MARKET 플래그도 기본 OFF 지만, 기존 게임 테스트는 '실제 시세 게임이 켜진 상태'를 검증한다 → 기본 ON.
+    판정 지점(real_market.flag_on)만 바꿔 feature_flag_service 의 '행 없음 = OFF' 규칙은 그대로 시험된다.
+    OFF 동작은 tests/test_game_real_market.py 가 이 함수를 다시 덮어써 검증한다."""
+    from apps.trading_game.services import real_market
+
+    async def _on(_db, _redis) -> bool:
+        return True
+
+    monkeypatch.setattr(real_market, "flag_on", _on)
+    yield
