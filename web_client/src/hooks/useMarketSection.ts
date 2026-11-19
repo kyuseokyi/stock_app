@@ -22,7 +22,7 @@ export function useMarketSection<T>(
   keepCurrent?: (cur: T, next: T) => boolean,
   enabled = true,
 ) {
-  const [state, setState] = useState<SectionState<T>>({ data: null, loading: true, failed: false })
+  const [state, setState] = useState<SectionState<T>>({ data: null, loading: enabled, failed: false })
   const seq = useRef(0)
   const busy = useRef(false)
   const fetchedAt = useRef<number | null>(null)
