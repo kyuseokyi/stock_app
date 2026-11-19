@@ -1,9 +1,11 @@
 import { GraphQLClient, gql } from 'graphql-request'
 import { STOCK_API_URL } from '../config'
 import type { ChartData, Stock } from '../types/stock'
+import { stockAuthHeaders } from './stockAuth'
 
-// stock_api GraphQL 엔드포인트(빌드 타임 주입, 폴백/fail-fast 는 ../config 참조)
-const client = new GraphQLClient(STOCK_API_URL)
+// stock_api GraphQL 엔드포인트(빌드 타임 주입, 폴백/fail-fast 는 ../config 참조).
+// 요청마다 관리자 토큰을 붙인다 — 시세 스위치가 꺼져 있어도 관리자는 차트 삽입·퀴즈 관리가 되도록(A안 2-2)
+const client = new GraphQLClient(STOCK_API_URL, { headers: () => stockAuthHeaders() })
 
 const SEARCH_STOCKS = gql`
   query SearchStocks($query: String!) {

@@ -1,6 +1,7 @@
 // web_client/src/api/screener.ts 복사본 — 원본과 같이 고칠 것 (변경: config 경로 → 관리자 src/config, 역대 신고가 nearAth)
 import axios from 'axios'
 import { STOCK_API_URL } from '../../config'
+import { stockAuthHeaders } from '../../api/stockAuth'
 import type { CanslimItem, CanslimMarket, CanslimScore, CanslimScreen, ScreenFilters } from '../types/screener'
 
 // stock_api GraphQL CANSLIM 조회(공개 — 로그인 불필요). api/stock 과 같은 axios POST 방식.
@@ -31,7 +32,12 @@ interface GqlResponse<T> {
 /** stock_api GraphQL POST — api/patterns 도 같이 쓴다 */
 export async function gql<T>(query: string, variables: Record<string, unknown>, timeoutMs?: number): Promise<T> {
   if (!STOCK_API_URL) throw new Error('STOCK_API_URL 미설정')
-  const { data } = await axios.post<GqlResponse<T>>(STOCK_API_URL, { query, variables }, timeoutMs ? { timeout: timeoutMs } : undefined)
+  // 관리자 토큰 첨부 — 시세 스위치가 꺼져 있어도 관리자 화면은 시세를 받는다(A안 2-2)
+  const { data } = await axios.post<GqlResponse<T>>(
+    STOCK_API_URL,
+    { query, variables },
+    { headers: stockAuthHeaders(), ...(timeoutMs ? { timeout: timeoutMs } : {}) },
+  )
   if ((data.errors && data.errors.length > 0) || !data.data) throw new Error(data.errors?.[0]?.message ?? '응답 없음')
   return data.data
 }

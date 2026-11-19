@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
-import { listAdminUsers, setCommentBan, updateUserNickname } from '../api/moderation'
+import { listAdminUsers, setCommentBan, setMarketDataAccess, updateUserNickname } from '../api/moderation'
 import { apiErrorDetail, apiErrorMessage } from '../lib/apiError'
 import { formatDateTime, NICKNAME_MAX, providerLabel, validateNickname } from '../lib/moderation'
 import { showToast } from '../lib/toast'
 import type { AdminUserOut } from '../types/api'
 
-// 회원 관리 — 검색·페이지 이동, 닉네임 강제 변경, 댓글 작성 금지 켜기/끄기.
-// 설계: docs/superpowers/specs/2026-11-13-comment-report-block-design.md §3·§6
+// 회원 관리 — 검색·페이지 이동, 닉네임 강제 변경, 댓글 작성 금지 켜기/끄기, 시세 열람 권한 켜기/끄기.
+// 설계: docs/superpowers/specs/2026-11-13-comment-report-block-design.md §3·§6,
+//       시세 열람 권한 docs/superpowers/specs/2026-11-19-market-data-off-plan-a-design.md 2-2(관리자는 항상 허용)
 
 const PAGE_SIZE = 20
 
@@ -14,6 +15,7 @@ export default function MembersPage() {
   const [query, setQuery] = useState('') // 입력 중인 검색어
   const [q, setQ] = useState('') // 실제 조회에 쓰는 검색어(검색 버튼/엔터로 확정)
   const [page, setPage] = useState(1)
+  const [marketOnly, setMarketOnly] = useState(false) // 시세 열람 권한 있는 회원만 보기
   const [items, setItems] = useState<AdminUserOut[]>([])
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(false)
@@ -27,7 +29,7 @@ export default function MembersPage() {
     setLoading(true)
     setError('')
     try {
-      const res = await listAdminUsers(q, page, PAGE_SIZE)
+      const res = await listAdminUsers(q, page, PAGE_SIZE, marketOnly)
       setItems(res.items)
       setTotal(res.total)
     } catch (e) {
@@ -35,7 +37,7 @@ export default function MembersPage() {
     } finally {
       setLoading(false)
     }
-  }, [q, page])
+  }, [q, page, marketOnly])
 
   useEffect(() => {
     load()
@@ -97,9 +99,49 @@ export default function MembersPage() {
     }
   }
 
+  const toggleMarketAccess = async (u: AdminUserOut) => {
+    const next = !u.market_data_access
+    const name = u.nickname ?? u.email ?? `#${u.id}`
+    if (
+      next &&
+      !confirm(
+        `'${name}' 회원에게 시세 열람 권한을 줄까요?\n운영자 본인 확인용이에요. 다른 사람에게 주면 시세 재배포에 해당할 수 있어요.`,
+      )
+    )
+      return
+    setBusyId(u.id)
+    setError('')
+    try {
+      const updated = await setMarketDataAccess(u.id, next)
+      // 권한 있는 회원만 보는 중에 끄면 목록에서 빠지므로 다시 불러온다
+      if (marketOnly && !next) await load()
+      else replaceRow(updated)
+      showToast(next ? '시세 열람 권한을 줬습니다.' : '시세 열람 권한을 뺐습니다.', { icon: '✅' })
+    } catch (e) {
+      const msg =
+        apiErrorDetail(e)?.code === 'ADMIN_ALWAYS_ALLOWED'
+          ? '관리자 계정은 항상 시세를 볼 수 있습니다.'
+          : apiErrorMessage(e, '시세 열람 권한 변경에 실패했습니다.')
+      setError(msg)
+    } finally {
+      setBusyId(null)
+    }
+  }
+
   return (
     <div>
       <h2 className="mb-6 text-2xl font-bold text-slate-900">회원 관리</h2>
+
+      <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+        <p className="font-medium">시세 열람 권한</p>
+        <p className="mt-1">
+          사용자 시세 노출(스크리너 탭 설정)이 꺼져 있어도, 권한을 준 계정은 웹·앱에서 시세를 볼 수 있어요. 관리자 계정은
+          항상 허용돼요.
+        </p>
+        <p className="mt-1 font-medium">
+          ⚠️ 운영자 본인 확인용. 다른 사람에게 주면 시세 재배포에 해당할 수 있어요.
+        </p>
+      </div>
 
       <form
         onSubmit={onSearch}
@@ -117,6 +159,18 @@ export default function MembersPage() {
         >
           검색
         </button>
+        <label className="flex shrink-0 items-center gap-1.5 text-sm text-slate-600">
+          <input
+            type="checkbox"
+            checked={marketOnly}
+            onChange={(e) => {
+              setPage(1)
+              setMarketOnly(e.target.checked)
+            }}
+            className="h-4 w-4 rounded border-slate-300"
+          />
+          시세 권한 있는 회원만
+        </label>
       </form>
 
       {error && (
@@ -129,7 +183,7 @@ export default function MembersPage() {
       </p>
 
       <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
-        <table className="w-full min-w-[900px] text-left text-sm">
+        <table className="w-full min-w-[1000px] text-left text-sm">
           <thead className="bg-slate-50 text-slate-500">
             <tr>
               <th className="px-4 py-3 font-medium">ID</th>
@@ -139,19 +193,20 @@ export default function MembersPage() {
               <th className="px-4 py-3 font-medium">역할</th>
               <th className="px-4 py-3 font-medium">가입일</th>
               <th className="px-4 py-3 font-medium">댓글</th>
+              <th className="px-4 py-3 font-medium">시세 열람</th>
               <th className="px-4 py-3 text-right font-medium">작업</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
             {loading && items.length === 0 ? (
               <tr>
-                <td colSpan={8} className="px-4 py-8 text-center text-slate-400">
+                <td colSpan={9} className="px-4 py-8 text-center text-slate-400">
                   불러오는 중…
                 </td>
               </tr>
             ) : items.length === 0 ? (
               <tr>
-                <td colSpan={8} className="px-4 py-8 text-center text-slate-400">
+                <td colSpan={9} className="px-4 py-8 text-center text-slate-400">
                   회원이 없습니다.
                 </td>
               </tr>
@@ -224,6 +279,35 @@ export default function MembersPage() {
                         <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs text-green-700">
                           허용
                         </span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3">
+                      {isAdmin ? (
+                        <span
+                          className="rounded-full bg-indigo-100 px-2 py-0.5 text-xs text-indigo-700"
+                          title="관리자 계정은 항상 시세를 볼 수 있습니다."
+                        >
+                          항상 허용
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          role="switch"
+                          aria-checked={!!u.market_data_access}
+                          aria-label={`${u.nickname ?? u.email ?? u.id} 시세 열람 권한`}
+                          disabled={busy}
+                          onClick={() => toggleMarketAccess(u)}
+                          className={`relative inline-flex h-6 w-10 shrink-0 items-center rounded-full transition focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 disabled:opacity-50 ${
+                            u.market_data_access ? 'bg-amber-500' : 'bg-slate-300'
+                          }`}
+                        >
+                          <span
+                            aria-hidden="true"
+                            className={`inline-block h-4 w-4 rounded-full bg-white shadow transition ${
+                              u.market_data_access ? 'translate-x-5' : 'translate-x-1'
+                            }`}
+                          />
+                        </button>
                       )}
                     </td>
                     <td className="px-4 py-3 text-right">
