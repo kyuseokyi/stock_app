@@ -302,13 +302,20 @@ def test_ws_off_free_user_gets_disabled_not_registered(ws_env):
     assert mgr.user_ids() == []
 
 
-def test_ws_off_disabled_connection_gets_no_broadcast(ws_env, monkeypatch):
+@pytest.mark.parametrize("logged_in", [False, True])
+def test_ws_off_disabled_connection_gets_no_tick_or_pnl(ws_env, monkeypatch, logged_in):
+    """안내 뒤 틱(브로드캐스트)·개인손익(send_to_user)이 와도 받지 않고, 보관 시간이 지나면 4429 로 닫힌다."""
     client, mgr, _, _ = ws_env
-    monkeypatch.setenv("GAME_WS_DISABLED_HOLD_SEC", "5")
-    with client.websocket_connect("/ws/game/stream") as ws:
-        assert json.loads(ws.receive_text())["type"] == "market_disabled"
-        ws.portal.call(mgr.broadcast, {"type": "tick", "price": 1})
-        assert mgr.public_count() == 0  # 구독자가 아니므로 틱이 전달될 곳이 없다
+    monkeypatch.setenv("GAME_WS_DISABLED_HOLD_SEC", "1")
+    url = f"/ws/game/stream?token={create_access_token(subject=7, role='FREE')}" if logged_in else "/ws/game/stream"
+    with pytest.raises(WebSocketDisconnect) as ei:
+        with client.websocket_connect(url) as ws:
+            assert json.loads(ws.receive_text())["type"] == "market_disabled"
+            ws.portal.call(mgr.broadcast, {"type": "tick", "price": 1})
+            ws.portal.call(mgr.send_to_user, 7, {"type": "position_pnl", "position_id": "p"})
+            ws.receive_text()  # 틱·손익이 아니라 종료가 와야 한다
+    assert ei.value.code == 4429
+    assert mgr.public_count() == 0 and mgr.user_ids() == []
 
 
 @pytest.mark.parametrize("user", [_User(role=UserRole.ADMIN), _User(access=True)])
