@@ -1,5 +1,7 @@
 # 상용 패키지명 변경: `com.stockapp` → `com.stocknote` (2026-11-18)
 
+> **진행 상태 (2026-11-19)**: B(K1~K7) **코드·문서 반영 완료**(브랜치 `feature/package-stocknote`, 권장안 D1~D5 기준). 남은 것은 **사용자 A 단계**(A1 Play 앱 생성, A2 Firebase·`google-services.json`·EAS FCM 키, A3~A5) — 특히 A2-1~3 전에는 `npm run build:android:preview` 가 새 검사에 걸려 멈춘다. 상용 DB 는 배포 때 마이그레이션 `e6f8a0b2c4d7` 이 android `store_url` 을 바꾼다(K6).
+
 ## 왜 바꾸나
 Google Play 에서 `com.stockapp` 은 **이미 다른 개발자가 쓰는 패키지명**이라 앱을 만들 수 없다. `com.stocknote` 는 사용 가능으로 확인(사용자, 2026-11-18).
 패키지명은 사용자 화면에 보이지 않는 **스토어 식별자**다. 앱 이름(FunNote)·아이콘·도메인은 그대로다.
@@ -62,7 +64,7 @@ Google Play 에서 `com.stockapp` 은 **이미 다른 개발자가 쓰는 패키
 
 ---
 
-## B. Claude 가 할 일 (코드·문서 — 커밋)
+## B. Claude 가 할 일 (코드·문서 — 커밋) — ✅ 2026-11-19 반영
 | # | 파일 | 바꿀 것 |
 |---|---|---|
 | K1 | `mobile/app.config.js` | 상용 `android.package`·`ios.bundleIdentifier` → `com.stocknote` (개발 `com.stockapp.dev` 유지), 주석 |
@@ -70,7 +72,7 @@ Google Play 에서 `com.stockapp` 은 **이미 다른 개발자가 쓰는 패키
 | K3 | `mobile/scripts/build-preview-apk.sh` | `google-services.json`·prebuild 결과·APK 설정 검사 3곳의 `"com.stockapp"` → `"com.stocknote"`, 주석 |
 | K4 | `mobile/src/features/app-update/*.test.ts` | 테스트 속 스토어 주소·패키지 문자열 |
 | K5 | `backend/apps/blog/services/app_version.py` | 기본 `store_url` → `https://play.google.com/store/apps/details?id=com.stocknote`, `backend/tests/test_app_version.py` 기대값 |
-| K6 | 상용 DB `app_version_configs` | 옛 마이그레이션(`f4a5b6c7d8e9`)이 넣은 android `store_url`(`com.stockapp`)을 **새 alembic 데이터 마이그레이션**으로 교체(옛 파일은 고치지 않음). 관리자 '앱 업데이트 관리' 화면에서 손으로 바꿔도 된다 |
+| K6 | 상용 DB `app_version_configs` | 옛 마이그레이션(`f4a5b6c7d8e9`)이 넣은 android `store_url`(`com.stockapp`)을 **새 alembic 데이터 마이그레이션**으로 교체(옛 파일은 고치지 않음) → `e6f8a0b2c4d7`(주소가 옛 기본값과 정확히 같을 때만 교체, downgrade 역방향). 관리자 '앱 업데이트 관리' 화면에서 손으로 바꿔도 된다 |
 | K7 | 문서 | `CLAUDE.md`, `README.md`, `PRODUCT.md`, `docs/deploy/{store-release,owner-todo,prod-release,environments}.md`, `docs/push_notification_setup.md`, `docs/social_login_guide.md`, `docs/ad_monetization_setup_guide.md`, `docs/local_build_guide.md`, `docs/handover/*` 의 상용 패키지 표기. 옛 설계·계획 문서(`docs/superpowers/*`)는 기록이라 그대로 |
 
 ⚠️ K1 이 들어간 뒤 `build:android:preview` 는 **새 `google-services.json`(A2-3)이 있어야** 성공한다(K3 검사). 그래서 A2-1~3 을 먼저 하고 K 를 반영하는 순서가 안전하다.
@@ -84,7 +86,7 @@ Google Play 에서 `com.stockapp` 은 **이미 다른 개발자가 쓰는 패키
 1. D1~D5 결정 확인(권장안 그대로면 진행)
 2. **A1** Play Console 앱 생성 — 이름 확보
 3. **A2-1~3** Firebase 에 `com.stocknote` 추가 → 새 `google-services.json` 교체
-4. **B(K1~K7)** 코드·문서 변경(Claude) → 테스트 → dev 머지
+4. **B(K1~K7)** 코드·문서 변경(Claude) → 테스트 → dev 머지 — 코드·문서·테스트 ✅(2026-11-19), dev 머지 대기
 5. **A2-4** EAS 에 `com.stocknote` FCM 키 업로드
 6. 상용 테스트 APK 다시 빌드 → 설치 → 로그인·푸시 수신 확인(A2-5)
 7. **K6** 상용 DB store_url 반영(상용 배포 때)

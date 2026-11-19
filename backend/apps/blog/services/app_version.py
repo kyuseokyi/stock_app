@@ -35,7 +35,7 @@ _COMMON_DEFAULTS = dict(
     maintenance_message=None,
 )
 DEFAULTS: dict[str, dict] = {
-    "android": {**_COMMON_DEFAULTS, "store_url": "https://play.google.com/store/apps/details?id=com.stockapp"},
+    "android": {**_COMMON_DEFAULTS, "store_url": "https://play.google.com/store/apps/details?id=com.stocknote"},
     "ios": {**_COMMON_DEFAULTS, "store_url": "https://apps.apple.com/app/id0000000000"},
 }
 

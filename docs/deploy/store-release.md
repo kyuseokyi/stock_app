@@ -64,13 +64,13 @@
 | U1 | **Google Play 개발자 계정**: US$25(선불카드 불가), 실명 결제 프로필, 신분증 확인, 이메일·전화 OTP, Play Console 모바일 앱으로 기기 인증 | 개발자 이메일은 `support@funnotedaily.com` |
 | U2 | 계정을 만들면 **바로 앱 생성 → `com.stocknote` 확보**(`com.stockapp` 은 이미 사용 중 — 변경 목록 [`package-rename-stocknote.md`](package-rename-stocknote.md)) | 이미 쓰이는 이름이면 바꿔야 하고, OAuth·FCM·EAS 설정을 모두 다시 맞춰야 함 |
 | U3 | **테스터 15~20명 모집**(Google 계정) → 비공개 테스트 트랙에 올리고 14일 연속 유지 → 대시보드에서 프로덕션 액세스 신청(테스트 내용 질문에 답함) | 테스트 피드백을 기록해 둔다 |
-| U4 | **Apple Developer Program**(연 US$99, 2단계 인증, 실명) → App Store Connect에서 `com.stockapp` 앱 생성, 무료 앱 약관 | |
+| U4 | **Apple Developer Program**(연 US$99, 2단계 인증, 실명) → App Store Connect에서 `com.stocknote` 앱 생성, 무료 앱 약관 | |
 | U5 | **EU DSA 거래자 상태 신고**(필수). 배포 지역을 **한국만**으로 하면 비거래자로 신고해 주소 공개를 피할 수 있음(추측) | |
 | U6 | 콘텐츠 선언(Play): 개인정보처리방침, 앱 액세스(심사 계정·영어 안내), 광고(하우스 배너 — 앱 안 기능 안내뿐이면 No 여지, 확신 없으면 Yes), 콘텐츠 등급(IARC), 타겟층 **18세 이상**, 데이터 보안(삭제 URL 포함), 금융 기능(정보 제공뿐이면 "없음" 또는 포트폴리오 관리 — 확인 필요), 건강·정부 앱 아님, 광고 ID 사용 안 함 | 초안은 아래 3절 |
 | U7 | Apple: 개인정보 영양 라벨(추적 없음), 연령 등급(광고·UGC 있음, 모의 도박 없음 → 4+ 예상), 수출 규정, 카테고리 금융 | |
 | U8 | 상용 앱 정식 빌드(EAS production) → Expo Credentials에서 **서명 키 백업** → Play 업로드 후 **앱 서명 키 SHA-1**을 Google OAuth Android 클라이언트(Drive 백업)에 등록 → OAuth 동의 화면 **프로덕션 게시** | 빠지면 스토어판에서만 Drive 백업 로그인 실패 |
 | U9 | Apple 키: 애플 로그인용 Services ID·키(D2), APNs 키(EAS 자격 증명), Google iOS OAuth 클라이언트(D7) | |
-| U10 | 상용 푸시: EAS에 `com.stockapp` FCM 자격 증명 업로드 | |
+| U10 | 상용 푸시: EAS에 `com.stocknote` FCM 자격 증명 업로드 | |
 | U11 | 스토어 자산: 아이콘 512(Play), 그래픽 1024×500(Play), 스크린샷(Play 세로 1080×1920 4~8장, iPhone 6.3인치 1179×2556 이상, iPad를 지원하면 13인치), 앱 이름 30자·짧은 설명 80자·설명 4000자, 키워드 100바이트(Apple), 지원 URL `/support`, 저작권, 심사 연락처(+82) | "1위·최고" 같은 순위 주장, 이모지 금지 |
 | U12 | 심사 메모(영어): 정보 제공 전용 고지, 비로그인 이용 범위, 댓글 기능 존재·현재 꺼짐, 백그라운드 작업 목적, 심사 계정 | Apple 2.5.19·2.3.1: 숨은 기능 금지 — 댓글을 켤 때는 OTA가 아니라 새 버전 심사로 |
 | U13 | 네이버 로그인 검수(마지막) — API 설정에서 **회원이름 체크 해제**, 적용 형태 "신규 회원가입" | [prod-release.md](prod-release.md) |

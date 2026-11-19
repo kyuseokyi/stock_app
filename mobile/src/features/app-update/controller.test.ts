@@ -27,7 +27,7 @@ jest.mock('./storage', () => ({ readStoreHiddenUntil: jest.fn(), hideStoreForADa
 jest.mock('./app-info', () => ({
   currentPlatform: jest.fn(() => 'android'),
   currentAppVersion: jest.fn(() => '1.0.0'),
-  currentPackageId: jest.fn(() => 'com.stockapp'),
+  currentPackageId: jest.fn(() => 'com.stocknote'),
 }));
 
 import { showToast } from '@/ui/app-toast';
@@ -283,7 +283,7 @@ describe('openStore', () => {
     await runCheck();
     rn.Linking.openURL.mockResolvedValue(undefined);
     await openStore();
-    expect(rn.Linking.openURL).toHaveBeenCalledWith('https://play.google.com/store/apps/details?id=com.stockapp');
+    expect(rn.Linking.openURL).toHaveBeenCalledWith('https://play.google.com/store/apps/details?id=com.stocknote');
   });
 
   it('서버 주소 열기 실패면 기본 주소로 다시 시도', async () => {
@@ -291,7 +291,7 @@ describe('openStore', () => {
     await runCheck();
     rn.Linking.openURL.mockRejectedValueOnce(new Error('no handler')).mockResolvedValueOnce(undefined);
     await openStore();
-    expect(rn.Linking.openURL).toHaveBeenLastCalledWith('https://play.google.com/store/apps/details?id=com.stockapp');
+    expect(rn.Linking.openURL).toHaveBeenLastCalledWith('https://play.google.com/store/apps/details?id=com.stocknote');
     expect(toastMock).not.toHaveBeenCalled();
   });
 

@@ -10,7 +10,7 @@ describe('parseVersionCheck', () => {
         min_supported_version: '1.0.0',
         title: '업데이트 안내',
         message: '최신 버전이 필요합니다.',
-        store_url: 'https://play.google.com/store/apps/details?id=com.stockapp',
+        store_url: 'https://play.google.com/store/apps/details?id=com.stocknote',
       },
       ota: { policy: 'OPTIONAL', title: '새 기능', message: '재시작할까요?' },
     });
@@ -22,7 +22,7 @@ describe('parseVersionCheck', () => {
         minSupportedVersion: '1.0.0',
         title: '업데이트 안내',
         message: '최신 버전이 필요합니다.',
-        storeUrl: 'https://play.google.com/store/apps/details?id=com.stockapp',
+        storeUrl: 'https://play.google.com/store/apps/details?id=com.stocknote',
       },
       ota: { policy: 'OPTIONAL', title: '새 기능', message: '재시작할까요?' },
     });
@@ -86,12 +86,12 @@ describe('parseVersionCheck', () => {
 
   it('store_url 은 https 만 — http·javascript·market 은 null(기본 스토어로 대체)', () => {
     const url = (v: unknown) => parseVersionCheck({ store: { store_url: v } })!.store.storeUrl;
-    expect(url('HTTPS://play.google.com/store/apps/details?id=com.stockapp')).toBe(
-      'HTTPS://play.google.com/store/apps/details?id=com.stockapp',
+    expect(url('HTTPS://play.google.com/store/apps/details?id=com.stocknote')).toBe(
+      'HTTPS://play.google.com/store/apps/details?id=com.stocknote',
     );
     expect(url('http://play.google.com/x')).toBeNull();
     expect(url('javascript:alert(1)')).toBeNull();
-    expect(url('market://details?id=com.stockapp')).toBeNull();
+    expect(url('market://details?id=com.stocknote')).toBeNull();
     expect(url('https://')).toBeNull();
     expect(url('https://a b')).toBeNull();
   });

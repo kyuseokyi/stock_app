@@ -10,7 +10,7 @@
 
 배포된 서버(haezean)는 **개발 서버**, 상용 서버(funnotedaily, 오라클 도쿄)는 구축·설정 완료(2026-11-10~12). 다음 목표는 **스토어 출시** — 전체 목록은 [`deploy/store-release.md`](deploy/store-release.md).
 
-1. **지금(사용자)** — Google Play 개인 개발자 계정 → `com.stockapp` 앱 생성(이름 확보) → 테스터 15~20명 모집. 개인 계정은 **테스터 12명·14일 연속 비공개 테스트**를 거쳐야 프로덕션 신청 가능 — 가장 오래 걸리므로 먼저 시작
+1. **지금(사용자)** — Google Play 개인 개발자 계정 → `com.stocknote` 앱 생성(이름 확보) → 테스터 15~20명 모집. 개인 계정은 **테스터 12명·14일 연속 비공개 테스트**를 거쳐야 프로덕션 신청 가능 — 가장 오래 걸리므로 먼저 시작
 2. **코드 1차(Android 비공개 테스트용)** — 권한 정리(`SYSTEM_ALERT_WINDOW` 차단) → 고객지원 `/support` → `funnotedaily.com` 루트 리다이렉트 → 이용약관 `/terms`·첫 로그인 동의 → 심사 전용 로그인 → 앱 내 "정보 제공 전용" 고지. 이후 상용 웹 배포(처리방침·계정 삭제 안내 포함)
 3. **상용 데이터** — KIS 상용 키 → 관리자 '초기 데이터 준비' → `PROD_DEPLOY_ENABLED=true` + 첫 `release/v1.0.0`
 4. **Android 비공개 테스트** — EAS production 정식 빌드(서명 키 백업) → Play 앱 서명 키 SHA-1을 Google OAuth(Drive 백업)에 등록 → 콘텐츠 선언·스토어 자산 → 비공개 트랙 업로드

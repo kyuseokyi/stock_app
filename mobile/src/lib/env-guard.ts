@@ -9,7 +9,8 @@
  *   로컬 Metro 개발(dev client = com.stockapp.dev + .env.development = development)은 일치하므로 영향 없다.
  */
 export const DEV_PACKAGE_ID = 'com.stockapp.dev';
-export const PROD_PACKAGE_ID = 'com.stockapp';
+// 상용은 com.stocknote(com.stockapp 은 Play 에서 이미 사용 중이라 변경 — docs/deploy/package-rename-stocknote.md). 개발은 그대로.
+export const PROD_PACKAGE_ID = 'com.stocknote';
 
 export type EnvMismatch = { packageId: string; expected: 'development' | 'production'; bundled: string };
 
