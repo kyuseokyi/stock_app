@@ -8,6 +8,7 @@ import {
   indexHeaderBasis,
   latestTime,
   marketSession,
+  moversTitle,
   parseKst,
   splitCarousel,
   topStocks,
@@ -162,5 +163,21 @@ describe('indexHeaderBasis', () => {
   it('국내 지수가 없으면 null', () => {
     expect(indexHeaderBasis([us])).toBeNull();
     expect(indexHeaderBasis([])).toBeNull();
+  });
+});
+
+describe('moversTitle', () => {
+  const row = (reasonSummary: string | null) => ({
+    ticker: '005930', stockName: '삼성전자', price: 1, changeRate: 5, reasonSummary,
+    category: null, reliability: null, riskWarning: null, sources: [],
+  });
+
+  it('AI 원인이 하나라도 있으면 "급등락 & AI 원인"', () => {
+    expect(moversTitle([row(null)], [row('수주')])).toBe('급등락 & AI 원인');
+  });
+
+  it('원인이 없으면(서버 기본 꺼짐) "급등락" 만', () => {
+    expect(moversTitle([row(null)], [])).toBe('급등락');
+    expect(moversTitle([], [])).toBe('급등락');
   });
 });

@@ -1,5 +1,5 @@
 import type { MacroValue, MarketIndex } from '../types/market'
-import type { FlowSource, InvestorFlow, Movers } from '../types/marketRest'
+import type { FlowSource, InvestorFlow, Mover, Movers } from '../types/marketRest'
 
 // 마켓 개요 표시용 순수 함수 — 기준 시각·장운영 뱃지·억 단위·지수 분류(앱 market/dashboard.ts 와 같은 규칙·문구).
 
@@ -129,4 +129,12 @@ export function tickerNames(movers: Movers | null, flow: InvestorFlow | null): M
     m.set(x.ticker, x.name)
   }
   return m
+}
+
+/**
+ * 급등락 카드 제목 — AI 원인이 하나라도 있을 때만 '& AI 원인'(앱 moversTitle 과 같은 규칙).
+ * 네이버 약관(2026-09-07 시행)으로 서버가 원인 분석을 기본 꺼 두므로, 원인이 없을 때 제목만 남는 빈 약속을 막는다.
+ */
+export function moversTitle(gainers: Mover[], losers: Mover[]): string {
+  return [...gainers, ...losers].some((m) => m.reasonSummary) ? '급등락 & AI 원인' : '급등락'
 }

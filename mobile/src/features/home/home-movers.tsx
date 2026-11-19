@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { StyleSheet } from 'react-native-unistyles';
 
-import { formatBasis } from '@/features/market/dashboard';
+import { formatBasis, moversTitle } from '@/features/market/dashboard';
 import { formatChg, toneOf } from '@/features/market/format';
 import type { Mover } from '@/features/market/rest-types';
 import { Chip, SectionHead } from '@/ui';
@@ -24,7 +24,7 @@ export function HomeMovers({ gainers, losers, initialSide, updatedAt, onOpenStoc
   const items = side === 'gainers' ? gainers : losers;
   return (
     <View style={styles.card}>
-      <SectionHead title="급등락 & AI 원인" caption={formatBasis(updatedAt)} />
+      <SectionHead title={moversTitle(gainers, losers)} caption={formatBasis(updatedAt)} />
       <View style={styles.tabs}>
         <Chip label="급등" selected={side === 'gainers'} onPress={() => setSide('gainers')} />
         <Chip label="급락" selected={side === 'losers'} onPress={() => setSide('losers')} />
