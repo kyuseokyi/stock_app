@@ -1,5 +1,7 @@
 # 테마 뉴스 레이더 — 단독·특징주·정책 뉴스로 테마주 찾기 (검토 단계)
 
+> ⚠️ **보류(2026-11-19)**: 네이버 검색 API 약관 개정(2026-09-07 시행)으로 이 설계의 핵심(기사·사건 저장, 묶기·재정렬, 사건별 Gemini 호출)이 금지 대상이다. 6절 1단계(네이버 실측)는 진행하지 않고, 출처를 바꾼 뒤 재설계한다 — [`naver-search-api-terms-issue.md`](naver-search-api-terms-issue.md)
+
 > 2026-11-18 조사·실측, 11-19 정리. **아직 구현 결정 전**이다. 다음 단계는 개발 서버에서 네이버 검색 API 실측(아래 6절).
 > 관련: 테마 큐레이션 기획 [`joodal_curation_service_plan.md`](joodal_curation_service_plan.md)(네이버 증권 크롤링 전제 — 보류됨). 이 문서는 **공식 검색 API·공개 RSS만** 쓰는 실시간 확산 탐지다.
 > 측정 스크립트(일회용, 저장소 밖): 세션 scratchpad `news/rss_probe.py`·`news/spread_probe.py` — 구현 때 `backend/scripts/` 로 옮긴다.
