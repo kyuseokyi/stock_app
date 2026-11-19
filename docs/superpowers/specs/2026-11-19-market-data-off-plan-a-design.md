@@ -118,8 +118,21 @@ OFF 일 때 시장 탭 = "브리핑 + 거시 + 경제 일정". 칩 구성·탭 �
      전역 스위치 값은 관리자 REST `/api/v1/admin/screener/features` 로 본다.
    - 차단 범위 밖(남은 일): trading_game(3번), 화면 숨김(5번), ECOS(4번) — OFF 일 때 marketOverview 지수 칸은 ECOS 전까지 빈 목록.
    - web_client·mobile 도 로그인 상태면 stock GraphQL·시세 REST 에 토큰을 붙인다(권한 회원이 앱·웹에서 보도록).
-2. admin_web 토큰 첨부(stockClient·REST) ✅, 관리자 UI 스위치 문구 ✅, 블로그 차트 모달 비활성(남음)
-3. trading_game `REAL_MARKET` 플래그·WS/캔들/상태/주문 차단 + 테스트, QUIZ OFF
+2. ✅ admin_web 토큰 첨부(stockClient·REST), 관리자 UI 스위치 문구, 블로그 차트 모달 비활성(2026-11-19, `feature/game-real-market-flag`)
+   - `RichTextEditor` "차트 삽입" 버튼: 전역 `MARKET_DATA`(관리자 REST `/api/v1/admin/screener/features`)가 꺼져 있거나 조회 실패면 비활성 + 안내.
+     요청자 기준 `screenerFeatures.marketData` 는 관리자에게 항상 true 라 쓰지 않는다. 기존 글 차트는 7번.
+3. ✅ (2026-11-19, `feature/game-real-market-flag`) trading_game `REAL_MARKET` 플래그·WS/캔들/상태/주문 차단 + 테스트, QUIZ OFF
+   - 판정 공유: `backend/shared/market_viewer.py`(`user_can_view`·`load_viewer`) — stock_api `market_access` 와 같은 규칙.
+     게임 판정 `backend/apps/trading_game/services/real_market.py`: 플래그 ON **또는** 관리자 **또는** `market_data_access` 회원. 토큰 선택, 실패 = 익명.
+   - 기본값 키별(`feature_flag_service.DEFAULTS`): QUIZ·STREAK 행 없음 = ON 유지, REAL_MARKET 행 없음·조회 오류 = OFF. 마이그레이션 없음.
+   - OFF+미허용: `/api/game/candles`·`/candles/session`·`/market-status` 403 `market_data_disabled`, `POST /orders`·`/positions/{id}/close` 403(로그인 401 이 먼저),
+     `GET /positions/active` 는 수익률·손익을 비움(null), 퀴즈 `random`·`submit` 503 `FEATURE_DISABLED`(QUIZ OFF 와 같은 모양).
+   - `seasons/active` 의 `features.real_market`(게임 API 는 snake_case — 설계의 `realMarket`) = 요청자 기준, `features.quiz` 도 같은 판정을 통과해야 true.
+   - WS: 구독 등록 없이 `{"type":"market_disabled"}` 1회 → `GAME_WS_DISABLED_HOLD_SEC`(600초) 유휴 → 4429 `MARKET_DISABLED`.
+     **바로 닫지 않는 이유**: 설치된 앱은 연결이 열리면 재연결 간격을 1초로 되돌리고 캔들·계좌를 재조회 → 즉시 종료면 1초 무한 재연결. 4429 는 긴 간격 재시도 코드.
+     무효·만료 토큰은 지금처럼 4401. 플래그를 끈 순간 이미 붙어 있던 스트림은 재연결 전까지 계속 받는다.
+   - 관리자 UI: admin `TradingGameSettings` 에 "📈 실제 시세 게임 공개"(켜려면 KRX/코스콤 라이선스 필요, 켤 때 확인창).
+   - 남은 위험(범위 밖): `coach/today` 지지·저항 가격, `accounts/me` 총자산(손익 반영) — 5번 화면 숨김 때 함께 판단.
 4. ECOS 수집기 + 홈 시장 참고 교체(모바일·웹)
 5. 앱·웹 화면 숨김(시장 탭·스크리너·종목 상세·게임 탭·일정 공모주) + 종목 상세 링크아웃, `searchStocks` 가격 필드 확인
 6. 네이버 뉴스 AI 입력 제거(브리핑 입력 교체, 급등락 생성 중단, 정성 분석 노출 중단)
