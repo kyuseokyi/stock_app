@@ -14,8 +14,8 @@
 | 종류 | 언제 | 패키지(앱 이름) | API 주소 | 맥 연결 필요 | 명령 |
 |---|---|---|---|---|---|
 | **개발용** (debug) | 코드 고치며 바로 확인 | `com.stockapp.dev` (StockApp Dev) | `.env.development` (+ `.env.development.local`) | **필요** — 화면 코드를 Metro(8082)에서 받음 | `APP_ENV=development npx expo run:android --port 8082` |
-| **단독 실행** (release APK) | 맥 없이 폰에서 써 보기·지인 배포 | `com.stockapp` (StockApp) | `.env.production` (haezean) | 불필요 | `npm run android:prod` |
-| **배포용** (스토어 AAB) | Play 스토어 업로드 | `com.stockapp` | `.env.production` | 불필요 | `npm run build:android:prod` (EAS 로컬 빌드) |
+| **단독 실행** (release APK) | 맥 없이 폰에서 써 보기·지인 배포 | `com.stocknote` (StockApp) | `.env.production` (haezean) | 불필요 | `npm run android:prod` |
+| **배포용** (스토어 AAB) | Play 스토어 업로드 | `com.stocknote` | `.env.production` | 불필요 | `npm run build:android:prod` (EAS 로컬 빌드) |
 
 - 패키지가 달라 **개발용과 단독 실행/배포용은 한 기기에 같이 설치**된다(로그인·저장 데이터도 따로).
 - 패키지·앱 이름·딥링크 스킴은 `mobile/app.config.js` 가 `APP_ENV` 로 고른다(`development` → `.dev`).
@@ -81,7 +81,7 @@ npm run android:prod
 # = APP_ENV=production expo prebuild --platform android --clean
 #   → APP_ENV=production expo run:android --variant release --device
 ```
-- `prebuild --clean` 이 **`android/` 폴더를 운영 설정(`com.stockapp`)으로 다시 만든다.** `android/` 는 커밋하지 않는 생성물이라
+- `prebuild --clean` 이 **`android/` 폴더를 운영 설정(`com.stocknote`)으로 다시 만든다.** `android/` 는 커밋하지 않는 생성물이라
   손으로 고친 내용이 있으면 사라진다.
 - 결과 APK: `android/app/build/outputs/apk/release/app-release.apk` — 다른 폰에는 `adb install -r <apk>` 로 설치.
 - 서명: 지금 `android/app/build.gradle` 의 release 는 **debug 키로 서명**된다 → 내부 테스트용. 스토어에는 올릴 수 없다(4장).
@@ -102,7 +102,7 @@ npm run build:android:dev         # (참고) 개발용 APK 를 EAS 로컬 빌드
 ```
 - `eas.json` 프로필: `development`(dev client APK) · `preview`(운영 설정 APK, 내부 배포) · `production`(AAB, 버전 자동 증가 — 원격 버전 기준).
 - `--local` 이라 빌드는 맥에서 하지만 **EAS 로그인(`eas login`)과 프로젝트 연결이 필요**하다. 업로드 키(서명)는 EAS 자격 증명으로 관리.
-- 운영 패키지명 `com.stockapp` 은 스토어에 한 번 올리면 바꿀 수 없다 — 첫 업로드 전에 확정.
+- 운영 패키지명 `com.stocknote` 는 스토어에 한 번 올리면 바꿀 수 없다 — 첫 업로드 전에 확정.
 - iOS: `npm run build:ios:prod`(실기기), `npm run build:ios:sim`(시뮬레이터) — 애플 로그인 도입 시점에 정리.
 
 ---

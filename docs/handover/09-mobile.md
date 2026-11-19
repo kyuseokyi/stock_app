@@ -86,7 +86,7 @@ npm run start:dev        # 이미 개발 앱이 설치돼 있으면 Metro(JS 서
 | 폰에 설치된 앱 | 이름 / 번들ID | 붙는 서버 |
 |---|---|---|
 | 개발 앱 | `StockApp Dev` / `com.stockapp.dev` | `.env.development` |
-| 상용 앱 | `StockApp` / `com.stockapp` | `.env.production` |
+| 상용 앱 | `StockApp` / `com.stocknote` | `.env.production` |
 
 두 앱은 번들ID 가 달라서 **한 폰에 같이 설치**된다.
 

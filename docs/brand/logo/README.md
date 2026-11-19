@@ -79,12 +79,12 @@ SVG 에는 글꼴이 아니라 도형만 들어 있다. 다시 만들 때: `pyth
 
 | 식별자 | 값 | 그대로 두는 이유 |
 |---|---|---|
-| 패키지 ID / 번들 ID | `com.stockapp` · `com.stockapp.dev` | 사용자에게 안 보인다. 바꾸면 다른 앱이 되어 네이버·카카오 콘솔, Firebase(google-services.json), 스토어 등록을 다 새로 해야 한다 |
+| 패키지 ID / 번들 ID | `com.stocknote` · `com.stockapp.dev` | 사용자에게 안 보인다. 바꾸면 다른 앱이 되어 네이버·카카오 콘솔, Firebase(google-services.json), 스토어 등록을 다 새로 해야 한다 |
 | Expo slug · EAS 프로젝트 | `stockapp` · `@kyuseokyi/stockapp` | OTA 업데이트 주소가 프로젝트에 묶여 있다 |
 | 딥링크 스킴 | `stockapp://` · `stockapp-dev://` | 간편 로그인 복귀 주소. 바꾸면 소셜 로그인 설정도 함께 바꿔야 한다 |
 | APK 파일 이름 | `stockapp-<dev\|prod>-…apk` | 빌드 산출물 이름일 뿐 |
 
-- 스토어 화면·홈 화면·알림에는 FunNote 만 보이므로 문제없다(패키지 ID 는 Play 스토어 주소 `?id=com.stockapp` 에만 보인다).
+- 스토어 화면·홈 화면·알림에는 FunNote 만 보이므로 문제없다(패키지 ID 는 Play 스토어 주소 `?id=com.stocknote` 에만 보인다).
 - **바꾸고 싶어지면 첫 스토어 출시 전에만 가능**하다. 출시 후에는 패키지 ID 를 바꿀 수 없다(바꾸면 새 앱으로 다시 출시).
 - 블로그 개발 샘플 글 제목 "해전(StockApp) 둘러보기"도 그대로 — 시드가 제목으로 중복을 판단해 바꾸면 글이 하나 더 생긴다.
 

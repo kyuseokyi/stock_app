@@ -15,7 +15,7 @@
 | 앱 패키지 `expo-notifications` | ✅ 설치 | 새 dev build 필요 |
 | 앱 설정 `app.config.js` | ✅ 연결 | projectId 는 코드 기본값(`DEFAULT_EAS_PROJECT_ID`), `google-services.json` 은 `mobile/secrets/` 에 있으면 자동 사용. env 는 덮어쓸 때만 |
 | 키 파일 git 제외 규칙 | ✅ 있음 | 루트 `.gitignore`(`**/secrets/`, `google-services*.json` 등) — 2026-10-20 추가 |
-| `google-services.json` | ✅ 준비됨 | `mobile/secrets/google-services.json` — **한 파일에 `com.stockapp.dev`·`com.stockapp` 두 앱 포함** |
+| `google-services.json` | ⚠️ 교체 필요 | `mobile/secrets/google-services.json` — **한 파일에 `com.stockapp.dev`·`com.stocknote` 두 앱 포함**(상용 패키지 변경 2026-11-18 — Firebase 에 `com.stocknote` 추가 후 새 파일로 교체, [`deploy/package-rename-stocknote.md`](deploy/package-rename-stocknote.md) A2) |
 | 새 글 알림 | ✅ Expo 이전 | 관리자가 글 작성 때 "앱 알림 보내기"를 고른 글만, `post_notice` 켠 기기(펀드 무관). Android 채널 `blog-post`. `users.fcm_token` 미사용 |
 
 👉 **이 문서의 1~4장(계정·키 준비)은 지금 바로 할 수 있다.** 구현은 끝났다(2026-10-21). 3장까지 마치면 5~7장으로 연결·확인한다.
@@ -47,7 +47,7 @@ Expo Push 서비스 (무료)
    | 앱 | Android 패키지 이름 |
    |---|---|
    | 개발용 (StockApp Dev) | `com.stockapp.dev` |
-   | 운영용 (StockApp) | `com.stockapp` |
+   | 운영용 (StockApp) | `com.stocknote` |
    - 앱 닉네임은 자유, SHA-1 은 푸시에는 필요 없다(비워 둠).
 3. 두 앱을 다 등록한 뒤 **프로젝트 설정 → 일반 → 내 앱**에서 `google-services.json` 을 내려받는다.
    - 두 앱을 모두 등록한 **뒤에** 받은 파일 하나에 두 패키지 정보가 함께 들어 있다(먼저 받았다면 다시 받기).
@@ -92,7 +92,7 @@ eas credentials
    **Manage your Google Service Account Key for Push Notifications (FCM V1)** →
    **Set up / Upload a new service account key**
 3. 2-2 에서 받은 JSON 파일 경로를 입력 → 완료.
-- 패키지(`com.stockapp.dev` / `com.stockapp`)마다 자격 증명이 따로라서 **두 패키지 모두** 올려야 개발용·운영용 앱 둘 다 받는다.
+- 패키지(`com.stockapp.dev` / `com.stocknote`)마다 자격 증명이 따로라서 **두 패키지 모두** 올려야 개발용·운영용 앱 둘 다 받는다.
 - `eas credentials` 도 env 없이 그대로 실행한다. (2026-10-21: EAS 프로젝트 생성과 두 패키지 키 업로드 완료)
 
 ---
@@ -219,7 +219,7 @@ PUSH_BACKEND=expo            # mock(기본, 로그만) → expo(실발송)
 | 증상 | 원인 | 해결 |
 |---|---|---|
 | 앱이 토큰을 못 받음(`projectId` 오류) | APK 에 projectId 누락(코드 기본값이 지워졌거나 새 프로젝트로 바꾼 뒤 미반영) | 5장의 `unzip … grep -c projectId` 로 확인 → `DEFAULT_EAS_PROJECT_ID` 또는 env 수정 → 재빌드 |
-| Expo 응답 `InvalidCredentials` | 해당 패키지에 FCM V1 키 미업로드 | 3장, `com.stockapp.dev`·`com.stockapp` 각각 |
+| Expo 응답 `InvalidCredentials` | 해당 패키지에 FCM V1 키 미업로드 | 3장, `com.stockapp.dev`·`com.stocknote` 각각 |
 | 응답 `DeviceNotRegistered` | 앱 삭제·재설치로 토큰 만료 | 정상 — 서버가 그 토큰을 지운다. 앱 재실행 시 새 토큰 등록 |
 | 알림이 안 뜸(응답은 ok) | 휴대폰에서 알림 권한 꺼짐 / 배터리 최적화 | 설정 → 앱 → 알림 허용 |
 | 앱이 켜지자마자 빨간 화면 `... could not be found` | 알림 모듈 추가 후 재빌드 안 함 | 5장 재빌드 |
@@ -235,6 +235,7 @@ PUSH_BACKEND=expo            # mock(기본, 로그만) → expo(실발송)
 - [x] FCM V1 서비스 계정 키 발급(2-2) — 2026-10-21
 - [x] `eas login` → `eas init` → projectId 기록(3장) — 2026-10-21
 - [x] `eas credentials` 로 두 패키지에 FCM V1 키 업로드(3장) — 2026-10-21
+- [ ] 상용 패키지 변경(`com.stockapp` → `com.stocknote`, 2026-11-18): Firebase 에 `com.stocknote` 앱 추가 → 새 `google-services.json` 교체 → `eas credentials` 로 `com.stocknote` 에 FCM V1 키 업로드 → 상용 테스트 APK 로 수신 확인([`deploy/package-rename-stocknote.md`](deploy/package-rename-stocknote.md) A2)
 - [x] projectId 기본값·`google-services.json` 자동 사용 반영(env 불필요) → 재빌드 후 APK 확인(5장)
 - [ ] 서버 `PUSH_BACKEND=expo` → 재배포(6장)
 - [ ] Expo 도구로 단독 발송 확인 → 관리자 테스트 발송 확인(7장)

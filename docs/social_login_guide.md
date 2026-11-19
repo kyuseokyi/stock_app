@@ -147,7 +147,7 @@
 * **방법 2: 일반 애플리케이션 1개로 멀티 Redirect URI 등록**
   - 앱을 1개만(`StockApp`) 만들고, 플랫폼 및 Redirect URI 목록에 개발용과 상용용을 복수 등록하는 방식입니다:
     - Redirect URI: `http://localhost:8001/...` (개발용) + 추후 `https://auth.yourdomain.com/...` (상용용) 추가 등록
-    - Android 패키지명: `com.stockapp.dev` + `com.stockapp` 둘 다 등록
+    - Android 패키지명: `com.stockapp.dev` + `com.stocknote` 둘 다 등록
   - **장점**: 앱 하나로 관리 가능.
   - **주의**: 개발 환경과 상용 환경에서 사용자의 카카오 회원번호(`id`)가 동일하게 발급되므로, 백엔드 데이터베이스를 완벽히 분리해 테스트해야 합니다.
 
@@ -292,8 +292,8 @@ GOOGLE_CLIENT_SECRET="<발급받은 Google Client Secret>"
 * **사이트 접속**: [Apple Developer Account](https://developer.apple.com/account/)
 
 1. **Certificates, Identifiers & Profiles**:
-   - **App IDs**: `com.stockapp`에 **Sign in with Apple** 기능 체크 및 활성화
-   - **Services IDs 생성**: 웹/백엔드 OAuth용 식별자 생성 (예: `com.stockapp.auth.service`)
+   - **App IDs**: `com.stocknote`에 **Sign in with Apple** 기능 체크 및 활성화
+   - **Services IDs 생성**: 웹/백엔드 OAuth용 식별자 생성 (예: `com.stocknote.auth.service`)
      - Sign in with Apple 체크 후 [Configure]
      - Primary App ID 연결
      - Domains and Subdomains: 운영 도메인 등록
@@ -304,7 +304,7 @@ GOOGLE_CLIENT_SECRET="<발급받은 Google Client Secret>"
    - Key ID 및 Team ID 기록
 3. **발급 키 환경변수**:
 ```env
-APPLE_CLIENT_ID="com.stockapp.auth.service"
+APPLE_CLIENT_ID="com.stocknote.auth.service"
 APPLE_TEAM_ID="<10자리 Apple Team ID>"
 APPLE_KEY_ID="<10자리 Key ID>"
 APPLE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----"
