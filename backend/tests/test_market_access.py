@@ -220,6 +220,35 @@ async def test_off_invalid_token_is_anonymous_not_401(client, switch, calls, use
         assert r.status_code == 403, path  # 401 이면 앱이 리프레시·로그아웃 흐름을 탄다
 
 
+async def test_off_other_resolvers_empty_not_error(client, switch, calls, monkeypatch):
+    """나머지 시세 리졸버도 OFF 면 오류 없이 빈 값 — 설치된 옛 앱이 죽지 않게(설계 2-3)."""
+    from apps.stock_api.services import pattern_query, screener_query
+
+    for mod, name in ((canslim_query, "score"), (screener_query, "screen"), (pattern_query, "screen"),
+                      (pattern_query, "bases"), (market_query, "group")):
+        monkeypatch.setattr(mod, name, _boom)
+    monkeypatch.setattr(market_query, "treemap", _boom)
+    q = """{
+      canslimScore(ticker: "005930") { ticker }
+      screenerScreen(preset: "volume_surge", filters: {market: "ALL", bbSigma: 2.5}) { date total bbSigma items { ticker } }
+      patternScreen { date total items { ticker } }
+      patternBases(ticker: "005930") { date ticker name close bases { label } zones { buyLow } }
+      marketTreemap { date groups { id } }
+      marketGroup(kind: "theme", id: "T1") { id }
+    }"""
+    r = await client.post("/graphql", json={"query": q})
+    body = r.json()
+    assert r.status_code == 200 and body.get("errors") is None, body
+    assert body["data"] == {
+        "canslimScore": None,
+        "screenerScreen": {"date": None, "total": 0, "bbSigma": 2.5, "items": []},
+        "patternScreen": {"date": None, "total": 0, "items": []},
+        "patternBases": {"date": None, "ticker": "005930", "name": "005930", "close": None, "bases": [], "zones": None},
+        "marketTreemap": {"date": None, "groups": []},
+        "marketGroup": None,
+    }
+
+
 # ---------------------------------------------------------------- 스위치 ON
 async def test_on_open_for_everyone_and_token_ignored(client, switch, calls, monkeypatch):
     switch["on"] = True
