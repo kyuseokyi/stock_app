@@ -2,6 +2,7 @@ import axios from 'axios'
 import { STOCK_API_URL } from '../config'
 import { normalizeFeatured, normalizeInvestorFlow, normalizeMorningBrief, normalizeMovers } from '../lib/marketRest'
 import { deriveStockApiUrl } from '../lib/stockApiUrl'
+import { stockAuthHeaders } from './stockAuth'
 import type { Featured, InvestorFlow, MorningBrief, Movers } from '../types/marketRest'
 
 // stock_api REST(마켓 AI, 공개 GET) — 응답은 lib/marketRest 로 모양을 맞춰 돌려준다.
@@ -12,7 +13,10 @@ const REST_BASE = STOCK_API_URL ? deriveStockApiUrl(STOCK_API_URL) : null
 /** timeoutMs 를 주면 그 시간 안에 응답이 없을 때 실패 처리(자동 갱신이 멈춘 요청에 갇히지 않게) */
 async function getJson(path: string, timeoutMs?: number): Promise<unknown> {
   if (REST_BASE === null) throw new Error('STOCK_API_URL 미설정')
-  const { data } = await axios.get<unknown>(`${REST_BASE}${path}`, timeoutMs ? { timeout: timeoutMs } : undefined)
+  const { data } = await axios.get<unknown>(`${REST_BASE}${path}`, {
+    headers: stockAuthHeaders(), // 로그인 상태면 토큰(시세 열람 권한 회원 — A안 2-2)
+    ...(timeoutMs ? { timeout: timeoutMs } : {}),
+  })
   return data
 }
 

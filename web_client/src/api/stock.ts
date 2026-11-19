@@ -1,5 +1,6 @@
 import axios from 'axios'
 import { STOCK_API_URL } from '../config'
+import { stockAuthHeaders } from './stockAuth'
 import { kstDateString } from '../lib/format'
 import type { DailyCandle } from '../types/game'
 
@@ -41,7 +42,9 @@ export async function getDailyCandlesBefore(
     startDate: new Date(end - days * DAY_MS).toISOString().slice(0, 10),
     endDate: new Date(end).toISOString().slice(0, 10),
   }
-  const { data } = await axios.post<ChartResponse>(STOCK_API_URL, { query: DAILY_HISTORY_QUERY, variables })
+  const { data } = await axios.post<ChartResponse>(
+    STOCK_API_URL, { query: DAILY_HISTORY_QUERY, variables }, { headers: stockAuthHeaders() },
+  )
   if (data.errors && data.errors.length > 0) throw new Error('일봉 데이터 오류')
   return (data.data?.getChartData?.candles ?? []).filter((c) => c.date < beforeDate)
 }
@@ -56,7 +59,7 @@ export async function getDailyCandles(
     startDate: kstDateString(new Date(now.getTime() - lookbackDays * DAY_MS)),
     endDate: kstDateString(now),
   }
-  const { data } = await axios.post<ChartResponse>(STOCK_API_URL, { query: QUERY, variables })
+  const { data } = await axios.post<ChartResponse>(STOCK_API_URL, { query: QUERY, variables }, { headers: stockAuthHeaders() })
   const candles = data.data?.getChartData?.candles
   if ((data.errors && data.errors.length > 0) || !candles || candles.length === 0) {
     throw new Error('일봉 데이터 없음')

@@ -1,5 +1,6 @@
 import axios from 'axios'
 import { STOCK_API_URL } from '../config'
+import { stockAuthHeaders } from './stockAuth'
 import type { CanslimItem, CanslimMarket, CanslimScore, CanslimScreen, ScreenFilters } from '../types/screener'
 
 // stock_api GraphQL CANSLIM 조회(공개 — 로그인 불필요). api/stock 과 같은 axios POST 방식.
@@ -30,7 +31,12 @@ interface GqlResponse<T> {
 /** stock_api GraphQL POST — 시장 탭(api/market)도 같이 쓴다 */
 export async function gql<T>(query: string, variables: Record<string, unknown>, timeoutMs?: number): Promise<T> {
   if (!STOCK_API_URL) throw new Error('STOCK_API_URL 미설정')
-  const { data } = await axios.post<GqlResponse<T>>(STOCK_API_URL, { query, variables }, timeoutMs ? { timeout: timeoutMs } : undefined)
+  // 로그인 상태면 토큰 첨부 — 시세 열람 권한이 있는 회원은 스위치가 꺼져 있어도 시세를 받는다(A안 2-2)
+  const { data } = await axios.post<GqlResponse<T>>(
+    STOCK_API_URL,
+    { query, variables },
+    { headers: stockAuthHeaders(), ...(timeoutMs ? { timeout: timeoutMs } : {}) },
+  )
   if ((data.errors && data.errors.length > 0) || !data.data) throw new Error(data.errors?.[0]?.message ?? '응답 없음')
   return data.data
 }
