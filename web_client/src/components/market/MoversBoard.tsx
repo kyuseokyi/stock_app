@@ -54,7 +54,8 @@ export default function MoversBoard({ gainers, losers }: { gainers: Mover[]; los
       ) : (
         <ol>{items.map((m, i) => <MoverRow key={m.ticker} rank={i + 1} item={m} />)}</ol>
       )}
-      <p className="mt-2 text-xs text-ink-muted">{AI_NOTICE}</p>
+      {/* AI 원인이 하나도 없으면(서버 기본 꺼짐) 'AI 분석' 안내도 숨긴다 */}
+      {[...gainers, ...losers].some((m) => m.reasonSummary) && <p className="mt-2 text-xs text-ink-muted">{AI_NOTICE}</p>}
     </div>
   )
 }

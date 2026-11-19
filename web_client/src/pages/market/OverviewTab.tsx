@@ -21,7 +21,7 @@ import { useReturnRefresh } from '../../hooks/useReturnRefresh'
 import { useVisibleInterval } from '../../hooks/useVisibleInterval'
 import { hasFeatured } from '../../lib/featured'
 import { closeBasisLabel, formatPct, kstDateString, pnlClass } from '../../lib/format'
-import { flowCaption, formatBasis, hasFlowData, indexHeaderBasis, marketSession, splitOverview, tickerNames } from '../../lib/marketDashboard'
+import { flowCaption, formatBasis, hasFlowData, indexHeaderBasis, marketSession, moversTitle, splitOverview, tickerNames } from '../../lib/marketDashboard'
 import { MARKET_REFRESH_MS } from '../../lib/marketLive'
 import { marketDataVisible, visibleIndices } from '../../lib/marketAccess'
 import type { GroupKind, MacroValue, MarketIndex } from '../../types/market'
@@ -146,7 +146,7 @@ export default function OverviewTab() {
 
   const moversCard = hasMovers ? (
     <Card as="section" aria-label="급등락">
-      <SectionHead title="급등락 & AI 원인" caption={formatBasis(mv.updatedAt)} />
+      <SectionHead title={moversTitle(mv.gainers, mv.losers)} caption={formatBasis(mv.updatedAt)} />
       <MoversBoard gainers={mv.gainers} losers={mv.losers} />
     </Card>
   ) : movers.failed ? (

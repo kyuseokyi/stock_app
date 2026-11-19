@@ -1,6 +1,6 @@
 // 마켓 대시보드(개요 칩) 표시용 순수 함수 — 기준 시각·장운영 뱃지·억 단위·히트맵 색 단계·지수 캐러셀 분류.
 // RN·네트워크 의존 없음(테스트 대상).
-import type { HeatmapGroup, HeatmapStock } from './rest-types';
+import type { HeatmapGroup, HeatmapStock, Mover } from './rest-types';
 import type { MarketIndex } from './types';
 
 const KST_OFFSET_MS = 9 * 3_600_000;
@@ -149,4 +149,12 @@ export function splitCarousel<T extends Pick<MarketIndex, 'code'>>(indices: T[])
   const carousel = CAROUSEL_CODES.map((c) => indices.find((i) => i.code === c)).filter((i): i is T => i != null);
   const rest = indices.filter((i) => !CAROUSEL_CODES.includes(i.code));
   return { carousel, rest };
+}
+
+/**
+ * 급등락 카드 제목 — AI 원인이 하나라도 있을 때만 '& AI 원인'.
+ * 네이버 약관(2026-09-07 시행)으로 서버가 원인 분석을 기본 꺼 두므로, 원인이 없을 때 제목만 남는 빈 약속을 막는다.
+ */
+export function moversTitle(gainers: Mover[], losers: Mover[]): string {
+  return [...gainers, ...losers].some((m) => m.reasonSummary) ? '급등락 & AI 원인' : '급등락';
 }

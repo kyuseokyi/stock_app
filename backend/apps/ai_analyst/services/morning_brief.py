@@ -1,4 +1,7 @@
-"""AI 모닝 글로벌 브리핑 — 전일 미국 마감 지수·환율·FRED 거시 지표(+선택: 미국 증시 뉴스) → Gemini → PG.
+"""AI 모닝 글로벌 브리핑 — 전일 미국 마감 지수·환율·FRED 거시 지표 → Gemini → PG.
+
+뉴스는 넣지 않는다 — 네이버 검색 API 약관 개정(2026-09-07 시행)으로 검색 결과의 LLM 입력·요약·저장이 금지됐다
+(docs/naver-search-api-terms-issue.md). 그래서 근거 기사(sources)도 비운다(저장·응답 모두 []).
 
 지수·거시 값은 시장 탭 서비스(`apps.stock_api.services.market_query`)의 `overview()` 를 그대로 재사용한다(로직 복제 금지).
 브리핑은 AI 산출물이라 Gemini 가 없거나 실패하면 None(원시 데이터만 저장하지 않는다).
@@ -12,16 +15,12 @@ from sqlalchemy.orm import Session
 
 from apps.ai_analyst import prompts, repository
 from apps.ai_analyst.clients.gemini_client import get_gemini_client
-from apps.ai_analyst.clients.naver_news import get_naver_news_client
 from apps.ai_analyst.schemas import MorningBriefingResponse
-from apps.ai_analyst.sources import news_sources
 
 log = logging.getLogger(__name__)
 
 # 브리핑에 넣을 지수 코드(순서 = 프롬프트 순서). 코드는 apps/collector/market_indices._BASE 기준.
 BRIEF_INDEX_CODES = ("US:SPX", "US:COMP", "US:NDX", "US:DJI", "US:SOX", "US:VIX", "FX:USDKRW", "KR:0001", "KR:1001")
-US_NEWS_QUERY = "뉴욕증시"
-US_NEWS_COUNT = 5
 HEADLINE_MAX = 255  # ai_daily_briefings.headline String(255)
 WEEK_POINTS = 5  # 주간 브리핑의 '5거래일' 등락률
 
@@ -36,10 +35,6 @@ def _overview() -> dict:
 
 def _gemini():
     return get_gemini_client()
-
-
-def _news():
-    return get_naver_news_client()
 
 
 # ---------------------------------------------------------------- 입력 변환(순수 함수)
@@ -89,18 +84,6 @@ def brief_macro(macro: list[dict]) -> list[dict]:
     return out
 
 
-def _us_news():
-    """키가 없으면 None — 프롬프트에서 뉴스 섹션 자체를 뺀다([] 를 넘기면 '(관련 뉴스 없음)' 이 생긴다)."""
-    client = _news()
-    if client is None:
-        return None
-    try:
-        return client.search(US_NEWS_QUERY, display=US_NEWS_COUNT, sort="date") or None
-    except Exception as exc:  # noqa: BLE001 — 뉴스는 선택 입력
-        log.warning("미국 증시 뉴스 조회 실패(%s) — 뉴스 없이 진행", type(exc).__name__)
-        return None
-
-
 # ---------------------------------------------------------------- 진입점
 def generate(day: date, *, session: Session, force: bool = False, weekly: bool = False) -> dict | None:
     """day 의 브리핑을 만들어 PG 에 저장하고 API 모양 dict 로 반환. 이미 있으면(force 아님) Gemini 없이 그대로.
@@ -130,26 +113,30 @@ def generate(day: date, *, session: Session, force: bool = False, weekly: bool =
         return None
     macro = brief_macro(ov.get("macro") or [])
 
-    us_news = _us_news()
-    prompt = (prompts.weekly_brief_prompt if weekly else prompts.morning_brief_prompt)(indices, macro, us_news)
+    prompt = (prompts.weekly_brief_prompt if weekly else prompts.morning_brief_prompt)(indices, macro)
     resp = gemini.generate_json(prompt, MorningBriefingResponse, system=prompts.SYSTEM_PROMPT)
     if resp is None:
         return None
     resp = resp.model_copy(update={"headline": resp.headline[:HEADLINE_MAX]})
     try:
-        # 근거 기사는 LLM 이 아니라 프롬프트에 넣은 뉴스로 채운다(R3)
-        repository.upsert_briefing(session, day, resp, sources=news_sources(us_news))
+        # 뉴스를 넣지 않으므로 근거 기사도 없다(R3 목록은 화면에서 저절로 숨는다)
+        repository.upsert_briefing(session, day, resp, sources=[])
     except Exception as exc:  # noqa: BLE001 — PG 저장 실패는 결과 없음으로
         log.warning("모닝 브리핑 저장 실패(%s)", type(exc).__name__)
         session.rollback()
         return None
-    return repository.get_briefing(session, day)
+    return _without_sources(repository.get_briefing(session, day))
+
+
+def _without_sources(got: dict | None) -> dict | None:
+    """옛 행(약관 개정 전 생성)에 남은 네이버 뉴스 근거 기사를 응답에서 뺀다 — 'API 는 최근 1건' 폴백으로 옛 행이 나올 수 있다."""
+    return {**got, "sources": []} if got else got
 
 
 def get_latest(day: date, *, session: Session) -> dict | None:
     """API 용 — day 의 브리핑, 없으면 그 이전 최근 1건. PG 장애면 None(API 는 200 + 빈 값)."""
     try:
-        return repository.get_briefing(session, day)
+        return _without_sources(repository.get_briefing(session, day))
     except Exception as exc:  # noqa: BLE001
         log.warning("모닝 브리핑 조회 실패(%s)", type(exc).__name__)
         session.rollback()

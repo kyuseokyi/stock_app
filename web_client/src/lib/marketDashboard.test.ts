@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { MacroValue, MarketIndex } from '../types/market'
 import { normalizeInvestorFlow, normalizeMovers } from './marketRest'
-import { flowCaption, formatBasis, formatEok, formatShortDate, hasFlowData, indexHeaderBasis, marketSession, parseKst, splitOverview, tickerNames } from './marketDashboard'
+import { flowCaption, formatBasis, formatEok, formatShortDate, hasFlowData, indexHeaderBasis, marketSession, moversTitle, parseKst, splitOverview, tickerNames } from './marketDashboard'
 
 describe('formatBasis (KST 기준 시각)', () => {
   it('오프셋 있는 ISO', () => {
@@ -117,5 +117,21 @@ describe('tickerNames · hasFlowData', () => {
     expect(tickerNames(null, null).size).toBe(0)
     expect(hasFlowData(fl)).toBe(true)
     expect(hasFlowData(normalizeInvestorFlow(null))).toBe(false)
+  })
+})
+
+describe('moversTitle', () => {
+  const row = (reasonSummary: string | null) => ({
+    ticker: '005930', stockName: '삼성전자', price: 1, changeRate: 5, reasonSummary,
+    category: null, reliability: null, riskWarning: null, sources: [],
+  })
+
+  it('AI 원인이 하나라도 있으면 "급등락 & AI 원인"', () => {
+    expect(moversTitle([row(null)], [row('수주')])).toBe('급등락 & AI 원인')
+  })
+
+  it('원인이 없으면(서버 기본 꺼짐) "급등락" 만', () => {
+    expect(moversTitle([row(null)], [])).toBe('급등락')
+    expect(moversTitle([], [])).toBe('급등락')
   })
 })

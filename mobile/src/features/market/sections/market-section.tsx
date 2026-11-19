@@ -26,6 +26,7 @@ import {
   indexHeaderBasis,
   marketSession,
   type MarketSession,
+  moversTitle,
   splitCarousel,
 } from '../dashboard';
 import { hasFeatured } from '../featured';
@@ -178,7 +179,7 @@ export function MarketSection({ onMore, onOpenGroup, onHeader, access }: Props) 
       {/* ⑤ 급등락 & AI 원인 */}
       {!showMarket ? null : mv && mv.gainers.length + mv.losers.length > 0 ? (
         <View style={styles.card}>
-          <SectionHead title="급등락 & AI 원인" caption={formatBasis(mv.updatedAt)} />
+          <SectionHead title={moversTitle(mv.gainers, mv.losers)} caption={formatBasis(mv.updatedAt)} />
           <MoversBoard gainers={mv.gainers} losers={mv.losers} onOpenStock={openStock} />
         </View>
       ) : movers.error && !mv ? (

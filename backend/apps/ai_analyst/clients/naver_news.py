@@ -3,6 +3,12 @@
 키: NAVER_SEARCH_CLIENT_ID / NAVER_SEARCH_CLIENT_SECRET (로그인 앱 키와 별개).
 제목·요약에는 `<b>` 강조 태그와 `&quot;` 같은 HTML 엔티티가 섞여 오므로 제거한다.
 4xx/5xx/타임아웃은 빈 리스트 + warning.
+
+⚠️ 현재 어디서도 호출하지 않는다(2026-11-19). 네이버 검색 API 약관 개정(2026-09-07 시행)으로 검색 결과를
+LLM 입력·요약·재정렬·저장(21일/24시간 예외 외)·광고 화면 노출에 쓸 수 없다 — docs/naver-search-api-terms-issue.md.
+AI 서비스(모닝 브리핑·급등락·정성 분석)에서 호출 경로를 끊었고, 클라이언트는 지우지 않고 남겨 둔다(Zero Deletion).
+다시 쓰려면: 검색 결과를 **가공·저장 없이** 요청 시 그대로, **광고 없는 화면**에, **네이버 BI(출처) 표시**와 함께
+AI 요약과 분리된 목록으로만 보여 줄 것. Gemini 프롬프트·Redis/PG 캐시에 넣지 말 것.
 """
 from __future__ import annotations
 

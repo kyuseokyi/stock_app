@@ -349,14 +349,14 @@ class _Gemini:
 
 
 def test_analyze_and_keywords_write_last(monkeypatch, env):
-    # 이 테스트만 진짜 analyze/hot_keywords 를 쓴다(외부 의존 _fetch·_gemini·_news·_universe 는 가짜)
+    # 이 테스트만 진짜 analyze/hot_keywords 를 쓴다(외부 의존 _fetch·_gemini·_universe 는 가짜)
     real = market_movers
+    monkeypatch.setattr(real, "HOT_KEYWORDS_ENABLED", True)  # 기본 꺼짐 — 켰을 때 last 저장·폴백 규칙 확인
     monkeypatch.setattr(real, "analyze", _REAL_ANALYZE)
     monkeypatch.setattr(real, "hot_keywords", _REAL_HOT_KEYWORDS)
     monkeypatch.setattr(real, "_fetch", lambda client, desc: [
         {"ticker": "005930", "name": "삼성전자", "price": 1.0, "change_rate": 5.0 if desc else -5.0}])
     monkeypatch.setattr(real, "_gemini", lambda: None)
-    monkeypatch.setattr(real, "_news", lambda: None)
     monkeypatch.setattr(real, "_universe", lambda: {"005930"})
     body = real.analyze(FRI_1000, kis_client=object(), force=True)
     assert cache.get_json(cache.MOVERS_LAST_KEY)["updated_at"] == body["updated_at"]

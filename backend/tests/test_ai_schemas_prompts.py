@@ -1,6 +1,5 @@
 """AI 시황 스키마(허용값·Gemini 호환) + 프롬프트 빌더(자르기·필수 내용)."""
 import typing
-from dataclasses import dataclass
 
 import pytest
 from pydantic import BaseModel, ValidationError
@@ -72,53 +71,45 @@ def test_api_response_defaults():
 
 
 # --- 프롬프트 ----------------------------------------------------------------- #
-@dataclass(frozen=True)
-class _News:
-    title: str
-    description: str
-
-
 def test_system_prompt_rules():
     assert "추측" in p.SYSTEM_PROMPT and "한국어" in p.SYSTEM_PROMPT
     assert "단순수급" in p.SYSTEM_PROMPT and '"하"' in p.SYSTEM_PROMPT
 
 
-def test_movers_prompt_limits_news_and_cuts_description():
-    long = "가" * 300
-    news = [_News(f"제목{i}", long) for i in range(8)]
+def test_movers_prompt_has_no_news_and_marks_estimate():
     text = p.movers_prompt([{"ticker": "000001", "name": "알파", "change_rate": 29.87}],
-                           [{"ticker": "000002", "name": "베타", "change_rate": -12.3}],
-                           {"000001": news})
+                           [{"ticker": "000002", "name": "베타", "change_rate": -12.3}])
     assert "000001 알파" in text and "+29.87%" in text and "-12.30%" in text
-    assert "제목4" in text and "제목5" not in text  # 최대 5건
-    assert "가" * p.DESC_MAX not in text and "…" in text  # 120자로 자름
-    assert "(관련 뉴스 없음)" in text  # 베타는 뉴스 없음
+    assert "관련 뉴스" not in text and "뉴스 근거는 제공되지 않는다" in text and "추정" in text
     assert "경영권 | 유상증자/악재 | 단순수급" in text  # 유상증자/악재 는 한 값
 
 
-def test_news_accepts_dicts():
-    text = p.hot_keywords_prompt([{"ticker": "1", "stock_name": "a", "change_rate": 3}],
-                                 [{"title": "AI반도체 급등", "description": "설명"}])
-    assert "AI반도체 급등 — 설명" in text and "1 a +3.00%" in text
+def test_prompt_builders_take_no_news():
+    """네이버 약관 — 어떤 프롬프트 빌더도 뉴스 인자를 받지 않는다."""
+    import inspect
+
+    for fn in (p.morning_brief_prompt, p.weekly_brief_prompt, p.movers_prompt, p.hot_keywords_prompt,
+               p.stock_qualitative_prompt):
+        assert not any("news" in name for name in inspect.signature(fn).parameters)
+    text = p.hot_keywords_prompt([{"ticker": "1", "stock_name": "a", "change_rate": 3}])
+    assert "1 a +3.00%" in text and "뉴스" not in text
 
 
 def test_morning_brief_prompt():
     text = p.morning_brief_prompt([{"name": "S&P500", "close": 5000.123, "change_rate": 1.2}],
-                                  [{"name": "미국10년물", "value": 4.25}], None)
+                                  [{"name": "미국10년물", "value": 4.25}])
     assert "S&P500: 5,000.12 (+1.20%)" in text and "미국10년물: 4.25" in text
-    assert "미국 증시 관련 뉴스" not in text
-    assert "미국 증시 관련 뉴스" in p.morning_brief_prompt([], [], [])
+    assert "뉴스" not in text
 
 
 def test_weekly_brief_prompt():
     text = p.weekly_brief_prompt([{"name": "S&P500", "close": 5000, "change_rate": 1.2, "week_change_rate": -2.5},
                                   {"name": "KOSPI", "close": 2600, "change_rate": 0.3}],
-                                 [{"name": "미국10년물", "value": 4.25}], None)
+                                 [{"name": "미국10년물", "value": 4.25}])
     assert "S&P500: 5,000.00 (마지막 거래일 +1.20%, 5거래일 -2.50%)" in text
     assert "KOSPI: 2,600.00 (마지막 거래일 +0.30%)" in text and "미국10년물: 4.25" in text
-    assert "토요일" in text and "다음 주" in text and "미국 증시 관련 뉴스" not in text
+    assert "토요일" in text and "다음 주" in text and "뉴스" not in text
     assert "'주간 마감: ' 으로 시작" in text
-    assert "미국 증시 관련 뉴스" in p.weekly_brief_prompt([], [], [])
 
 
 def test_investor_flow_prompt_amounts_in_eok():
@@ -133,8 +124,8 @@ def test_investor_flow_prompt_amounts_in_eok():
 def test_stock_qualitative_prompt():
     text = p.stock_qualitative_prompt("123456", "테스트", {"C": "EPS +40%"},
                                       [{"report_nm": "전환사채권발행결정", "rcept_dt": "20261020"}],
-                                      ["CB 발행"], [])
+                                      ["CB 발행"])
     assert "테스트(123456)" in text and "C: EPS +40%" in text and "20261020 전환사채권발행결정" in text
     assert "- CB 발행" in text and "ticker 는 123456" in text
-    empty = p.stock_qualitative_prompt("1", "a", None, None, None, None)
-    assert "(최근 공시 없음)" in empty and "(관련 뉴스 없음)" in empty
+    empty = p.stock_qualitative_prompt("1", "a", None, None, None)
+    assert "(최근 공시 없음)" in empty and "뉴스" not in empty

@@ -1,7 +1,9 @@
-"""스크리너(CANSLIM) 통과 종목 정성 분석 — DART 공시 90일 + 지뢰 힌트 + 뉴스 → Gemini → PG(ai_stock_evaluations).
+"""스크리너(CANSLIM) 통과 종목 정성 분석 — DART 공시 90일 + 지뢰 힌트 + 재무 추이 → Gemini → PG(ai_stock_evaluations).
 
 후보는 기존 CANSLIM 조회 서비스(`apps.stock_api.services.canslim_query.screen`)를 읽기만 해서 얻는다(수정 금지).
 모바일 주도주 화면 기본값(시장 전체·유동성 통과·점수순)과 같은 정렬의 상위 N 개 — 화면 위쪽 카드부터 뱃지가 붙는다.
+뉴스는 넣지 않는다 — 네이버 검색 API 약관 개정(2026-09-07 시행)으로 검색 결과의 LLM 입력·요약·저장이 금지됐다
+(docs/naver-search-api-terms-issue.md). 근거 기사(sources)도 저장·응답 모두 [].
 ⚠️ canslim_daily 는 일봉 파이프라인(20:30) 뒤에 계산되므로, 16:00 평가 시점의 최신 결과는 보통 전 거래일 기준이다.
 """
 from __future__ import annotations
@@ -13,16 +15,13 @@ from sqlalchemy.orm import Session
 
 from apps.ai_analyst import prompts, repository
 from apps.ai_analyst.clients.gemini_client import get_gemini_client
-from apps.ai_analyst.clients.naver_news import get_naver_news_client
 from apps.ai_analyst.clients.opendart import get_opendart_client, red_flag_hints
 from apps.ai_analyst.schemas import ScreenerQualitativeResponse
-from apps.ai_analyst.sources import news_sources
 
 log = logging.getLogger(__name__)
 
 CANDIDATE_LIMIT = 30
 DART_DAYS = 90
-NEWS_COUNT = prompts.NEWS_PER_ITEM  # 5
 HOOK_MAX = 255  # ai_stock_evaluations.hook_summary String(255)
 _LETTER_STATE = {1: "통과", 0: "미통과", -1: "해당없음", -2: "대기"}
 _LETTER_NAMES = {"c": "C(분기 실적)", "a": "A(연간 실적)", "n": "N(신고가)", "s": "S(수급)", "l": "L(주도주)",
@@ -72,10 +71,6 @@ def _screen(limit: int) -> dict:
 
 def _gemini():
     return get_gemini_client()
-
-
-def _news():
-    return get_naver_news_client()
 
 
 def _dart():
@@ -131,12 +126,13 @@ def _apply_dart_floor(resp: ScreenerQualitativeResponse, hints: list[str]) -> Sc
 
 def evaluate(day: date, ticker: str, name: str, canslim_summary, *, session: Session,
              dart=None, news=None, gemini=None) -> dict | None:
-    """한 종목 정성 평가 → PG 저장 후 dict. Gemini 없으면 None. dart·news·gemini 를 안 주면 env 키로 만든다."""
+    """한 종목 정성 평가 → PG 저장 후 dict. Gemini 없으면 None. dart·gemini 를 안 주면 env 키로 만든다.
+
+    news 는 옛 호출부 호환용으로 받기만 하고 쓰지 않는다(네이버 약관 — 뉴스 검색을 부르지 않는다)."""
     gemini = gemini if gemini is not None else _gemini()
     if gemini is None:
         return None
     dart = dart if dart is not None else _dart()
-    news = news if news is not None else _news()
 
     disclosures = []
     if dart is not None:
@@ -145,14 +141,8 @@ def evaluate(day: date, ticker: str, name: str, canslim_summary, *, session: Ses
         except Exception as exc:  # noqa: BLE001
             log.warning("DART 공시 조회 실패(%s): %s", ticker, type(exc).__name__)
     hints = red_flag_hints(disclosures)
-    articles = []
-    if news is not None:
-        try:
-            articles = news.search(name, display=NEWS_COUNT, sort="date")
-        except Exception as exc:  # noqa: BLE001
-            log.warning("종목 뉴스 조회 실패(%s): %s", ticker, type(exc).__name__)
 
-    prompt = prompts.stock_qualitative_prompt(ticker, name, canslim_summary, disclosures, hints, articles,
+    prompt = prompts.stock_qualitative_prompt(ticker, name, canslim_summary, disclosures, hints,
                                               fundamentals=fundamentals(ticker))
     resp = gemini.generate_json(prompt, ScreenerQualitativeResponse, system=prompts.SYSTEM_PROMPT)
     if resp is None:
@@ -160,20 +150,19 @@ def evaluate(day: date, ticker: str, name: str, canslim_summary, *, session: Ses
     # ticker 는 모델 값을 믿지 않고 인자로 덮는다. hook_summary 는 PG String(255) 에 맞춘다
     resp = resp.model_copy(update={"ticker": ticker, "hook_summary": resp.hook_summary[:HOOK_MAX]})
     resp = _apply_dart_floor(resp, hints)
-    sources = news_sources(articles)  # 근거 기사 — 프롬프트에 넣은 뉴스로 채운다(R3)
-    repository.upsert_evaluation(session, day, resp, sources=sources)
-    return {**resp.model_dump(), "date": day.isoformat(), "sources": sources}
+    repository.upsert_evaluation(session, day, resp, sources=[])  # 뉴스를 넣지 않으므로 근거 기사도 없다
+    return {**resp.model_dump(), "date": day.isoformat(), "sources": []}
 
 
 def evaluate_batch(day: date, *, session: Session, limit: int = CANDIDATE_LIMIT, force: bool = False) -> dict:
     """후보 일괄 평가 — 이미 평가한 종목은 건너뛰고(force=True 면 다시 평가해 덮어씀), 종목별 실패는 격리한다."""
     gemini = _gemini()
     if gemini is None:
-        return {"skipped": "no_gemini_key"}  # 30종목 DART·뉴스 호출도 하지 않는다
+        return {"skipped": "no_gemini_key"}  # 30종목 DART 호출도 하지 않는다
     cands = candidates(day, limit=limit)
     if not cands:
         return {"ok": 0, "skipped": 0, "failed": [], "note": "no_candidates"}
-    dart, news = _dart(), _news()
+    dart = _dart()
     try:
         done = repository.evaluated_tickers(session, day)
     except Exception as exc:  # noqa: BLE001 — PG 장애면 이번 회차 전체를 건너뛴다
@@ -187,7 +176,7 @@ def evaluate_batch(day: date, *, session: Session, limit: int = CANDIDATE_LIMIT,
             continue
         try:
             got = evaluate(day, c["ticker"], c["name"], c["summary"], session=session,
-                           dart=dart, news=news, gemini=gemini)
+                           dart=dart, gemini=gemini)
         except Exception as exc:  # noqa: BLE001 — 한 종목 실패가 나머지를 막지 않게
             log.warning("정성 평가 실패(%s): %s", c["ticker"], type(exc).__name__)
             session.rollback()  # PG 는 실패한 트랜잭션을 되돌려야 다음 종목이 진행된다
@@ -203,7 +192,9 @@ def evaluate_batch(day: date, *, session: Session, limit: int = CANDIDATE_LIMIT,
 def get_latest(ticker: str, *, session: Session) -> dict | None:
     """API 용 — 종목의 가장 최근 정성 평가. PG 장애면 None(API 는 200 + 빈 값)."""
     try:
-        return repository.get_latest_evaluation(session, ticker)
+        got = repository.get_latest_evaluation(session, ticker)
+        # 옛 행(약관 개정 전 생성)에 남은 네이버 뉴스 근거 기사는 응답에서 뺀다
+        return {**got, "sources": []} if got else got
     except Exception as exc:  # noqa: BLE001
         log.warning("정성 평가 조회 실패(%s): %s", ticker, type(exc).__name__)
         session.rollback()
