@@ -1,4 +1,4 @@
-"""관리자 — 댓글 신고 관리·회원(닉네임 변경·댓글 금지·시세 열람 권한) REST 라우터. 모두 require_admin."""
+"""관리자 — 댓글 신고 관리·회원(닉네임 변경·댓글 금지·시세 열람 권한)·차트 포함 글 점검 REST 라우터. 모두 require_admin."""
 from __future__ import annotations
 
 import logging
@@ -11,7 +11,7 @@ from shared.database import get_db
 from shared.models import User
 
 from .. import moderation_schemas as ms
-from ..services import moderation
+from ..services import chart_audit, moderation
 
 log = logging.getLogger("blog.admin_moderation")
 router = APIRouter(prefix="/api/v1/admin", tags=["admin-moderation"])
@@ -104,3 +104,14 @@ async def set_nickname(
         return await moderation.set_nickname(db, user_id, payload.nickname)
     except moderation.ModerationError as e:
         raise _http(e) from e
+
+
+# ---------------------------------------------------------------- 차트 포함 글 점검
+@router.get("/blog/chart-posts", response_model=list[ms.ChartPostOut])
+async def list_chart_posts(
+    limit: int = Query(200, ge=1, le=chart_audit.CHART_POSTS_LIMIT_MAX),
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    """차트 스냅샷·내장 이미지가 들어간 글 목록(최신순, 조회 전용). 정리는 관리자가 편집 화면에서 직접 한다."""
+    return await chart_audit.list_chart_posts(db, limit)
