@@ -321,6 +321,7 @@ class MacroValue:
     date: str
     value: float
     prev: float | None
+    source: str | None = strawberry.field(default=None, description="출처 — FRED | ECOS(한국은행)")
 
 
 @strawberry.type

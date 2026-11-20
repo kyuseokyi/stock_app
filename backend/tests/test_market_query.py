@@ -163,7 +163,19 @@ def test_overview_indices_and_macro_yoy(ch):
     assert set(by) == {"CPIAUCSL", "UNRATE"}
     assert by["CPIAUCSL"]["value"] == pytest.approx(3.0) and by["CPIAUCSL"]["prev"] == pytest.approx(3.0)
     assert by["UNRATE"] == {"series_id": "UNRATE", "name": "실업률", "unit": "%", "date": "2026-09-01",
-                            "value": 4.2, "prev": 4.1}
+                            "value": 4.2, "prev": 4.1, "source": "FRED"}
+
+
+def test_macro_includes_ecos_usdkrw(ch):
+    # 한국은행 ECOS 원/달러(일별) — 수준값 그대로, 출처 ECOS. 시세 비노출 경로(macro())에도 같은 목록
+    rows = [("DGS10", date(2026, 11, 18), 4.10), ("DGS10", date(2026, 11, 19), 4.12),
+            ("ECOS:USDKRW", date(2026, 11, 18), 1384.5), ("ECOS:USDKRW", date(2026, 11, 19), 1385.2)]
+    ch([rows])
+    by = {m["series_id"]: m for m in mq.macro()}
+    assert "ECOS:USDKRW" in mq.MACRO_NAMES
+    assert by["ECOS:USDKRW"] == {"series_id": "ECOS:USDKRW", "name": "원/달러 환율", "unit": "원",
+                                 "date": "2026-11-19", "value": 1385.2, "prev": 1384.5, "source": "ECOS"}
+    assert by["DGS10"]["source"] == "FRED"
 
 
 def test_overview_tables_missing(monkeypatch):
@@ -361,13 +373,14 @@ def test_graphql_wiring(monkeypatch):
     monkeypatch.setattr(mq, "calendar", lambda s, e, c: [
         {"date": "2026-10-20", "title": "에이 청약", "category": "공모주", "ticker": "AAA", "name": "에이",
          "detail": "공모가 25,000원"}])
-    res = asyncio.run(schema.execute("""{ marketOverview { indices { code chg1d spark } macro { seriesId unit } }
+    res = asyncio.run(schema.execute("""{ marketOverview { indices { code chg1d spark } macro { seriesId unit source } }
       marketGroups(kind: "theme") { total items { id leader { ticker } streak } }
       marketTreemap { groups { id stocks { ticker name } } }
       marketGroup(kind: "theme", id: "404") { id }
       marketCalendar(start: "2026-10-16", end: "2026-12-15") { date detail } }"""))
     assert res.errors is None, res.errors
-    assert res.data["marketOverview"]["macro"] == [{"seriesId": "UNRATE", "unit": "%"}]
+    # source 가 없는 행(옛 dict)도 null 로 — 새 nullable 필드
+    assert res.data["marketOverview"]["macro"] == [{"seriesId": "UNRATE", "unit": "%", "source": None}]
     assert res.data["marketGroups"]["items"][0] == {"id": "7", "leader": None, "streak": 2}
     assert res.data["marketTreemap"]["groups"][0]["stocks"][0]["name"] == "기타 2종목"
     assert res.data["marketGroup"] is None
