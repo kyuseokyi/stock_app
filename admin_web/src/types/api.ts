@@ -192,6 +192,19 @@ export interface ResolveResult {
   action: ResolveAction
 }
 
+// 차트 포함 글 점검(관리자 조회 전용) — GET /admin/blog/chart-posts. 본문은 내려오지 않는다
+export interface ChartPostOut {
+  id: number
+  title: string
+  board_id: number
+  board_name: string | null
+  created_at: string
+  updated_at: string
+  featured: boolean // 홈 추천(메인 노출)
+  chart_count: number // alt="차트 스냅샷" 이미지 수
+  other_inline_images: number // 그 외 data:image 내장 이미지 수
+}
+
 export interface AdminUserOut {
   id: number
   email: string | null
