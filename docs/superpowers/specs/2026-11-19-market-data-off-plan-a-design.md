@@ -134,7 +134,21 @@ OFF 일 때 시장 탭 = "브리핑 + 거시 + 경제 일정". 칩 구성·탭 �
    - 관리자 UI: admin `TradingGameSettings` 에 "📈 실제 시세 게임 공개"(켜려면 KRX/코스콤 라이선스 필요, 켤 때 확인창).
    - 남은 위험(범위 밖): `coach/today` 지지·저항 가격, `accounts/me` 총자산(손익 반영), 리더보드·내 순위 ROI(가격 움직임 간접 노출) — 5번 화면 숨김 때 함께 판단.
    - 배포 주의: OFF 동안 일반 회원은 보유 포지션을 **수동 청산할 수 없다**(자동청산·시즌 정산으로만 닫힘). 5번 전에 배포하면 설치된 앱은 게임 탭이 보인 채 빈 차트·주문 오류.
-4. ECOS 수집기 + 홈 시장 참고 교체(모바일·웹)
+4. ✅ (2026-11-20, `feature/ecos-usdkrw`) ECOS 수집기 + 홈 시장 참고 교체(모바일·웹) — 결정: **홈 거시 3개: 원/달러·미10년물·미기준금리**
+   - 수집: `backend/apps/collector/ecos.py` + 태스크 `collector.collect_ecos_usdkrw` → `macro_series` series_id **`ECOS:USDKRW`**(FRED id 와 안 겹치게 접두어).
+     첫 수집 400일, 이후 최신일-30일 겹침(ReplacingMergeTree FINAL 이라 멱등). `INFO-200`(데이터 없음)은 빈 결과, 그 밖의 오류 코드는 실패로 기록.
+     키가 URL 경로에 들어가므로 예외·로그·Celery 결과에 URL·requests 원문을 남기지 않는다. 키 없으면 `skipped`.
+   - beat: **평일 10:30 + 17:30 안전망**(매매기준율은 당일 오전 고시 — 반영 시각이 일정하지 않아 오전엔 적어도 전 영업일 값을 확보, 오후에 당일 값을 메꿈).
+   - prod_readonly 개발 서버: FRED 와 같이 `CLICKHOUSE_LOCAL_*` 가 있으면 개발 CH 에 쓰고, 없으면 상용 CH 에 쓰지 않고 `skipped: prod_readonly`.
+     단 화면(`market_query._macro`)은 상용 CH 를 읽으므로 **개발 서버 화면의 원/달러는 상용 배포 + 상용 `ECOS_API_KEY` 등록 + 첫 수집 뒤부터** 보인다.
+   - 조회: `market_query.MACRO_NAMES` 끝에 `ECOS:USDKRW`("원/달러 환율", 원), 거시 행·GraphQL `MacroValue` 에 nullable `source`(FRED|ECOS).
+     클라이언트는 `source` 를 묻지 않고 `seriesId` 접두어로 구분(새 앱이 옛 서버에 붙어도 쿼리가 깨지지 않게). OFF 응답에도 포함. 모닝 브리핑 거시 입력에도 들어간다.
+   - 홈 '오늘 시장 참고'(웹 `lib/homeSections.homeReferenceView`, 앱 `features/home/home-sections.homeReferenceView`):
+     시세 열람 = 기존 그대로(지수 4칸, 거시 카드 없음) / 비열람 + 국내 지수 공개 = 코스피·코스닥 + 거시 3개 / 비열람 = 거시 3개만 /
+     값 없는 거시는 빼고 그릴 게 없으면 섹션째 숨김 / 판단값 모름(null)은 요청 없이 숨김. 카드마다 기준일(일별 `MM.DD 기준`, 기준금리는 `N월 기준`),
+     등락 색 없음, 출처 한 줄 "출처: 한국은행 경제통계시스템(ECOS), FRED"(보이는 카드 기준). 환율에 "30초 갱신"류 문구 없음.
+   - 시장 탭: `ECOS:USDKRW` 를 '미국 경제지표' 칸에 섞지 않는다(웹 `splitOverview`, 앱 `groupOverview`) — 시장 탭 화면은 그대로.
+   - 범위 밖: 관리자 데이터 현황(`data_status`)에 ECOS 항목 없음, 초기 데이터 준비(bootstrap) 단계에 ECOS 없음(첫 beat 가 400일을 채움).
 5. ✅ (2026-11-19, `feature/market-ui-hide`) 앱·웹 화면 숨김(시장 탭·스크리너·종목 상세·게임 탭·일정 공모주) + 종목 상세 링크아웃, `searchStocks` 가격 필드 확인
    - **원칙(사용자 요청)**: 권한이 없으면 빈 칸·빈 차트가 아니라 **섹션·탭 자체를 그리지 않는다**. 권한 있는 사용자(관리자·열람 권한 회원·스위치 ON)는 지금과 같다. 컴포넌트·파일은 지우지 않고 렌더 조건만.
    - **국내 지수 공개 스위치 `MARKET_INDEX_KR`**(사용자 요청 "한국 것도 같이"): `screener_features` 새 키, 기본 OFF(행 없음·DB 오류 = OFF), 마이그레이션 없음.
@@ -211,5 +225,5 @@ OFF 일 때 시장 탭 = "브리핑 + 거시 + 경제 일정". 칩 구성·탭 �
 
 ## 9. 남은 결정
 - 시장 탭 OFF 상태의 이름·구성("시황" 한 화면으로 합칠지)
-- 홈 시장 참고에 FRED 지표 몇 개를 둘지
+- ~~홈 시장 참고에 FRED 지표 몇 개를 둘지~~ → **결정(2026-11-20)**: 홈 거시 3개 = 원/달러(ECOS)·미 10년물·미 기준금리(FRED). 6절 P1 4번
 - 개발 서버에서 게임 실측(장중 테스트)이 필요할 때 방법 — 관리자 계정으로만 WS 허용하는 옵션(P1 범위 밖, 필요 시 추가)

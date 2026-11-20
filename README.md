@@ -467,6 +467,7 @@ uv run pytest tests/test_universe_cooldown.py    # 특정 파일
 | `KIS_RATE_PER_SEC` | collector | `15`(prod) / `8`(vps) | 전종목 수집 KIS 초당 호출 상한 — 모든 스레드 공유, HTTP 요청(J 폴백·재시도 포함)마다 셈(실전 한도 ~20) |
 | `KIS_WORKERS` | collector | `4` | 전종목 수집·백필 병렬 스레드 수(`1`=기존 순차) |
 | `FRED_API_KEY` | collector | (없음) | 미국 거시 지표(FRED, 무료 발급). 없으면 거시 지표 수집만 건너뜀 |
+| `ECOS_API_KEY` | collector(워커·beat) | (없음) | 한국은행 경제통계시스템(ECOS) 인증키 — [ecos.bok.or.kr](https://ecos.bok.or.kr) 에서 무료 발급. 원/달러 매매기준율(731Y001, 일별)을 `macro_series`(`ECOS:USDKRW`)에 평일 10:30·17:30 수집 → 홈 '오늘 시장 참고'·거시 목록. 없으면 이 수집만 건너뜀. 키가 URL 에 들어가므로 로그에 URL 을 남기지 않음. `MARKET_DATA_SOURCE=prod_readonly` 개발 서버는 `CLICKHOUSE_LOCAL_*` 가 있을 때만 개발 CH 에 쓰고(화면은 상용 CH 값을 읽음), 없으면 건너뜀 |
 | `GEMINI_API_KEY` | collector·stock_api(ai_analyst) | (없음) | AI 시황 분석(Gemini). 없으면 AI 태스크가 `skipped`, 화면은 시세만(원인·해설 null) |
 | `GEMINI_MODEL` | collector(ai_analyst) | `gemini-3.8-flash` | Gemini 모델 이름. 스펙의 `gemini-2.0-flash` 는 2026-06-01 지원 종료라 기본값을 바꿈 |
 | `NAVER_SEARCH_CLIENT_ID` / `NAVER_SEARCH_CLIENT_SECRET` | collector(ai_analyst) | (없음) | 네이버 검색(뉴스) Open API — **소셜 로그인 키(`NAVER_CLIENT_*`)와 별개**. 없으면 뉴스 없이 AI 분석 |
