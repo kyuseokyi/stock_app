@@ -3,36 +3,46 @@ import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { StyleSheet } from 'react-native-unistyles';
 
-import { anyIndexVisible, marketDataVisible, visibleIndices } from '@/features/market-access/access';
+import { marketDataVisible } from '@/features/market-access/access';
 import { fetchMarketOverview } from '@/features/market/api';
 import { formatChg, formatIndex } from '@/features/market/format';
 import { indexTone } from '@/features/market/overview-groups';
-import type { MarketIndex } from '@/features/market/types';
+import type { MacroValue, MarketIndex } from '@/features/market/types';
 import { useAutoRefresh } from '@/features/market/use-auto-refresh';
 import { useRestResource } from '@/features/market/use-rest-resource';
 import type { ScreenerFeatures } from '@/features/screener/api';
 import { Card } from '@/ui';
 
-import { homeReferenceIndices, marketStripPhase } from './home-sections';
+import {
+  homeMacroSourceLine,
+  homeMacroTile,
+  homeReferenceEnabled,
+  homeReferenceView,
+  marketStripPhase,
+} from './home-sections';
 
 /**
  * 홈 최하단 '오늘 시장 참고' 데이터 — 시장 개요 1건만 받는다(예전 홈 요약의 브리핑·급등락 조회는 하지 않음).
  * 지수는 홈이 포커스·앱이 앞에 있을 때 30초마다 조용히 갱신(예전 홈과 같은 주기).
  * 홈 화면이 들고 당겨서 새로고침에 함께 넘긴다 — 실패해도 throw 하지 않는다(이 칸만 다시 시도).
- * 시세 비노출(A안): 시세 열람이면 지금과 같고, 아니면 국내 지수 공개 스위치일 때 코스피·코스닥만. 볼 수 있는 지수가 없으면
- * 요청하지 않고(visible=false) 섹션째 숨긴다. 열람 범위가 바뀌면(로그인 등) 다시 불러온다.
+ * 시세 비노출(A안): 시세 열람이면 지금과 같고, 아니면 (국내 지수 공개 스위치일 때 코스피·코스닥 +) 거시 카드
+ * 원/달러(한국은행 ECOS, 일별)·미 10년물·미 기준금리(FRED). 판단값을 모르면 요청하지 않고, 그릴 게 없으면 섹션째 숨긴다.
+ * 판정은 home-sections.homeReferenceView(순수 함수·테스트). 열람 범위가 바뀌면(로그인 등) 다시 불러온다.
  */
 export function useHomeMarketStrip(access: ScreenerFeatures | null) {
   const showMarket = marketDataVisible(access);
-  const enabled = anyIndexVisible(access);
+  const enabled = homeReferenceEnabled(access);
+  const scope = showMarket ? 'all' : access?.marketIndexKr === true ? 'kr' : 'macro';
   // 열람 범위가 바뀌면 fetcher 가 바뀌어 다시 불러온다(관리자로 로그인하면 미국 지수·환율까지)
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const fetcher = useCallback(() => fetchMarketOverview(), [showMarket]);
+  const fetcher = useCallback(() => fetchMarketOverview(), [scope]);
   const overview = useRestResource(fetcher, enabled);
-  const indices = useMemo(
-    () => visibleIndices(access, homeReferenceIndices(overview.data?.indices ?? [])),
+  const view = useMemo(
+    () => homeReferenceView(access, overview.data?.indices ?? [], overview.data?.macro ?? []),
     [access, overview.data],
   );
+  const indices = view.mode === 'hidden' ? [] : view.indices;
+  const macro = view.mode === 'public' ? view.macro : [];
 
   // 첫 로딩 중이면 자동 갱신을 건너뛰어 개요를 두 번 받지 않게(use-home-summary 와 같은 방식)
   const loadingRef = useRef(true);
@@ -50,8 +60,9 @@ export function useHomeMarketStrip(access: ScreenerFeatures | null) {
   const phase = marketStripPhase(overview.loading, overview.data !== null, overview.error !== null);
   return {
     indices,
-    // 볼 수 있는 지수가 없으면(판단값 모름·둘 다 꺼짐, 또는 시세 비노출에서 받은 지수 없음) 섹션째 숨김
-    visible: enabled && !(phase === 'ready' && indices.length === 0 && !showMarket),
+    macro,
+    // 판단값 모름, 또는 시세 비노출에서 받은 지수·거시가 모두 없으면 섹션째 숨김(시세 열람이면 지금처럼 안내 카드)
+    visible: enabled && !(phase === 'ready' && view.mode === 'hidden'),
     phase,
     reload,
     refresh,
@@ -94,17 +105,21 @@ export function HomeMarketStrip({ strip }: { strip: HomeMarketStripData }) {
       ) : null}
 
       {strip.phase === 'ready' ? (
-        strip.indices.length === 0 ? (
+        strip.indices.length === 0 && strip.macro.length === 0 ? (
           <Card>
             <Text style={styles.failedText}>시장 데이터는 매일 장 마감 후 갱신돼요.</Text>
           </Card>
         ) : (
           <View style={styles.grid}>
             {strip.indices.map((ix) => <IndexTile key={ix.code} index={ix} onPress={goMarket} />)}
+            {strip.macro.map((m) => <MacroTile key={m.seriesId} macro={m} />)}
           </View>
         )
       ) : null}
 
+      {strip.phase === 'ready' && homeMacroSourceLine(strip.macro) ? (
+        <Text style={styles.note}>{homeMacroSourceLine(strip.macro)}</Text>
+      ) : null}
       <Text style={styles.note}>ⓘ 실시간 시세가 아니어서 실제 값과 차이가 있을 수 있어요. 투자 판단의 참고 자료예요.</Text>
     </View>
   );
@@ -127,7 +142,22 @@ function IndexTile({ index, onPress }: { index: MarketIndex; onPress: () => void
   );
 }
 
+/** 거시 카드 — 일별·월별 공공 통계라 등락 색 없이 값과 기준일만(누르는 동작 없음) */
+function MacroTile({ macro }: { macro: MacroValue }) {
+  const t = homeMacroTile(macro);
+  return (
+    <View style={styles.tile} accessible accessibilityLabel={`${t.label} ${t.value}, ${t.basis}`}>
+      <Text style={styles.name} numberOfLines={1}>{t.label}</Text>
+      <View style={styles.values}>
+        <Text style={styles.close} numberOfLines={1}>{t.value}</Text>
+        <Text style={styles.basis} numberOfLines={1}>{t.basis}</Text>
+      </View>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create((theme) => ({
+  basis: { fontSize: 12, color: theme.colors.textSecondary, fontVariant: ['tabular-nums'] },
   section: { gap: theme.gap(1.5) },
   head: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   title: { fontSize: 18, fontWeight: '700', color: theme.colors.text },

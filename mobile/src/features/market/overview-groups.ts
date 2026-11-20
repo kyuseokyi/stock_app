@@ -49,6 +49,7 @@ export function groupOverview(indices: MarketIndex[], macro: MacroValue[]): Over
     US_ORDER,
   );
   const rates = orderBy(macro.filter((m) => RATE_SERIES.includes(m.seriesId)), (m) => m.seriesId, RATE_SERIES);
-  const otherMacro = macro.filter((m) => !RATE_SERIES.includes(m.seriesId));
+  // 한국은행 ECOS 원/달러(ECOS:USDKRW)는 홈 '오늘 시장 참고' 전용 — '미국 경제지표'에 섞지 않는다(시장 탭은 그대로)
+  const otherMacro = macro.filter((m) => !RATE_SERIES.includes(m.seriesId) && !m.seriesId.startsWith('ECOS:'));
   return { kr, us, flow, rates, otherMacro };
 }
