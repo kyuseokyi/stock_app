@@ -105,6 +105,11 @@ describe('splitOverview', () => {
     expect(r.rates.map((x) => x.seriesId)).toEqual(['DGS10', 'DGS2'])
     expect(r.otherMacro.map((x) => x.seriesId)).toEqual(['CPI'])
   })
+  it('ECOS 원/달러는 시장 탭 경제지표에 넣지 않는다(홈 전용)', () => {
+    const r = splitOverview([], [m('CPI'), m('ECOS:USDKRW'), m('DGS10')])
+    expect(r.otherMacro.map((x) => x.seriesId)).toEqual(['CPI'])
+    expect(r.rates.map((x) => x.seriesId)).toEqual(['DGS10'])
+  })
 })
 
 describe('tickerNames · hasFlowData', () => {

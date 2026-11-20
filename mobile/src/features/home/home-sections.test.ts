@@ -1,6 +1,17 @@
 import type { FundEntry } from '@/features/fund/core';
+import type { MacroValue } from '@/features/market/types';
 
-import { HOME_FUND_LIMIT, homeFundCardState, homeReferenceIndices, marketStripPhase } from './home-sections';
+import {
+  HOME_FUND_LIMIT,
+  homeFundCardState,
+  homeMacroCards,
+  homeMacroSourceLine,
+  homeMacroTile,
+  homeReferenceEnabled,
+  homeReferenceIndices,
+  homeReferenceView,
+  marketStripPhase,
+} from './home-sections';
 
 const fund = (id: string) => ({ id, url: `https://fund.ivyro.net/${id}`, name: id }) as unknown as FundEntry;
 const base = { hydrated: true, uid: 7, funds: [] as FundEntry[] | null, failed: false };
@@ -73,5 +84,64 @@ describe('marketStripPhase (시장 참고 칸)', () => {
   it('첫 로딩·다시 시도 중이면 자리만', () => {
     expect(marketStripPhase(true, false, false)).toBe('loading');
     expect(marketStripPhase(true, false, true)).toBe('loading');
+  });
+});
+
+const mv = (seriesId: string, value: number, unit: string, date: string): MacroValue => ({
+  seriesId, name: seriesId, unit, date, value, prev: null,
+});
+const MACRO = [
+  mv('UNRATE', 4.2, '%', '2026-10-01'),
+  mv('FEDFUNDS', 4.33, '%', '2026-10-01'),
+  mv('DGS10', 4.12, '%', '2026-11-18'),
+  mv('ECOS:USDKRW', 1385.2, '원', '2026-11-19'),
+];
+const ALL_IX = [ix('KR:0001', 'KR'), ix('KR:1001', 'KR'), ix('US:SPX', 'US'), ix('FX:USDKRW', 'FX')];
+type View = ReturnType<typeof homeReferenceView<{ code: string; region: string }>>;
+const codes = (v: View) => (v.mode === 'hidden' ? null : v.indices.map((i) => i.code));
+const series = (v: View) => (v.mode === 'public' ? v.macro.map((m) => m.seriesId) : null);
+
+describe('홈 거시 카드(A안 — 원/달러 ECOS·미 10년물·미 기준금리)', () => {
+  it('정해진 3개만 순서대로, 없는 것은 뺀다', () => {
+    expect(homeMacroCards(MACRO).map((m) => m.seriesId)).toEqual(['ECOS:USDKRW', 'DGS10', 'FEDFUNDS']);
+    expect(homeMacroCards([MACRO[0], MACRO[2]]).map((m) => m.seriesId)).toEqual(['DGS10']);
+    expect(homeMacroCards([])).toEqual([]);
+  });
+  it('표시 — 원은 쉼표·소수 둘째, 일별은 MM.DD 기준, 기준금리(월별)는 월 기준', () => {
+    expect(homeMacroTile(MACRO[3])).toEqual({ seriesId: 'ECOS:USDKRW', label: '원/달러 환율', value: '1,385.20원', basis: '11.19 기준' });
+    expect(homeMacroTile(MACRO[2])).toMatchObject({ label: '미 10년물', value: '4.12%', basis: '11.18 기준' });
+    expect(homeMacroTile(MACRO[1])).toMatchObject({ label: '미 기준금리', value: '4.33%', basis: '10월 기준' });
+  });
+  it('출처 한 줄 — 보이는 카드 기준', () => {
+    expect(homeMacroSourceLine(homeMacroCards(MACRO))).toBe('출처: 한국은행 경제통계시스템(ECOS), FRED');
+    expect(homeMacroSourceLine([{ seriesId: 'DGS10' }])).toBe('출처: FRED');
+    expect(homeMacroSourceLine([])).toBeNull();
+  });
+});
+
+describe('homeReferenceView (어떤 카드가 보이는가)', () => {
+  it('판단값을 모르면 요청도 표시도 하지 않는다', () => {
+    expect(homeReferenceEnabled(null)).toBe(false);
+    expect(homeReferenceView(null, ALL_IX, MACRO)).toEqual({ mode: 'hidden' });
+  });
+  it('시세 열람이면 지금과 같다 — 지수 4칸, 거시 카드 없음', () => {
+    const v = homeReferenceView({ marketData: true, marketIndexKr: false }, ALL_IX, MACRO);
+    expect(v.mode).toBe('full');
+    expect(codes(v)).toEqual(['KR:0001', 'KR:1001', 'US:SPX', 'FX:USDKRW']);
+    expect(series(v)).toBeNull();
+  });
+  it('시세 비열람 + 국내 지수 공개 → 코스피·코스닥 + 거시 3개', () => {
+    const v = homeReferenceView({ marketData: false, marketIndexKr: true }, ALL_IX, MACRO);
+    expect(codes(v)).toEqual(['KR:0001', 'KR:1001']);
+    expect(series(v)).toEqual(['ECOS:USDKRW', 'DGS10', 'FEDFUNDS']);
+  });
+  it('시세 비열람 + 국내 지수 비공개 → 거시 카드만', () => {
+    expect(homeReferenceEnabled({ marketData: false, marketIndexKr: false })).toBe(true);
+    const v = homeReferenceView({ marketData: false, marketIndexKr: false }, ALL_IX, MACRO);
+    expect(codes(v)).toEqual([]);
+    expect(series(v)).toEqual(['ECOS:USDKRW', 'DGS10', 'FEDFUNDS']);
+  });
+  it('시세 비열람인데 거시도 지수도 없으면 숨김', () => {
+    expect(homeReferenceView({ marketData: false }, [], [MACRO[0]])).toEqual({ mode: 'hidden' });
   });
 });

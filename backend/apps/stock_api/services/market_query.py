@@ -58,7 +58,14 @@ MACRO_NAMES = {
     "DGS10": ("미 국채 10년", "%"),
     "DGS2": ("미 국채 2년", "%"),
     "T10Y2Y": ("장단기 금리차(10년-2년)", "%p"),
+    # 한국은행 ECOS 원/달러 매매기준율(일별) — 시세 비노출(A안)에서도 보이는 환율. 장중 KIS 환율(FX:USDKRW)과 별개
+    "ECOS:USDKRW": ("원/달러 환율", "원"),
 }
+
+
+def macro_source(series_id: str) -> str:
+    """거시 지표 출처 — 'ECOS:' 접두어는 한국은행 ECOS, 나머지는 FRED."""
+    return "ECOS" if series_id.startswith("ECOS:") else "FRED"
 YOY_SERIES = frozenset({"CPIAUCSL", "CPILFESL", "PCEPILFE"})  # 물가 '지수'라 수준값 대신 전년 대비 % 로 보여준다
 # 거시 지표 읽는 기간 — 전년 대비는 최신값의 1년 전 값이 필요한데, 근원 PCE 는 발표가 두 달가량 늦어
 # '오늘 기준 1년 + 한 달'(430일)로는 비교값이 빠진다. 석 달 늦은 값까지 덮게 넉넉히.
@@ -287,7 +294,7 @@ def _macro() -> list[dict]:
         else:
             value, prev = pts[-1][1], (pts[-2][1] if len(pts) > 1 else None)
         out.append({"series_id": sid, "name": name, "unit": unit, "date": pts[-1][0].isoformat(),
-                    "value": value, "prev": prev})
+                    "value": value, "prev": prev, "source": macro_source(sid)})
     return out
 
 
@@ -302,7 +309,7 @@ def kr_indices() -> list[dict]:
 
 
 def macro() -> list[dict]:
-    """FRED 거시 지표만 — 시세 비노출일 때 marketOverview 가 쓴다(KIS 지수·장중 Redis 를 읽지 않음)."""
+    """거시 지표(FRED + ECOS 원/달러)만 — 시세 비노출일 때 marketOverview 가 쓴다(KIS 지수·장중 Redis 를 읽지 않음)."""
     return _macro()
 
 

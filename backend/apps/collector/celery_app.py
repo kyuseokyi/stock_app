@@ -103,6 +103,18 @@ celery_app.conf.beat_schedule = {
         "task": "collector.collect_macro_series",
         "schedule": crontab(hour=8, minute=0),
     },
+    # 원/달러 매매기준율(한국은행 ECOS 731Y001, 일별) — ECOS_API_KEY 없으면 건너뜀.
+    # 매매기준율은 당일 오전(서울외국환중개 고시) 값이 그날 날짜로 ECOS 에 오르는데, 반영 시각이 일정하지 않다.
+    # 평일 10:30 에 돌리면 적어도 전 영업일 값은 확실히 있고(홈은 '전일 기준'으로 보여 준다), 당일 값이 늦으면
+    # 17:30 안전망이 채운다. 매번 30일 겹쳐 받아(ReplacingMergeTree) 하루 실패해도 다음 실행이 메꾼다.
+    "collect-ecos-usdkrw": {
+        "task": "collector.collect_ecos_usdkrw",
+        "schedule": crontab(hour=10, minute=30, day_of_week="mon-fri"),
+    },
+    "collect-ecos-usdkrw-retry": {
+        "task": "collector.collect_ecos_usdkrw",
+        "schedule": crontab(hour=17, minute=30, day_of_week="mon-fri"),
+    },
     "collect-ipo-events": {
         "task": "collector.collect_ipo_events",
         "schedule": crontab(hour=21, minute=30),

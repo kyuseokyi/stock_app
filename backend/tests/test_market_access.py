@@ -43,7 +43,10 @@ REAL_KR_SWITCH = market_access.kr_index_switch_on
 GROUPS = {"date": "2026-11-18", "total": 1, "items": [
     {"id": "T1", "name": "반도체", "members": 10, "chg": 1.5, "value": 1e12, "up": 7, "down": 2, "flat": 1,
      "leader": None, "rank": 1, "streak": 2}]}
-MACRO = [{"series_id": "DGS10", "name": "미 국채 10년", "unit": "%", "date": "2026-11-17", "value": 4.1, "prev": 4.0}]
+MACRO = [{"series_id": "DGS10", "name": "미 국채 10년", "unit": "%", "date": "2026-11-17", "value": 4.1, "prev": 4.0,
+          "source": "FRED"},
+         {"series_id": "ECOS:USDKRW", "name": "원/달러 환율", "unit": "원", "date": "2026-11-18", "value": 1385.2,
+          "prev": 1384.5, "source": "ECOS"}]
 INDICES = [{"code": "KR:KOSPI", "name": "코스피", "region": "KR", "date": "2026-11-18", "close": 2600.0,
             "chg1d": 0.5, "spark": [2590.0, 2600.0]}]
 CALENDAR = [
@@ -159,7 +162,7 @@ def _assert_blocked(data: dict) -> None:
     assert data["marketGroups"] == {"date": None, "total": 0, "items": []}
     assert data["canslimScreen"] == {"date": None, "total": 0, "items": []}
     assert data["canslimMarket"] == []
-    assert data["marketOverview"] == {"indices": [], "macro": [{"seriesId": "DGS10"}]}  # FRED 거시는 유지
+    assert data["marketOverview"] == {"indices": [], "macro": [{"seriesId": "DGS10"}, {"seriesId": "ECOS:USDKRW"}]}  # FRED·ECOS 거시는 유지
     assert data["marketCalendar"] == [{"category": "경제지표"}]  # 공모주(KIS) 제외
     assert data["getChartData"] == {"symbol": "005930", "candles": []}  # 오류 아닌 빈 캔들
 
@@ -364,7 +367,7 @@ async def test_kr_index_switch_off_anonymous_no_indices(client, switch, kr_switc
     monkeypatch.setattr(market_query, "kr_indices", _boom)  # OFF 면 지수를 읽지도 않는다
     data = await _kr_gql(client)
     assert data["screenerFeatures"] == {"marketData": False, "marketIndexKr": False}
-    assert data["marketOverview"] == {"indices": [], "macro": [{"seriesId": "DGS10"}]}
+    assert data["marketOverview"] == {"indices": [], "macro": [{"seriesId": "DGS10"}, {"seriesId": "ECOS:USDKRW"}]}
 
 
 async def test_kr_index_switch_on_anonymous_only_kr_indices(client, switch, kr_switch, calls, monkeypatch):
@@ -375,7 +378,7 @@ async def test_kr_index_switch_on_anonymous_only_kr_indices(client, switch, kr_s
     assert data["screenerFeatures"] == {"marketData": False, "marketIndexKr": True}
     assert data["marketOverview"] == {
         "indices": [{"code": "KR:0001", "live": True}, {"code": "KR:1001", "live": True}],
-        "macro": [{"seriesId": "DGS10"}],
+        "macro": [{"seriesId": "DGS10"}, {"seriesId": "ECOS:USDKRW"}],
     }
     # 개별 시세는 여전히 차단
     assert data["marketGroups"] == {"total": 0}

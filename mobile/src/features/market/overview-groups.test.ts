@@ -28,6 +28,12 @@ describe('groupOverview', () => {
     expect(g.rates.map((m) => m.seriesId)).toEqual(['DGS10', 'DGS2']);
     expect(g.otherMacro.map((m) => m.seriesId)).toEqual(['CPIAUCSL', 'UNRATE']);
   });
+
+  it('ECOS 원/달러는 시장 탭 경제지표에 넣지 않는다(홈 전용)', () => {
+    const g = groupOverview([], [mv('CPIAUCSL'), mv('ECOS:USDKRW'), mv('DGS10')]);
+    expect(g.otherMacro.map((m) => m.seriesId)).toEqual(['CPIAUCSL']);
+    expect(g.rates.map((m) => m.seriesId)).toEqual(['DGS10']);
+  });
 });
 
 describe('indexTone', () => {
