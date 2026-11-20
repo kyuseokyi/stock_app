@@ -241,6 +241,14 @@
 - [x] Phase 3 (관리자 웹 `admin_web` 전체 스크리너 상시 노출) — `feature/app-identity-nav` 구현 완료(2026-11-18, 배포·머지 전): 사용자 화면 스위치와 무관하게 관리자 웹 `시장 데이터` 사이드바에 `조건검색(/market/finder)` 및 `차트 패턴(/market/patterns)` 화면을 추가해 4대 스크리너(`주도주 · 5·20 정배열 · 조건검색 · 차트 패턴`) 전부 상시 노출
 
 
+### 교육용 합성 종가 트레이딩 게임 (방식 A 합성 일봉 + 유형 1 하루 1회 참가 · 기존 실시간 게임 보존 & 별도 화면 분리)
+> 상세 설계 및 로드맵: [`docs/edu_synthetic_daily_game_spec_and_plan.md`](edu_synthetic_daily_game_spec_and_plan.md)
+- [ ] Step 1: 기능 플래그 `EDU_DAILY_GAME`(기본 `ON`) 확장 및 신규 DB 테이블 4종(`edu_game_seasons`, `edu_game_candles`, `edu_game_accounts`, `edu_game_daily_actions`) 추가 (기존 실시간 게임 테이블·로직 100% 보존)
+- [ ] Step 2: 4국면(`ACCUMULATION · UPTREND · DISTRIBUTION · DOWNTREND`) 상태 머신 기반 합성 일봉 생성 엔진(`edu_synthetic_engine.py`, 초기 120봉 + 일별 1봉, POC·지지/저항·코치 해설 자동 산출) 및 하루 1회 의사결정(`submit_daily_action`)·일일 정산(`advance_day_and_settle`) 서비스 구현
+- [ ] Step 3: 백엔드 `/api/game/edu/*` 라우터(`edu_game.py`) 및 평일 20:00 KST 일일 정산 스케줄 연결
+- [ ] Step 4: 관리자 웹(`admin_web`) `EDU_DAILY_GAME` 토글, `+1일 다음 종가 캔들 즉시 생성 & 정산` 테스트 버튼, 국면 지정 및 신규 가상 테마/블라인드 시즌 생성 UI 추가
+- [ ] Step 5 & 6: 웹(`EduDailyGamePage.tsx`) 및 모바일(`edu-daily-game-screen.tsx`) 별도 화면 구현 — 기존 실시간 게임(`GameScreen`) 코드는 100% 보존하고 `REAL_MARKET=OFF`일 때 기본 게임 화면으로 노출, `REAL_MARKET=ON`일 때 상단 탭으로 두 게임 모두 전환 지원
+
 ### 트레이딩 게임 지지·저항 경량화 · 수평추세선 · POC 시인성 개선 · 관리자 ON/OFF
 > 상세 설계 및 로드맵: [`docs/game_lightweight_sr_action_spec_and_plan.md`](game_lightweight_sr_action_spec_and_plan.md)
 - [ ] Step 1 (백엔드 & `admin_web`): 관리자 `/game/settings`에 차트 지지·저항 수평선 기본 표시(`SR_DEFAULT`) ON/OFF 스위치 추가 (클라이언트 폴백 기본값은 안 보임(`false`), 현재 테스트를 위해 서버 초기값은 `ON(true)` 설정)
@@ -270,6 +278,7 @@
 ---
 
 ## 참고 문서
+- **교육용 합성 종가 트레이딩 게임 명세 및 플랜: `docs/edu_synthetic_daily_game_spec_and_plan.md`**
 - **관리자 등급별 권한 제어(RBAC) 명세 및 플랜: `docs/admin_rbac_permissions_spec_and_plan.md`**
 - **트레이딩 게임 지지·저항 손절·익절·홀딩 경량화 명세: `docs/game_lightweight_sr_action_spec_and_plan.md`**
 - **앱 정체성 재정의 & 5탭 네비게이션·홈 개편 명세: `docs/app_identity_and_nav_redesign_spec.md`**
