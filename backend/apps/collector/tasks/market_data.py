@@ -329,14 +329,14 @@ def collect_macro_series(today: date | None = None) -> dict:
                     releases[rel[0]] = (rel[1], sid)
             ok.append(sid)
         except Exception as e:  # noqa: BLE001 — 시리즈 하나 실패가 나머지를 막지 않게
-            log.warning("FRED 수집 실패 %s: %s", sid, str(e)[:160])
-            failed.append({"series_id": sid, "error": repr(e)[:300]})
+            log.warning("FRED 수집 실패 %s: %s", sid, fred.redact(str(e), key)[:160])
+            failed.append({"series_id": sid, "error": fred.redact(repr(e), key)[:300]})
     dates = {}
     for rid in releases:
         try:
             dates[rid] = client.release_dates(rid, today, today + timedelta(days=RELEASE_AHEAD_DAYS))
         except Exception as e:  # noqa: BLE001
-            log.warning("FRED 발표일 조회 실패 release=%s: %s", rid, str(e)[:160])
+            log.warning("FRED 발표일 조회 실패 release=%s: %s", rid, fred.redact(str(e), key)[:160])
     events = fred.release_events(releases, dates)
     n_events = _save_events(events) if events else 0
     log.info("FRED 수집: ok=%d failed=%d inserted=%d events=%d", len(ok), len(failed), inserted, n_events)

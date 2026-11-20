@@ -42,16 +42,34 @@ def _d(s: str) -> date:
     return date.fromisoformat(str(s)[:10])
 
 
+class FredError(RuntimeError):
+    """FRED 호출 실패 — 문장에 API 키·URL 을 담지 않는다."""
+
+
+def redact(text: str, key: str | None) -> str:
+    """로그·결과에 남기기 전 마지막 안전장치 — 문장 안의 키를 *** 로 바꾼다(FredError 밖에서 난 예외 대비)."""
+    return text.replace(key, "***") if key else text
+
+
 class FredClient:
     def __init__(self, key: str, session=None):
         self.key = key
         self.session = session or requests.Session()
 
     def _get(self, path: str, **params) -> dict:
-        resp = self.session.get(f"{BASE}/{path}", params={**params, "api_key": self.key, "file_type": "json"},
-                                timeout=_TIMEOUT)
-        resp.raise_for_status()
-        return resp.json()
+        # 키가 쿼리스트링(api_key=)에 들어가므로 requests 예외·raise_for_status 문장에는 전체 URL(=키)이 담긴다.
+        # → 그 문장을 쓰지 않고 종류 이름·상태 코드만 남긴 FredError 로 바꾼다(from None: 원래 예외를 연결하지 않음).
+        try:
+            resp = self.session.get(f"{BASE}/{path}", params={**params, "api_key": self.key, "file_type": "json"},
+                                    timeout=_TIMEOUT)
+        except requests.RequestException as e:
+            raise FredError(f"FRED 요청 실패({type(e).__name__}) {path}") from None
+        if resp.status_code != 200:
+            raise FredError(f"FRED HTTP {resp.status_code} {path}")
+        try:
+            return resp.json()
+        except ValueError:
+            raise FredError(f"FRED 응답이 JSON 이 아니에요 {path}") from None
 
     def observations(self, series_id: str, start: date) -> list[tuple[date, float | None]]:
         data = self._get("series/observations", series_id=series_id, observation_start=start.isoformat())
