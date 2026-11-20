@@ -117,7 +117,8 @@ export function splitOverview(indices: MarketIndex[], macro: MacroValue[]) {
     flow: [...pick(FLOW_CODES), ...indices.filter(isFlowExtra)],
     others: indices.filter((i) => !HEADLINE_CODES.includes(i.code) && !FLOW_CODES.includes(i.code) && !isFlowExtra(i)),
     rates: RATE_SERIES.flatMap((s) => macro.filter((m) => m.seriesId === s)),
-    otherMacro: macro.filter((m) => !RATE_SERIES.includes(m.seriesId)),
+    // 한국은행 ECOS 원/달러(ECOS:USDKRW)는 홈 '오늘 시장 참고' 전용 — '미국 경제지표' 칸에 섞지 않는다(시장 탭은 그대로)
+    otherMacro: macro.filter((m) => !RATE_SERIES.includes(m.seriesId) && !m.seriesId.startsWith('ECOS:')),
   }
 }
 
