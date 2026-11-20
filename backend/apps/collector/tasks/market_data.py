@@ -12,6 +12,7 @@ from datetime import date, datetime, time as dtime, timedelta, timezone
 
 import requests
 
+from apps.collector import ecos
 from apps.collector import fred
 from apps.collector import investor_detail as idt
 from apps.collector import trading_day
@@ -36,7 +37,7 @@ from shared import market_repo, pipeline_record
 from shared.kiwoom_config import get_kiwoom_config
 from shared.sync_redis import get_sync_redis
 from shared.database import SyncSessionLocal
-from shared.clickhouse_schema import get_local_client, local_client_configured, readonly_skip
+from shared.clickhouse_schema import get_local_client, local_client_configured, market_data_readonly, readonly_skip
 
 log = logging.getLogger(__name__)
 IPO_BACK_DAYS = 7
@@ -44,6 +45,9 @@ IPO_AHEAD_DAYS = 60
 MACRO_BACKFILL_DAYS = 730
 MACRO_OVERLAP_DAYS = 90  # 수정 발표(revision)까지 다시 받기
 RELEASE_AHEAD_DAYS = 60
+# ECOS 원/달러 — 첫 수집은 약 1년 4개월(직전 값·추이 비교용), 이후 30일 겹침(늦게 올라온 날·정정 반영, ReplacingMergeTree 라 멱등)
+ECOS_BACKFILL_DAYS = 400
+ECOS_OVERLAP_DAYS = 30
 # 세부 투자자 매일 수집 겹침(거래일) — 하루 실패로 빠진 날이 구멍으로 남으면 연속 일수가 끊겨 10거래일 동안 프리셋에서
 # 빠진다. 한 호출이 5거래일 이상을 주면 추가 호출 없음, 하루씩만 주면 종목당 최대 5장(명세 확인 필요 — 실측 후 조정).
 DETAIL_DAILY_DAYS = 5
@@ -337,6 +341,43 @@ def collect_macro_series(today: date | None = None) -> dict:
     n_events = _save_events(events) if events else 0
     log.info("FRED 수집: ok=%d failed=%d inserted=%d events=%d", len(ok), len(failed), inserted, n_events)
     return {"ok": ok, "failed": failed, "inserted": inserted, "events": n_events}
+
+
+# ---------------------------------------------------------------- ECOS(한국은행) 원/달러
+@celery_app.task(name="collector.collect_ecos_usdkrw")
+def collect_ecos_usdkrw(today: date | None = None) -> dict:
+    """원/달러 매매기준율(ECOS 731Y001/0000001, 일별) → macro_series(series_id=ECOS:USDKRW).
+
+    시세 비노출(A안)에서도 보여 줄 수 있는 공공 통계라 홈 '오늘 시장 참고'·거시 목록에 쓴다.
+    쓰기 위치는 FRED 와 같다: CLICKHOUSE_LOCAL_* 가 있으면 개발 자체 CH, 없으면 기본 CH.
+    단 prod_readonly 인데 로컬 CH 설정이 없으면 기본 CH = 상용(읽기 전용 계정)이므로 쓰지 않고 건너뛴다.
+    키가 URL 에 들어가므로 실패는 EcosError 문장(키 없음)이나 예외 종류 이름만 남긴다.
+    """
+    key = ecos.api_key()
+    if key is None:
+        log.info("ECOS_API_KEY 없음 — 원/달러(ECOS) 수집 건너뜀")
+        return {"skipped": "ECOS_API_KEY 없음"}
+    if market_data_readonly() and not local_client_configured():
+        return readonly_skip("collector.collect_ecos_usdkrw")
+    today = today or date.today()
+    ch = {"client": get_local_client()} if local_client_configured() else {}
+    sid = ecos.SERIES_ID
+    try:
+        chm.ensure_market_tables(**ch)
+        latest = chm.latest_macro_date(sid, **ch)
+        start = (today - timedelta(days=ECOS_BACKFILL_DAYS) if latest is None
+                 else latest - timedelta(days=ECOS_OVERLAP_DAYS))
+        rows = ecos.EcosClient(key).usdkrw_daily(start, today)
+        inserted = chm.upsert_macro(sid, rows, **ch)
+    except ecos.EcosError as e:
+        log.warning("ECOS 원/달러 수집 실패: %s", e)
+        return {"series_id": sid, "inserted": 0, "error": str(e)}
+    except Exception as e:  # noqa: BLE001 — CH 오류 등. 원문에 키가 섞일 수 있어 종류만 남긴다
+        log.warning("ECOS 원/달러 수집 실패: %s", type(e).__name__)
+        return {"series_id": sid, "inserted": 0, "error": type(e).__name__}
+    last = next((d for d, v in reversed(rows) if v is not None), None)
+    log.info("ECOS 원/달러 수집: inserted=%d latest=%s", inserted, last)
+    return {"series_id": sid, "inserted": inserted, "latest": last.isoformat() if last else None}
 
 
 # ---------------------------------------------------------------- 일일 파이프라인
