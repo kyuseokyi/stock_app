@@ -1,10 +1,17 @@
 """FRED — 관측값·발표 예정일 파싱, 키, 시리즈 목록(가짜 HTTP 세션)."""
 from datetime import date
 
+import logging
+
+import pytest
+import requests
+
 from apps.collector import fred
 
 
 class _Resp:
+    status_code = 200
+
     def __init__(self, data):
         self._d = data
 
@@ -75,3 +82,60 @@ def test_api_key_from_env(monkeypatch):
     assert fred.api_key() is None
     monkeypatch.setenv("FRED_API_KEY", "  abc ")
     assert fred.api_key() == "abc"
+
+
+# ---------------------------------------------------------------- 키 노출 방지
+SECRET = "SECRETKEY1234567890abcdef"
+_URL = f"https://api.stlouisfed.org/fred/series/observations?api_key={SECRET}&file_type=json"
+
+
+class _BadResp:
+    def __init__(self, status=500, json_ok=True):
+        self.status_code, self._json_ok = status, json_ok
+
+    def raise_for_status(self):  # 옛 코드가 부르면 URL(=키)이 담긴 문장이 나온다 — 새 코드는 부르지 않아야 한다
+        raise requests.HTTPError(f"{self.status_code} Server Error for url: {_URL}")
+
+    def json(self):
+        if not self._json_ok:
+            raise ValueError(f"bad json from {_URL}")
+        return {}
+
+
+class _RaiseSession:
+    def __init__(self, exc=None, resp=None):
+        self.exc, self.resp = exc, resp
+
+    def get(self, url, params=None, timeout=None):
+        if self.exc is not None:
+            raise self.exc
+        return self.resp
+
+
+@pytest.mark.parametrize("session", [
+    _RaiseSession(resp=_BadResp(500)),
+    _RaiseSession(resp=_BadResp(400)),
+    _RaiseSession(resp=_BadResp(200, json_ok=False)),
+    _RaiseSession(exc=requests.ConnectionError(f"Max retries exceeded with url: {_URL}")),
+    _RaiseSession(exc=requests.Timeout(f"Read timed out. url: {_URL}")),
+])
+def test_errors_never_carry_key(session):
+    c = fred.FredClient(SECRET, session=session)
+    with pytest.raises(fred.FredError) as ei:
+        c.observations("DGS10", date(2026, 1, 1))
+    e = ei.value
+    assert SECRET not in str(e) and SECRET not in repr(e)
+    # 원래 예외(URL 포함)가 연결되지 않게 — 트레이스백에 'During handling of…' 로 찍히지 않아야 한다
+    assert e.__cause__ is None and (e.__context__ is None or e.__suppress_context__)
+
+
+def test_http_status_kept_in_message():
+    c = fred.FredClient(SECRET, session=_RaiseSession(resp=_BadResp(429)))
+    with pytest.raises(fred.FredError, match="429"):
+        c.observations("DGS10", date(2026, 1, 1))
+
+
+def test_redact_removes_key():
+    assert fred.redact(f"oops {_URL} again {SECRET}", SECRET) == "oops https://api.stlouisfed.org/fred/series/observations?api_key=***&file_type=json again ***"
+    assert fred.redact("no key here", SECRET) == "no key here"
+    assert fred.redact("anything", None) == "anything"

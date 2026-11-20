@@ -1,4 +1,5 @@
 """시장 데이터 Celery 태스크 — 투자자 UN→J 폴백, 재무 연간·분기, 공모주 일정, FRED 키 없음, 일일 파이프라인."""
+import logging
 from datetime import date, datetime
 
 import fakeredis
@@ -151,6 +152,30 @@ def test_macro_collects_and_isolates(monkeypatch):
     assert out["inserted"] == 2 and out["events"] == 1
     assert starts["CPIAUCSL"] == date(2024, 10, 18)  # 첫 실행 2년
     assert saved["evs"][0]["title"] == "미국 CPI 발표"
+
+
+def test_macro_failure_log_and_result_hide_key(monkeypatch, caplog):
+    """클라이언트 밖에서 난 예외(문장에 키가 섞인 경우)도 로그·결과에 키를 남기지 않는다."""
+    secret = "SECRETKEY1234567890abcdef"
+    monkeypatch.setenv("FRED_API_KEY", secret)
+    monkeypatch.setattr(md.chm, "ensure_market_tables", lambda: None)
+    monkeypatch.setattr(md.fred, "series_ids", lambda: ["DGS10"])
+    monkeypatch.setattr(md.chm, "latest_macro_date", lambda s: None)
+
+    class F:
+        def __init__(self, key, session=None):
+            pass
+
+        def observations(self, sid, start):
+            raise RuntimeError(f"boom url=...?api_key={secret}")
+
+    monkeypatch.setattr(md.fred, "FredClient", F)
+    monkeypatch.setattr(md, "_save_events", lambda evs: 0)
+    with caplog.at_level(logging.WARNING):
+        out = md.collect_macro_series(today=date(2026, 10, 18))
+    assert out["failed"][0]["series_id"] == "DGS10"
+    assert secret not in repr(out) and secret not in caplog.text
+    assert "***" in out["failed"][0]["error"]
 
 
 def test_daily_pipeline_continues_after_failure(monkeypatch):
