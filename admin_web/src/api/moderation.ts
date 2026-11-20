@@ -2,6 +2,7 @@ import client from './client'
 import type {
   AdminUserListOut,
   AdminUserOut,
+  ChartPostOut,
   ReportedCommentOut,
   ReportStatusFilter,
   ResolveAction,
@@ -56,5 +57,11 @@ export const setMarketDataAccess = async (userId: number, enabled: boolean): Pro
 
 export const updateUserNickname = async (userId: number, nickname: string): Promise<AdminUserOut> => {
   const { data } = await client.patch<AdminUserOut>(`/admin/users/${userId}/nickname`, { nickname })
+  return data
+}
+
+// 차트 포함 글 점검(조회 전용) — 정리는 기존 글 편집 화면에서 직접 한다
+export const listChartPosts = async (limit = 200): Promise<ChartPostOut[]> => {
+  const { data } = await client.get<ChartPostOut[]>('/admin/blog/chart-posts', { params: { limit } })
   return data
 }

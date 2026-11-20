@@ -176,7 +176,8 @@ OFF 일 때 시장 탭 = "브리핑 + 거시 + 경제 일정". 칩 구성·탭 �
    - 화면: 참고 기사·핫 키워드는 빈 배열이면 이미 숨겨진다. 원인이 없을 때 급등락 제목을 "급등락" 으로(앱·웹), 웹 "AI 분석은 참고용" 안내도 숨김.
    - 배포 후 정리(운영 작업, 삭제는 사용자 확인 뒤): PG `ai_daily_briefings.sources`·`ai_stock_evaluations.sources` 에 옛 뉴스 제목·링크가 남아 있다(TTL 없음, 응답에서는 이미 뺌).
      Redis `ai:market:movers:reasons`(24시간)·`ai:market:keywords:today`(30분)·`ai:market:keywords:last`(4일)·`ai:market:movers:last`(4일, 2분마다 원인 없이 다시 쓰임)·`ai:market:movers:today`(5분)는 TTL 로 사라진다.
-7. 블로그 기존 글 차트 점검(관리자 조회) — 정리는 사용자
+7. ✅ (2026-11-20, `feature/blog-chart-audit`) 블로그 기존 글 차트 점검(관리자 조회) — 정리는 사용자. 화면: admin_web 블로그 관리 > 차트 포함 글 점검(`/blog-chart-audit`), API `GET /api/v1/admin/blog/chart-posts`
+   - 판정: `<img>` 태그 단위 — alt="차트 스냅샷" 은 차트 수, 그 외 `data:image/` 내장 이미지는 따로 센다(alt 가 지워진 차트 대비). 파일 URL·외부 URL 로 붙인 차트는 못 잡는다(현재 그런 삽입 경로는 없음).
 8. 개발 배포 → 검증(7절) → OTA(dev·preview) → 상용 배포는 사용자 요청 시
 
 ### P2 — 출시 뒤 콘텐츠 보강

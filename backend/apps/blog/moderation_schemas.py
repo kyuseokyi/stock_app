@@ -119,3 +119,20 @@ class NicknameUpdate(BaseModel):
         if not (NICKNAME_MIN <= len(v) <= NICKNAME_MAX):
             raise ValueError(f"닉네임은 {NICKNAME_MIN}~{NICKNAME_MAX}자여야 합니다.")
         return v
+
+
+# --------------------------------------------------------------------------- #
+# 관리자 — 차트 포함 글 점검(시세 재배포 계약 대응, 조회 전용)
+# --------------------------------------------------------------------------- #
+class ChartPostOut(BaseModel):
+    """차트 스냅샷·내장(data:image) 이미지가 들어간 글 1건. 본문은 크기 때문에 내려보내지 않는다."""
+
+    id: int
+    title: str
+    board_id: int
+    board_name: str | None
+    created_at: datetime
+    updated_at: datetime
+    featured: bool  # 홈 추천(featured_at 있음)
+    chart_count: int  # alt="차트 스냅샷" 이미지 수
+    other_inline_images: int  # 그 외 data:image 내장 이미지 수

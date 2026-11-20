@@ -19,6 +19,8 @@ const NAV_GROUPS: NavGroup[] = [
       { to: '/boards', label: '게시판 관리', icon: '🗂️' },
       { to: '/blogs', label: '게시글 관리', icon: '📝' },
       { to: '/reports', label: '신고 관리', icon: '🚩' },
+      // 시세 재배포 계약 대응 — 기존 글에 박힌 차트 이미지 점검(조회 전용, /blogs 아래에 두면 '게시글 관리' 도 함께 활성화됨)
+      { to: '/blog-chart-audit', label: '차트 포함 글 점검', icon: '🖼️' },
     ],
   },
   {
