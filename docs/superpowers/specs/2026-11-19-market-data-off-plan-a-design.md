@@ -193,6 +193,11 @@ OFF 일 때 시장 탭 = "브리핑 + 거시 + 경제 일정". 칩 구성·탭 �
 7. ✅ (2026-11-20, `feature/blog-chart-audit`) 블로그 기존 글 차트 점검(관리자 조회) — 정리는 사용자. 화면: admin_web 블로그 관리 > 차트 포함 글 점검(`/blog-chart-audit`), API `GET /api/v1/admin/blog/chart-posts`
    - 판정: `<img>` 태그 단위 — alt="차트 스냅샷" 은 차트 수, 그 외 `data:image/` 내장 이미지는 따로 센다(alt 가 지워진 차트 대비). 파일 URL·외부 URL 로 붙인 차트는 못 잡는다(현재 그런 삽입 경로는 없음).
 8. 개발 배포 → 검증(7절) → OTA(dev·preview) → 상용 배포는 사용자 요청 시
+   - ✅ (2026-11-23) 개발 서버(`haezean.com`) **익명** curl 체크(7절): `screenerFeatures` marketData·marketIndexKr=false, `marketGroups` items=[]·`getChartData` candles=[]·`canslimScreen` total=0,
+     `marketOverview` indices=[]·macro=FRED 만(ECOS 는 상용 수집 전이라 없음 — 정상), REST `/api/v1/market/movers`·`investor-flow`·`featured`·`/api/v1/stocks/005930/lending`·`/api/game/candles` 모두 403 `market_data_disabled`,
+     `/api/game/seasons/active` features `real_market=false`·`quiz=false`.
+   - [ ] 관리자·권한 계정 토큰으로 같은 호출이 정상(사용자 확인 — 앱에서 권한 계정 시세 보임은 11-19 확인)
+   - [ ] preview APK(옛 앱)에서 각 화면 빈 섹션·크래시 없음 → preview OTA
 
 ### P2 — 출시 뒤 콘텐츠 보강
 - DART 기반 종목 화면, DART 공모 일정, 정책 이슈 카드, 가상 종목 게임·퀴즈, 브리핑 입력 고도화
