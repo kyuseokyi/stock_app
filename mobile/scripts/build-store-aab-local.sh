@@ -82,7 +82,9 @@ SRC=$(ls -t android/app/build/outputs/bundle/release/*.aab 2>/dev/null | head -1
 [ -n "$SRC" ] || fail "AAB 를 찾지 못함(android/app/build/outputs/bundle/release)"
 # 업로드 키로 서명됐는지(debug 키면 Play 가 거부) — 인증서 소유자만 보고 값은 출력하지 않는다
 jarsigner -verify "$SRC" >/dev/null 2>&1 || fail "AAB 서명 검증 실패"
-if keytool -printcert -jarfile "$SRC" 2>/dev/null | grep -q "CN=Android Debug"; then fail "debug 키로 서명됨 — 업로드 키 설정 확인"; fi
+# 파이프 grep -q 는 pipefail 에서 SIGPIPE 로 거짓이 될 수 있어(=debug 서명을 놓침) here-string 으로
+CERT=$(keytool -printcert -jarfile "$SRC" 2>/dev/null || true)
+if grep -q "CN=Android Debug" <<< "$CERT"; then fail "debug 키로 서명됨 — 업로드 키 설정 확인"; fi
 
 mkdir -p build/store
 OUT="build/store/stockapp-prod-aab-$(date '+%Y%m%d-%H%M')-v$VC.aab"
