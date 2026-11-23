@@ -182,7 +182,7 @@ CREATE TABLE edu_game_daily_actions (
     season_id INTEGER NOT NULL REFERENCES edu_game_seasons(id) ON DELETE CASCADE,
     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     day_index INTEGER NOT NULL,                    -- 참가 시점의 캔들 번호
-    action_date DATE NOT NULL,                     -- 참가 KST 날짜 (하루 1회 제약용)
+    action_date DATE NOT NULL,                     -- 참가 KST 날짜 (기록용 — 하루 1회 제약은 day_index 기준)
     action_type VARCHAR(20) NOT NULL,              -- 'ENTER_LONG' | 'ENTER_SHORT' | 'HOLD_WATCH' | 'KEEP_POS' | 'PARTIAL_CLOSE' | 'FULL_CLOSE'
     ratio NUMERIC(5, 4) NULL,                      -- 진입 비중 (0.25, 0.5, 1.0)
     leverage INTEGER NOT NULL DEFAULT 1,
@@ -221,7 +221,7 @@ Prefix: `/api/game/edu`
 | 메서드 & 경로 | 인증 | 설명 |
 | :--- | :--- | :--- |
 | `GET /api/game/edu/state` | 선택 (비로그인도 차트·시즌 조회 가능) | 현재 활성 교육 시즌 정보, 최근 120봉 일봉 배열(`candles`), 오늘의 코치 교육 해설, 지지/저항/POC 가격, 참여자 오늘의 선택 비율(상승/하락/관망 %), (로그인 시) 내 계좌·포지션·**오늘 참가 완료 여부(`today_submitted: bool`)** 반환 |
-| `POST /api/game/edu/action` | 필수 (`get_current_user`) | **하루 1회 의사결정 제출**. 이미 현재 `day_index`(또는 오늘 KST 날짜)에 제출했으면 `409 Conflict` (`ALREADY_PARTICIPATED_TODAY`, `"오늘은 이미 게임에 참가했어요. 내일 새 종가 캔들이 열리면 다시 참가할 수 있어요!"`) 반환. 제출 시 연속 출석(`streak_service.touch`) 자동 갱신 |
+| `POST /api/game/edu/action` | 필수 (`get_current_user`) | **하루 1회 의사결정 제출**. 이미 현재 `day_index`에 제출했으면(KST 날짜가 아니라 봉 번호 기준 — 아래 Step 2 참고) `409 Conflict` (`ALREADY_PARTICIPATED_TODAY`, `"오늘은 이미 게임에 참가했어요. 내일 새 종가 캔들이 열리면 다시 참가할 수 있어요!"`) 반환. 제출 시 연속 출석(`streak_service.touch`) 자동 갱신 |
 | `GET /api/game/edu/leaderboard` | 공개 | 현재 교육 시즌 수익률(`current_roi`) Top 50 랭킹 및 내 순위 반환 |
 | `GET /api/game/edu/history` | 필수 | 이번 시즌 나의 일별 참가 내역(`edu_game_daily_actions`) 및 정산 손익 히스토리 반환 |
 | `POST /api/game/admin/edu/advance-day` | 관리자 (`require_admin`) | **(관리자 테스트·운영용)** 즉시 다음 날 일봉 1캔들을 생성하고 전 유저 포지션 일일 정산을 1회 실행 |
@@ -283,7 +283,7 @@ Prefix: `/api/game/edu`
   * `backend/apps/trading_game/services/edu_game_service.py`
     * 활성 시즌 자동 부트스트랩(시즌이 없으면 시즌 1기 `[교육 지수] AI·반도체 모멘텀 가상그룹` + 초기 120봉 자동 시드).
     * `get_edu_state(db, user_id)`: 차트 120봉, 코치 해설, 내 계좌, `today_submitted` 판정, 참여자 심리 집계.
-    * `submit_daily_action(db, redis, user, payload)`: **하루 1회 참가 검증(`last_action_day_index == season.current_day_index` 또는 `last_action_date == today_kst` 이면 `409` 차단)**, 포지션 진입/관망/부분청산/전량청산 처리, `streak_service.touch` 연동.
+    * `submit_daily_action(db, redis, user, payload)`: **하루(봉) 1회 참가 검증(`last_action_day_index == season.current_day_index` 이면 `409` 차단 + DB 유일 제약 `(account_id, day_index)` 위반도 같은 409)**. KST 날짜 조건은 쓰지 않는다 — 평일 20:00 자동 정산이 하루 1봉이라 실사용에선 날짜 기준과 같고, 관리자가 하루에 여러 봉을 진행하는 테스트·운영에서도 봉마다 1회 참가할 수 있게 하려는 것(구현 2026-11-23 결정). 요청에 선택 필드 `day_index` 를 보내면 그 사이 새 봉이 열렸을 때 `409 STALE_DAY`, 포지션 진입/관망/부분청산/전량청산 처리, `streak_service.touch` 연동.
     * `advance_day_and_settle(db)`: 새 일봉 1개 생성 + 열린 포지션의 고가/저가 기준 손절·익절 자동 체결 및 종가 평가손익 갱신.
 
 ### Step 3: 백엔드 라우터 및 Celery 일일 정산 스케줄 연결
@@ -338,7 +338,7 @@ Prefix: `/api/game/edu`
 
 - [ ] **백엔드 유닛 테스트 (`backend/tests/test_edu_daily_game.py`)**:
   - [ ] 초기 120봉 합성 캔들 생성 시 `low <= open, close <= high`, 호가 단위 정규화, `poc_price`·`support_price`·`resistance_price` 정상 산출 검증.
-  - [ ] **하루 1회 참가 제한 검증**: 같은 `day_index`(또는 같은 KST 날짜)에 두 번째 `POST /api/game/edu/action` 호출 시 `409 ALREADY_PARTICIPATED_TODAY` 반환 검증.
+  - [ ] **하루 1회 참가 제한 검증**: 같은 `day_index`(봉 번호 기준 — KST 날짜 기준 아님)에 두 번째 `POST /api/game/edu/action` 호출 시 `409 ALREADY_PARTICIPATED_TODAY` 반환 검증.
   - [ ] `+1일 정산(advance_day_and_settle)` 실행 후 `current_day_index`가 `+1` 증가하면 다시 하루 1회 참가가 가능해지는지 검증.
   - [ ] 포지션 보유 중 새 캔들의 `low <= stop_loss_price`일 때 자동 손절 체결, `high >= take_profit_price`일 때 자동 익절 체결 검증.
   - [ ] 관망(`HOLD_WATCH`) 제출 시에도 오늘의 참가 완료 처리 및 연속 출석(`UserStreak`)이 갱신되는지 검증.

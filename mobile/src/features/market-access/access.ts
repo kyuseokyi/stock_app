@@ -39,6 +39,34 @@ export function realMarketOf(season: { features?: { real_market?: boolean } } | 
   return season?.features?.real_market === true;
 }
 
+/** 교육용 합성 종가 게임 상태 응답(GET /api/game/edu/state) → enabled. 응답 없음·필드 없음은 false(닫힘) */
+export function eduEnabledOf(state: { enabled?: boolean } | null | undefined): boolean {
+  return state?.enabled === true;
+}
+
+/**
+ * 하단 게임 탭 노출 — 실제 시세 게임(real_market) 또는 교육용 종가 게임(edu) 중 하나라도 열려 있으면.
+ * 합성 데이터 게임이라 A안(시세 비노출)과 무관하게 열 수 있다(docs/edu_synthetic_daily_game_spec_and_plan.md 3.2)
+ */
+export function gameTabVisible(realMarket: boolean | null | undefined, edu: boolean | null | undefined): boolean {
+  return realMarket === true || edu === true;
+}
+
+/** 게임 탭 화면 — loading: 판단값을 묻는 중(아무 게임도 마운트하지 않음), none: 안내 카드 */
+export type GameTabMode = 'loading' | 'real' | 'edu' | 'both' | 'none';
+
+/**
+ * 게임 탭에 무엇을 그릴지. 두 판단값이 다 와야 정한다 — 실시간 게임 화면을 그렸다가 세그먼트 화면으로 다시 마운트되지 않게.
+ * real=실시간만(기존 그대로), edu=종가 게임만, both=상단 세그먼트로 전환, none=둘 다 닫힘(기존 안내 카드)
+ */
+export function gameTabMode(realMarket: boolean | null | undefined, edu: boolean | null | undefined): GameTabMode {
+  if (realMarket == null || edu == null) return 'loading';
+  if (realMarket && edu) return 'both';
+  if (realMarket) return 'real';
+  if (edu) return 'edu';
+  return 'none';
+}
+
 /** 종목 상세 링크아웃(설계 3-4 "시세는 증권사 앱에서") — 포털 종목 화면 주소(링크만, 내용을 가져오지 않음). 6자리 코드만 */
 export function stockLinkOutUrl(ticker: string): string | null {
   return /^[0-9A-Z]{6}$/.test(ticker) ? `https://m.stock.naver.com/domestic/stock/${ticker}/total` : null;

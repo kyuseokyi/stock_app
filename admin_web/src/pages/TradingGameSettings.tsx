@@ -4,6 +4,7 @@ import { GAME_API_URL } from '../config'
 import { listFeatureFlags, updateFeatureFlag } from '../api/featureFlags'
 import { showToast } from '../lib/toast'
 import GameSeasonRewardSettings from '../components/GameSeasonRewardSettings'
+import EduGameOperations from '../components/EduGameOperations'
 import type { FeatureFlag, FeatureFlagKey } from '../types/game'
 
 const FLAG_META: Record<FeatureFlagKey, { title: string; description: string }> = {
@@ -20,6 +21,11 @@ const FLAG_META: Record<FeatureFlagKey, { title: string; description: string }> 
     title: '📈 실제 시세 게임 공개',
     description:
       '켜려면 KRX/코스콤 시세 라이선스가 필요합니다. 꺼져 있으면(기본) 일반 사용자는 게임 시세 스트림·분봉·장운영 상태·주문·퀴즈가 막힙니다(게임 탭 숨김은 앱·웹 화면 업데이트 뒤). 관리자와 회원 관리에서 시세 열람 권한을 준 회원은 계속 이용할 수 있습니다. 정산·랭킹 등 서버 내부 작업은 영향이 없습니다.',
+  },
+  EDU_DAILY_GAME: {
+    title: '📘 교육용 일일 종가 게임 공개',
+    description:
+      '서버가 만든 가상 일봉으로 하루 1회 결정하는 교육용 게임입니다(시세 라이선스 불필요, 기본 켜짐). 끄면 실시간 게임이 열려 있지 않은 사용자에게는 게임 탭이 사라지고 참가·랭킹 API가 막힙니다. 아래 운영 카드(진행·국면·새 시즌)는 스위치와 무관하게 동작합니다.',
   },
 }
 
@@ -60,6 +66,7 @@ function SettingsPanel() {
   const toggle = async (flag: FeatureFlag) => {
     const next = !flag.enabled
     if (flag.key === 'REAL_MARKET' && next && !confirm('실제 시세 게임을 모든 사용자에게 공개할까요?\nKRX/코스콤 시세 라이선스가 있어야 켤 수 있어요.')) return
+    if (flag.key === 'EDU_DAILY_GAME' && !next && !confirm('교육용 종가 게임을 닫을까요?\n실시간 게임 권한이 없는 사용자에게는 게임 탭이 사라집니다.')) return
     setPending(flag.key)
     setFlags((prev) => prev.map((f) => (f.key === flag.key ? { ...f, enabled: next } : f)))
     try {
@@ -126,6 +133,7 @@ function SettingsPanel() {
         </ul>
       )}
       <GameSeasonRewardSettings />
+      <EduGameOperations />
     </div>
   )
 }

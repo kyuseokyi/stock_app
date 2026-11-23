@@ -75,7 +75,8 @@ export type ChartInterval = 'day' | '1m' | '5m' | '15m' | '60m'
 
 // 기능 on/off (Phase 5b). 출처: game_dtos.FeatureFlagResponse
 // REAL_MARKET = 실제 시세 게임(A안 — 기본 꺼짐, 켜려면 KRX/코스콤 라이선스 필요)
-export type FeatureFlagKey = 'QUIZ' | 'STREAK' | 'REAL_MARKET'
+// EDU_DAILY_GAME = 교육용 합성 종가 게임(기본 켜짐). 서버가 모르는 키를 더 보내도 화면은 FLAG_META 에 있는 것만 그린다
+export type FeatureFlagKey = 'QUIZ' | 'STREAK' | 'REAL_MARKET' | 'EDU_DAILY_GAME'
 
 export interface FeatureFlag {
   key: FeatureFlagKey
@@ -160,4 +161,41 @@ export interface QuizAdminUpdateBody {
 export interface QuizGenerateResult {
   created: number
   skipped: number
+}
+
+// 교육용 합성 종가 게임 관리자(/api/game/admin/edu/*). 출처: edu_game_dtos.EduAdminSeasonDTO 등
+export type EduRegime = 'ACCUMULATION' | 'UPTREND' | 'DISTRIBUTION' | 'DOWNTREND'
+
+export interface EduAdminSeason {
+  id: number
+  season_number: number
+  synthetic_code: string
+  title: string
+  theme_category: string
+  hide_name: boolean
+  current_day_index: number
+  current_regime: EduRegime | string
+  regime_days_left: number
+  next_regime_override: EduRegime | string | null
+  status: string
+  start_date: string
+  last_advanced_date: string | null
+  participants: number
+}
+
+export interface EduNewSeasonBody {
+  title: string
+  theme_category: string
+  hide_name: boolean
+  start_price: 50000 | 100000
+}
+
+export interface EduAdvanceResult {
+  status: 'advanced' | 'skipped' | 'no_season' | string
+  season_id: number | null
+  day_index: number | null
+  close: number | null
+  regime: string | null
+  settled: number
+  closed: number
 }

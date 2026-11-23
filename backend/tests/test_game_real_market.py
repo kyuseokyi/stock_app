@@ -210,7 +210,7 @@ async def test_on_active_season_features_open(client, maker):
     await _flag(maker, True)
     await _season(maker)
     f = (await client.get("/api/game/seasons/active")).json()["features"]
-    assert f == {"quiz": True, "streak": True, "real_market": True}
+    assert f == {"quiz": True, "streak": True, "real_market": True, "edu_daily_game": True}
 
 
 # ---------------------------------------------------------------- 퀴즈

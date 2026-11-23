@@ -13,6 +13,7 @@ import PostListPage from './pages/PostListPage'
 import PostDetailPage from './pages/PostDetailPage'
 
 const GamePage = lazy(() => import('./pages/GamePage'))
+const EduDailyGamePage = lazy(() => import('./pages/EduDailyGamePage'))
 const ScreenerLayout = lazy(() => import('./pages/screener/ScreenerLayout'))
 const ScreenerPage = lazy(() => import('./pages/ScreenerPage'))
 const MarketLayout = lazy(() => import('./pages/market/MarketLayout'))
@@ -58,6 +59,12 @@ export default function App() {
         <Route path="game" element={
           <Suspense fallback={<p className="py-16 text-center text-ink-muted">불러오는 중…</p>}>
             <GamePage />
+          </Suspense>
+        } />
+        {/* 교육용 합성 종가 게임 전용 주소 — /game 진입부에서도 같은 화면으로 분기(꺼져 있으면 화면이 안내) */}
+        <Route path="edu-game" element={
+          <Suspense fallback={<p className="py-16 text-center text-ink-muted">불러오는 중…</p>}>
+            <EduDailyGamePage />
           </Suspense>
         } />
         <Route path="market" element={

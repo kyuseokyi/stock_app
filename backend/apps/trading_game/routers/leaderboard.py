@@ -40,6 +40,7 @@ async def active_season(
             quiz=can_view and await feature_flag_service.is_enabled(db, redis, "QUIZ"),
             streak=await feature_flag_service.is_enabled(db, redis, "STREAK"),
             real_market=can_view,
+            edu_daily_game=await feature_flag_service.is_enabled(db, redis, "EDU_DAILY_GAME"),
         ),
     )
 
