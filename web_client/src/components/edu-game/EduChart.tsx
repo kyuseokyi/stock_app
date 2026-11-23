@@ -93,6 +93,7 @@ export default function EduChart({ candles, today, position }: Props) {
       volRef.current = null
       chartRef.current = null
       linesRef.current = []
+      rangeSetRef.current = false // 차트를 다시 만들면 첫 화면 구간도 다시 잡는다
       chart.remove()
     }
   }, [])
