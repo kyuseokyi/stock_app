@@ -134,7 +134,7 @@ export default function ProfileScreen() {
         <Text style={styles.screenTitle}>내정보</Text>
         <Card>
           <Text style={styles.nickname}>{user.nickname}</Text>
-          <Text style={styles.role}>{user.role} 등급</Text>
+          {/* 등급(FREE 등) 표시는 하지 않는다 — 유료 등급이 없고 모든 회원이 같은 기능(2026-11-23 결정). 관리자 여부는 아래 식별 줄에 */}
           {/* 계정 식별 — 관리자 회원관리의 어느 행인지 맞춰 보는 용도(회원 번호·로그인 방식) */}
           <Text style={styles.identity} selectable>
             {accountIdentityLabel(user)}
