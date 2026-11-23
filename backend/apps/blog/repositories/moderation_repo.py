@@ -4,7 +4,7 @@ from __future__ import annotations
 from sqlalchemy import delete, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from shared.models import BlogComment, BlogPost, CommentReport, User, UserBlock
+from shared.models import AuthProvider, BlogComment, BlogPost, CommentReport, User, UserBlock
 
 
 # --------------------------------------------------------------------------- #
@@ -127,12 +127,22 @@ async def list_blocks(db: AsyncSession, blocker_id: int) -> list:
 # 회원(관리자)
 # --------------------------------------------------------------------------- #
 async def list_users(db: AsyncSession, *, q: str | None, page: int, size: int,
-                     market_data_access: bool | None = None) -> tuple[int, list[User]]:
+                     market_data_access: bool | None = None, user_id: int | None = None,
+                     provider: AuthProvider | None = None, local_only: bool = False) -> tuple[int, list[User]]:
+    """user_id 가 있으면 닉네임·이메일 부분 검색에 회원 ID 일치를 OR 로 더한다.
+    provider 는 해당 공급자만, local_only 는 provider 없는 계정(관리자 LOCAL·게스트·심사)만."""
     base = select(User)
     count_stmt = select(func.count()).select_from(User)
     if q:
         like = f"%{q}%"
-        cond = or_(User.nickname.ilike(like), User.email.ilike(like))
+        conds = [User.nickname.ilike(like), User.email.ilike(like)]
+        if user_id is not None:
+            conds.append(User.id == user_id)
+        cond = or_(*conds)
+        base = base.where(cond)
+        count_stmt = count_stmt.where(cond)
+    if provider is not None or local_only:
+        cond = User.provider.is_(None) if local_only else User.provider == provider
         base = base.where(cond)
         count_stmt = count_stmt.where(cond)
     if market_data_access is not None:  # 시세 열람 권한 보유 회원만(또는 없는 회원만) 보기

@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from apps.auth.terms import TERMS_VERSION
 from apps.blog.main import app as blog_app
 from shared.database import get_db
-from shared.models import Base, BlogComment, BlogPost, Board, CommentReport, User, UserRole
+from shared.models import AuthProvider, Base, BlogComment, BlogPost, Board, CommentReport, User, UserRole
 from shared.security import create_access_token
 
 REPORTS = "/api/v1/admin/comment-reports"
@@ -257,3 +257,72 @@ async def test_market_data_access_admin_400_404_403(client, world):
     r = await client.patch(f"/api/v1/admin/users/{author.id}/market-data-access", json={"enabled": True},
                            headers=_auth(author))
     assert r.status_code == 403
+
+
+# ── 회원: 회원 번호 검색·로그인 방식 필터 ─────────────
+
+
+async def _set_provider(maker, user: User, provider: AuthProvider, provider_id: str) -> None:
+    async with maker() as db:
+        u = await db.get(User, user.id)
+        u.provider, u.provider_id = provider, provider_id
+        await db.commit()
+
+
+async def test_admin_list_users_search_by_id(client, world):
+    admin, author = world["admin"], world["author"]
+    for q in (str(author.id), f"#{author.id}", f" # {author.id} "):
+        found = (await client.get("/api/v1/admin/users", params={"q": q}, headers=_auth(admin))).json()
+        assert author.id in [u["id"] for u in found["items"]], q
+    # 닉네임·이메일 부분 검색은 그대로
+    found = (await client.get("/api/v1/admin/users", params={"q": "신고"}, headers=_auth(admin))).json()
+    assert found["total"] == 3
+    # 범위 밖 큰 숫자 — ID 비교에서 빠져 DB 오류 없이 200(0건)
+    r = await client.get("/api/v1/admin/users", params={"q": "9" * 20}, headers=_auth(admin))
+    assert r.status_code == 200 and r.json()["total"] == 0
+    r = await client.get("/api/v1/admin/users", params={"q": "#"}, headers=_auth(admin))
+    assert r.status_code == 200
+
+
+def test_user_id_from_query():
+    from apps.blog.services.moderation import user_id_from_query
+    assert user_id_from_query("12") == 12
+    assert user_id_from_query("#12") == 12
+    assert user_id_from_query(" #12 ") == 12
+    for bad in (None, "", "#", "0", "12a", "-3", "１２", "9" * 20, "1.5"):
+        assert user_id_from_query(bad) is None, bad
+
+
+async def test_admin_list_users_provider_filter(client, maker, world):
+    admin, author = world["admin"], world["author"]
+    r1, r2, _ = world["reporters"]
+    await _set_provider(maker, author, AuthProvider.KAKAO, "k-1")
+    await _set_provider(maker, r1, AuthProvider.NAVER, "n-1")
+    await _set_provider(maker, r2, AuthProvider.KAKAO, "k-2")
+
+    def ids(body):
+        return {u["id"] for u in body["items"]}
+
+    kakao = (await client.get("/api/v1/admin/users", params={"provider": "KAKAO"}, headers=_auth(admin))).json()
+    assert kakao["total"] == 2 and ids(kakao) == {author.id, r2.id}
+    assert all(u["provider"] == "KAKAO" for u in kakao["items"])
+    naver = (await client.get("/api/v1/admin/users", params={"provider": "NAVER"}, headers=_auth(admin))).json()
+    assert ids(naver) == {r1.id}
+    local = (await client.get("/api/v1/admin/users", params={"provider": "LOCAL"}, headers=_auth(admin))).json()
+    assert local["total"] == 2 and admin.id in ids(local) and all(u["provider"] is None for u in local["items"])
+    # 시세 열람 필터·검색어와 함께(AND)
+    r = await client.patch(f"/api/v1/admin/users/{author.id}/market-data-access", json={"enabled": True},
+                           headers=_auth(admin))
+    assert r.status_code == 200
+    both = (await client.get("/api/v1/admin/users", params={"provider": "KAKAO", "market_data_access": "true"},
+                             headers=_auth(admin))).json()
+    assert ids(both) == {author.id}
+    none = (await client.get("/api/v1/admin/users", params={"provider": "NAVER", "market_data_access": "true"},
+                             headers=_auth(admin))).json()
+    assert none["total"] == 0
+    by_id = (await client.get("/api/v1/admin/users", params={"provider": "KAKAO", "q": f"#{r2.id}"},
+                              headers=_auth(admin))).json()
+    assert ids(by_id) == {r2.id}
+    # 모르는 값은 422
+    r = await client.get("/api/v1/admin/users", params={"provider": "FACEBOOK"}, headers=_auth(admin))
+    assert r.status_code == 422

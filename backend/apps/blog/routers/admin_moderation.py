@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -51,15 +52,17 @@ async def resolve_comment_report(
 # ---------------------------------------------------------------- 회원
 @router.get("/users", response_model=ms.AdminUserListOut)
 async def list_users(
-    q: str | None = Query(None, max_length=100, description="닉네임·이메일 부분 검색"),
+    q: str | None = Query(None, max_length=100, description="닉네임·이메일 부분 검색, 숫자(앞 # 허용)면 회원 번호 일치도"),
     page: int = Query(1, ge=1),
     size: int = Query(20, ge=1, le=100),
     market_data_access: bool | None = Query(None, description="true 면 시세 열람 권한이 있는 회원만"),
+    provider: Literal["KAKAO", "NAVER", "GOOGLE", "APPLE", "LOCAL"] | None = Query(
+        None, description="로그인 방식 필터 — LOCAL 은 공급자 없는 계정(관리자·게스트·심사)"),
     db: AsyncSession = Depends(get_db),
     admin: User = Depends(require_admin),
 ):
     """회원 목록(최근 가입순) — 어드민 회원 화면용."""
-    return await moderation.admin_list_users(db, q, page, size, market_data_access)
+    return await moderation.admin_list_users(db, q, page, size, market_data_access, provider)
 
 
 @router.patch("/users/{user_id}/comment-ban", response_model=ms.AdminUserOut)
