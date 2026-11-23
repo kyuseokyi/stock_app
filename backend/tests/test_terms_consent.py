@@ -14,7 +14,7 @@ from apps.auth.main import app as auth_app
 from apps.auth.terms import TERMS_VERSION, terms_required
 from apps.blog.main import app as blog_app
 from shared.database import get_db
-from shared.models import Base, BlogPost, Board, User, UserRole
+from shared.models import AuthProvider, Base, BlogPost, Board, User, UserRole
 from shared.security import create_access_token
 
 ME = "/api/v1/auth/me"
@@ -101,8 +101,21 @@ async def test_me_includes_terms_required_true_for_null(auth_client, maker):
     assert r.status_code == 200, r.text
     body = r.json()
     # 기존 필드 유지 + 순서(새 필드는 맨 끝)
-    assert list(body.keys()) == ["id", "email", "nickname", "role", "terms_required"]
+    assert list(body.keys()) == ["id", "email", "nickname", "role", "terms_required", "provider"]
     assert body["terms_required"] is True
+
+
+async def test_me_includes_provider(auth_client, maker):
+    """로그인 방식 — 소셜 계정은 공급자 코드, 관리자 LOCAL 계정은 null."""
+    social = await _seed_user(maker, email=None)
+    async with maker() as db:
+        u = await db.get(User, social.id)
+        u.provider, u.provider_id = AuthProvider.NAVER, "n-1"
+        await db.commit()
+    assert (await auth_client.get(ME, headers=_auth(social))).json()["provider"] == "NAVER"
+    admin = await _seed_user(maker, role=UserRole.ADMIN, email="admin@test.local")
+    body = (await auth_client.get(ME, headers=_auth(admin))).json()
+    assert body["provider"] is None and body["role"] == "ADMIN"
 
 
 async def test_me_terms_required_false_when_current(auth_client, maker):
