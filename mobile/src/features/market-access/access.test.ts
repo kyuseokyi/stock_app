@@ -1,5 +1,8 @@
 import {
   anyIndexVisible,
+  eduEnabledOf,
+  gameTabMode,
+  gameTabVisible,
   gameVisible,
   indexVisible,
   KR_PUBLIC_INDEX_CODES,
@@ -49,6 +52,29 @@ describe('시세 비노출 화면 판정(A안)', () => {
     expect(realMarketOf(null)).toBe(false);
     expect(gameVisible(true)).toBe(true);
     expect(gameVisible(false)).toBe(false);
+  });
+
+  it('게임 탭 = real_market || 교육 종가 게임 enabled — 모름·실패는 숨김', () => {
+    expect(gameTabVisible(false, true)).toBe(true);
+    expect(gameTabVisible(true, false)).toBe(true);
+    expect(gameTabVisible(true, null)).toBe(true);
+    expect(gameTabVisible(false, false)).toBe(false);
+    expect(gameTabVisible(null, null)).toBe(false);
+    expect(gameTabVisible(undefined, null)).toBe(false);
+    expect(eduEnabledOf({ enabled: true })).toBe(true);
+    expect(eduEnabledOf({ enabled: false })).toBe(false);
+    expect(eduEnabledOf({})).toBe(false);
+    expect(eduEnabledOf(null)).toBe(false);
+  });
+
+  it('게임 탭 화면 — 두 판단값이 다 와야 정하고, 둘 다 열리면 세그먼트', () => {
+    expect(gameTabMode(null, true)).toBe('loading');
+    expect(gameTabMode(true, null)).toBe('loading'); // 실시간 화면을 그렸다가 다시 마운트하지 않게
+    expect(gameTabMode(false, null)).toBe('loading');
+    expect(gameTabMode(true, true)).toBe('both');
+    expect(gameTabMode(true, false)).toBe('real');
+    expect(gameTabMode(false, true)).toBe('edu');
+    expect(gameTabMode(false, false)).toBe('none');
   });
 
   it('링크아웃은 6자리 코드만', () => {
