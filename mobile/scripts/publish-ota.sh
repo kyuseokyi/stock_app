@@ -152,6 +152,16 @@ else
   EAS=(npx --yes eas-cli)
 fi
 
+# 플랫폼별 발행 지문(Runtime version) 앞 7자리 — APK 이름 끝(stockapp-<env>-<일시>-<지문7>.apk)과 같아야 그 APK 가 받는다
+OTA_OUT=$(mktemp "${TMPDIR:-/tmp}/ota-out.XXXXXX")
+RUNTIMES=""
+note_runtime() {
+  local rv
+  rv=$(grep -m1 -E 'Runtime version' "$OTA_OUT" | grep -oE '[0-9a-f]{40}' || true)
+  [ -n "$rv" ] && RUNTIMES="$RUNTIMES $1=${rv:0:7}"
+  : > "$OTA_OUT"
+}
+
 # 발행한 번들(dist/)에 env 의 API 주소가 실제로 들어갔는지 — 빠졌으면 이미 발행된 상태라 크게 알리고 실패로 끝낸다.
 BUNDLE_BAD=0
 check_bundle() {
@@ -175,7 +185,8 @@ if [ "$TARGET" = dev ]; then
   # build-dev-apk.sh 처럼 합친 env 를 프로세스 env 로도 넘긴다 — app.config.js 평가(EAS_PROJECT_ID·GOOGLE_SERVICES_JSON 등)가
   #   빌드 때와 같아야 fingerprint 가 같다.
   for p in $OTA_PLATFORMS; do
-    (set -a; . "./$TMP"; set +a; env "${ENV_ARGS[@]}" "${EAS[@]}" update "${DEST_ARGS[@]}" --environment "$EAS_ENV" --platform "$p" --message "$MESSAGE")
+    (set -a; . "./$TMP"; set +a; env "${ENV_ARGS[@]}" "${EAS[@]}" update "${DEST_ARGS[@]}" --environment "$EAS_ENV" --platform "$p" --message "$MESSAGE") | tee "$OTA_OUT"
+    note_runtime "$p"
     check_bundle "$p"
   done
 else
@@ -183,11 +194,14 @@ else
   #   → .env.production 을 프로세스 env 로 넘겨야 EXPO_PUBLIC_* 가 번들에 실린다. 빠뜨리면 코드 기본값(localhost)이 실려
   #   앱 전체가 네트워크 오류가 된다(2026-11-17 preview 발행 사고).
   for p in $OTA_PLATFORMS; do
-    (set -a; . "./$BASE"; set +a; env "${ENV_ARGS[@]}" "${EAS[@]}" update "${DEST_ARGS[@]}" --environment "$EAS_ENV" --platform "$p" --message "$MESSAGE")
+    (set -a; . "./$BASE"; set +a; env "${ENV_ARGS[@]}" "${EAS[@]}" update "${DEST_ARGS[@]}" --environment "$EAS_ENV" --platform "$p" --message "$MESSAGE") | tee "$OTA_OUT"
+    note_runtime "$p"
     check_bundle "$p"
   done
 fi
 
+rm -f "$OTA_OUT"
+[ -n "$RUNTIMES" ] && echo "[ota] 발행 지문(앞 7자리):$RUNTIMES — 설치된 APK 이름 끝 7자리와 같아야 받는다"
 [ "$BUNDLE_BAD" = 1 ] && exit 1
 
 if [ "$OTA_STAGE" = 1 ]; then
