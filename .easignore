@@ -1,0 +1,75 @@
+# EAS 빌드 묶음 규칙 — 이 파일이 있으면 EAS 는 모든 .gitignore 를 무시하고 이것만 쓴다(eas-cli: 저장소 루트의 .easignore).
+# 왜 따로 두나(store-release.md D9): .gitignore 규칙 그대로면 스토어 빌드(eas build --local)에 앱 설정 두 개가 빠져
+#   API 주소 localhost·푸시 꺼진 AAB 가 나온다 → mobile/.env.production, mobile/secrets/google-services.json 만 예외로 넣는다.
+#   (.env.production 의 EXPO_PUBLIC_* 와 google-services.json 은 어차피 앱 번들·APK 에 그대로 실리는 공개 값이다)
+# 서버 비밀(fcm-service-account.json 등)·개발 env(.env.development*, *.local)는 계속 뺀다.
+# .gitignore(루트·mobile)를 바꾸면 여기도 같이 맞춘다.
+
+# ===== 루트 .gitignore =====
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+wheels/
+.venv/
+venv/
+node_modules/
+.expo/
+*.log
+.env
+.env.*
+!.env.example
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+pg_data/
+clickhouse_data/
+redis_data/
+.agents/
+backend/backups/
+backend/logs/
+.superpowers/
+deploy/swarm/stack.env
+deploy/k8s/**/secret.yaml
+deploy/k8s/**/*.secret.env
+.firecrawl/
+.claude/settings.local.json
+*.tsbuildinfo
+**/secrets/*
+google-services*.json
+GoogleService-Info*.plist
+*service-account*.json
+*firebase-adminsdk*.json
+
+# ===== mobile/.gitignore =====
+mobile/web-build/
+mobile/expo-env.d.ts
+mobile/.kotlin/
+*.orig.*
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+.metro-health-check*
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+*.pem
+.env*.local
+mobile/example
+mobile/ios
+mobile/android
+
+# ===== 앱 빌드와 무관한 로컬 도구 폴더(묶음 크기·노출 줄이기) =====
+.claude/
+.codex/
+.serena/
+.impeccable/
+.github/hooks/
+
+# ===== 앱 빌드에 필요한 상용 설정 — 위 규칙의 예외(반드시 맨 끝) =====
+!mobile/.env.production
+!mobile/secrets/google-services.json
