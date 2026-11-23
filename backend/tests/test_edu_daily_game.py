@@ -660,6 +660,61 @@ async def test_flag_default_on_and_independent_of_real_market(api, maker, monkey
     assert (await client.get("/api/game/edu/state")).json()["enabled"] is True
 
 
+def _switch_from_db(monkeypatch):
+    """conftest 가 real_market.flag_on 을 항상 True 로 덮어쓰므로, 여기서는 실제 플래그 행(행 없음=OFF)을 읽게 되돌린다."""
+    from apps.trading_game.services import feature_flag_service, real_market
+
+    async def _db_flag(db, redis) -> bool:
+        return await feature_flag_service.is_enabled(db, redis, "REAL_MARKET")
+
+    monkeypatch.setattr(real_market, "flag_on", _db_flag)
+
+
+async def test_state_real_market_switch_default_off(api, maker, monkeypatch):
+    """REAL_MARKET 행 없음 = 전역 스위치 OFF → real_market_switch false(관리자여도 사용자별 판정과 무관)."""
+    _switch_from_db(monkeypatch)
+    client, set_user = api
+    set_user(await _user(maker, role=UserRole.ADMIN, nickname="관리자"))
+    body = (await client.get("/api/game/edu/state")).json()
+    assert body["enabled"] is True and body["real_market_switch"] is False
+
+
+async def test_state_real_market_switch_on(api, maker, monkeypatch):
+    _switch_from_db(monkeypatch)
+    client, set_user = api
+    async with maker() as db:
+        db.add(GameFeatureFlag(key="REAL_MARKET", enabled=True))
+        await db.commit()
+    set_user(None)
+    body = (await client.get("/api/game/edu/state")).json()
+    assert body["enabled"] is True and body["real_market_switch"] is True
+    assert body["season"] is not None  # 기존 전체 응답은 그대로
+
+
+async def test_state_real_market_switch_in_minimal_response(api, maker, monkeypatch):
+    """EDU_DAILY_GAME OFF 최소 응답에도 스위치 값이 들어간다."""
+    _switch_from_db(monkeypatch)
+    client, set_user = api
+    async with maker() as db:
+        db.add(GameFeatureFlag(key="REAL_MARKET", enabled=True))
+        db.add(GameFeatureFlag(key="EDU_DAILY_GAME", enabled=False))
+        await db.commit()
+    set_user(None)
+    body = (await client.get("/api/game/edu/state")).json()
+    assert body["enabled"] is False and body["real_market_switch"] is True and body["season"] is None
+
+
+async def test_state_real_market_switch_admin_toggle(api, maker, monkeypatch):
+    """관리자가 REAL_MARKET 을 켜고 끄면 state 의 스위치 값이 따라간다."""
+    _switch_from_db(monkeypatch)
+    client, set_user = api
+    set_user(await _user(maker, role=UserRole.ADMIN, nickname="관리자"))
+    assert (await client.put("/api/game/admin/feature-flags/REAL_MARKET", json={"enabled": True})).status_code == 200
+    assert (await client.get("/api/game/edu/state")).json()["real_market_switch"] is True
+    assert (await client.put("/api/game/admin/feature-flags/REAL_MARKET", json={"enabled": False})).status_code == 200
+    assert (await client.get("/api/game/edu/state")).json()["real_market_switch"] is False
+
+
 async def test_admin_flag_toggle_reflects_in_state(api, maker):
     client, set_user = api
     set_user(await _user(maker, role=UserRole.ADMIN, nickname="관리자"))

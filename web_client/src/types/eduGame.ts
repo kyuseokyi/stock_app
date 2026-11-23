@@ -108,6 +108,8 @@ export interface EduOptions {
 /** enabled=false 면 나머지는 기본값(null/빈 배열) — 화면은 게임을 숨긴다 */
 export interface EduState {
   enabled: boolean
+  /** 관리자 전역 REAL_MARKET 스위치(사용자별 판정 아님) — true=실시간 게임만, false=가상 데이터 게임만. 옛 서버는 없음(=false) */
+  real_market_switch?: boolean
   season: EduSeason | null
   candles: EduCandle[]
   today: EduToday | null

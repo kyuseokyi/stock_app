@@ -117,6 +117,9 @@ class EduStateResponse(BaseModel):
     """enabled=false 면 나머지 필드는 기본값(null/빈 배열) — 프론트는 게임 화면을 숨긴다."""
 
     enabled: bool
+    # 관리자 전역 스위치 REAL_MARKET 값(사용자별 열람 판정 아님) — 화면 분기용: true=실시간 게임만, false=가상 데이터 게임만.
+    # enabled=false 최소 응답에도 들어간다. 조회 실패는 false(닫힘).
+    real_market_switch: bool = False
     season: EduSeasonDTO | None = None
     candles: list[EduCandleDTO] = []
     today: EduTodayDTO | None = None

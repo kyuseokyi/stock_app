@@ -32,9 +32,7 @@ import { isQuizPrimeTime } from '../lib/quiz'
 import { useAuthStore } from '../store/auth'
 import { useTradingGameStore } from '../store/tradingGame'
 import type { Leverage, OrderOptions, Ratio, Side } from '../types/game'
-import { useSearchParams } from 'react-router-dom'
-import GameModeTabs from '../components/edu-game/GameModeTabs'
-import { useEduGameAccess } from '../hooks/useGameAccess'
+import { useEduGameAccess, useRealMarketSwitch } from '../hooks/useGameAccess'
 import { gameEntryMode } from '../lib/marketAccess'
 import EduDailyGamePage from './EduDailyGamePage'
 
@@ -49,13 +47,14 @@ type PrivateModal = Exclude<ActiveModal, 'ranking' | 'rules' | null>
 // 메뉴에서는 숨지만 주소로 바로 들어오면 안내 카드. 판단값을 묻는 동안은 '불러오는 중'.
 export default function GamePage() {
   const access = useGameAccess()
-  // 교육용 합성 종가 게임 분기(명세 3.2) — 게임 탭 = real_market || 교육용 공개. 아래 기존 실시간 게이트는 그대로.
-  // edu: 교육용만 열림 → 교육용 화면 / both: 상단 전환 탭 / realtime·none: 기존 흐름(GameScreen 또는 안내 카드)
+  // 게임 모드 = 관리자 전역 스위치 REAL_MARKET 하나(edu/state 의 real_market_switch, 사용자별 판정 아님).
+  // ON → 실시간 게임만(아래 기존 실시간 게이트 그대로) / OFF → 가상 데이터(교육용 종가) 게임만 / 둘 다 닫힘 → 안내 카드.
+  // 두 게임을 함께 보이거나 전환하는 탭은 두지 않는다.
   const eduAccess = useEduGameAccess()
-  const entry = gameEntryMode(access, eduAccess)
+  const realMarketSwitch = useRealMarketSwitch()
+  const entry = gameEntryMode(access, eduAccess, realMarketSwitch)
   if (entry === 'loading') return <p className="py-16 text-center text-ink-muted">불러오는 중…</p>
   if (entry === 'edu') return <EduDailyGamePage />
-  if (entry === 'both') return <GameModeSwitch />
   if (access === null) return <p className="py-16 text-center text-ink-muted">불러오는 중…</p>
   if (!gameVisible(access)) {
     return (
@@ -67,22 +66,6 @@ export default function GamePage() {
     )
   }
   return <GameScreen />
-}
-
-// 실시간·교육용 둘 다 열려 있을 때 — 상단 [📘 일일 종가 게임] | [⚡ 실시간 게임] 전환(주소 ?mode=realtime 로 유지·공유).
-// 기본은 교육용. 실시간 탭일 때만 GameScreen 을 마운트한다(교육용 탭에서는 WS·분봉 요청이 생기지 않게).
-function GameModeSwitch() {
-  const [params, setParams] = useSearchParams()
-  const mode = params.get('mode') === 'realtime' ? 'realtime' : 'edu'
-  return (
-    <div className="space-y-3 sm:space-y-4">
-      <GameModeTabs
-        mode={mode}
-        onChange={(m) => setParams(m === 'realtime' ? { mode: 'realtime' } : {}, { replace: true })}
-      />
-      {mode === 'realtime' ? <GameScreen /> : <EduDailyGamePage />}
-    </div>
-  )
 }
 
 // 실시간 트레이딩 게임 — 상태별 분기: 서버 미설정/시즌 없음 → 준비 중, 연결 실패 → 재시도, 정상 → 트레이딩 화면

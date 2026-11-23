@@ -50,25 +50,31 @@ describe('종목 상세 링크아웃', () => {
   })
 })
 
-describe('교육용 종가 게임 — 게임 탭·진입 화면 판정', () => {
-  it('게임 탭 = real_market || edu, 모름·실패는 숨김', () => {
-    expect(gameTabVisible(false, true)).toBe(true)
-    expect(gameTabVisible(true, false)).toBe(true)
-    expect(gameTabVisible(true, null)).toBe(true)
-    expect(gameTabVisible(false, false)).toBe(false)
-    expect(gameTabVisible(null, null)).toBe(false)
-    expect(gameTabVisible(undefined, undefined)).toBe(false)
+describe('게임 모드 스위치(REAL_MARKET 전역) — 게임 탭·진입 화면 판정', () => {
+  it('게임 탭 — 스위치 ON 이면 실시간 허용일 때, OFF 면 가상 데이터 게임 공개일 때, 모름이면 숨김', () => {
+    expect(gameTabVisible(true, false, true)).toBe(true)
+    expect(gameTabVisible(true, true, true)).toBe(true)
+    expect(gameTabVisible(false, true, true)).toBe(false) // 스위치 ON — 가상 데이터 게임은 보이지 않는다
+    expect(gameTabVisible(null, true, true)).toBe(false)
+    expect(gameTabVisible(true, true, false)).toBe(true) // 관리자(real_market=true)도 스위치 OFF 면 가상 데이터 게임
+    expect(gameTabVisible(false, true, false)).toBe(true)
+    expect(gameTabVisible(true, false, false)).toBe(false) // 스위치 OFF + 가상 게임 꺼짐 → 숨김(실시간으로 대신 보이지 않음)
+    expect(gameTabVisible(false, false, false)).toBe(false)
+    expect(gameTabVisible(true, true, null)).toBe(false)
+    expect(gameTabVisible(undefined, undefined, undefined)).toBe(false)
     expect(eduGameVisible(null)).toBe(false)
   })
-  it('진입 화면 — 둘 다 알 때까지 loading, 그다음 edu·realtime·both·none', () => {
-    expect(gameEntryMode(null, null)).toBe('loading')
-    expect(gameEntryMode(true, null)).toBe('loading') // 실시간을 먼저 그렸다가 전환 탭으로 다시 마운트되지 않게
-    expect(gameEntryMode(false, null)).toBe('loading')
-    expect(gameEntryMode(null, true)).toBe('loading')
-    expect(gameEntryMode(false, true)).toBe('edu')
-    expect(gameEntryMode(true, true)).toBe('both')
-    expect(gameEntryMode(true, false)).toBe('realtime')
-    expect(gameEntryMode(false, false)).toBe('none')
-    expect(gameEntryMode(null, false)).toBe('loading')
+  it('진입 화면 — 스위치 모름이면 loading, ON → realtime/none, OFF → edu/none. both 는 없다', () => {
+    expect(gameEntryMode(true, true, null)).toBe('loading')
+    expect(gameEntryMode(null, null, null)).toBe('loading')
+    expect(gameEntryMode(null, true, true)).toBe('loading') // 실시간 허용 판정을 기다린다
+    expect(gameEntryMode(true, true, true)).toBe('realtime')
+    expect(gameEntryMode(true, false, true)).toBe('realtime')
+    expect(gameEntryMode(false, true, true)).toBe('none')
+    expect(gameEntryMode(true, true, false)).toBe('edu') // 관리자도 스위치 OFF 면 가상 데이터 게임
+    expect(gameEntryMode(null, true, false)).toBe('edu')
+    expect(gameEntryMode(false, true, false)).toBe('edu')
+    expect(gameEntryMode(true, false, false)).toBe('none')
+    expect(gameEntryMode(false, false, false)).toBe('none')
   })
 })

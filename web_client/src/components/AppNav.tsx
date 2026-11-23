@@ -1,7 +1,7 @@
 import type { MouseEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { useScreenerFeatures } from '../hooks/useScreenerFeatures'
-import { useEduGameAccess, useGameAccess } from '../hooks/useGameAccess'
+import { useEduGameAccess, useGameAccess, useRealMarketSwitch } from '../hooks/useGameAccess'
 import { FUND_LOGIN_DESCRIPTION, FUNDS_PATH, fundNavAction, isLoginGatedSection } from '../lib/fundGate'
 import { visibleSections, type Section } from '../lib/navSections'
 import { useAuthStore } from '../store/auth'
@@ -53,7 +53,7 @@ const ITEMS: { key: Section; to: string; label: string; icon: JSX.Element }[] = 
 
 /** 스위치에 맞는 메뉴 — 묻는 중·실패면 스크리너·게임을 뺀다 */
 function useNavItems() {
-  const visible = visibleSections(useScreenerFeatures(), useGameAccess(), useEduGameAccess())
+  const visible = visibleSections(useScreenerFeatures(), useGameAccess(), useEduGameAccess(), useRealMarketSwitch())
   return ITEMS.filter((it) => visible.includes(it.key))
 }
 

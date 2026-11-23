@@ -44,27 +44,47 @@ export function eduEnabledOf(state: { enabled?: boolean } | null | undefined): b
   return state?.enabled === true;
 }
 
-/**
- * 하단 게임 탭 노출 — 실제 시세 게임(real_market) 또는 교육용 종가 게임(edu) 중 하나라도 열려 있으면.
- * 합성 데이터 게임이라 A안(시세 비노출)과 무관하게 열 수 있다(docs/edu_synthetic_daily_game_spec_and_plan.md 3.2)
- */
-export function gameTabVisible(realMarket: boolean | null | undefined, edu: boolean | null | undefined): boolean {
-  return realMarket === true || edu === true;
+/** edu/state 응답에서 게임 분기에 쓰는 두 값 */
+export type EduGate = { enabled: boolean; realMarketSwitch: boolean };
+
+/** edu/state 응답 → { enabled, realMarketSwitch(관리자 전역 REAL_MARKET) }. 응답·필드 없음은 false(닫힘) */
+export function eduGateOf(state: { enabled?: boolean; real_market_switch?: boolean } | null | undefined): EduGate {
+  return { enabled: eduEnabledOf(state), realMarketSwitch: state?.real_market_switch === true };
 }
 
-/** 게임 탭 화면 — loading: 판단값을 묻는 중(아무 게임도 마운트하지 않음), none: 안내 카드 */
-export type GameTabMode = 'loading' | 'real' | 'edu' | 'both' | 'none';
+/**
+ * 하단 게임 탭 노출 — 관리자 전역 스위치(REAL_MARKET, edu/state 의 real_market_switch) 하나로 정한다.
+ * 스위치 ON → 실시간 게임만(요청자 기준 real_market 허용일 때), OFF → 가상 데이터 게임만(edu 공개일 때). 스위치 모름·실패는 숨김.
+ * 웹 web_client/src/lib/marketAccess.ts 의 gameTabVisible 과 같은 규칙
+ */
+export function gameTabVisible(
+  realMarket: boolean | null | undefined,
+  edu: boolean | null | undefined,
+  realMarketSwitch: boolean | null | undefined,
+): boolean {
+  if (realMarketSwitch === true) return realMarket === true;
+  if (realMarketSwitch === false) return edu === true;
+  return false;
+}
+
+/** 게임 탭 화면 — loading: 판단값을 묻는 중(아무 게임도 마운트하지 않음), none: 안내 카드. 두 게임을 함께 보이는 경우는 없다 */
+export type GameTabMode = 'loading' | 'real' | 'edu' | 'none';
 
 /**
- * 게임 탭에 무엇을 그릴지. 두 판단값이 다 와야 정한다 — 실시간 게임 화면을 그렸다가 세그먼트 화면으로 다시 마운트되지 않게.
- * real=실시간만(기존 그대로), edu=종가 게임만, both=상단 세그먼트로 전환, none=둘 다 닫힘(기존 안내 카드)
+ * 게임 탭에 무엇을 그릴지 — 스위치 값을 알 때까지 loading.
+ * 스위치 ON → real(실시간 허용일 때, 기존 그대로) / none, OFF → edu(가상 데이터 게임 공개일 때) / none
  */
-export function gameTabMode(realMarket: boolean | null | undefined, edu: boolean | null | undefined): GameTabMode {
-  if (realMarket == null || edu == null) return 'loading';
-  if (realMarket && edu) return 'both';
-  if (realMarket) return 'real';
-  if (edu) return 'edu';
-  return 'none';
+export function gameTabMode(
+  realMarket: boolean | null | undefined,
+  edu: boolean | null | undefined,
+  realMarketSwitch: boolean | null | undefined,
+): GameTabMode {
+  if (realMarketSwitch == null) return 'loading';
+  if (realMarketSwitch) {
+    if (realMarket == null) return 'loading';
+    return realMarket ? 'real' : 'none';
+  }
+  return edu === true ? 'edu' : 'none';
 }
 
 /** 종목 상세 링크아웃(설계 3-4 "시세는 증권사 앱에서") — 포털 종목 화면 주소(링크만, 내용을 가져오지 않음). 6자리 코드만 */

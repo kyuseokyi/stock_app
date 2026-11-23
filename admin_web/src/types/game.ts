@@ -74,8 +74,9 @@ export interface GameSettings {
 export type ChartInterval = 'day' | '1m' | '5m' | '15m' | '60m'
 
 // 기능 on/off (Phase 5b). 출처: game_dtos.FeatureFlagResponse
-// REAL_MARKET = 실제 시세 게임(A안 — 기본 꺼짐, 켜려면 KRX/코스콤 라이선스 필요)
-// EDU_DAILY_GAME = 교육용 합성 종가 게임(기본 켜짐). 서버가 모르는 키를 더 보내도 화면은 FLAG_META 에 있는 것만 그린다
+// REAL_MARKET = 실시간(실제 시세) 게임 스위치(A안 — 기본 꺼짐, 켜려면 KRX/코스콤 라이선스 필요).
+//   게임 모드도 이 값 하나로 정한다: ON → 사용자에게 실시간 게임만, OFF → 가상 데이터(교육용 종가) 게임만
+// EDU_DAILY_GAME = 가상 데이터(교육용 합성 종가) 게임(기본 켜짐) — REAL_MARKET OFF 일 때 표시. 서버가 모르는 키를 더 보내도 화면은 FLAG_META 에 있는 것만 그린다
 export type FeatureFlagKey = 'QUIZ' | 'STREAK' | 'REAL_MARKET' | 'EDU_DAILY_GAME'
 
 export interface FeatureFlag {
