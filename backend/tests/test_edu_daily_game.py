@@ -756,3 +756,136 @@ async def test_roi_clamped_to_column_limit(maker):
     acc = EduGameAccount(cash_balance=Decimal("5000000000"), bonus_cash=Decimal(0), max_roi=Decimal(0))
     svc.refresh_totals(acc, season, None)
     assert acc.current_roi == svc.ROI_LIMIT == acc.max_roi
+
+
+# ---------------------------------------------------------------- 독립 검토 반영(2차)
+async def test_account_create_conflict_keeps_same_session_user_usable(maker, monkeypatch):
+    """계좌 동시 생성 충돌(세이브포인트) 뒤에도 같은 세션에서 읽은 user 를 그대로 쓴다 — 500 아님."""
+    u = await _user(maker)
+    async with maker() as db:
+        season = await svc.get_or_create_active_season(db)
+        db.add(EduGameAccount(user_id=u.id, season_id=season.id))  # 다른 요청이 먼저 만든 계좌
+        await db.commit()
+    real = svc._account
+    calls = {"n": 0}
+
+    async def racing(db, user_id, season_id, *, lock=False):
+        calls["n"] += 1
+        return None if calls["n"] == 1 else await real(db, user_id, season_id, lock=lock)
+
+    monkeypatch.setattr(svc, "_account", racing)
+    redis = fake_aioredis.FakeRedis(decode_responses=True)
+    async with maker() as db:
+        user = await db.get(User, u.id)  # 요청 인증과 같은 세션에서 읽은 객체
+        out = await svc.submit_daily_action(db, redis, user, {"action": "HOLD_WATCH"})
+    assert out["action"]["action_type"] == "HOLD_WATCH"
+
+
+async def test_bootstrap_conflict_keeps_same_session_user_usable(maker, monkeypatch):
+    u = await _user(maker, nickname="같은세션")
+    async with maker() as db:
+        await svc.get_or_create_active_season(db)
+    real = svc._active_season
+
+    def racing_factory():
+        calls = {"n": 0}
+
+        async def racing(db, *, lock=None):
+            calls["n"] += 1
+            return None if calls["n"] == 1 else await real(db, lock=lock)
+        return racing
+
+    redis = fake_aioredis.FakeRedis(decode_responses=True)
+    monkeypatch.setattr(svc, "_active_season", racing_factory())
+    async with maker() as db:
+        user = await db.get(User, u.id)
+        state = await svc.get_edu_state(db, user)
+        assert state["logged_in"] is True and state["season"]["season_number"] == 1
+    monkeypatch.setattr(svc, "_active_season", racing_factory())
+    async with maker() as db:
+        user = await db.get(User, u.id)
+        out = await svc.submit_daily_action(db, redis, user, {"action": "HOLD_WATCH"})
+        assert out["action"]["day_index"] == 120
+    monkeypatch.setattr(svc, "_active_season", racing_factory())
+    async with maker() as db:
+        user = await db.get(User, u.id)
+        board = await svc.get_leaderboard(db, user)
+        assert board["my_rank"]["nickname"] == "같은세션"
+    monkeypatch.setattr(svc, "_active_season", racing_factory())
+    async with maker() as db:
+        user = await db.get(User, u.id)
+        assert len((await svc.get_history(db, user))["actions"]) == 1
+    async with maker() as db:
+        assert (await db.execute(select(func.count()).select_from(EduGameSeason))).scalar() == 1
+
+
+@pytest.mark.parametrize("cash, roi", [(Decimal("5000000"), Decimal("-50.0000")), (Decimal("20000000"), Decimal("100.0000"))])
+async def test_hold_watch_bonus_keeps_roi(api, maker, cash, roi):
+    client, set_user = api
+    u = await _user(maker)
+    set_user(u)
+    await client.get("/api/game/edu/state")
+    season = await _season(maker)
+    async with maker() as db:
+        db.add(EduGameAccount(user_id=u.id, season_id=season.id, cash_balance=cash, total_asset=cash,
+                              current_roi=roi, max_roi=max(roi, Decimal(0))))
+        await db.commit()
+    r = await client.post("/api/game/edu/action", json={"action": "HOLD_WATCH"})
+    assert r.status_code == 200 and r.json()["bonus_cash_awarded"] == 10000.0
+    acc = await _account(maker, u.id)
+    assert acc.cash_balance == cash + Decimal("10000")
+    assert acc.current_roi == roi  # 보너스가 ROI 를 0 쪽으로 끌어당기지 않는다
+    assert acc.bonus_cash == (Decimal("10000") / (1 + roi / 100)).quantize(Decimal("0.01"))
+
+
+async def test_stale_day_index_is_409_and_matching_day_ok(api, maker):
+    client, set_user = api
+    set_user(await _user(maker))
+    day = (await client.get("/api/game/edu/state")).json()["season"]["current_day_index"]
+    await _advance(maker)  # 사용자가 화면을 보는 사이 새 봉이 열림
+    r = await client.post("/api/game/edu/action", json={"action": "HOLD_WATCH", "day_index": day})
+    assert r.status_code == 409 and r.json() == {"detail": {"code": "STALE_DAY", "message": svc.MSG_STALE_DAY}}
+    r = await client.post("/api/game/edu/action", json={"action": "HOLD_WATCH", "day_index": day + 1})
+    assert r.status_code == 200 and r.json()["action"]["day_index"] == day + 1
+
+
+async def test_settlement_notes_accumulate_newest_first(api, maker, monkeypatch):
+    """보유만 하고 며칠 참가하지 않아도 정산 기록이 덮어써지지 않는다(최근 것이 앞, 200자 제한)."""
+    client, set_user = api
+    u = await _user(maker)
+    set_user(u)
+    p = await _close(client)
+    await client.post("/api/game/edu/action", json=_enter(sl=7, tp=15))
+    for _ in range(2):
+        _patch_next(monkeypatch, p, eng.round_tick(p * 1.01), eng.round_tick(p * 0.99), p)
+        await _advance(maker)
+    note = (await client.get("/api/game/edu/history")).json()["actions"][0]["settlement_note"]
+    assert note.startswith("Day 122:") and "Day 121:" in note and len(note) <= 200
+    for _ in range(10):
+        _patch_next(monkeypatch, p, eng.round_tick(p * 1.01), eng.round_tick(p * 0.99), p)
+        await _advance(maker)
+    note = (await client.get("/api/game/edu/history")).json()["actions"][0]["settlement_note"]
+    assert note.startswith("Day 132:") and len(note) <= 200
+
+
+async def test_total_asset_clamped_to_column_limit(maker):
+    async with maker() as db:
+        season = await svc.get_or_create_active_season(db, date(2026, 11, 23))
+    acc = EduGameAccount(cash_balance=Decimal("99999999999999"), bonus_cash=Decimal(0), max_roi=Decimal(0))
+    svc.refresh_totals(acc, season, None)
+    assert acc.total_asset == svc.ASSET_LIMIT
+
+
+async def test_advance_commit_conflict_returns_skipped_with_season_id(maker, monkeypatch):
+    """다른 정산이 같은 봉을 먼저 만든 경우(uq_edu_season_day) — rollback 뒤에도 season_id 를 안전하게 돌려준다."""
+    async with maker() as db:
+        sid = (await svc.get_or_create_active_season(db, date(2026, 11, 23))).id
+    real = eng.generate_next_candle
+
+    def dup(seed, season_id, history, regime, days_left, override=None):
+        bar, r, d = real(seed, season_id, history, regime, days_left, override)
+        bar["day_index"] = history[-1]["day_index"]  # 이미 있는 봉 번호 → commit 시 유일 제약 충돌
+        return bar, r, d
+
+    monkeypatch.setattr(eng, "generate_next_candle", dup)
+    assert await _advance(maker) == {"status": "skipped", "season_id": sid, "day_index": 119}

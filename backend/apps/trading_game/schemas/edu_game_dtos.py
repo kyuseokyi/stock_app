@@ -137,6 +137,9 @@ class EduActionRequest(BaseModel):
     leverage: Literal[1, 2, 5] = 1
     stop_loss_pct: Literal[3, 5, 7] | None = None
     take_profit_pct: Literal[5, 10, 15] | None = None
+    # 화면에 보던 봉 번호(state.season.current_day_index). 보내면 그 사이 새 봉이 열렸을 때 409 STALE_DAY.
+    # 생략(옛 클라이언트)하면 지금 봉 종가로 그대로 처리한다.
+    day_index: int | None = None
 
 
 class EduActionResponse(BaseModel):

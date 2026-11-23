@@ -23,7 +23,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from shared.game_models import EduGameAccount, EduGameCandle, EduGameDailyAction, EduGameSeason
 from shared.models import User
-from apps.trading_game.services import academy_service, streak_service
+from apps.trading_game.services import academy_service, reward_service, streak_service
 from apps.trading_game.services import edu_synthetic_engine as engine
 
 log = logging.getLogger("trading_game.edu_game")
@@ -40,7 +40,9 @@ RATIOS = (Decimal("0.25"), Decimal("0.5"), Decimal("1.0"))
 BASE_LEVERAGES = (1, 2)
 STOP_LOSS_PCTS = (3, 5, 7)
 TAKE_PROFIT_PCTS = (5, 10, 15)
-HOLD_WATCH_BONUS = Decimal("10000")   # 관망 학습 보너스(원금 조정분 bonus_cash — ROI 에는 영향 없음)
+# 관망 학습 보너스 — 현금 10,000원 지급. 원금(bonus_cash)은 기존 reward_service.principal_increment 와 같은 식
+# (지급액 / (1 + 현재 ROI))만큼 늘려 지급 직후 ROI 가 그대로 유지되게 한다(랭킹에 유리·불리 없음).
+HOLD_WATCH_BONUS = Decimal("10000")
 MIN_ENTRY_AMOUNT = Decimal("10000")
 STATE_BARS = 120
 LEADERBOARD_LIMIT = 50
@@ -52,10 +54,12 @@ ENTER_ACTIONS = {"ENTER_LONG": LONG, "ENTER_SHORT": SHORT}
 FLAT_ACTIONS = {"ENTER_LONG", "ENTER_SHORT", "HOLD_WATCH"}
 HOLDING_ACTIONS = {"KEEP_POS", "PARTIAL_CLOSE", "FULL_CLOSE"}
 
+MSG_STALE_DAY = "새 종가 캔들이 열렸어요. 화면을 새로고침한 뒤 다시 결정해 주세요."
 MSG_ALREADY = "오늘은 이미 게임에 참가했어요. 내일 새 종가 캔들이 열리면 다시 참가할 수 있어요!"
 CENT = Decimal("0.01")
 PCT4 = Decimal("0.0001")
 ROI_LIMIT = Decimal("9999.9999")
+ASSET_LIMIT = Decimal("9999999999999.99")  # NUMERIC(15,2) 상한
 
 
 class EduGameError(Exception):
@@ -196,7 +200,8 @@ def refresh_totals(acc: EduGameAccount, season: EduGameSeason, mark: Decimal | N
     if acc.pos_side and acc.pos_size_amount is not None and mark is not None:
         size = Decimal(acc.pos_size_amount)
         total += size + position_pnl(acc.pos_side, acc.pos_entry_price, mark, size, acc.pos_leverage)
-    acc.total_asset = total.quantize(CENT, rounding=ROUND_HALF_UP)
+    # NUMERIC(15,2) 상한 — 넘치면 그날 정산 트랜잭션 전체가 실패하므로 고정(ROI 는 고정 전 값으로 계산)
+    acc.total_asset = min(total, ASSET_LIMIT).quantize(CENT, rounding=ROUND_HALF_UP)
     principal = _principal(acc, season)
     roi = ((total / principal - 1) * 100).quantize(PCT4, rounding=ROUND_HALF_UP) if principal else Decimal(0)
     roi = max(min(roi, ROI_LIMIT), -ROI_LIMIT)  # NUMERIC(8,4) 상한 — 넘치면 그날 정산 트랜잭션 전체가 실패하므로 고정
@@ -284,26 +289,28 @@ async def _insert_season(
 async def get_or_create_active_season(db: AsyncSession, today: date | None = None) -> EduGameSeason:
     """활성 교육 시즌. 없으면 시즌 1기(또는 다음 번호) + 워밍업 120봉 자동 생성.
 
-    동시 요청은 ACTIVE 부분 유일 인덱스·season_number 유일 제약으로 1개만 성공 — 진 쪽은 rollback 후 다시 읽는다.
+    동시 요청은 ACTIVE 부분 유일 인덱스·season_number 유일 제약으로 1개만 성공 — 진 쪽은 세이브포인트만 되돌리고
+    다시 읽는다. 바깥 트랜잭션을 rollback 하지 않으므로 같은 세션에서 이미 읽은 객체(요청 사용자 등)가 만료되지 않는다.
     """
     season = await _active_season(db)
     if season is not None:
         return season
     today = today or now_kst().date()
     try:
-        season = await _insert_season(
-            db, title=DEFAULT_TITLE, theme_category=DEFAULT_THEME, hide_name=False,
-            start_price=engine.START_PRICE, today=today,
-        )
-        await db.commit()
-        log.info("교육 시즌 자동 생성 id=%s no=%s", season.id, season.season_number)
-        return season
+        async with db.begin_nested():
+            season = await _insert_season(
+                db, title=DEFAULT_TITLE, theme_category=DEFAULT_THEME, hide_name=False,
+                start_price=engine.START_PRICE, today=today,
+            )
     except IntegrityError:
-        await db.rollback()
         season = await _active_season(db)
         if season is None:
             raise
         return season
+    season_id, season_no = season.id, season.season_number
+    await db.commit()
+    log.info("교육 시즌 자동 생성 id=%s no=%s", season_id, season_no)
+    return season
 
 
 async def start_new_season(
@@ -441,11 +448,12 @@ async def _leverage_options(db: AsyncSession, user_id: int | None) -> tuple[list
 
 async def get_edu_state(db: AsyncSession, user: User | None, *, now: datetime | None = None) -> dict:
     now = now or now_kst()
+    user_id = user.id if user is not None else None  # 이후 commit·세이브포인트와 무관하게 지역 변수만 쓴다
     season = await get_or_create_active_season(db, now.astimezone(KST).date())
     bars = await _last_candles(db, season.id, STATE_BARS)
     last = bars[-1]
     mark = Decimal(last.close)
-    leverages, unlocked = await _leverage_options(db, user.id if user else None)
+    leverages, unlocked = await _leverage_options(db, user_id)
     state = {
         "enabled": True,
         "season": season_dict(season),
@@ -458,7 +466,7 @@ async def get_edu_state(db: AsyncSession, user: User | None, *, now: datetime | 
         },
         "crowd": await crowd(db, season.id, season.current_day_index),
         "next_settlement_at": next_settlement_at(now, season.last_advanced_date),
-        "logged_in": user is not None,
+        "logged_in": user_id is not None,
         "today_submitted": False,
         "today_action": None,
         "account": None,
@@ -469,8 +477,8 @@ async def get_edu_state(db: AsyncSession, user: User | None, *, now: datetime | 
         },
         "disclaimer": DISCLAIMER,
     }
-    if user is not None:
-        acc = await _account(db, user.id, season.id)
+    if user_id is not None:
+        acc = await _account(db, user_id, season.id)
         if acc is not None:
             state["account"] = account_dict(acc, mark)
             state["today_submitted"] = acc.last_action_day_index == season.current_day_index
@@ -484,8 +492,9 @@ async def get_edu_state(db: AsyncSession, user: User | None, *, now: datetime | 
 
 
 async def get_history(db: AsyncSession, user: User, *, limit: int = 200) -> dict:
+    user_id = user.id
     season = await get_or_create_active_season(db)
-    acc = await _account(db, user.id, season.id)
+    acc = await _account(db, user_id, season.id)
     actions: list = []
     if acc is not None:
         actions = (await db.execute(
@@ -496,6 +505,7 @@ async def get_history(db: AsyncSession, user: User, *, limit: int = 200) -> dict
 
 
 async def get_leaderboard(db: AsyncSession, user: User | None, *, limit: int = LEADERBOARD_LIMIT) -> dict:
+    user_id, nickname_me = (user.id, user.nickname) if user is not None else (None, None)
     season = await get_or_create_active_season(db)
     order = (EduGameAccount.current_roi.desc(), EduGameAccount.total_asset.desc(), EduGameAccount.created_at.asc())
     rows = (await db.execute(
@@ -515,15 +525,15 @@ async def get_leaderboard(db: AsyncSession, user: User | None, *, limit: int = L
         top.append(row(acc, nickname, rank))
 
     mine = None
-    if user is not None:
-        acc = await _account(db, user.id, season.id)
+    if user_id is not None:
+        acc = await _account(db, user_id, season.id)
         if acc is not None:
             higher = (await db.execute(
                 select(func.count()).select_from(EduGameAccount).where(
                     EduGameAccount.season_id == season.id, EduGameAccount.current_roi > acc.current_roi,
                 )
             )).scalar() or 0
-            mine = row(acc, user.nickname, higher + 1)
+            mine = row(acc, nickname_me, higher + 1)
     return {"season_id": season.id, "top": top, "my_rank": mine}
 
 
@@ -531,14 +541,15 @@ async def get_leaderboard(db: AsyncSession, user: User | None, *, limit: int = L
 async def _ensure_account(db: AsyncSession, user_id: int, season: EduGameSeason) -> None:
     if await _account(db, user_id, season.id) is not None:
         return
-    db.add(EduGameAccount(
-        user_id=user_id, season_id=season.id, cash_balance=season.initial_cash,
-        total_asset=season.initial_cash, bonus_cash=Decimal(0),
-    ))
     try:
-        await db.commit()
+        async with db.begin_nested():  # 세이브포인트 — 충돌해도 바깥 트랜잭션(읽어 둔 객체)은 그대로
+            db.add(EduGameAccount(
+                user_id=user_id, season_id=season.id, cash_balance=season.initial_cash,
+                total_asset=season.initial_cash, bonus_cash=Decimal(0),
+            ))
     except IntegrityError:  # 같은 유저 동시 첫 제출 — 이미 생겼으면 그대로 사용
-        await db.rollback()
+        return
+    await db.commit()
 
 
 async def submit_daily_action(
@@ -548,23 +559,27 @@ async def submit_daily_action(
     now = (now or now_kst()).astimezone(KST)
     today = now.date()
     action = payload["action"]
+    user_id = user.id  # 세션 객체 만료와 무관하게 지역 변수만 쓴다
 
     season = await get_or_create_active_season(db, today)
     if action in ENTER_ACTIONS and payload.get("leverage", 1) == academy_service.ACADEMY_LEVERAGE \
-            and not await academy_service.is_unlocked(db, user.id):
+            and not await academy_service.is_unlocked(db, user_id):
         raise EduGameError(
             "LEVERAGE_LOCKED", "5배 레버리지는 아카데미 리스크 관리 퀴즈를 통과해야 사용할 수 있습니다.", 403,
         )
-    await _ensure_account(db, user.id, season)
+    await _ensure_account(db, user_id, season)
 
     # 잠금: 시즌(공유) → 계좌(배타). 정산이 진행 중이면 끝난 뒤의 day_index 로 판정된다.
     season = await _active_season(db, lock="share")
     if season is None:
         raise EduGameError("NO_ACTIVE_SEASON", "진행 중인 교육 시즌이 없어요.", 409)
-    acc = await _account(db, user.id, season.id, lock=True)
+    acc = await _account(db, user_id, season.id, lock=True)
     if acc is None:
         raise EduGameError("NO_ACTIVE_SEASON", "진행 중인 교육 시즌이 없어요.", 409)
     day = season.current_day_index
+    expected_day = payload.get("day_index")
+    if expected_day is not None and expected_day != day:  # 사용자가 본 봉과 지금 봉이 다르면 체결하지 않는다
+        raise EduGameError("STALE_DAY", MSG_STALE_DAY, 409)
     if acc.last_action_day_index == day:
         raise already_participated()
 
@@ -579,7 +594,7 @@ async def submit_daily_action(
         raise EduGameError("ACTION_NOT_ALLOWED", msg, 409)
 
     row = EduGameDailyAction(
-        account_id=acc.id, season_id=season.id, user_id=user.id, day_index=day, action_date=today,
+        account_id=acc.id, season_id=season.id, user_id=user_id, day_index=day, action_date=today,
         action_type=action, execution_price=price, leverage=1,
     )
     bonus = Decimal(0)
@@ -605,8 +620,9 @@ async def submit_daily_action(
         message = f"{'상승' if side == LONG else '하락'} 진입을 예약했어요. 다음 종가 캔들에서 손익이 정산됩니다."
     elif action == "HOLD_WATCH":
         bonus = HOLD_WATCH_BONUS
+        refresh_totals(acc, season, price)  # 관망은 무포지션 — 지급 직전 ROI 를 현재 값으로
+        acc.bonus_cash = Decimal(acc.bonus_cash) + reward_service.principal_increment(bonus, acc.current_roi)
         acc.cash_balance = Decimal(acc.cash_balance) + bonus
-        acc.bonus_cash = Decimal(acc.bonus_cash) + bonus
         message = "쉬어 가는 것도 중요한 투자 기술이에요! 관망 학습 보너스를 받았어요."
     elif action == "KEEP_POS":
         sl_pct, tp_pct = payload.get("stop_loss_pct"), payload.get("take_profit_pct")
@@ -661,10 +677,10 @@ async def submit_daily_action(
 
     streak_value = None
     try:  # STREAK 플래그·기존 동작 그대로(꺼져 있으면 None). 실패해도 제출은 유지
-        streak = await streak_service.touch(db, redis, user.id, today=today)
+        streak = await streak_service.touch(db, redis, user_id, today=today)
         streak_value = streak.current_streak if streak else None
     except Exception:  # noqa: BLE001
-        log.warning("교육 게임 연속 출석 갱신 실패 user=%s", user.id, exc_info=True)
+        log.warning("교육 게임 연속 출석 갱신 실패 user=%s", user_id, exc_info=True)
         await db.rollback()
     result.update(bonus_cash_awarded=float(bonus), streak=streak_value, message=message)
     return result
@@ -680,6 +696,7 @@ async def advance_day_and_settle(db: AsyncSession, *, force: bool = False, now: 
     season = await _active_season(db, lock="update")
     if season is None:
         return {"status": "no_season"}
+    season_id = season.id  # commit 실패(rollback) 뒤에도 만료된 객체를 읽지 않게
     if not force and season.last_advanced_date == today:
         return {"status": "skipped", "season_id": season.id, "day_index": season.current_day_index}
 
@@ -690,6 +707,11 @@ async def advance_day_and_settle(db: AsyncSession, *, force: bool = False, now: 
     )
     db.add(_candle_row(season.id, bar))
     day = bar["day_index"]
+    try:
+        await db.flush()  # 봉 유일 제약을 여기서 확인 — 이후 조회의 autoflush 에서 예외가 새지 않게
+    except IntegrityError:  # 같은 봉을 동시에 만든 경우(uq_edu_season_day) — 먼저 끝난 쪽만 유효
+        await db.rollback()
+        return {"status": "skipped", "season_id": season_id, "day_index": day - 1}
     season.current_day_index = day
     season.current_regime, season.regime_days_left = regime, days_left
     season.next_regime_override = None
@@ -724,30 +746,42 @@ async def advance_day_and_settle(db: AsyncSession, *, force: bool = False, now: 
         await db.commit()
     except IntegrityError:  # 같은 봉을 동시에 만든 경우(uq_edu_season_day) — 먼저 끝난 쪽만 유효
         await db.rollback()
-        return {"status": "skipped", "season_id": season.id, "day_index": day - 1}
+        return {"status": "skipped", "season_id": season_id, "day_index": day - 1}
     closed = sum(1 for s in results.values() if s.closed)
     log.info("교육 게임 정산 season=%s day=%s close=%s settled=%s closed=%s",
-             season.id, day, bar["close"], len(results), closed)
-    return {"status": "advanced", "season_id": season.id, "day_index": day, "close": bar["close"],
+             season_id, day, bar["close"], len(results), closed)
+    return {"status": "advanced", "season_id": season_id, "day_index": day, "close": bar["close"],
             "regime": regime, "settled": len(results), "closed": closed}
 
 
 async def _annotate_actions(db: AsyncSession, season_id: int, day: int, results: dict) -> None:
-    """정산 결과를 각 계좌의 가장 최근 참가 기록에 남긴다(청산이면 realized_pnl 누적)."""
+    """정산 결과를 각 계좌의 가장 최근 참가 기록에 남긴다(청산이면 realized_pnl 누적).
+
+    보유만 하고 며칠 참가하지 않으면 같은 행에 매일 정산이 쌓인다 — 덮어쓰지 않고 최신 결과를 앞에 붙이며
+    컬럼 길이(200자)를 넘는 오래된 부분은 잘린다. 조회는 시즌 단위 2번(전날 참가 행 + 그 밖 계좌의 최근 행)으로 끝낸다.
+    """
+    acc_ids = list(results)
     recent = (await db.execute(select(EduGameDailyAction).where(
         EduGameDailyAction.season_id == season_id, EduGameDailyAction.day_index == day - 1,
-        EduGameDailyAction.account_id.in_(list(results)),
+        EduGameDailyAction.account_id.in_(acc_ids),
     ))).scalars().all()
     by_acc = {a.account_id: a for a in recent}
+    missing = [a for a in acc_ids if a not in by_acc]
+    if missing:
+        latest = (
+            select(EduGameDailyAction.account_id, func.max(EduGameDailyAction.day_index).label("d"))
+            .where(EduGameDailyAction.season_id == season_id, EduGameDailyAction.account_id.in_(missing))
+            .group_by(EduGameDailyAction.account_id).subquery()
+        )
+        rows = (await db.execute(select(EduGameDailyAction).join(
+            latest, (EduGameDailyAction.account_id == latest.c.account_id) & (EduGameDailyAction.day_index == latest.c.d),
+        ))).scalars().all()
+        by_acc.update({a.account_id: a for a in rows})
     for acc_id, st in results.items():
         row = by_acc.get(acc_id)
         if row is None:
-            row = (await db.execute(
-                select(EduGameDailyAction).where(EduGameDailyAction.account_id == acc_id)
-                .order_by(EduGameDailyAction.day_index.desc()).limit(1)
-            )).scalar_one_or_none()
-        if row is None:
             continue
-        row.settlement_note = f"Day {day}: {st.note}"[:200]
+        note = f"Day {day}: {st.note}"
+        row.settlement_note = (f"{note} / {row.settlement_note}" if row.settlement_note else note)[:200]
         if st.closed:
             row.realized_pnl = Decimal(row.realized_pnl or 0) + st.pnl
