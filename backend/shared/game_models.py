@@ -14,6 +14,7 @@ from datetime import date, datetime
 from decimal import Decimal
 
 from sqlalchemy import (
+    BigInteger,
     Boolean,
     CheckConstraint,
     Date,
@@ -461,3 +462,148 @@ class GameSetting(Base):
     updated_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=True
     )
+
+
+# ---------------------------------------------------------------- 교육용 합성 종가 게임
+# 명세: docs/edu_synthetic_daily_game_spec_and_plan.md 4.1 — 기존 실시간 게임 테이블과 완전히 분리.
+# 서버가 자체 생성한 가상 일봉만 다루므로 시세 라이선스(REAL_MARKET)와 무관하다.
+
+
+class EduGameSeason(Base):
+    """교육용 합성 종가 시즌. ACTIVE 는 동시에 1개만(부분 유일 인덱스)."""
+
+    __tablename__ = "edu_game_seasons"
+    __table_args__ = (
+        UniqueConstraint("season_number", name="uq_edu_season_number"),
+        Index(
+            "uq_edu_one_active_season", "status", unique=True,
+            postgresql_where=text("status = 'ACTIVE'"), sqlite_where=text("status = 'ACTIVE'"),
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    season_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    synthetic_code: Mapped[str] = mapped_column(String(20), nullable=False)
+    title: Mapped[str] = mapped_column(String(100), nullable=False)
+    theme_category: Mapped[str] = mapped_column(String(50), nullable=False)
+    hide_name: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+    seed_key: Mapped[str] = mapped_column(String(64), nullable=False)  # 결정론적 캔들 난수 키(HMAC)
+    current_day_index: Mapped[int] = mapped_column(Integer, nullable=False, default=120, server_default="120")
+    current_regime: Mapped[str] = mapped_column(
+        String(30), nullable=False, default="ACCUMULATION", server_default="ACCUMULATION"
+    )
+    regime_days_left: Mapped[int] = mapped_column(Integer, nullable=False, default=8, server_default="8")
+    next_regime_override: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    initial_cash: Mapped[Decimal] = mapped_column(
+        Numeric(15, 2), nullable=False, default=INITIAL_CASH, server_default="10000000"
+    )
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="ACTIVE", server_default="ACTIVE")
+    last_advanced_date: Mapped[date | None] = mapped_column(Date, nullable=True)  # 마지막 정산 KST 날짜
+    start_date: Mapped[date] = mapped_column(Date, nullable=False)
+    end_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+
+class EduGameCandle(Base):
+    """합성 일봉 OHLCV + 그날의 교육 해설·지지/저항/POC."""
+
+    __tablename__ = "edu_game_candles"
+    __table_args__ = (
+        UniqueConstraint("season_id", "day_index", name="uq_edu_season_day"),
+        Index("idx_edu_candles_season_day", "season_id", "day_index"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    season_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("edu_game_seasons.id", ondelete="CASCADE"), nullable=False
+    )
+    day_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    display_date: Mapped[date] = mapped_column(Date, nullable=False)
+    open: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
+    high: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
+    low: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
+    close: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
+    volume: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    change_pct: Mapped[Decimal] = mapped_column(Numeric(8, 4), nullable=False, default=Decimal("0"), server_default="0")
+    regime: Mapped[str] = mapped_column(String(30), nullable=False)
+    pattern_tag: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    coach_comment: Mapped[str | None] = mapped_column(Text, nullable=True)
+    support_price: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
+    resistance_price: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
+    poc_price: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class EduGameAccount(Base):
+    """유저별 교육용 게임 계좌 + 단일 활성 포지션(pos_*). (user_id, season_id) 유일."""
+
+    __tablename__ = "edu_game_accounts"
+    __table_args__ = (UniqueConstraint("user_id", "season_id", name="uq_edu_user_season"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    season_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("edu_game_seasons.id", ondelete="CASCADE"), nullable=False
+    )
+    cash_balance: Mapped[Decimal] = mapped_column(
+        Numeric(15, 2), nullable=False, default=INITIAL_CASH, server_default="10000000"
+    )
+    # 관망 학습 보너스 등 원금 조정분 — 원금 = 시즌 initial_cash + bonus_cash (기존 게임 bonus_cash 와 같은 규칙)
+    bonus_cash: Mapped[Decimal] = mapped_column(Numeric(15, 2), nullable=False, default=Decimal("0"), server_default="0")
+    total_asset: Mapped[Decimal] = mapped_column(
+        Numeric(15, 2), nullable=False, default=INITIAL_CASH, server_default="10000000"
+    )
+    current_roi: Mapped[Decimal] = mapped_column(Numeric(8, 4), nullable=False, default=Decimal("0"), server_default="0")
+    max_roi: Mapped[Decimal] = mapped_column(Numeric(8, 4), nullable=False, default=Decimal("0"), server_default="0")
+    total_trades: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    win_trades: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    participation_days: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    last_action_day_index: Mapped[int | None] = mapped_column(Integer, nullable=True)  # 하루 1회 참가 판정 기준
+    last_action_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    pos_side: Mapped[str | None] = mapped_column(String(10), nullable=True)  # NULL | LONG | SHORT
+    pos_entry_price: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
+    pos_size_amount: Mapped[Decimal | None] = mapped_column(Numeric(15, 2), nullable=True)
+    pos_leverage: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
+    pos_stop_loss: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
+    pos_take_profit: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
+    pos_opened_day_index: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+
+class EduGameDailyAction(Base):
+    """하루 1회 참가 기록 + 다음 봉 정산 결과. (account_id, day_index) 유일 — 중복 참가 DB 방어."""
+
+    __tablename__ = "edu_game_daily_actions"
+    __table_args__ = (
+        UniqueConstraint("account_id", "day_index", name="uq_edu_account_day_index"),
+        Index("idx_edu_actions_season_day", "season_id", "day_index"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    account_id: Mapped[uuid.UUID] = mapped_column(
+        GUID(), ForeignKey("edu_game_accounts.id", ondelete="CASCADE"), nullable=False
+    )
+    season_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("edu_game_seasons.id", ondelete="CASCADE"), nullable=False
+    )
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    day_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    action_date: Mapped[date] = mapped_column(Date, nullable=False)
+    # ENTER_LONG | ENTER_SHORT | HOLD_WATCH | KEEP_POS | PARTIAL_CLOSE | FULL_CLOSE
+    action_type: Mapped[str] = mapped_column(String(20), nullable=False)
+    # 제출 직후 보유 방향(LONG|SHORT|NULL) — 참여자 심리(상승·하락·관망 비율) 집계용(명세 외 추가 컬럼)
+    side: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    ratio: Mapped[Decimal | None] = mapped_column(Numeric(5, 4), nullable=True)
+    leverage: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
+    stop_loss_price: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
+    take_profit_price: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
+    execution_price: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
+    realized_pnl: Mapped[Decimal | None] = mapped_column(Numeric(15, 2), nullable=True)
+    settlement_note: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)

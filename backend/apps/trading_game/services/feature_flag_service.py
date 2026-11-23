@@ -15,9 +15,9 @@ from shared.game_models import GameFeatureFlag
 
 log = logging.getLogger("trading_game.flags")
 
-KNOWN_FLAGS = ("QUIZ", "STREAK", "REAL_MARKET")
+KNOWN_FLAGS = ("QUIZ", "STREAK", "REAL_MARKET", "EDU_DAILY_GAME")
 # 행이 없을 때의 값 — REAL_MARKET 만 닫힘(KRX/코스콤 라이선스 없이 실제 시세를 내보내지 않게)
-DEFAULTS = {"QUIZ": True, "STREAK": True, "REAL_MARKET": False}
+DEFAULTS = {"QUIZ": True, "STREAK": True, "REAL_MARKET": False, "EDU_DAILY_GAME": True}  # EDU: 교육용 합성 종가 게임(기본 공개)
 CACHE_TTL_SECONDS = 30
 
 
