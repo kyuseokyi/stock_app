@@ -4,6 +4,7 @@ import { Pressable, RefreshControl, ScrollView, Text, TextInput, View } from 're
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 
+import { accountIdentityLabel } from '@/features/auth/account-identity';
 import { getSocialProviders, type SocialProvider, type SocialProviders } from '@/features/auth/api';
 import { currentAppVersion } from '@/features/app-update/app-info';
 import { DeleteAccountSheet } from '@/features/auth/delete-account-sheet';
@@ -134,6 +135,10 @@ export default function ProfileScreen() {
         <Card>
           <Text style={styles.nickname}>{user.nickname}</Text>
           <Text style={styles.role}>{user.role} 등급</Text>
+          {/* 계정 식별 — 관리자 회원관리의 어느 행인지 맞춰 보는 용도(회원 번호·로그인 방식) */}
+          <Text style={styles.identity} selectable>
+            {accountIdentityLabel(user)}
+          </Text>
         </Card>
 
         <Card style={styles.rankCard}>
@@ -259,6 +264,7 @@ const styles = StyleSheet.create((theme) => ({
   returnHint: { fontSize: 13, fontWeight: '600', color: theme.colors.primary },
   nickname: { fontSize: 18, fontWeight: '700', color: theme.colors.text },
   role: { fontSize: 13, color: theme.colors.textSecondary },
+  identity: { fontSize: 12, color: theme.colors.textSecondary },
   rankCard: { backgroundColor: theme.colors.primarySoft },
   rankLabel: { fontSize: 14, fontWeight: '600', color: theme.colors.primary },
   rankHint: { fontSize: 13, color: theme.colors.textSecondary },

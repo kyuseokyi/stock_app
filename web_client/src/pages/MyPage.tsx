@@ -8,6 +8,7 @@ import { showToast } from '../store/toast'
 import PageHeader from '../components/ui/PageHeader'
 import Card from '../components/ui/Card'
 import { INFO_NOTICE } from '../lib/terms'
+import { accountIdentityLabel } from '../lib/accountIdentity'
 import { useGameAccess } from '../hooks/useGameAccess'
 import { gameVisible } from '../lib/marketAccess'
 
@@ -50,6 +51,8 @@ export default function MyPage() {
       <Card>
         <p className="text-sm text-ink-muted">닉네임</p>
         <p className="mt-1 text-lg font-bold text-ink">{user.nickname ?? '이름 없음'}</p>
+        {/* 계정 식별 — 관리자 회원관리의 어느 행인지 맞춰 보는 용도(회원 번호·로그인 방식) */}
+        <p className="mt-1 text-xs text-ink-muted">{accountIdentityLabel(user)}</p>
       </Card>
 
       <Card padding="none" className="mt-3 overflow-hidden">

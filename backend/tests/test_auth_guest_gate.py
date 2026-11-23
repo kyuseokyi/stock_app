@@ -79,3 +79,12 @@ async def test_guest_gate_closed_hides_validation(client, env):
     r = await client.post(GUEST, json={})
     assert r.status_code == 404
     assert r.json() == {"detail": "Not Found"}
+
+
+async def test_guest_user_has_no_provider(client, env):
+    """게스트(개발용) 계정은 소셜 공급자가 없어 provider=null, FREE, 합성 이메일로 내려간다."""
+    env(guest="true")
+    r = await client.post(GUEST, json={"nickname": "주린이"})
+    assert r.status_code == 200, r.text
+    user = r.json()["user"]
+    assert user["provider"] is None and user["role"] == "FREE" and user["email"]

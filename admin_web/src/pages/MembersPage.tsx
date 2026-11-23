@@ -1,7 +1,14 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { listAdminUsers, setCommentBan, setMarketDataAccess, updateUserNickname } from '../api/moderation'
 import { apiErrorDetail, apiErrorMessage } from '../lib/apiError'
-import { formatDateTime, NICKNAME_MAX, providerLabel, validateNickname } from '../lib/moderation'
+import {
+  formatDateTime,
+  NICKNAME_MAX,
+  PROVIDER_FILTER_OPTIONS,
+  providerLabel,
+  validateNickname,
+  type ProviderFilter,
+} from '../lib/moderation'
 import { showToast } from '../lib/toast'
 import type { AdminUserOut } from '../types/api'
 
@@ -16,6 +23,7 @@ export default function MembersPage() {
   const [q, setQ] = useState('') // 실제 조회에 쓰는 검색어(검색 버튼/엔터로 확정)
   const [page, setPage] = useState(1)
   const [marketOnly, setMarketOnly] = useState(false) // 시세 열람 권한 있는 회원만 보기
+  const [provider, setProvider] = useState<ProviderFilter>('') // 로그인 방식 필터(''=전체)
   const [items, setItems] = useState<AdminUserOut[]>([])
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(false)
@@ -29,7 +37,7 @@ export default function MembersPage() {
     setLoading(true)
     setError('')
     try {
-      const res = await listAdminUsers(q, page, PAGE_SIZE, marketOnly)
+      const res = await listAdminUsers(q, page, PAGE_SIZE, marketOnly, provider)
       setItems(res.items)
       setTotal(res.total)
     } catch (e) {
@@ -37,7 +45,7 @@ export default function MembersPage() {
     } finally {
       setLoading(false)
     }
-  }, [q, page, marketOnly])
+  }, [q, page, marketOnly, provider])
 
   useEffect(() => {
     load()
@@ -150,7 +158,7 @@ export default function MembersPage() {
         <input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="닉네임 또는 이메일 검색"
+          placeholder="닉네임·이메일·회원 번호(#12) 검색"
           className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none"
         />
         <button
@@ -159,6 +167,21 @@ export default function MembersPage() {
         >
           검색
         </button>
+        <select
+          value={provider}
+          onChange={(e) => {
+            setPage(1)
+            setProvider(e.target.value as ProviderFilter)
+          }}
+          aria-label="가입 방식"
+          className="shrink-0 rounded-lg border border-slate-300 px-2 py-2 text-sm text-slate-700 focus:border-indigo-500 focus:outline-none"
+        >
+          {PROVIDER_FILTER_OPTIONS.map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label}
+            </option>
+          ))}
+        </select>
         <label className="flex shrink-0 items-center gap-1.5 text-sm text-slate-600">
           <input
             type="checkbox"

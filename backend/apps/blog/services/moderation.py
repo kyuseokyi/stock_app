@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from shared.models import BlogComment, User, UserRole
+from shared.models import AuthProvider, BlogComment, User, UserRole
 
 from .. import crud, moderation_schemas as ms, schemas
 from ..repositories import moderation_repo as repo
@@ -215,10 +215,32 @@ def admin_user_out(u: User) -> ms.AdminUserOut:
     )
 
 
+# users.id 는 PostgreSQL INTEGER — 범위를 넘는 숫자를 비교하면 DB 오류(500)라 ID 검색에서 뺀다
+_USER_ID_MAX = 2**31 - 1
+LOCAL_PROVIDER = "LOCAL"  # 로그인 방식 필터에서 'provider 없음'(관리자 LOCAL·게스트·심사 계정)
+
+
+def user_id_from_query(q: str | None) -> int | None:
+    """검색어가 숫자만(앞 '#' 허용)이면 회원 ID 로 본다. 0·범위 밖·숫자 아님은 None."""
+    text = (q or "").strip().removeprefix("#").strip()
+    if not text.isascii() or not text.isdigit():
+        return None
+    value = int(text)
+    return value if 0 < value <= _USER_ID_MAX else None
+
+
 async def admin_list_users(db: AsyncSession, q: str | None, page: int, size: int,
-                           market_data_access: bool | None = None) -> ms.AdminUserListOut:
-    total, users = await repo.list_users(db, q=(q or "").strip() or None, page=page, size=size,
-                                         market_data_access=market_data_access)
+                           market_data_access: bool | None = None,
+                           provider: str | None = None) -> ms.AdminUserListOut:
+    """회원 목록. q 는 닉네임·이메일 부분 검색 + (숫자면) 회원 ID 일치, provider 는 로그인 방식 필터(LOCAL=없음)."""
+    query = (q or "").strip() or None
+    local_only = provider == LOCAL_PROVIDER
+    total, users = await repo.list_users(
+        db, q=query, page=page, size=size, market_data_access=market_data_access,
+        user_id=user_id_from_query(query),
+        provider=None if (provider is None or local_only) else AuthProvider(provider),
+        local_only=local_only,
+    )
     return ms.AdminUserListOut(total=total, page=page, size=size, items=[admin_user_out(u) for u in users])
 
 

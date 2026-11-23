@@ -45,6 +45,17 @@ const PROVIDER_LABELS: Record<string, string> = {
   apple: '애플',
 }
 
+/** 회원 목록 로그인 방식 필터 — ''=전체, LOCAL=공급자 없음(관리자 이메일·게스트·심사 계정) */
+export type ProviderFilter = '' | 'KAKAO' | 'NAVER' | 'GOOGLE' | 'APPLE' | 'LOCAL'
+export const PROVIDER_FILTER_OPTIONS: { value: ProviderFilter; label: string }[] = [
+  { value: '', label: '전체 가입 방식' },
+  { value: 'KAKAO', label: '카카오' },
+  { value: 'NAVER', label: '네이버' },
+  { value: 'GOOGLE', label: '구글' },
+  { value: 'APPLE', label: '애플' },
+  { value: 'LOCAL', label: '이메일·기타(소셜 아님)' },
+]
+
 /** 가입 방식 코드 → 화면 라벨(없으면 '-', 모르는 코드는 원문) */
 export const providerLabel = (provider: string | null | undefined): string =>
   provider ? (PROVIDER_LABELS[provider.toLowerCase()] ?? provider) : '-'

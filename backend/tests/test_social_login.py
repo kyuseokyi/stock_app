@@ -187,7 +187,8 @@ async def test_callback_creates_user_and_exchange_issues_token(ctx):
     assert r.status_code == 200
     body = r.json()
     assert body["token_type"] == "bearer"
-    assert body["user"] == {"id": u.id, "email": None, "nickname": "카카오친구", "role": "FREE", "terms_required": True}
+    assert body["user"] == {"id": u.id, "email": None, "nickname": "카카오친구", "role": "FREE", "terms_required": True,
+                           "provider": "KAKAO"}
     assert decode_token(body["access_token"])["sub"] == str(u.id)
 
 

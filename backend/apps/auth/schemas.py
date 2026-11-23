@@ -6,7 +6,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from shared.models import UserRole
+from shared.models import AuthProvider, UserRole
 
 from .terms import terms_required as _terms_required
 
@@ -38,6 +38,8 @@ class UserOut(BaseModel):
     role: UserRole
     # 약관 (재)동의 필요 여부 — 기본값 없이 항상 계산(누락 시 조용히 false 가 되어 게이트가 무력화되지 않게)
     terms_required: bool
+    # 로그인 방식(KAKAO·NAVER·GOOGLE·APPLE). 관리자 LOCAL·게스트·심사 계정은 null — 추가 필드(옛 클라이언트는 무시)
+    provider: AuthProvider | None = None
 
     @model_validator(mode="before")
     @classmethod
@@ -51,6 +53,7 @@ class UserOut(BaseModel):
             "nickname": data.nickname,
             "role": data.role,
             "terms_required": _terms_required(data),
+            "provider": getattr(data, "provider", None),
         }
 
 

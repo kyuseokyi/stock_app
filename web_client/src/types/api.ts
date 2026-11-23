@@ -14,6 +14,8 @@ export interface UserOut {
   role: UserRole
   /** 현재 약관 동의가 필요한지(서버 UserOut.terms_required). 옛 저장값·구 서버는 없음 → 동의 불필요로 본다 */
   terms_required?: boolean
+  /** 로그인 방식(KAKAO·NAVER·GOOGLE·APPLE). null=공급자 없음(관리자·게스트·심사), 없음=옛 저장값·구 서버 */
+  provider?: string | null
 }
 
 export interface TokenResponse {
