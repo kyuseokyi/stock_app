@@ -6,7 +6,8 @@ import NotificationToaster from './NotificationToaster'
 
 // 목록·상세 2단 화면은 넓게 — 4xl(896px) 안에서 두 칸으로 나누면 칸당 ~430px 라 표 글자가 낱자로 끊긴다.
 // 나머지 화면(글 편집 등)은 읽기 폭을 유지한다.
-const WIDE_PREFIXES = ['/game/quizzes', '/market/', '/fund-notices']
+// 회원 목록은 열이 9개라 4xl 안에서는 가로 스크롤이 생긴다 → 넓게
+const WIDE_PREFIXES = ['/game/quizzes', '/market/', '/fund-notices', '/members']
 
 export default function Layout() {
   const navigate = useNavigate()

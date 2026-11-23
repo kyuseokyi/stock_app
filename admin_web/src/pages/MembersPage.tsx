@@ -206,30 +206,30 @@ export default function MembersPage() {
       </p>
 
       <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
-        <table className="w-full min-w-[1000px] text-left text-sm">
+        <table className="w-full min-w-[860px] text-left text-sm">
           <thead className="bg-slate-50 text-slate-500">
             <tr>
-              <th className="px-4 py-3 font-medium">ID</th>
-              <th className="px-4 py-3 font-medium">닉네임</th>
-              <th className="px-4 py-3 font-medium">이메일</th>
-              <th className="px-4 py-3 font-medium">가입 방식</th>
-              <th className="px-4 py-3 font-medium">역할</th>
-              <th className="px-4 py-3 font-medium">가입일</th>
-              <th className="px-4 py-3 font-medium">댓글</th>
-              <th className="px-4 py-3 font-medium">시세 열람</th>
-              <th className="px-4 py-3 text-right font-medium">작업</th>
+              <th className="px-3 py-3 font-medium">ID</th>
+              <th className="px-3 py-3 font-medium">닉네임</th>
+              <th className="px-3 py-3 font-medium">이메일</th>
+              <th className="px-3 py-3 font-medium">가입 방식</th>
+              <th className="px-3 py-3 font-medium">역할</th>
+              <th className="px-3 py-3 font-medium">가입일</th>
+              <th className="px-3 py-3 font-medium">댓글</th>
+              <th className="px-3 py-3 font-medium">시세 열람</th>
+              <th className="px-3 py-3 text-right font-medium">작업</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
             {loading && items.length === 0 ? (
               <tr>
-                <td colSpan={9} className="px-4 py-8 text-center text-slate-400">
+                <td colSpan={9} className="px-3 py-8 text-center text-slate-400">
                   불러오는 중…
                 </td>
               </tr>
             ) : items.length === 0 ? (
               <tr>
-                <td colSpan={9} className="px-4 py-8 text-center text-slate-400">
+                <td colSpan={9} className="px-3 py-8 text-center text-slate-400">
                   회원이 없습니다.
                 </td>
               </tr>
@@ -240,8 +240,8 @@ export default function MembersPage() {
                 const editing = editingId === u.id
                 return (
                   <tr key={u.id} className="hover:bg-slate-50">
-                    <td className="px-4 py-3 text-slate-400">{u.id}</td>
-                    <td className="px-4 py-3">
+                    <td className="px-3 py-3 text-slate-400">{u.id}</td>
+                    <td className="px-3 py-3">
                       {editing ? (
                         <form
                           onSubmit={(e) => {
@@ -276,9 +276,9 @@ export default function MembersPage() {
                         <span className="font-medium text-slate-800">{u.nickname ?? '-'}</span>
                       )}
                     </td>
-                    <td className="px-4 py-3 text-slate-600">{u.email ?? '-'}</td>
-                    <td className="px-4 py-3">{providerLabel(u.provider)}</td>
-                    <td className="px-4 py-3">
+                    <td className="max-w-[220px] break-all px-3 py-3 text-slate-600">{u.email ?? '-'}</td>
+                    <td className="px-3 py-3">{providerLabel(u.provider)}</td>
+                    <td className="px-3 py-3">
                       <span
                         className={`rounded-full px-2 py-0.5 text-xs ${
                           isAdmin ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-600'
@@ -287,10 +287,10 @@ export default function MembersPage() {
                         {u.role}
                       </span>
                     </td>
-                    <td className="whitespace-nowrap px-4 py-3 text-slate-500">
+                    <td className="whitespace-nowrap px-3 py-3 text-slate-500">
                       {formatDateTime(u.created_at)}
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-3 py-3">
                       {u.comment_banned ? (
                         <span
                           className="rounded-full bg-red-100 px-2 py-0.5 text-xs text-red-700"
@@ -304,7 +304,7 @@ export default function MembersPage() {
                         </span>
                       )}
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-3 py-3">
                       {isAdmin ? (
                         <span
                           className="rounded-full bg-indigo-100 px-2 py-0.5 text-xs text-indigo-700"
@@ -333,7 +333,7 @@ export default function MembersPage() {
                         </button>
                       )}
                     </td>
-                    <td className="px-4 py-3 text-right">
+                    <td className="px-3 py-3 text-right">
                       <div className="flex justify-end gap-3 whitespace-nowrap">
                         {!editing && (
                           <button
