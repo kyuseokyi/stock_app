@@ -37,6 +37,29 @@ export function realMarketOf(season: { features?: { real_market?: boolean } } | 
   return season?.features?.real_market === true
 }
 
+/** 교육용 합성 종가 게임(GET /api/game/edu/state 의 enabled) — 합성 데이터라 시세 판정과 무관. 모름·실패는 닫힘 */
+export function eduGameVisible(eduEnabled: boolean | null | undefined): boolean {
+  return eduEnabled === true
+}
+
+/** 게임 탭(메뉴) 노출 — 실제 시세 게임 허용 또는 교육용 종가 게임 공개 중 하나라도 참 */
+export function gameTabVisible(realMarket: boolean | null | undefined, eduEnabled: boolean | null | undefined): boolean {
+  return gameVisible(realMarket) || eduGameVisible(eduEnabled)
+}
+
+/** /game 진입 화면 — loading(판단값 대기) · none(안내 카드) · edu(교육용만) · realtime(실시간만) · both(상단 전환 탭)
+ *  두 판단값을 모두 알 때까지 기다린다(한 화면을 그렸다가 전환 탭으로 바뀌며 다시 마운트되지 않게) */
+export type GameEntryMode = 'loading' | 'none' | 'edu' | 'realtime' | 'both'
+
+export function gameEntryMode(realMarket: boolean | null | undefined, eduEnabled: boolean | null | undefined): GameEntryMode {
+  const real = gameVisible(realMarket)
+  const edu = eduGameVisible(eduEnabled)
+  if (eduEnabled == null || realMarket == null) return 'loading'
+  if (real && edu) return 'both'
+  if (edu) return 'edu'
+  return real ? 'realtime' : 'none'
+}
+
 /** 종목 상세 링크아웃(A안 설계 3-4 "시세는 증권사 앱에서") — 시세는 우리가 보여 주지 않고 포털 종목 화면으로 보낸다.
  *  링크만 걸고 내용을 가져오지 않는다(크롤링 아님). 6자리 국내 코드만, 아니면 null */
 export function stockLinkOutUrl(ticker: string): string | null {

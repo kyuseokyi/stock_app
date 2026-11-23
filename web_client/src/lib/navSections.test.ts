@@ -49,3 +49,17 @@ describe('sectionOf', () => {
     expect(sectionOf('/marketing')).toBeNull()
   })
 })
+
+describe('게임 탭 — 교육용 종가 게임 확장', () => {
+  it('실시간이 닫혀도 교육용이 공개면 게임 탭 노출, 둘 다 닫힘·모름이면 숨김', () => {
+    expect(visibleSections(null, false, true)).toContain('game')
+    expect(visibleSections(null, null, true)).toContain('game')
+    expect(visibleSections(null, true, false)).toContain('game')
+    expect(visibleSections(null, false, false)).not.toContain('game')
+    expect(visibleSections(null, false, null)).not.toContain('game')
+    expect(visibleSections(null, false)).not.toContain('game')
+  })
+  it('/edu-game 은 게임 섹션', () => {
+    expect(sectionOf('/edu-game')).toBe('game')
+  })
+})

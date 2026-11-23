@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { gameVisible, indexVisible, KR_PUBLIC_INDEX_CODES, marketDataVisible, realMarketOf, stockLinkOutUrl, visibleIndices } from './marketAccess'
+import { eduGameVisible, gameEntryMode, gameTabVisible, gameVisible, indexVisible, KR_PUBLIC_INDEX_CODES, marketDataVisible, realMarketOf, stockLinkOutUrl, visibleIndices } from './marketAccess'
 
 const ix = (code: string) => ({ code })
 const ALL = ['KR:0001', 'KR:1001', 'KR:2001', 'US:SPX', 'FX:USDKRW', 'USSTK:AAPL'].map(ix)
@@ -47,5 +47,28 @@ describe('종목 상세 링크아웃', () => {
     expect(stockLinkOutUrl('005930')).toBe('https://m.stock.naver.com/domestic/stock/005930/total')
     expect(stockLinkOutUrl('0059')).toBeNull()
     expect(stockLinkOutUrl('../x')).toBeNull()
+  })
+})
+
+describe('교육용 종가 게임 — 게임 탭·진입 화면 판정', () => {
+  it('게임 탭 = real_market || edu, 모름·실패는 숨김', () => {
+    expect(gameTabVisible(false, true)).toBe(true)
+    expect(gameTabVisible(true, false)).toBe(true)
+    expect(gameTabVisible(true, null)).toBe(true)
+    expect(gameTabVisible(false, false)).toBe(false)
+    expect(gameTabVisible(null, null)).toBe(false)
+    expect(gameTabVisible(undefined, undefined)).toBe(false)
+    expect(eduGameVisible(null)).toBe(false)
+  })
+  it('진입 화면 — 둘 다 알 때까지 loading, 그다음 edu·realtime·both·none', () => {
+    expect(gameEntryMode(null, null)).toBe('loading')
+    expect(gameEntryMode(true, null)).toBe('loading') // 실시간을 먼저 그렸다가 전환 탭으로 다시 마운트되지 않게
+    expect(gameEntryMode(false, null)).toBe('loading')
+    expect(gameEntryMode(null, true)).toBe('loading')
+    expect(gameEntryMode(false, true)).toBe('edu')
+    expect(gameEntryMode(true, true)).toBe('both')
+    expect(gameEntryMode(true, false)).toBe('realtime')
+    expect(gameEntryMode(false, false)).toBe('none')
+    expect(gameEntryMode(null, false)).toBe('loading')
   })
 })
