@@ -1,5 +1,5 @@
 import type { ScreenerFeatures } from '../api/screenerFeatures'
-import { eduGameVisible, gameVisible } from './marketAccess'
+import { gameTabVisible } from './marketAccess'
 import { screenerMenuVisible } from './screenerFeatures'
 
 // 1차 메뉴 판정 — 순수 함수. 순서는 앱 하단 탭과 같다.
@@ -10,12 +10,16 @@ export type Section = 'home' | 'funds' | 'market' | 'screener' | 'community' | '
 
 const SECTIONS: Section[] = ['home', 'funds', 'community', 'game', 'market', 'screener']
 
-/** 지금 보여 줄 메뉴 — 스크리너는 종목 찾기 스위치가 켜지고 시세 열람일 때만, 게임은 실제 시세 게임 허용
- *  (seasons/active features.real_market, A안)일 때만. 로딩·오류는 숨김 */
-export function visibleSections(features: ScreenerFeatures | null, realMarket: boolean | null, eduEnabled: boolean | null = null): Section[] {
-  // 게임 탭 = 실시간 허용 || 교육용 종가 게임 공개(eduEnabled 를 안 넘기면 예전과 같이 실시간만 본다)
+/** 지금 보여 줄 메뉴 — 스크리너는 종목 찾기 스위치가 켜지고 시세 열람일 때만, 게임은 보여 줄 게임이 있을 때만
+ *  (관리자 REAL_MARKET 스위치 ON 이면 실시간 허용일 때, OFF 면 가상 데이터 게임 공개일 때 — gameTabVisible). 로딩·오류는 숨김 */
+export function visibleSections(
+  features: ScreenerFeatures | null,
+  realMarket: boolean | null,
+  eduEnabled: boolean | null = null,
+  realMarketSwitch: boolean | null = null,
+): Section[] {
   return SECTIONS.filter(
-    (s) => (s !== 'screener' || screenerMenuVisible(features)) && (s !== 'game' || gameVisible(realMarket) || eduGameVisible(eduEnabled)),
+    (s) => (s !== 'screener' || screenerMenuVisible(features)) && (s !== 'game' || gameTabVisible(realMarket, eduEnabled, realMarketSwitch)),
   )
 }
 

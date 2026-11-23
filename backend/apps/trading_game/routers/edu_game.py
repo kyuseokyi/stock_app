@@ -23,6 +23,7 @@ from apps.trading_game.schemas.edu_game_dtos import (
 )
 from apps.trading_game.services import edu_game_service as svc
 from apps.trading_game.services import feature_flag_service
+from apps.trading_game.services import real_market
 
 log = logging.getLogger("trading_game.edu_router")
 router = APIRouter(tags=["trading-game-edu"])
@@ -47,10 +48,15 @@ async def edu_state(
     user: User | None = Depends(get_optional_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """교육 시즌·최근 120봉·오늘 해설·참여자 심리 + (로그인 시) 내 계좌·오늘 참가 여부. 활성 시즌이 없으면 자동 생성."""
+    """교육 시즌·최근 120봉·오늘 해설·참여자 심리 + (로그인 시) 내 계좌·오늘 참가 여부. 활성 시즌이 없으면 자동 생성.
+
+    real_market_switch = 관리자 전역 REAL_MARKET 스위치(화면이 실시간/가상 데이터 게임 중 무엇을 보일지 정한다).
+    시즌 생성·commit 전에 먼저 읽는다(flag_on 은 실패 시 rollback 하고 false 로 닫는다).
+    """
+    switch = await real_market.flag_on(db, deps.get_redis())
     if not await _enabled(db):
-        return EduStateResponse(enabled=False)
-    return await svc.get_edu_state(db, user)
+        return EduStateResponse(enabled=False, real_market_switch=switch)
+    return {**await svc.get_edu_state(db, user), "real_market_switch": switch}
 
 
 @router.post("/api/game/edu/action", response_model=EduActionResponse)

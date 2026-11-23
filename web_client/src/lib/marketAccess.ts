@@ -42,22 +42,33 @@ export function eduGameVisible(eduEnabled: boolean | null | undefined): boolean 
   return eduEnabled === true
 }
 
-/** 게임 탭(메뉴) 노출 — 실제 시세 게임 허용 또는 교육용 종가 게임 공개 중 하나라도 참 */
-export function gameTabVisible(realMarket: boolean | null | undefined, eduEnabled: boolean | null | undefined): boolean {
-  return gameVisible(realMarket) || eduGameVisible(eduEnabled)
+/** 게임 탭(메뉴) 노출 — 관리자 전역 스위치(REAL_MARKET, edu/state 의 real_market_switch) 하나로 정한다.
+ *  스위치 ON → 실시간 게임만(요청자 기준 real_market 허용일 때), OFF → 가상 데이터 게임만(edu 공개일 때). 스위치 모름·실패는 숨김 */
+export function gameTabVisible(
+  realMarket: boolean | null | undefined,
+  eduEnabled: boolean | null | undefined,
+  realMarketSwitch: boolean | null | undefined,
+): boolean {
+  if (realMarketSwitch === true) return gameVisible(realMarket)
+  if (realMarketSwitch === false) return eduGameVisible(eduEnabled)
+  return false
 }
 
-/** /game 진입 화면 — loading(판단값 대기) · none(안내 카드) · edu(교육용만) · realtime(실시간만) · both(상단 전환 탭)
- *  두 판단값을 모두 알 때까지 기다린다(한 화면을 그렸다가 전환 탭으로 바뀌며 다시 마운트되지 않게) */
-export type GameEntryMode = 'loading' | 'none' | 'edu' | 'realtime' | 'both'
+/** /game 진입 화면 — loading(판단값 대기) · none(안내 카드) · edu(가상 데이터 게임) · realtime(실시간 게임).
+ *  두 게임을 함께 보이는 경우는 없다(전환 탭 없음). 스위치 값을 알 때까지 아무 게임도 마운트하지 않는다 */
+export type GameEntryMode = 'loading' | 'none' | 'edu' | 'realtime'
 
-export function gameEntryMode(realMarket: boolean | null | undefined, eduEnabled: boolean | null | undefined): GameEntryMode {
-  const real = gameVisible(realMarket)
-  const edu = eduGameVisible(eduEnabled)
-  if (eduEnabled == null || realMarket == null) return 'loading'
-  if (real && edu) return 'both'
-  if (edu) return 'edu'
-  return real ? 'realtime' : 'none'
+export function gameEntryMode(
+  realMarket: boolean | null | undefined,
+  eduEnabled: boolean | null | undefined,
+  realMarketSwitch: boolean | null | undefined,
+): GameEntryMode {
+  if (realMarketSwitch == null) return 'loading'
+  if (realMarketSwitch) {
+    if (realMarket == null) return 'loading'
+    return gameVisible(realMarket) ? 'realtime' : 'none'
+  }
+  return eduGameVisible(eduEnabled) ? 'edu' : 'none'
 }
 
 /** 종목 상세 링크아웃(A안 설계 3-4 "시세는 증권사 앱에서") — 시세는 우리가 보여 주지 않고 포털 종목 화면으로 보낸다.

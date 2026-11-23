@@ -18,14 +18,14 @@ const FLAG_META: Record<FeatureFlagKey, { title: string; description: string }> 
     description: '끄면 매매·퀴즈를 해도 연속 출석 일수가 갱신되지 않습니다. 기존 기록은 보존됩니다.',
   },
   REAL_MARKET: {
-    title: '📈 실제 시세 게임 공개',
+    title: '⚡ 실시간 게임 (ON: 사용자에게 실시간 게임만 표시 · OFF: 가상 데이터 게임 표시)',
     description:
-      '켜려면 KRX/코스콤 시세 라이선스가 필요합니다. 꺼져 있으면(기본) 일반 사용자는 게임 시세 스트림·분봉·장운영 상태·주문·퀴즈가 막힙니다(게임 탭 숨김은 앱·웹 화면 업데이트 뒤). 관리자와 회원 관리에서 시세 열람 권한을 준 회원은 계속 이용할 수 있습니다. 정산·랭킹 등 서버 내부 작업은 영향이 없습니다.',
+      '게임 탭에 무엇을 보일지 정하는 스위치입니다. 켜면(실제 시세 공개 — KRX/코스콤 시세 라이선스 필요) 모든 사용자에게 실시간 게임만 보이고 가상 데이터 게임은 보이지 않습니다. 끄면(기본) 가상 데이터(교육용 종가) 게임만 보이며, 일반 사용자는 실시간 게임의 시세 스트림·분봉·장운영 상태·주문·퀴즈가 막힙니다(관리자·시세 열람 권한 회원은 API 이용은 가능하지만 화면에는 가상 데이터 게임이 보입니다). 정산·랭킹 등 서버 내부 작업은 영향이 없습니다.',
   },
   EDU_DAILY_GAME: {
-    title: '📘 교육용 일일 종가 게임 공개',
+    title: '📘 가상 데이터(교육용 종가) 게임 — 실시간 게임이 OFF 일 때 표시',
     description:
-      '서버가 만든 가상 일봉으로 하루 1회 결정하는 교육용 게임입니다(시세 라이선스 불필요, 기본 켜짐). 끄면 실시간 게임이 열려 있지 않은 사용자에게는 게임 탭이 사라지고 참가·랭킹 API가 막힙니다. 아래 운영 카드(진행·국면·새 시즌)는 스위치와 무관하게 동작합니다.',
+      '서버가 만든 가상 일봉으로 하루 1회 결정하는 교육용 게임입니다(시세 라이선스 불필요, 기본 켜짐). 위 실시간 게임 스위치가 OFF 일 때만 사용자에게 보입니다. 둘 다 끄면 게임 탭이 사라지고 참가·랭킹 API가 막힙니다. 아래 운영 카드(진행·국면·새 시즌)는 스위치와 무관하게 동작합니다.',
   },
 }
 
@@ -35,6 +35,15 @@ const errorMessage = (caught: unknown): string => {
   if (typeof detail === 'string') return detail
   if (err.response) return `요청 실패 (HTTP ${err.response.status})`
   return '게임 서버에 연결할 수 없습니다.'
+}
+
+/** 지금 사용자에게 보이는 게임 — 웹·앱 규칙과 같다: REAL_MARKET ON → 실시간, OFF 이고 EDU_DAILY_GAME ON → 가상 데이터, 둘 다 OFF → 없음.
+ *  행이 없으면 서버 기본값(REAL_MARKET 꺼짐, EDU_DAILY_GAME 켜짐)으로 본다 */
+function visibleGameLabel(flags: FeatureFlag[]): string {
+  const on = (key: FeatureFlagKey, fallback: boolean) => flags.find((f) => f.key === key)?.enabled ?? fallback
+  if (on('REAL_MARKET', false)) return '⚡ 실시간 게임'
+  if (on('EDU_DAILY_GAME', true)) return '📘 가상 데이터 게임'
+  return '없음 (게임 탭 숨김)'
 }
 
 const formatTime = (iso: string | null): string =>
@@ -66,7 +75,7 @@ function SettingsPanel() {
   const toggle = async (flag: FeatureFlag) => {
     const next = !flag.enabled
     if (flag.key === 'REAL_MARKET' && next && !confirm('실제 시세 게임을 모든 사용자에게 공개할까요?\nKRX/코스콤 시세 라이선스가 있어야 켤 수 있어요.')) return
-    if (flag.key === 'EDU_DAILY_GAME' && !next && !confirm('교육용 종가 게임을 닫을까요?\n실시간 게임 권한이 없는 사용자에게는 게임 탭이 사라집니다.')) return
+    if (flag.key === 'EDU_DAILY_GAME' && !next && !confirm('가상 데이터(교육용 종가) 게임을 닫을까요?\n실시간 게임 스위치도 꺼져 있으면 사용자에게 게임 탭이 사라집니다.')) return
     setPending(flag.key)
     setFlags((prev) => prev.map((f) => (f.key === flag.key ? { ...f, enabled: next } : f)))
     try {
@@ -99,6 +108,10 @@ function SettingsPanel() {
           </button>
         </div>
       ) : (
+        <>
+        <p className="mb-3 rounded-xl border border-indigo-100 bg-indigo-50 px-5 py-3 text-sm text-slate-700">
+          지금 사용자에게 보이는 게임: <strong className="text-slate-900">{visibleGameLabel(flags)}</strong>
+        </p>
         <ul className="space-y-3">
           {flags.map((flag) => (
             <li
@@ -131,6 +144,7 @@ function SettingsPanel() {
             </li>
           ))}
         </ul>
+        </>
       )}
       <GameSeasonRewardSettings />
       <EduGameOperations />

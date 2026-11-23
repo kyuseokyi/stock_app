@@ -1,6 +1,7 @@
 import {
   anyIndexVisible,
   eduEnabledOf,
+  eduGateOf,
   gameTabMode,
   gameTabVisible,
   gameVisible,
@@ -54,27 +55,35 @@ describe('시세 비노출 화면 판정(A안)', () => {
     expect(gameVisible(false)).toBe(false);
   });
 
-  it('게임 탭 = real_market || 교육 종가 게임 enabled — 모름·실패는 숨김', () => {
-    expect(gameTabVisible(false, true)).toBe(true);
-    expect(gameTabVisible(true, false)).toBe(true);
-    expect(gameTabVisible(true, null)).toBe(true);
-    expect(gameTabVisible(false, false)).toBe(false);
-    expect(gameTabVisible(null, null)).toBe(false);
-    expect(gameTabVisible(undefined, null)).toBe(false);
+  it('게임 탭 — 스위치 ON 이면 실시간 허용일 때, OFF 면 가상 데이터 게임 공개일 때, 모름이면 숨김', () => {
+    expect(gameTabVisible(true, false, true)).toBe(true);
+    expect(gameTabVisible(false, true, true)).toBe(false); // 스위치 ON — 가상 데이터 게임은 보이지 않는다
+    expect(gameTabVisible(null, true, true)).toBe(false);
+    expect(gameTabVisible(true, true, false)).toBe(true); // 관리자(real_market=true)도 스위치 OFF 면 가상 데이터 게임
+    expect(gameTabVisible(false, true, false)).toBe(true);
+    expect(gameTabVisible(true, false, false)).toBe(false);
+    expect(gameTabVisible(false, false, false)).toBe(false);
+    expect(gameTabVisible(true, true, null)).toBe(false);
+    expect(gameTabVisible(undefined, undefined, undefined)).toBe(false);
     expect(eduEnabledOf({ enabled: true })).toBe(true);
     expect(eduEnabledOf({ enabled: false })).toBe(false);
     expect(eduEnabledOf({})).toBe(false);
     expect(eduEnabledOf(null)).toBe(false);
+    expect(eduGateOf({ enabled: true, real_market_switch: true })).toEqual({ enabled: true, realMarketSwitch: true });
+    expect(eduGateOf({ enabled: true })).toEqual({ enabled: true, realMarketSwitch: false }); // 옛 서버
+    expect(eduGateOf(null)).toEqual({ enabled: false, realMarketSwitch: false });
   });
 
-  it('게임 탭 화면 — 두 판단값이 다 와야 정하고, 둘 다 열리면 세그먼트', () => {
-    expect(gameTabMode(null, true)).toBe('loading');
-    expect(gameTabMode(true, null)).toBe('loading'); // 실시간 화면을 그렸다가 다시 마운트하지 않게
-    expect(gameTabMode(false, null)).toBe('loading');
-    expect(gameTabMode(true, true)).toBe('both');
-    expect(gameTabMode(true, false)).toBe('real');
-    expect(gameTabMode(false, true)).toBe('edu');
-    expect(gameTabMode(false, false)).toBe('none');
+  it('게임 탭 화면 — 스위치 모름이면 loading, ON → real/none, OFF → edu/none. both 는 없다', () => {
+    expect(gameTabMode(true, true, null)).toBe('loading');
+    expect(gameTabMode(null, true, true)).toBe('loading'); // 실시간 허용 판정을 기다린다
+    expect(gameTabMode(true, true, true)).toBe('real');
+    expect(gameTabMode(true, false, true)).toBe('real');
+    expect(gameTabMode(false, true, true)).toBe('none');
+    expect(gameTabMode(true, true, false)).toBe('edu');
+    expect(gameTabMode(null, true, false)).toBe('edu');
+    expect(gameTabMode(true, false, false)).toBe('none');
+    expect(gameTabMode(false, false, false)).toBe('none');
   });
 
   it('링크아웃은 6자리 코드만', () => {

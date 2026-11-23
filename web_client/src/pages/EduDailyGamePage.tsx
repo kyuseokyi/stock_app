@@ -48,7 +48,7 @@ export default function EduDailyGamePage() {
     try {
       const data = await getEduState()
       if (my !== seqRef.current) return
-      rememberEduEnabled(data.enabled)
+      rememberEduEnabled(data.enabled, data.real_market_switch)
       setLoad({ kind: 'ok', data: { ...data, candles: sortedCandles(data.candles) } })
       setRefreshKey((k) => k + 1)
     } catch (e) {

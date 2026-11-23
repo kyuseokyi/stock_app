@@ -51,7 +51,7 @@ export function EduDailyGameScreen() {
       setState(s);
       setFailed(false);
       setNowMs(Date.now());
-      noteEduEnabled(s.enabled); // 탭 노출 판단값도 맞춘다(관리자가 끈 직후 등)
+      noteEduEnabled(s.enabled, s.real_market_switch); // 탭 노출·게임 모드 판단값도 맞춘다(관리자가 끈 직후 등)
       if (s.enabled) {
         getEduLeaderboard()
           .then((b) => {

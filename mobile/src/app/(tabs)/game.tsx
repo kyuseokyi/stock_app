@@ -2,7 +2,6 @@ import { useFocusEffect, useIsFocused, useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { RefreshControl, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
 import { StyleSheet } from 'react-native-unistyles';
 
 import { useAuthStore } from '@/features/auth/store';
@@ -35,7 +34,7 @@ import { useGameSocket } from '@/features/game/use-game-socket';
 import { gameVisible } from '@/features/market-access/access';
 import { useGameAccess } from '@/features/market-access/use-game-access';
 import { gameTabMode } from '@/features/market-access/access';
-import { useEduGameAccess } from '@/features/market-access/use-edu-game-access';
+import { useEduGate } from '@/features/market-access/use-edu-game-access';
 import { EduDailyGameScreen } from '@/features/edu-game/edu-daily-game-screen';
 import { reasonFromCode } from '@/lib/api/session-end';
 import { BottomSheet, Button, Card, ListState, ProfileHeaderButton } from '@/ui';
@@ -54,12 +53,14 @@ type PrivateModal = Exclude<ActiveModal, 'ranking' | 'rules' | null>;
 export default function GameTab() {
   const insets = useSafeAreaInsets();
   const access = useGameAccess();
-  // 교육용 합성 종가 게임(EDU_DAILY_GAME) 분기 — 두 판단값이 다 온 뒤 정한다(명세 3.2). 실시간만 열림이면 아래 기존 줄 그대로
-  const edu = useEduGameAccess();
-  const mode = gameTabMode(access, edu);
+  // 게임 모드 = 관리자 전역 스위치 REAL_MARKET 하나(edu/state 의 real_market_switch, 사용자별 판정 아님).
+  // ON → 실시간 게임만(아래 기존 줄 그대로) / OFF → 가상 데이터(교육용 종가) 게임만. 두 게임을 함께 보이는 전환 세그먼트는 없다
+  const eduGate = useEduGate();
+  const mode = gameTabMode(access, eduGate?.enabled, eduGate?.realMarketSwitch);
   if (mode === 'edu') return <EduDailyGameScreen />;
-  if (mode === 'both') return <DualGameScreen />;
   if (mode === 'loading') return <GameTabLoading />;
+  // 보여 줄 게임 없음(스위치 OFF + 가상 데이터 게임 OFF 등) — 관리자·열람 회원이 링크로 들어와도 실시간 게임을 열지 않는다
+  if (mode === 'none') return <GameTabUnavailable />;
   if (gameVisible(access)) return <GameScreen />;
   return (
     <View style={[styles.flex, { paddingTop: insets.top }]}>
@@ -95,35 +96,21 @@ function GameTabLoading() {
   );
 }
 
-type DualMode = 'edu' | 'real';
-
-/**
- * 실시간 게임과 교육용 종가 게임이 모두 열렸을 때 — 상단 세그먼트로 전환(기본 = 종가 게임).
- * 세그먼트가 상태 표시줄 여백을 맡으므로 아래 화면에는 위 여백 0 을 넘긴다(각 화면이 insets.top 을 또 적용하지 않게)
- */
-function DualGameScreen() {
+/** 보여 줄 게임이 없을 때 — 어떤 게임 화면도 마운트하지 않는다 */
+function GameTabUnavailable() {
   const insets = useSafeAreaInsets();
-  const [picked, setPicked] = useState<DualMode>('edu');
   return (
     <View style={[styles.flex, { paddingTop: insets.top }]}>
-      <View style={styles.segment} accessibilityRole="tablist">
-        {([
-          ['edu', '📘 일일 종가 게임'],
-          ['real', '⚡ 실시간 게임'],
-        ] as const).map(([value, label]) => (
-          <Text
-            key={value}
-            accessibilityRole="tab"
-            accessibilityState={{ selected: picked === value }}
-            onPress={() => setPicked(value)}
-            style={[styles.segmentItem, picked === value && styles.segmentItemOn]}>
-            {label}
-          </Text>
-        ))}
+      <View style={styles.titleRow}>
+        <Text style={styles.screenTitle} accessibilityRole="header">트레이딩 게임</Text>
+        <ProfileHeaderButton />
       </View>
-      <SafeAreaInsetsContext.Provider value={{ ...insets, top: 0 }}>
-        {picked === 'edu' ? <EduDailyGameScreen /> : <GameScreen />}
-      </SafeAreaInsetsContext.Provider>
+      <ListState
+        mode="empty"
+        emoji="🎮"
+        title="지금은 게임을 이용할 수 없어요"
+        hint="지금은 열려 있는 게임이 없어요. 다음에 다시 찾아 주세요."
+      />
     </View>
   );
 }
@@ -470,24 +457,4 @@ const styles = StyleSheet.create((theme) => ({
   guestTitle: { fontSize: 16, fontWeight: '700', color: theme.colors.text },
   guestText: { fontSize: 14, lineHeight: 20, color: theme.colors.textSecondary, marginTop: theme.gap(0.5), marginBottom: theme.gap(1.5) },
   sheetText: { fontSize: 15, lineHeight: 22, color: theme.colors.textSecondary, marginBottom: theme.gap(0.5) },
-  segment: {
-    flexDirection: 'row',
-    marginHorizontal: theme.gap(1.5),
-    marginTop: theme.gap(1),
-    padding: 4,
-    borderRadius: theme.radius.button,
-    backgroundColor: theme.colors.fill,
-    gap: 4,
-  },
-  segmentItem: {
-    flex: 1,
-    textAlign: 'center',
-    paddingVertical: theme.gap(1),
-    borderRadius: theme.radius.input,
-    overflow: 'hidden',
-    fontSize: 14,
-    fontWeight: '700',
-    color: theme.colors.textSecondary,
-  },
-  segmentItemOn: { backgroundColor: theme.colors.surface, color: theme.colors.text },
 }));
