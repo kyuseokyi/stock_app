@@ -13,6 +13,8 @@ type RawUser = {
   role: string;
   /** 약관 동의 필요 여부 — 구 서버는 없음 */
   terms_required?: boolean;
+  /** 로그인 방식 — 구 서버는 없음(undefined), 공급자 없는 계정은 null */
+  provider?: string | null;
 };
 
 type RawTokenResponse = {
@@ -33,6 +35,8 @@ function toUser(r: RawUser): User {
     role: r.role,
     // 서버가 줄 때만 담는다(구 서버 응답·기존 비교 결과가 그대로 유지되게)
     ...(typeof r.terms_required === 'boolean' ? { termsRequired: r.terms_required } : {}),
+    // null(공급자 없음)은 담고 필드 없음(구 서버)만 생략 — 둘의 표시가 다르다
+    ...(typeof r.provider === 'string' || r.provider === null ? { provider: r.provider } : {}),
   };
 }
 
@@ -62,6 +66,7 @@ export function toUserOrNull(raw: unknown): User | null {
     nickname: r.nickname ?? null,
     role: r.role,
     terms_required: r.terms_required,
+    provider: r.provider,
   });
 }
 

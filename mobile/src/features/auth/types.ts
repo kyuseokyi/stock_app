@@ -6,4 +6,7 @@ export type User = {
   role: string;
   /** 현재 약관 동의가 필요한지(서버 UserOut.terms_required). 옛 저장값·구 서버는 없음 → 동의 불필요로 본다 */
   termsRequired?: boolean;
+  /** 로그인 방식(서버 UserOut.provider: KAKAO·NAVER·GOOGLE·APPLE). null=공급자 없음(관리자·게스트·심사),
+   *  undefined=옛 저장값·구 서버(모름 → 표시 생략) */
+  provider?: string | null;
 };
