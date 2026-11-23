@@ -36,10 +36,12 @@ export const listAdminUsers = async (
   page = 1,
   size = 20,
   marketDataOnly = false,
+  provider = '', // 로그인 방식 필터(KAKAO·NAVER·GOOGLE·APPLE·LOCAL). 빈 값=전체
 ): Promise<AdminUserListOut> => {
   const params: Record<string, string | number | boolean> = { page, size }
   if (q.trim()) params.q = q.trim()
   if (marketDataOnly) params.market_data_access = true
+  if (provider) params.provider = provider
   const { data } = await client.get<AdminUserListOut>('/admin/users', { params })
   return data
 }
