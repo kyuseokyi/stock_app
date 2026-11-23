@@ -55,6 +55,7 @@ HOLDING_ACTIONS = {"KEEP_POS", "PARTIAL_CLOSE", "FULL_CLOSE"}
 MSG_ALREADY = "오늘은 이미 게임에 참가했어요. 내일 새 종가 캔들이 열리면 다시 참가할 수 있어요!"
 CENT = Decimal("0.01")
 PCT4 = Decimal("0.0001")
+ROI_LIMIT = Decimal("9999.9999")
 
 
 class EduGameError(Exception):
@@ -198,6 +199,7 @@ def refresh_totals(acc: EduGameAccount, season: EduGameSeason, mark: Decimal | N
     acc.total_asset = total.quantize(CENT, rounding=ROUND_HALF_UP)
     principal = _principal(acc, season)
     roi = ((total / principal - 1) * 100).quantize(PCT4, rounding=ROUND_HALF_UP) if principal else Decimal(0)
+    roi = max(min(roi, ROI_LIMIT), -ROI_LIMIT)  # NUMERIC(8,4) 상한 — 넘치면 그날 정산 트랜잭션 전체가 실패하므로 고정
     acc.current_roi = roi
     acc.max_roi = max(Decimal(acc.max_roi or 0), roi)
 

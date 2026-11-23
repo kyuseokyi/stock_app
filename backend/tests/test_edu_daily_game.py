@@ -738,3 +738,21 @@ async def test_celery_run_once_respects_flag_and_daily_guard(maker, monkeypatch)
     await redis.flushall()
     async with maker() as db:
         assert await task.run_once(db, redis) == {"status": "disabled"}
+
+
+async def test_js_integer_ratio_one_is_accepted(api, maker):
+    """JS 는 1.0 을 정수 1 로 직렬화한다 — 원문 JSON {"ratio":1} 도 100% 비중으로 받아야 한다."""
+    client, set_user = api
+    set_user(await _user(maker))
+    raw = '{"action":"ENTER_LONG","ratio":1,"leverage":1,"stop_loss_pct":5,"take_profit_pct":10}'
+    r = await client.post("/api/game/edu/action", content=raw, headers={"content-type": "application/json"})
+    assert r.status_code == 200, r.text
+    assert r.json()["account"]["position"]["size_amount"] == 10_000_000.0 and r.json()["action"]["ratio"] == 1.0
+
+
+async def test_roi_clamped_to_column_limit(maker):
+    async with maker() as db:
+        season = await svc.get_or_create_active_season(db, date(2026, 11, 23))
+    acc = EduGameAccount(cash_balance=Decimal("5000000000"), bonus_cash=Decimal(0), max_roi=Decimal(0))
+    svc.refresh_totals(acc, season, None)
+    assert acc.current_roi == svc.ROI_LIMIT == acc.max_roi
