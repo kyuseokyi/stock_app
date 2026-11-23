@@ -57,7 +57,9 @@ CONFIG=$(unzip -p "$APK" assets/app.config 2>/dev/null || true)
 echo "$CONFIG" | grep -q '"projectId"' || { echo "[preview] ✗ APK 설정에 projectId 없음 — 푸시가 꺼진 앱" >&2; exit 1; }
 echo "$CONFIG" | grep -q '"com.stocknote"' || { echo "[preview] ✗ APK 설정의 패키지가 com.stocknote 가 아님" >&2; exit 1; }
 
+APK=$(bash "$(dirname "$0")/apk-fingerprint-name.sh" "$APK") # 이름에 지문 앞 7자리(OTA Runtime version 과 대조)
 echo "[preview] ✓ $APK"
+echo "[preview] 지문: $(unzip -p "$APK" assets/fingerprint 2>/dev/null | cut -c1-7) — OTA 발행 결과의 Android Runtime version 앞 7자리와 같아야 이 APK 가 받는다"
 bash "$(dirname "$0")/copy-apk-to-drive.sh" "$APK" # Google Drive 동기화 폴더로(APK_DRIVE=0 이면 생략)
 echo "[preview] 설치: adb install -r \"$APK\"  ·  OTA: npm run ota:preview -- \"메시지\""
 echo "[preview] 개발 APK 를 다시 만들기 전에: npm run prebuild:dev:android"

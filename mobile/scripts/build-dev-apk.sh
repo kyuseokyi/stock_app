@@ -69,7 +69,7 @@ JVMARGS="${DEVAPK_JVMARGS:--Xmx4096m -XX:MaxMetaspaceSize=1536m}"
   -PreactNativeArchitectures="$ABIS" "-Dorg.gradle.jvmargs=$JVMARGS")
 
 # 푸시 설정이 실제로 들어갔는지 확인(값은 출력하지 않음)
-# 파일 이름은 plugins/with-apk-name.js 가 정한다(stockapp-dev-<브랜치>-<일시>.apk) — 방금 만든 것 하나
+# 파일 이름은 plugins/with-apk-name.js 가 정하고(stockapp-dev-<브랜치>-<일시>.apk) 아래에서 지문을 붙여 바꾼다 — 방금 만든 것 하나
 APK=$(ls -t android/app/build/outputs/apk/release/*.apk 2>/dev/null | head -1 || true)
 [ -n "$APK" ] || { echo "[devapk] ✗ release APK 를 찾지 못함" >&2; exit 1; }
 if grep -q '^EAS_PROJECT_ID=' "$TMP" && ! unzip -p "$APK" assets/app.config 2>/dev/null | grep -q '"projectId"'; then
@@ -77,5 +77,7 @@ if grep -q '^EAS_PROJECT_ID=' "$TMP" && ! unzip -p "$APK" assets/app.config 2>/d
   exit 1
 fi
 
+APK=$(bash "$(dirname "$0")/apk-fingerprint-name.sh" "$APK") # 이름에 지문 앞 7자리(OTA Runtime version 과 대조)
 echo "[devapk] ✓ $APK"
+echo "[devapk] 지문: $(unzip -p "$APK" assets/fingerprint 2>/dev/null | cut -c1-7) — OTA 발행 결과의 Android Runtime version 앞 7자리와 같아야 이 APK 가 받는다"
 bash "$(dirname "$0")/copy-apk-to-drive.sh" "$APK" # Google Drive 동기화 폴더로(APK_DRIVE=0 이면 생략)
