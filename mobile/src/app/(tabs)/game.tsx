@@ -59,6 +59,8 @@ export default function GameTab() {
   const mode = gameTabMode(access, eduGate?.enabled, eduGate?.realMarketSwitch);
   if (mode === 'edu') return <EduDailyGameScreen />;
   if (mode === 'loading') return <GameTabLoading />;
+  // 보여 줄 게임 없음(스위치 OFF + 가상 데이터 게임 OFF 등) — 관리자·열람 회원이 링크로 들어와도 실시간 게임을 열지 않는다
+  if (mode === 'none') return <GameTabUnavailable />;
   if (gameVisible(access)) return <GameScreen />;
   return (
     <View style={[styles.flex, { paddingTop: insets.top }]}>
@@ -90,6 +92,25 @@ function GameTabLoading() {
         <ProfileHeaderButton />
       </View>
       <ListState mode="loading" />
+    </View>
+  );
+}
+
+/** 보여 줄 게임이 없을 때 — 어떤 게임 화면도 마운트하지 않는다 */
+function GameTabUnavailable() {
+  const insets = useSafeAreaInsets();
+  return (
+    <View style={[styles.flex, { paddingTop: insets.top }]}>
+      <View style={styles.titleRow}>
+        <Text style={styles.screenTitle} accessibilityRole="header">트레이딩 게임</Text>
+        <ProfileHeaderButton />
+      </View>
+      <ListState
+        mode="empty"
+        emoji="🎮"
+        title="지금은 게임을 이용할 수 없어요"
+        hint="지금은 열려 있는 게임이 없어요. 다음에 다시 찾아 주세요."
+      />
     </View>
   );
 }

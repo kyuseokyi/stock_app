@@ -55,6 +55,10 @@ export default function GamePage() {
   const entry = gameEntryMode(access, eduAccess, realMarketSwitch)
   if (entry === 'loading') return <p className="py-16 text-center text-ink-muted">불러오는 중…</p>
   if (entry === 'edu') return <EduDailyGamePage />
+  // 보여 줄 게임 없음(스위치 OFF + 가상 데이터 게임 OFF 등) — 관리자·열람 회원이 주소로 들어와도 실시간 게임을 열지 않는다
+  if (entry === 'none') {
+    return <EmptyState emoji="🎮" title="지금은 게임을 이용할 수 없어요" description="지금은 열려 있는 게임이 없어요. 다음에 다시 찾아 주세요." />
+  }
   if (access === null) return <p className="py-16 text-center text-ink-muted">불러오는 중…</p>
   if (!gameVisible(access)) {
     return (
