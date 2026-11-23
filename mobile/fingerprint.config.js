@@ -7,6 +7,12 @@ const { SourceSkips } = require('expo/fingerprint');
 /** @type {import('expo/fingerprint').Config} */
 const config = {
   sourceSkips: SourceSkips.PackageJsonScriptsAll,
+  // 로컬 Gradle 빌드가 node_modules 라이브러리 매니페스트를 직접 고친다(2026-11-23 확인: @react-native-masked-view 의
+  // AndroidManifest.xml 에서 package 속성이 지워짐). 그 파일이 지문에 들어가면 로컬(빌드한 적 있음) 지문과
+  // 깨끗한 설치(EAS 빌드·npm ci) 지문이 달라져 스토어 빌드가 "Runtime version … not equal" 로 멈추고,
+  // 로컬 빌드 여부에 따라 지문이 흔들린다 → 라이브러리 매니페스트만 뺀다. 라이브러리 버전이 바뀌면 같은 폴더의
+  // package.json·소스가 지문에 잡히므로 실제 네이티브 변경은 그대로 감지된다.
+  ignorePaths: ['node_modules/**/android/src/main/AndroidManifest.xml'],
 };
 
 module.exports = config;
