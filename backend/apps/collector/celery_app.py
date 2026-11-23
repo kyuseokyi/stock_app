@@ -33,6 +33,7 @@ celery_app = Celery(
         "apps.collector.tasks.settle_season",
         "apps.collector.tasks.quiz",
         "apps.collector.tasks.weekly_close",
+        "apps.collector.tasks.edu_game",
         "apps.collector.tasks.market_data",
         "apps.collector.tasks.canslim",
         "apps.collector.tasks.market_groups",
@@ -132,6 +133,12 @@ celery_app.conf.beat_schedule = {
     "settle-trading-season": {
         "task": "settle_trading_season",
         "schedule": crontab(hour=20, minute=40),
+    },
+    # 교육용 합성 종가 게임 — 평일 20:00 새 가상 일봉 1개 + 전 계좌 손절·익절·종가 정산(PG 만 사용).
+    # 오늘 이미 진행했으면(관리자 advance-day 포함) 건너뛴다. prod_readonly 에서도 그대로 돈다(READONLY_DISABLED_BEATS 아님)
+    "edu-game-advance-day": {
+        "task": "edu_game_advance_day",
+        "schedule": crontab(hour=20, minute=0, day_of_week="mon-fri"),
     },
     # 차트 퀴즈 풀 보충 — 일봉 수집·정산 이후. 미시도 재고 < QUIZ_POOL_MIN_UNSEEN 일 때만 생성
     "generate-chart-quiz": {

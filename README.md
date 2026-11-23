@@ -54,7 +54,7 @@ uv run uvicorn apps.trading_game.main:app --reload --port 8003 --workers 1  # �
 
 # 데이터 수집/알림 워커 (Celery)
 uv run celery -A apps.collector.celery_app worker --loglevel=info
-uv run celery -A apps.collector.celery_app beat   --loglevel=info   # 스케줄러(매일 20:30 전종목 수집 · 20:40 시즌 정산 · 21:00 퀴즈 풀 보충 · 월 08:50 주간 랭킹 마감 · 매월 1일 08:55 월간 랭킹 마감 · 평일 장중 30초 국내 지수·환율 · 1분마다 펀드 알림 예약 발송 `dispatch-scheduled-pushes`)
+uv run celery -A apps.collector.celery_app beat   --loglevel=info   # 스케줄러(매일 20:30 전종목 수집 · 20:40 시즌 정산 · 평일 20:00 교육용 종가 게임 새 봉·정산 `edu-game-advance-day` · 21:00 퀴즈 풀 보충 · 월 08:50 주간 랭킹 마감 · 매월 1일 08:55 월간 랭킹 마감 · 평일 장중 30초 국내 지수·환율 · 1분마다 펀드 알림 예약 발송 `dispatch-scheduled-pushes`)
 
 # 국내 주식 데이터 수집 — 수동 트리거 (워커 실행 중일 때)
 # 전종목 일봉(겹침창) 수집:      collector.collect_all_daily
@@ -93,6 +93,10 @@ uv run uvicorn apps.trading_game.main:app --reload --port 8003 --workers 1
 - **수평 확장(인스턴스 N개)**: WS 전달은 Redis Pub/Sub 버스(`game:ws:broadcast` — `aud: all|users`, `game:ws:user:{id}`) → 각 인스턴스가 자기 접속자에게만 전달(sticky 세션 불필요, 메시지 형식 불변). 틱 리스너(+자동청산)·틱 묶기·개인손익·시장심리는 **리더 1개만** 실행 — Redis 락 `game:leader:trading_game`(SET NX PX, ttl/3 주기 갱신, `GAME_LEADER_TTL_MS` 기본 `10000`). 리더가 죽으면(kill) 약 ttl + ttl/3 안에 다른 인스턴스가 승계(로컬 실측: ttl 3초 → 4.2초 후 틱 재개), SIGTERM 이면 락을 즉시 반납해 1초 안에 승계(실측 0.65초). 종료 시 클라이언트는 close 1012(uvicorn)를 받고 재연결. 주문 인스턴스의 캐시 무효화는 `game:cache:dirty` 로 리더에 알림(5초 TTL 재적재는 안전망). 단일 인스턴스(dev compose)도 같은 경로로 그대로 동작. 배포 설정은 `deploy/`·`docs/deploy/`.
 - **헬스 프로브(모든 FastAPI 서비스)**: `GET /health` = 프로세스 생존(의존성 미검사, 기존 응답 그대로), `GET /ready` = DB `SELECT 1` + Redis `PING`(auth·blog·trading_game; stock_api 는 DB만) — 실패 시 503 `{"status":"not_ready","checks":{…}}`. 검사당 타임아웃 `READY_CHECK_TIMEOUT_SEC`(기본 `2`).
 - **주문 이중 게이트**: 거래 세션 창 + 최신가 신선도. 둘 다 통과해야 체결(세션 밖/시세 끊김 → 409).
+- **교육용 합성 종가 게임**(명세 `docs/edu_synthetic_daily_game_spec_and_plan.md`): 서버가 자체 생성한 가상 일봉(실제 종목·시세 무관 — `REAL_MARKET` 판정 없음)으로 하루(봉) 1회 의사결정. 기능 플래그 `EDU_DAILY_GAME`(기본 ON, 관리자 `PUT /api/game/admin/feature-flags/EDU_DAILY_GAME`).
+  - 사용자: `GET /api/game/edu/state`(비로그인 가능, 항상 `enabled` 포함 — OFF 면 `{enabled:false}`, 활성 시즌이 없으면 시즌 1기 + 워밍업 120봉 자동 생성) · `POST /api/game/edu/action`(로그인, 같은 봉에 두 번째 제출은 409 `ALREADY_PARTICIPATED_TODAY`) · `GET /api/game/edu/leaderboard`(공개 Top 50) · `GET /api/game/edu/history`(로그인). OFF 면 action·history·leaderboard 403 `edu_game_disabled`.
+  - 관리자(ADMIN): `GET /api/game/admin/edu/season` · `POST /api/game/admin/edu/advance-day`(즉시 1봉 + 정산, 하루 제한 없음) · `POST /api/game/admin/edu/new-season`(기존 ACTIVE → CLOSED 후 새 시즌) · `PUT /api/game/admin/edu/regime`(다음 봉 국면 지정).
+  - 자동 정산: Celery beat `edu-game-advance-day` 평일 20:00 KST — 오늘 이미 진행했으면(관리자 진행 포함) 건너뜀, 플래그 OFF 면 진행 안 함. PostgreSQL 만 써서 `MARKET_DATA_SOURCE=prod_readonly` 에서도 동작. 테이블 `edu_game_*` 4개(마이그레이션 `b1d3f5a7c9e2`).
 - **실시간 랭킹(Phase 4)**: Redis ZSET(`game:season:{id}:ranking`)에 매 틱 보유자 라이브 ROI·청산 시 실현 ROI 반영. 조회 — `GET /api/game/seasons/{id}/leaderboard`(Top100), `GET /api/game/seasons/{id}/my-rank`, `GET /api/game/hall-of-fame`.
 - **시즌 정산(Phase 4)**: Celery beat `settle_trading_season` 매일 20:40 KST → 종료일 도래 시 ClickHouse 종가(종료일 당일, 주말·휴장이면 직전 거래일 — 평일 당일 봉이 없으면 보류 후 다음 날 전 종목 0행이면 휴장으로 판단, 최후 3일 뒤 폴백)로 전액 강제청산 → 명예의 전당 박제(+Trading MBTI) → 시즌 FINISHED + 차기 시즌 자동 생성(멱등). worker+beat 가동 필요(`uv run celery -A apps.collector.celery_app worker/beat`).
 - **데일리 스마트 코치(Phase 5a)**: 관리자 `PUT /api/game/admin/coach-messages`(슬롯 upsert, `action=draft|publish` — 발행된 슬롯은 초안 저장 불가 409), `GET /api/game/admin/coach-messages?season_id&target_date`, `GET /api/game/admin/seasons`(ADMIN). 유저 `GET /api/game/coach/today`(KST 오늘·활성 시즌의 발행분, `active`=이브닝 우선). 발행 시 WS로 `{type:"coach", season_id, ...}` 전원 push(활성 시즌·오늘(KST) 브리핑일 때만).

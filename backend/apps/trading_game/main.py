@@ -23,7 +23,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from shared.cors import build_allowed_origins
 from apps.trading_game import deps
 from apps.trading_game.routers import (
-    academy, academy_admin, candles, coach, feature_flags, game_settings, leaderboard, market_status, orders, quests,
+    academy, academy_admin, candles, coach, edu_game, feature_flags, game_settings, leaderboard, market_status, orders, quests,
     quiz, quiz_admin, ws_gateway,
 )
 from apps.trading_game.services import position_cache, ws_bus
@@ -100,6 +100,7 @@ app.include_router(quests.router)
 app.include_router(academy.router)
 app.include_router(academy_admin.router)
 app.include_router(quiz_admin.router)
+app.include_router(edu_game.router)  # 교육용 합성 종가 게임 /api/game/edu/*·/api/game/admin/edu/*
 
 
 @app.get("/health", tags=["health"])

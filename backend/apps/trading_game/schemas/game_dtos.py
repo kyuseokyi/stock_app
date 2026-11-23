@@ -151,6 +151,8 @@ class GameFeatures(BaseModel):
     streak: bool = True
     # A안: 요청자 기준 실제 시세 게임 열람 가능 여부(REAL_MARKET 플래그 또는 관리자·시세 열람 권한 회원)
     real_market: bool = False
+    # 교육용 합성 종가 게임(EDU_DAILY_GAME) 공개 여부 — 탭 노출은 GET /api/game/edu/state 의 enabled 가 기준
+    edu_daily_game: bool = True
 
 
 class ActiveSeason(SeasonOption):
