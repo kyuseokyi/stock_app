@@ -67,16 +67,25 @@ const NAV_GROUPS: NavGroup[] = [
   },
 ]
 
+// 관리자 계정 — '관리자 계정'(만들기·관리)은 슈퍼 관리자에게만, '비밀번호 변경'은 모든 관리자에게
+const accountGroup = (isSuper: boolean): NavGroup => ({
+  title: '관리자',
+  items: [
+    ...(isSuper ? [{ to: '/admins', label: '관리자 계정', icon: '🛡️' }] : []),
+    { to: '/account/password', label: '비밀번호 변경', icon: '🔑' },
+  ],
+})
+
 const linkClass = ({ isActive }: { isActive: boolean }) =>
   `flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition ${
     isActive ? 'bg-indigo-600 text-white' : 'text-slate-600 hover:bg-slate-100'
   }`
 
-function SidebarContent() {
+function SidebarContent({ isSuper }: { isSuper: boolean }) {
   const closeSidebar = useUiStore((s) => s.closeSidebar)
   return (
     <nav className="flex flex-col gap-6 p-4">
-      {NAV_GROUPS.map((group) => (
+      {[...NAV_GROUPS, accountGroup(isSuper)].map((group) => (
         <div key={group.title}>
           <p className="mb-2 px-3 text-xs font-semibold uppercase tracking-wide text-slate-400">
             {group.title}
@@ -100,14 +109,14 @@ function SidebarContent() {
   )
 }
 
-export default function Sidebar() {
+export default function Sidebar({ isSuper = false }: { isSuper?: boolean }) {
   const { sidebarOpen, closeSidebar } = useUiStore()
 
   return (
     <>
       {/* 데스크톱: 고정 사이드바 */}
       <aside className="hidden w-56 shrink-0 border-r border-slate-200 bg-white lg:block">
-        <SidebarContent />
+        <SidebarContent isSuper={isSuper} />
       </aside>
 
       {/* 모바일: 오버레이 드로어 */}
@@ -119,7 +128,7 @@ export default function Sidebar() {
             aria-hidden="true"
           />
           <aside className="absolute left-0 top-0 h-full w-64 border-r border-slate-200 bg-white shadow-xl">
-            <SidebarContent />
+            <SidebarContent isSuper={isSuper} />
           </aside>
         </div>
       )}

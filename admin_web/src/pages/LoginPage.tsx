@@ -9,7 +9,7 @@ export default function LoginPage() {
   const from =
     (location.state as { from?: Location } | null)?.from?.pathname || '/boards'
 
-  const [email, setEmail] = useState('admin@stock.app')
+  const [loginId, setLoginId] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
@@ -19,7 +19,7 @@ export default function LoginPage() {
     setError('')
     setLoading(true)
     try {
-      await login(email.trim(), password)
+      await login(loginId.trim(), password)
       navigate(from, { replace: true })
     } catch (caught) {
       const err = caught as AxiosError
@@ -29,7 +29,9 @@ export default function LoginPage() {
           '백엔드 서버에 연결할 수 없습니다. uvicorn(apps.blog.main:app)이 실행 중인지 확인하세요.',
         )
       } else if (err.response.status === 401) {
-        setError('이메일 또는 비밀번호가 올바르지 않습니다.')
+        setError('아이디 또는 비밀번호가 올바르지 않습니다.')
+      } else if (err.response.status === 403) {
+        setError('사용 중지된 계정입니다. 슈퍼 관리자에게 문의하세요.')
       } else {
         setError(`로그인 실패 (HTTP ${err.response.status})`)
       }
@@ -55,12 +57,16 @@ export default function LoginPage() {
         <form onSubmit={onSubmit} className="space-y-4">
           <div>
             <label className="mb-1 block text-sm font-medium text-slate-600">
-              이메일
+              아이디
             </label>
             <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              type="text"
+              autoComplete="username"
+              autoCapitalize="none"
+              spellCheck={false}
+              value={loginId}
+              onChange={(e) => setLoginId(e.target.value)}
+              placeholder="아이디"
               className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none"
             />
           </div>
@@ -70,6 +76,7 @@ export default function LoginPage() {
             </label>
             <input
               type="password"
+              autoComplete="current-password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="비밀번호"
@@ -85,9 +92,6 @@ export default function LoginPage() {
           </button>
         </form>
 
-        <p className="mt-4 text-center text-xs text-slate-400">
-          기본 계정: admin@stock.app / admin1234
-        </p>
       </div>
     </div>
   )

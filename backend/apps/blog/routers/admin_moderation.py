@@ -1,4 +1,4 @@
-"""관리자 — 댓글 신고 관리·회원(닉네임 변경·댓글 금지·시세 열람 권한·역할)·차트 포함 글 점검 REST 라우터. 모두 require_admin."""
+"""관리자 — 댓글 신고 관리·회원(닉네임 변경·댓글 금지·시세 열람 권한)·차트 포함 글 점검 REST 라우터. 모두 require_admin."""
 from __future__ import annotations
 
 import logging
@@ -93,21 +93,6 @@ async def set_market_data_access(
         raise _http(e) from e
     log.info("시세 열람 권한 변경 user=%s enabled=%s admin=%s", user_id, payload.enabled, admin.id)
     return out
-
-
-@router.patch("/users/{user_id}/role", response_model=ms.AdminUserOut)
-async def set_role(
-    user_id: int,
-    payload: ms.RoleUpdateRequest,
-    db: AsyncSession = Depends(get_db),
-    admin: User = Depends(require_admin),
-):
-    """회원 역할 변경(FREE|ADMIN). 자기 강등·마지막 관리자 강등·비활성 회원 승격은 409, 같은 역할이면 그대로 200.
-    변경 기록(누가·누구를·무엇에서 무엇으로)은 서비스가 logging 으로 남긴다."""
-    try:
-        return await moderation.set_role(db, user_id, payload.role, admin)
-    except moderation.ModerationError as e:
-        raise _http(e) from e
 
 
 @router.patch("/users/{user_id}/nickname", response_model=ms.AdminUserOut)

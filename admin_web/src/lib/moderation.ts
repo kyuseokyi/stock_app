@@ -68,6 +68,3 @@ export const formatDateTime = (iso: string | null | undefined): string => {
   const p = (n: number) => String(n).padStart(2, '0')
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`
 }
-
-/** 역할 표시 라벨 — 유료 등급이 없어 ADMIN 만 '관리자', 그 밖(FREE·PREMIUM)은 모두 '일반' */
-export const roleLabel = (role: string): string => (role === 'ADMIN' ? '관리자' : '일반')

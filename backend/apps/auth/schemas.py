@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -12,7 +13,7 @@ from .terms import terms_required as _terms_required
 
 
 class LoginRequest(BaseModel):
-    email: str = Field(..., description="관리자 이메일")
+    email: str = Field(..., description="관리자 아이디(기존 시드 관리자는 이메일 형식)")
     password: str = Field(..., description="비밀번호")
 
 
@@ -40,6 +41,8 @@ class UserOut(BaseModel):
     terms_required: bool
     # 로그인 방식(KAKAO·NAVER·GOOGLE·APPLE). 관리자 LOCAL·게스트·심사 계정은 null — 추가 필드(옛 클라이언트는 무시)
     provider: AuthProvider | None = None
+    # 슈퍼 관리자 여부 — admin_web 이 '관리자 계정' 메뉴를 보일지 판단. 추가 필드(옛 클라이언트는 무시)
+    is_super_admin: bool = False
 
     @model_validator(mode="before")
     @classmethod
@@ -54,6 +57,7 @@ class UserOut(BaseModel):
             "role": data.role,
             "terms_required": _terms_required(data),
             "provider": getattr(data, "provider", None),
+            "is_super_admin": bool(getattr(data, "is_super_admin", False)),
         }
 
 
@@ -111,3 +115,40 @@ class SocialExchangeRequest(BaseModel):
 
     code: str = Field(..., min_length=1, max_length=200)
     code_verifier: str = Field("", max_length=128)
+
+
+# --- 관리자 계정(슈퍼 관리자 전용 생성·관리) · 비밀번호 변경 ------------------------------------- #
+# 아이디: 영문 소문자·숫자·. _ - 4~30자. '@' 를 막아 소셜 이메일·게스트(@guest.local)와 겹칠 일이 없다.
+ADMIN_LOGIN_ID_PATTERN = r"^[a-z0-9._-]{4,30}$"
+# bcrypt 는 72바이트까지만 본다 — 그 이상은 조용히 잘리므로 막는다
+PASSWORD_MIN, PASSWORD_MAX = 8, 72
+
+
+class PasswordChangeRequest(BaseModel):
+    current_password: str = Field(..., min_length=1, description="현재 비밀번호")
+    new_password: str = Field(..., min_length=PASSWORD_MIN, max_length=PASSWORD_MAX, description="새 비밀번호(8~72자)")
+
+
+class AdminCreateRequest(BaseModel):
+    login_id: str = Field(..., pattern=ADMIN_LOGIN_ID_PATTERN, description="로그인 아이디(영문 소문자·숫자·._- 4~30자)")
+    nickname: str = Field(..., min_length=1, max_length=20, description="표시 이름")
+    password: str = Field(..., min_length=PASSWORD_MIN, max_length=PASSWORD_MAX, description="처음 비밀번호(8~72자)")
+
+
+class AdminPasswordResetRequest(BaseModel):
+    new_password: str = Field(..., min_length=PASSWORD_MIN, max_length=PASSWORD_MAX, description="새 비밀번호(8~72자)")
+
+
+class AdminActiveRequest(BaseModel):
+    is_active: bool
+
+
+class AdminAccountOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    login_id: str | None = Field(None, validation_alias="email", description="로그인 아이디(users.email 에 저장)")
+    nickname: str | None
+    is_active: bool
+    is_super_admin: bool
+    created_at: datetime | None = None

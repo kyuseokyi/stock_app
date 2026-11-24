@@ -49,7 +49,7 @@ uv run celery -A apps.collector.celery_app worker --loglevel=info  # 워커 실�
 uv run celery -A apps.collector.celery_app beat --loglevel=info    # 스케줄러 실행
 
 # 관리자 시드 (최초 1회)
-uv run python -m apps.auth.seed_admin   # admin@stock.app / admin1234
+uv run python -m apps.auth.seed_admin   # 슈퍼 관리자 admin@stock.app / admin1234(처음 만들 때만 — 재실행은 비밀번호 유지)
 ```
 
 ### 2. Mobile App (Expo)

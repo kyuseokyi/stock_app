@@ -4,7 +4,7 @@ from __future__ import annotations
 from sqlalchemy import delete, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from shared.models import AuthProvider, BlogComment, BlogPost, CommentReport, User, UserBlock, UserRole
+from shared.models import AuthProvider, BlogComment, BlogPost, CommentReport, User, UserBlock
 
 
 # --------------------------------------------------------------------------- #
@@ -153,19 +153,3 @@ async def list_users(db: AsyncSession, *, q: str | None, page: int, size: int,
     stmt = base.order_by(User.id.desc()).offset((page - 1) * size).limit(size)
     return total, list((await db.execute(stmt)).scalars().all())
 
-
-
-async def lock_active_admin_ids(db: AsyncSession) -> list[int]:
-    """활성 관리자 id 목록을 행 잠금(SELECT ... FOR UPDATE)으로 읽는다 — 관리자 강등 직전 '마지막 관리자' 판정용.
-
-    - id 순으로 잠가 두 관리자가 서로를 동시에 내릴 때 교착(deadlock)을 피한다.
-    - PostgreSQL(READ COMMITTED)은 잠금을 기다린 뒤 WHERE 를 다시 평가하므로, 먼저 커밋된 강등으로 FREE 가 된 행은 빠진다.
-    - 엔티티가 아니라 id 만 읽어 세션 identity map 의 낡은 값에 영향받지 않는다. SQLite(테스트)는 FOR UPDATE 를 생략한다.
-    """
-    stmt = (
-        select(User.id)
-        .where(User.role == UserRole.ADMIN, User.is_active.is_(True))
-        .order_by(User.id)
-        .with_for_update()
-    )
-    return list((await db.execute(stmt)).scalars().all())

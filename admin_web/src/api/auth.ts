@@ -20,3 +20,19 @@ export const getUser = (): UserOut | null => {
   const raw = localStorage.getItem('user')
   return raw ? (JSON.parse(raw) as UserOut) : null
 }
+
+/** 서버의 최신 내 정보로 저장값 갱신(슈퍼 관리자 표시 등 새 필드 반영). 실패하면 저장값 그대로 */
+export const refreshMe = async (): Promise<UserOut | null> => {
+  try {
+    const { data } = await authClient.get<UserOut>('/auth/me')
+    localStorage.setItem('user', JSON.stringify(data))
+    return data
+  } catch {
+    return getUser()
+  }
+}
+
+/** 내 비밀번호 변경 — 현재 비밀번호 확인 후. 지금 로그인은 유지된다 */
+export const changePassword = async (currentPassword: string, newPassword: string): Promise<void> => {
+  await authClient.post('/auth/me/password', { current_password: currentPassword, new_password: newPassword })
+}
