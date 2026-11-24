@@ -107,7 +107,7 @@ ADDR_POOL=172.30.0.0/16 bash deploy/swarm/cutover.sh
 전환 후 확인
 - [ ] `docker stack services stock` — 9개 `1/1`
 - [ ] `https://app.funnotedaily.com`·`api`·`auth`·`blog`·`game`·`admin` 정상, 앱 로그인·게임 탭
-- [ ] 다음 상용 배포(`release/v*`) Actions 로그에 `모드: Swarm(start-first)` → 배포 중 새로고침해도 502 없음
+- [x] 다음 상용 배포(`release/v*`) Actions 로그에 `모드: Swarm(start-first)` → 배포 중 새로고침해도 502 없음 — release/v1.0.15 로 확인(8-1)
 - [ ] `sudo reboot` 뒤(한가한 시간) DB 3개 healthy·`stock_net` 연결·스택 9개 `1/1`
 - [ ] **포트 노출(전환과 무관한 기존 상태)**: compose 도 앱·DB 포트(8001~8004·3000·3001·5432·8123·6379)를 0.0.0.0 에 연다. Oracle 보안 목록(VCN Security List/NSG)에서 인바운드는 22(SSH)만 열려 있는지 확인 — Cloudflare 터널은 바깥으로 나가는 연결이라 인바운드가 필요 없다
 - 되돌리기: `bash deploy/swarm/rollback-to-compose.sh`(6절)
@@ -116,4 +116,5 @@ ADDR_POOL=172.30.0.0/16 bash deploy/swarm/cutover.sh
 - 사전 점검: Docker 29.9.3, live-restore false, 사설망 `10.0.0.0/24`(서버 10.0.0.x) → `ADDR_POOL=172.30.0.0/16` 로 실행, 관리자 웹 주소 4개 확인.
 - `cutover.sh`(커밋 6dc90e4 = release/v1.0.14): env 해석 40개 키 일치, DB 이름 확인 OK, **중단 약 30초**, 9개 서비스 `1/1`.
 - 외부 확인: app·admin 200, api·auth·blog·game 루트 404(서버 응답 = 정상), auth `/health` 200, 교육 게임 features·GraphQL 정상, 시세 차단 유지.
-- 남은 확인: 다음 `release/v*` 배포에서 `모드: Swarm(start-first)` 와 502 없음, 한가한 시간 재부팅 내성, Oracle 보안 목록 인바운드 22 만.
+- 첫 무중단 상용 배포(release/v1.0.15, 같은 날 14:25~14:27): `모드: Swarm(start-first)`, 마이그레이션(`users.is_super_admin` 칸 추가) → 백엔드 → 웹 순서. 배포 중 10초마다 16회 외부 점검(auth `/health`·app) 모두 200 — 끊김·502 없음.
+- 남은 확인: 한가한 시간 재부팅 내성, Oracle 보안 목록 인바운드 22 만.
