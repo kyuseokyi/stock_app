@@ -101,7 +101,7 @@ async def test_me_includes_terms_required_true_for_null(auth_client, maker):
     assert r.status_code == 200, r.text
     body = r.json()
     # 기존 필드 유지 + 순서(새 필드는 맨 끝)
-    assert list(body.keys()) == ["id", "email", "nickname", "role", "terms_required", "provider"]
+    assert list(body.keys()) == ["id", "email", "nickname", "role", "terms_required", "provider", "is_super_admin"]
     assert body["terms_required"] is True
 
 

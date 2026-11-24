@@ -116,6 +116,11 @@ class User(Base, TimestampMixin):
         role_enum, default=UserRole.FREE, server_default=UserRole.FREE.value, nullable=False
     )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    # 슈퍼 관리자 — 관리자 계정 생성·비활성화·비밀번호 초기화까지 할 수 있는 관리자(role=ADMIN 과 함께 쓴다).
+    # 일반 관리자 권한 판정(require_admin)은 role 만 보므로 이 값과 무관. 판정은 shared/auth.require_super_admin
+    is_super_admin: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=false(), nullable=False
+    )
 
     # 이용약관 동의 — 마지막으로 동의한 약관 버전과 시각(미동의·기존 회원은 NULL). 판정은 apps/auth/terms.py
     terms_version: Mapped[str | None] = mapped_column(String(20), nullable=True)

@@ -77,6 +77,16 @@ async def require_admin(user: User = Depends(get_current_user)) -> User:
     return user
 
 
+async def require_super_admin(user: User = Depends(require_admin)) -> User:
+    """관리자 계정 관리(생성·비활성화·비밀번호 초기화) 전용 — 슈퍼 관리자만."""
+    if not user.is_super_admin:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            {"code": "SUPER_ADMIN_REQUIRED", "message": "슈퍼 관리자만 할 수 있어요."},
+        )
+    return user
+
+
 async def get_optional_user(
     creds: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
     db: AsyncSession = Depends(get_db),

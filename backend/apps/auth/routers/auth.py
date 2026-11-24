@@ -18,7 +18,7 @@ from .. import schemas
 from ..deps import get_redis
 from ..guest_gate import require_guest_enabled
 from ..review_gate import require_review_login_enabled
-from ..services import account_deletion, refresh_tokens, review_login, terms_consent
+from ..services import account_deletion, admin_accounts, refresh_tokens, review_login, terms_consent
 from ..services.session_login import issue_login_token
 from ..social.config import SocialSettings, get_social_settings
 from ..social.providers import get_http_transport
@@ -165,6 +165,20 @@ async def logout(
 @router.get("/me", response_model=schemas.UserOut)
 async def me(user: User = Depends(get_current_user)):
     return user
+
+
+@router.post("/me/password", status_code=status.HTTP_204_NO_CONTENT)
+async def change_password(
+    payload: schemas.PasswordChangeRequest,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> Response:
+    """내 비밀번호 변경(아이디·비밀번호 로그인 계정) — 현재 비밀번호 확인 후 바꾼다. 지금 로그인은 유지."""
+    try:
+        await admin_accounts.change_own_password(db, user, payload.current_password, payload.new_password)
+    except admin_accounts.AdminAccountError as e:
+        raise HTTPException(e.status, detail={"code": e.code, "message": e.message}) from e
+    return Response(status_code=status.HTTP_204_NO_CONTENT, headers=NO_STORE)
 
 
 @router.post("/me/terms", response_model=schemas.UserOut)
