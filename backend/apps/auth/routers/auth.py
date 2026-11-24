@@ -8,7 +8,7 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Response, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from shared.auth import get_current_user
+from shared.auth import get_current_user, require_admin
 from shared.database import get_db
 from shared.models import User, UserRole
 from shared.nickname_filter import is_blocked_nickname, safe_nickname
@@ -170,10 +170,10 @@ async def me(user: User = Depends(get_current_user)):
 @router.post("/me/password", status_code=status.HTTP_204_NO_CONTENT)
 async def change_password(
     payload: schemas.PasswordChangeRequest,
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> Response:
-    """내 비밀번호 변경(아이디·비밀번호 로그인 계정) — 현재 비밀번호 확인 후 바꾼다. 지금 로그인은 유지."""
+    """내 비밀번호 변경(관리자 전용 — 심사 계정 등 다른 비밀번호 계정은 막는다) — 현재 비밀번호 확인 후 바꾼다. 지금 로그인은 유지."""
     try:
         await admin_accounts.change_own_password(db, user, payload.current_password, payload.new_password)
     except admin_accounts.AdminAccountError as e:

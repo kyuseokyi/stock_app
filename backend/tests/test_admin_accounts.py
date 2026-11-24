@@ -210,3 +210,19 @@ async def test_seed_keeps_changed_password(maker, monkeypatch):
     await seed_admin.seed(session_factory=maker, reset_password=True)
     async with maker() as db:
         assert verify_password("admin1234", (await db.get(User, 1)).password_hash)
+
+
+async def test_member_cannot_change_password(client, maker):
+    """심사 계정처럼 비밀번호가 있는 일반 회원도 이 API 로는 못 바꾼다(관리자 전용)."""
+    from shared.security import create_access_token
+
+    async with maker() as db:
+        u = User(email="review@t.local", nickname="r", role=UserRole.FREE, is_active=True,
+                 password_hash=hash_password(PW))
+        db.add(u)
+        await db.commit()
+        await db.refresh(u)
+    h = {"Authorization": f"Bearer {create_access_token(subject=u.id, role='FREE')}"}
+    r = await client.post("/api/v1/auth/me/password",
+                          json={"current_password": PW, "new_password": "new-pass-12"}, headers=h)
+    assert r.status_code == 403
