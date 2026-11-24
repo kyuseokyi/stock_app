@@ -53,7 +53,7 @@ type PrivateModal = Exclude<ActiveModal, 'ranking' | 'rules' | null>;
 export default function GameTab() {
   const insets = useSafeAreaInsets();
   const access = useGameAccess();
-  // 게임 모드 = 관리자 전역 스위치 REAL_MARKET 하나(edu/state 의 real_market_switch, 사용자별 판정 아님).
+  // 게임 모드 = 관리자 전역 스위치 REAL_MARKET 하나(edu/features 의 real_market_switch, 사용자별 판정 아님).
   // ON → 실시간 게임만(아래 기존 줄 그대로) / OFF → 가상 데이터(교육용 종가) 게임만. 두 게임을 함께 보이는 전환 세그먼트는 없다
   const eduGate = useEduGate();
   const mode = gameTabMode(access, eduGate?.enabled, eduGate?.realMarketSwitch);

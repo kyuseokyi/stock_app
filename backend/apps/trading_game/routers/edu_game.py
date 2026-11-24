@@ -2,6 +2,7 @@
 
 명세: docs/edu_synthetic_daily_game_spec_and_plan.md 4.3
 - 게임 탭 노출은 실시간 시즌(/api/game/seasons/active)과 분리 — GET /state 가 항상 enabled 를 준다.
+- 탭(메뉴) 노출 판단만 필요하면 GET /features(전역 플래그 두 개, 인증 무시, 시즌 생성 없음)를 쓴다.
 - EDU_DAILY_GAME OFF: state 는 200 {enabled:false}, action·history·leaderboard 는 403 {"detail":"edu_game_disabled"}.
 - 합성 데이터라 REAL_MARKET(A안 시세 비노출) 판정을 걸지 않는다. 비로그인도 state·leaderboard 조회 가능.
 - 관리자 API 는 플래그와 무관하게 동작(require_admin).
@@ -10,7 +11,7 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from shared.auth import get_current_user, get_optional_user, require_admin
@@ -19,7 +20,7 @@ from shared.models import User
 from apps.trading_game import deps
 from apps.trading_game.schemas.edu_game_dtos import (
     EduActionRequest, EduActionResponse, EduAdminSeasonDTO, EduAdvanceResponse, EduHistoryResponse,
-    EduLeaderboardResponse, EduNewSeasonRequest, EduRegimeRequest, EduStateResponse,
+    EduFeaturesResponse, EduLeaderboardResponse, EduNewSeasonRequest, EduRegimeRequest, EduStateResponse,
 )
 from apps.trading_game.services import edu_game_service as svc
 from apps.trading_game.services import feature_flag_service
@@ -43,6 +44,34 @@ def _http(e: svc.EduGameError) -> HTTPException:
 
 
 # ---------------------------------------------------------------- 사용자
+FEATURES_CACHE_CONTROL = "public, max-age=30"  # 플래그 Redis 캐시(30초)와 같은 주기 — 사용자와 무관한 공개 값
+
+
+async def _safe_enabled(db: AsyncSession) -> bool:
+    """EDU_DAILY_GAME 플래그. 조회 오류 = false(닫힘) — features 는 탭 노출 판단용이라 500 대신 닫는다."""
+    try:
+        return await _enabled(db)
+    except Exception as exc:  # noqa: BLE001 — 기본은 닫힘
+        log.warning("EDU_DAILY_GAME 플래그 조회 실패 — OFF 로 판정: %s", type(exc).__name__)
+        try:
+            await db.rollback()
+        except Exception:  # noqa: BLE001
+            pass
+        return False
+
+
+@router.get("/api/game/edu/features", response_model=EduFeaturesResponse)
+async def edu_features(response: Response, db: AsyncSession = Depends(get_db)):
+    """게임 탭(메뉴) 노출 판단값만 — 전역 플래그 두 개. 인증을 보지 않는다(토큰이 없거나 잘못돼도 200).
+
+    /state 와 달리 시즌을 만들지 않고 DB 에 아무것도 쓰지 않는다(크롤러·미리 불러오기가 시즌을 만들지 않게).
+    """
+    switch = await real_market.flag_on(db, deps.get_redis())
+    enabled = await _safe_enabled(db)
+    response.headers["Cache-Control"] = FEATURES_CACHE_CONTROL
+    return EduFeaturesResponse(enabled=enabled, real_market_switch=switch)
+
+
 @router.get("/api/game/edu/state", response_model=EduStateResponse)
 async def edu_state(
     user: User | None = Depends(get_optional_user),

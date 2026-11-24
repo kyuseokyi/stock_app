@@ -944,3 +944,80 @@ async def test_advance_commit_conflict_returns_skipped_with_season_id(maker, mon
 
     monkeypatch.setattr(eng, "generate_next_candle", dup)
     assert await _advance(maker) == {"status": "skipped", "season_id": sid, "day_index": 119}
+
+
+# ---------------------------------------------------------------- GET /api/game/edu/features(탭 노출 판단 전용)
+from apps.trading_game.services import real_market as _real_market_mod  # noqa: E402
+
+_REAL_FLAG_ON = _real_market_mod.flag_on  # conftest 가 덮어쓰기 전 원본(조회 실패 → false 처리 포함)
+
+
+@pytest.fixture
+async def raw_api(maker, fake_redis):
+    """인증 의존성을 덮어쓰지 않은 클라이언트 — 실제 토큰 처리(잘못된 토큰)를 그대로 탄다."""
+
+    async def _db():
+        async with maker() as s:
+            yield s
+
+    app.dependency_overrides[get_db] = _db
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        yield client
+    app.dependency_overrides.clear()
+
+
+async def _row_counts(maker) -> tuple[int, ...]:
+    counts = []
+    async with maker() as db:
+        for m in (EduGameSeason, EduGameCandle, EduGameAccount, GameFeatureFlag):
+            counts.append((await db.execute(select(func.count()).select_from(m))).scalar())
+    return tuple(counts)
+
+
+async def test_features_does_not_create_season(raw_api, maker, monkeypatch):
+    """시즌 0개에서 불러도 시즌·봉·계좌가 생기지 않는다(state 와 다름)."""
+    _switch_from_db(monkeypatch)
+    before = await _row_counts(maker)
+    assert before[0] == 0
+    for _ in range(2):
+        r = await raw_api.get("/api/game/edu/features")
+        assert r.status_code == 200
+        assert r.json() == {"enabled": True, "real_market_switch": False}
+        assert r.headers["cache-control"] == "public, max-age=30"
+    assert await _row_counts(maker) == before
+
+
+@pytest.mark.parametrize("edu,switch", [(True, True), (True, False), (False, True), (False, False)])
+async def test_features_flag_combinations(raw_api, maker, monkeypatch, edu, switch):
+    _switch_from_db(monkeypatch)
+    async with maker() as db:
+        db.add(GameFeatureFlag(key="EDU_DAILY_GAME", enabled=edu))
+        db.add(GameFeatureFlag(key="REAL_MARKET", enabled=switch))
+        await db.commit()
+    body = (await raw_api.get("/api/game/edu/features")).json()
+    assert body == {"enabled": edu, "real_market_switch": switch}
+    async with maker() as db:
+        assert (await db.execute(select(func.count()).select_from(EduGameSeason))).scalar() == 0
+
+
+async def test_features_ignores_invalid_token(raw_api, maker, monkeypatch):
+    """공개 값이라 토큰을 보지 않는다 — 잘못된 토큰도 401 이 아니라 200(같은 토큰으로 state 는 401)."""
+    _switch_from_db(monkeypatch)
+    headers = {"Authorization": "Bearer not-a-valid-token"}
+    r = await raw_api.get("/api/game/edu/features", headers=headers)
+    assert r.status_code == 200 and r.json() == {"enabled": True, "real_market_switch": False}
+    assert (await raw_api.get("/api/game/edu/state", headers=headers)).status_code == 401
+
+
+async def test_features_flag_lookup_failure_is_closed(raw_api, maker, monkeypatch):
+    """플래그 조회 오류는 500 대신 둘 다 false(닫힘)."""
+    from apps.trading_game.services import feature_flag_service
+
+    async def _boom(_db, _redis, _flag) -> bool:
+        raise RuntimeError("db down")
+
+    monkeypatch.setattr(_real_market_mod, "flag_on", _REAL_FLAG_ON)
+    monkeypatch.setattr(feature_flag_service, "is_enabled", _boom)
+    r = await raw_api.get("/api/game/edu/features")
+    assert r.status_code == 200 and r.json() == {"enabled": False, "real_market_switch": False}

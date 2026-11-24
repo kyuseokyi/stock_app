@@ -17,7 +17,7 @@ import { screenerTabVisible } from '@/features/screener/visibility';
  *  내정보(profile)는 탭 버튼만 숨기고(href: null) 라우트·화면은 그대로 — 탭 화면 제목 줄 오른쪽 ProfileHeaderButton 으로 연다.
  *  '내 펀드'는 비로그인이면 탭 이동을 막고 로그인 안내 시트(FundLoginSheet — 홈 카드와 같은 시트)를 띄운다.
  *  단 이미 로그인 화면(내정보)에 있으면 시트 없이 '로그인 뒤 내 펀드로' 만 기억한다(내정보가 안내 문구를 보여 줌).
- *  게임 탭은 보여 줄 게임이 있을 때만 — 관리자 전역 스위치 REAL_MARKET(GET /api/game/edu/state real_market_switch)이
+ *  게임 탭은 보여 줄 게임이 있을 때만 — 관리자 전역 스위치 REAL_MARKET(GET /api/game/edu/features real_market_switch)이
  *  ON 이면 실시간 게임 허용(seasons/active features.real_market)일 때, OFF 면 가상 데이터(교육용 종가) 게임 공개(enabled)일 때.
  *  모름·실패는 숨김(href: null).
  *  (docs/app_identity_and_nav_redesign_spec.md 1장) */

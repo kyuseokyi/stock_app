@@ -53,7 +53,7 @@ export function eduGateOf(state: { enabled?: boolean; real_market_switch?: boole
 }
 
 /**
- * 하단 게임 탭 노출 — 관리자 전역 스위치(REAL_MARKET, edu/state 의 real_market_switch) 하나로 정한다.
+ * 하단 게임 탭 노출 — 관리자 전역 스위치(REAL_MARKET, edu/features 의 real_market_switch) 하나로 정한다.
  * 스위치 ON → 실시간 게임만(요청자 기준 real_market 허용일 때), OFF → 가상 데이터 게임만(edu 공개일 때). 스위치 모름·실패는 숨김.
  * 웹 web_client/src/lib/marketAccess.ts 의 gameTabVisible 과 같은 규칙
  */

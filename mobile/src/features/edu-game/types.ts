@@ -103,6 +103,14 @@ export interface EduOptions {
   hold_watch_bonus: number;
 }
 
+/** GET /api/game/edu/features — 탭 노출 판단용 전역 플래그 두 개(사용자 무관, 시즌을 만들지 않음) */
+export interface EduFeatures {
+  /** EDU_DAILY_GAME — 교육용(가상 데이터) 게임 공개 여부 */
+  enabled: boolean;
+  /** 관리자 전역 REAL_MARKET 스위치 */
+  real_market_switch: boolean;
+}
+
 /** enabled=false 면 나머지는 기본값(null/빈 배열) — 화면은 게임을 숨긴다 */
 export interface EduState {
   enabled: boolean;
