@@ -109,6 +109,11 @@ class MarketDataAccessRequest(BaseModel):
     enabled: bool
 
 
+class RoleUpdateRequest(BaseModel):
+    """회원 역할 변경 — 유료 등급이 없어 일반(FREE)·관리자(ADMIN) 두 가지만 받는다(PREMIUM 등은 422)."""
+    role: Literal["FREE", "ADMIN"]
+
+
 class NicknameUpdate(BaseModel):
     nickname: str = Field(..., description="1~20자(앞뒤 공백 제거 후). 금칙어 검사는 하지 않는다 — 관리자 판단")
 
