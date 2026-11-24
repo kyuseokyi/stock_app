@@ -1,6 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import { Outlet, useLocation, useNavigate } from 'react-router-dom'
-import { getUser, logout, refreshMe } from '../api/auth'
+import { logout, refreshMe } from '../api/auth'
+import { tierLabel } from '../lib/permissions'
+import { useMeStore } from '../store/me'
 import { useUiStore } from '../store/ui'
 import Sidebar from './Sidebar'
 import NotificationToaster from './NotificationToaster'
@@ -14,7 +16,8 @@ export default function Layout() {
   const navigate = useNavigate()
   const { pathname } = useLocation()
   const wide = WIDE_PREFIXES.some((p) => pathname.startsWith(p))
-  const [user, setUser] = useState(getUser)
+  const user = useMeStore((s) => s.user)
+  const setUser = useMeStore((s) => s.setUser)
   const toggleSidebar = useUiStore((s) => s.toggleSidebar)
   const isSuper = user?.is_super_admin === true
 
@@ -27,10 +30,11 @@ export default function Layout() {
     return () => {
       alive = false
     }
-  }, [])
+  }, [setUser])
 
   const onLogout = () => {
     logout()
+    setUser(null)
     navigate('/login', { replace: true })
   }
 
@@ -57,7 +61,7 @@ export default function Layout() {
               <span className="hidden truncate text-sm text-slate-500 sm:inline">
                 {user.nickname || user.email}
                 <span className="ml-1 rounded-full bg-indigo-50 px-2 py-0.5 text-xs text-indigo-600">
-                  {isSuper ? '슈퍼 관리자' : '관리자'}
+                  {tierLabel(user)}
                 </span>
               </span>
             )}

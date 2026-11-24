@@ -14,6 +14,38 @@ export interface UserOut {
   role: UserRole
   // 슈퍼 관리자(관리자 계정 생성·관리 가능). 옛 로그인 정보에는 없을 수 있다 → 없으면 false 로 본다
   is_super_admin?: boolean
+  // 관리자 등급·최종 권한(로그인·/auth/me 가 채움). 옛 로그인 정보에는 없을 수 있다
+  admin_tier?: AdminTier | null
+  permissions?: AdminPermissionKey[]
+}
+
+// 관리자 권한 키 — backend/shared/admin_permissions.py 와 같게 유지
+export type AdminPermissionKey =
+  | 'SCREENER_VIEW'
+  | 'SCREENER_SETTINGS'
+  | 'DATA_PIPELINE'
+  | 'APP_UPDATE_MANAGE'
+  | 'AD_MANAGE'
+  | 'CONTENT_MANAGE'
+  | 'GAME_MANAGE'
+  | 'ADMIN_ROLE_MANAGE'
+export type AdminTier = 'SUPER_ADMIN' | 'OPERATOR' | 'ANALYST' | 'EDITOR'
+export type EditableTier = Exclude<AdminTier, 'SUPER_ADMIN'>
+
+export interface PermissionMeta {
+  key: AdminPermissionKey
+  label: string
+  description: string
+  grantable: boolean
+}
+export interface TierPolicy {
+  tier: EditableTier
+  label: string
+  permissions: AdminPermissionKey[]
+}
+export interface RolePolicies {
+  permissions: PermissionMeta[]
+  tiers: TierPolicy[]
 }
 
 // 관리자 계정 — GET/POST /api/v1/auth/admin/accounts (슈퍼 관리자 전용)
@@ -23,6 +55,8 @@ export interface AdminAccount {
   nickname: string | null
   is_active: boolean
   is_super_admin: boolean
+  admin_tier: AdminTier | null
+  custom_permissions: AdminPermissionKey[]
   created_at: string | null
 }
 
