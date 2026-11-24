@@ -17,6 +17,28 @@
 
 ---
 
+## 0-1. 구현 기록 — 2026-11-24 지시로 바뀐 점 (이 절이 아래 본문보다 우선)
+
+구현: dev `feature/admin-rbac`(마이그레이션 `d4f6b8c0e2a4`). 같은 날 사용자 지시 "관리자를 어드민에서 생성, 기존 일반회원을 관리자로 승격하는 방식은 제거, admin 계정을 슈퍼 관리자로"를 따른다.
+
+| 명세 본문 | 실제 구현 |
+| :--- | :--- |
+| `admin_tier = 'SUPER_ADMIN'` 으로 최고 관리자 표시 | 최고 관리자는 `users.is_super_admin`(마이그레이션 `c3e5a7b9d1f2`, 시드 계정). `admin_tier` 는 나머지 관리자만 `OPERATOR·ANALYST·EDITOR`. 응답의 `admin_tier` 는 표시용으로 슈퍼면 `SUPER_ADMIN` |
+| 등급이 NULL 이면 전체 권한 | **NULL = OPERATOR**(계정 관리만 빼고 전부 — 등급 도입 전 일반 관리자와 같은 동작). 전체 권한으로 보면 일반 관리자가 계정 관리까지 얻는다 |
+| 4개 등급 정책 시드 | 시드하지 않음. 표(`admin_tier_policies`)에 행이 없으면 코드 기본값(`shared/admin_permissions.DEFAULT_POLICIES`) — 표가 비어도 잠김 없음 |
+| 경로 B(일반 회원 승격), 회원 관리 등급 드롭다운, `PATCH /admin/users/{id}/admin-role`(FREE↔ADMIN) | **제외**(승격 방식 제거 지시). 관리자는 '관리자 계정' 화면에서 새로 만든다 |
+| 관리자 생성 시 `SUPER_ADMIN` 선택 가능 | **제외** — 슈퍼 관리자는 시드 계정 하나. 슈퍼 계정은 화면에서 잠겨 있어(사용 중지·초기화 불가) 여럿이면 문제 생긴 슈퍼를 막을 방법이 없다 |
+| `ADMIN_ROLE_MANAGE` 를 등급에 부여 | 슈퍼 관리자 고정(어떤 등급·개별 권한으로도 줄 수 없음, 422 `INVALID_PERMISSION`) |
+| API 경로 `POST /api/v1/auth/admin/users`, `/admin/roles` 화면 | `POST /api/v1/auth/admin/accounts`(+ `PATCH /{id}/tier`), 등급 표 `GET·PUT /api/v1/auth/admin/role-policies[/{tier}]`. 화면은 '관리자 계정'(`/admins`) 한 곳에 생성·등급·권한 표 |
+| `custom_permissions` 추가/제외 | **더하기만**(등급 권한 ∪ 개별 권한) |
+| (명세에 없음) 회원별 시세 열람 권한 부여 | 시세 재배포 계약과 연결돼 **슈퍼 관리자 전용** |
+| (명세에 없음) 실시간 게임 `REAL_MARKET` 스위치 | `GAME_MANAGE` 에 더해 `SCREENER_SETTINGS`(전체 시세 스위치와 같은 권한) 요구 — 에디터 기본 권한으로 실시간 시세를 켜지 못하게 |
+| 스크리너 조회 "관리자 전용" | 서버에서도 막음: 시세 스위치 OFF 때 관리자 우회는 `SCREENER_VIEW` 가 있을 때만(`shared/market_viewer.can_view` — GraphQL·REST·게임 WS 공통). 권한 없는 관리자는 일반 회원과 같다 |
+
+권한 대응: 데이터 현황 조회 `SCREENER_VIEW` 또는 `DATA_PIPELINE`, 수집 실행·테마 보정 `DATA_PIPELINE`, 데이터 검증 `SCREENER_VIEW`, 회원 목록·닉네임·댓글 금지·펀드 알림 `CONTENT_MANAGE`, 교육 게임 운영·기능 스위치 `GAME_MANAGE`, 통계·비밀번호 변경은 모든 관리자. 거부 응답 403 `{code: INSUFFICIENT_ADMIN_PERMISSION, required: [...]}`.
+
+---
+
 ## 1. 관리자 등급(Tier) 및 기능별 권한(Permission Scope) 정의
 
 ### 1-1. 관리자 등급 (`AdminTier`) 기본 구성

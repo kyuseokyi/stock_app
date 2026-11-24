@@ -243,11 +243,11 @@
 
 ### 교육용 합성 종가 트레이딩 게임 (방식 A 합성 일봉 + 유형 1 하루 1회 참가 · 기존 실시간 게임 보존 & 별도 화면 분리)
 > 상세 설계 및 로드맵: [`docs/edu_synthetic_daily_game_spec_and_plan.md`](edu_synthetic_daily_game_spec_and_plan.md)
-- [ ] Step 1: 기능 플래그 `EDU_DAILY_GAME`(기본 `ON`) 확장 및 신규 DB 테이블 4종(`edu_game_seasons`, `edu_game_candles`, `edu_game_accounts`, `edu_game_daily_actions`) 추가 (기존 실시간 게임 테이블·로직 100% 보존)
-- [ ] Step 2: 4국면(`ACCUMULATION · UPTREND · DISTRIBUTION · DOWNTREND`) 상태 머신 기반 합성 일봉 생성 엔진(`edu_synthetic_engine.py`, 초기 120봉 + 일별 1봉, POC·지지/저항·코치 해설 자동 산출) 및 하루 1회 의사결정(`submit_daily_action`)·일일 정산(`advance_day_and_settle`) 서비스 구현
-- [ ] Step 3: 백엔드 `/api/game/edu/*` 라우터(`edu_game.py`) 및 평일 20:00 KST 일일 정산 스케줄 연결
-- [ ] Step 4: 관리자 웹(`admin_web`) `EDU_DAILY_GAME` 토글, `+1일 다음 종가 캔들 즉시 생성 & 정산` 테스트 버튼, 국면 지정 및 신규 가상 테마/블라인드 시즌 생성 UI 추가
-- [ ] Step 5 & 6: 웹(`EduDailyGamePage.tsx`) 및 모바일(`edu-daily-game-screen.tsx`) 별도 화면 구현 — 기존 실시간 게임(`GameScreen`) 코드는 100% 보존하고 `REAL_MARKET=OFF`일 때 기본 게임 화면으로 노출, `REAL_MARKET=ON`일 때 상단 탭으로 두 게임 모두 전환 지원
+- [x] Step 1: 기능 플래그 `EDU_DAILY_GAME`(기본 `ON`) 확장 및 신규 DB 테이블 4종(`edu_game_seasons`, `edu_game_candles`, `edu_game_accounts`, `edu_game_daily_actions`) 추가 (기존 실시간 게임 테이블·로직 100% 보존)
+- [x] Step 2: 4국면(`ACCUMULATION · UPTREND · DISTRIBUTION · DOWNTREND`) 상태 머신 기반 합성 일봉 생성 엔진(`edu_synthetic_engine.py`, 초기 120봉 + 일별 1봉, POC·지지/저항·코치 해설 자동 산출) 및 하루 1회 의사결정(`submit_daily_action`)·일일 정산(`advance_day_and_settle`) 서비스 구현
+- [x] Step 3: 백엔드 `/api/game/edu/*` 라우터(`edu_game.py`) 및 평일 20:00 KST 일일 정산 스케줄 연결
+- [x] Step 4: 관리자 웹(`admin_web`) `EDU_DAILY_GAME` 토글, `+1일 다음 종가 캔들 즉시 생성 & 정산` 테스트 버튼, 국면 지정 및 신규 가상 테마/블라인드 시즌 생성 UI 추가
+- [x] Step 5 & 6: 웹(`EduDailyGamePage.tsx`) 및 모바일(`edu-daily-game-screen.tsx`) 별도 화면 구현 — 기존 실시간 게임(`GameScreen`) 코드는 100% 보존하고 `REAL_MARKET=OFF`일 때 기본 게임 화면으로 노출, `REAL_MARKET=ON`이면 실시간 게임만(상단 탭 없음 — 11-23 사용자 결정). 개발·상용 배포 완료(2026-11-23)
 
 ### 트레이딩 게임 지지·저항 경량화 · 수평추세선 · POC 시인성 개선 · 관리자 ON/OFF
 > 상세 설계 및 로드맵: [`docs/game_lightweight_sr_action_spec_and_plan.md`](game_lightweight_sr_action_spec_and_plan.md)
@@ -258,9 +258,10 @@
 
 ### 관리자 등급별 권한 제어 (RBAC — 스크리너 · 데이터 업데이트 · 앱 관리)
 > 상세 설계 및 로드맵: [`docs/admin_rbac_permissions_spec_and_plan.md`](admin_rbac_permissions_spec_and_plan.md)
-- [ ] Step 1: 백엔드 `User.admin_tier`(`SUPER_ADMIN · OPERATOR · ANALYST · EDITOR`), `admin_tier_policies` 테이블 및 `require_permission(perm)` 가드 구현 (기존 `ADMIN` 계정은 `SUPER_ADMIN` 자동 승격)
-- [ ] Step 2: 주요 서비스(`stock_api`, `blog`, `trading_game`)의 데이터 수집/재계산(`DATA_PIPELINE`), 스크리너 스위치(`SCREENER_SETTINGS`), 앱 버전(`APP_UPDATE_MANAGE`), 광고 설정(`AD_MANAGE`) API에 세부 권한 가드 적용
-- [ ] Step 3: 관리자 웹(`admin_web`) 권한별 사이드바/버튼 제어, `관리자 권한 설정(/admin/roles)` 매트릭스 편집 UI 및 `회원 관리(/members)` 등급 지정 드롭다운 구현
+- [x] Step 1: 백엔드 `User.admin_tier`(`SUPER_ADMIN · OPERATOR · ANALYST · EDITOR`), `admin_tier_policies` 테이블 및 `require_permission(perm)` 가드 구현 (기존 `ADMIN` 계정은 `SUPER_ADMIN` 자동 승격)
+- [x] Step 2: 주요 서비스(`stock_api`, `blog`, `trading_game`)의 데이터 수집/재계산(`DATA_PIPELINE`), 스크리너 스위치(`SCREENER_SETTINGS`), 앱 버전(`APP_UPDATE_MANAGE`), 광고 설정(`AD_MANAGE`) API에 세부 권한 가드 적용
+- [x] Step 3: 관리자 웹(`admin_web`) 권한별 사이드바/버튼 제어, `관리자 권한 설정(/admin/roles)` 매트릭스 편집 UI 및 `회원 관리(/members)` 등급 지정 드롭다운 구현
+- 구현 기록(2026-11-24): 슈퍼 관리자=`is_super_admin`, 회원 승격·슈퍼 추가 생성 제외, 등급 없는 관리자=운영 관리자 — 명세 0-1 절
 
 ### 관리자 전용 5·20일선 정배열 스크리너 (`admin_web` 우선 → 추후 웹·앱 확장)
 > 상세 설계 및 로드맵: [`docs/admin_ma5_20_screener_spec_and_plan.md`](admin_ma5_20_screener_spec_and_plan.md)
