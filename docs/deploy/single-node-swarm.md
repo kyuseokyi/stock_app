@@ -76,3 +76,38 @@ bash deploy/swarm/rollback-to-compose.sh   # 스택 삭제 → compose 로 앱 9
 - 백엔드·웹 배포가 동시에 와도 `deploy.sh` 가 서버 잠금(`/tmp/stock_stack_deploy.lock`)으로 순서대로 처리.
 - Docker 23 이상 필요(스택 `ulimits`). `docker version` 으로 확인.
 - macOS 라 스크립트는 bash 3.2·BSD 도구 기준으로 작성(잠금은 `flock` 대신 `mkdir`). OrbStack 이 로그인 시 자동 시작되도록(설정 → Start at login) 둬야 재부팅 뒤 스택·DB 가 다시 뜬다.
+
+## 8. 상용 서버 전환(Oracle Cloud Ubuntu, funnotedaily) — 2026-11-24 준비
+상용 워크플로(`deploy-prod.yml`)도 스택 `stock` 이 있으면 Swarm 으로, 없으면 compose 로 배포한다 → **코드 변경 없이 서버에서 한 번 전환**하면 된다. 개발 서버와 다른 점만 적는다.
+
+| 항목 | 개발(haezean) | 상용(funnotedaily) |
+|---|---|---|
+| OS·Docker | macOS + OrbStack | Ubuntu + Docker Engine(systemd — 재부팅 뒤 자동 기동) |
+| 사설망 | 겹침 없음 | Oracle VCN 이 보통 `10.0.0.0/16` → Swarm 기본 풀(10.0.0.0/8)과 겹칠 수 있음 → **`ADDR_POOL=172.30.0.0/16`** |
+| 게스트 로그인 | `VITE_ENABLE_GUEST_LOGIN=true` 를 넘김 | **넘기지 않는다**(상용은 게스트 버튼 없음) |
+| 피할 시간 | 20:30~20:50 | 19:55~21:00(20:00 교육 게임 정산 + 20:30 수집) |
+
+```bash
+# 0) compose 가 쓰는 저장소 폴더로(배포 러너 폴더) — 위치를 모르면 라벨에서 찾는다
+cd "$(docker inspect $(docker ps -qf name=stock_api | head -1) --format '{{index .Config.Labels "com.docker.compose.project.working_dir"}}')"
+git pull
+cp /opt/stock_app/env/.env.production backend/.env.production
+cp /opt/stock_app/env/compose.env .env
+
+# 1) 사전 점검(값은 출력하지 않고 이름·버전만)
+docker version --format '{{.Server.Version}}'          # 23 이상
+docker info --format '{{.LiveRestoreEnabled}}'         # false 여야 함
+ip route | grep -E '^10\.' || echo "10.x 경로 없음"
+grep -oE '^ADMIN_[A-Z_]+_URL' .env                     # 관리자 웹 주소 4개 — 없으면 관리자 웹이 개발 주소로 빌드됨(중단)
+
+# 2) 전환 — yes 입력 후 진행(앱 교체 순간 수십 초 중단)
+ADDR_POOL=172.30.0.0/16 bash deploy/swarm/cutover.sh
+```
+
+전환 후 확인
+- [ ] `docker stack services stock` — 9개 `1/1`
+- [ ] `https://app.funnotedaily.com`·`api`·`auth`·`blog`·`game`·`admin` 정상, 앱 로그인·게임 탭
+- [ ] 다음 상용 배포(`release/v*`) Actions 로그에 `모드: Swarm(start-first)` → 배포 중 새로고침해도 502 없음
+- [ ] `sudo reboot` 뒤(한가한 시간) DB 3개 healthy·`stock_net` 연결·스택 9개 `1/1`
+- [ ] **포트 노출(전환과 무관한 기존 상태)**: compose 도 앱·DB 포트(8001~8004·3000·3001·5432·8123·6379)를 0.0.0.0 에 연다. Oracle 보안 목록(VCN Security List/NSG)에서 인바운드는 22(SSH)만 열려 있는지 확인 — Cloudflare 터널은 바깥으로 나가는 연결이라 인바운드가 필요 없다
+- 되돌리기: `bash deploy/swarm/rollback-to-compose.sh`(6절)
