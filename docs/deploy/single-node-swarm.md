@@ -90,7 +90,7 @@ bash deploy/swarm/rollback-to-compose.sh   # 스택 삭제 → compose 로 앱 9
 ```bash
 # 0) compose 가 쓰는 저장소 폴더로(배포 러너 폴더) — 위치를 모르면 라벨에서 찾는다
 cd "$(docker inspect $(docker ps -qf name=stock_api | head -1) --format '{{index .Config.Labels "com.docker.compose.project.working_dir"}}')"
-git pull
+git log -1 --oneline   # 러너 작업 폴더는 배포한 커밋이 detached 로 체크아웃돼 있다 — git pull·checkout 하지 말 것(다음 배포 때 러너가 맞춘다)
 cp /opt/stock_app/env/.env.production backend/.env.production
 cp /opt/stock_app/env/compose.env .env
 
@@ -111,3 +111,9 @@ ADDR_POOL=172.30.0.0/16 bash deploy/swarm/cutover.sh
 - [ ] `sudo reboot` 뒤(한가한 시간) DB 3개 healthy·`stock_net` 연결·스택 9개 `1/1`
 - [ ] **포트 노출(전환과 무관한 기존 상태)**: compose 도 앱·DB 포트(8001~8004·3000·3001·5432·8123·6379)를 0.0.0.0 에 연다. Oracle 보안 목록(VCN Security List/NSG)에서 인바운드는 22(SSH)만 열려 있는지 확인 — Cloudflare 터널은 바깥으로 나가는 연결이라 인바운드가 필요 없다
 - 되돌리기: `bash deploy/swarm/rollback-to-compose.sh`(6절)
+
+### 8-1. 실제 전환 기록(2026-11-24)
+- 사전 점검: Docker 29.9.3, live-restore false, 사설망 `10.0.0.0/24`(서버 10.0.0.x) → `ADDR_POOL=172.30.0.0/16` 로 실행, 관리자 웹 주소 4개 확인.
+- `cutover.sh`(커밋 6dc90e4 = release/v1.0.14): env 해석 40개 키 일치, DB 이름 확인 OK, **중단 약 30초**, 9개 서비스 `1/1`.
+- 외부 확인: app·admin 200, api·auth·blog·game 루트 404(서버 응답 = 정상), auth `/health` 200, 교육 게임 features·GraphQL 정상, 시세 차단 유지.
+- 남은 확인: 다음 `release/v*` 배포에서 `모드: Swarm(start-first)` 와 502 없음, 한가한 시간 재부팅 내성, Oracle 보안 목록 인바운드 22 만.
