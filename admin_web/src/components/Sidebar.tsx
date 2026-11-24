@@ -1,10 +1,16 @@
 import { NavLink } from 'react-router-dom'
+import { hasPermission } from '../lib/permissions'
+import { NAV_PERMS } from '../lib/navPermissions'
+import { useMeStore } from '../store/me'
 import { useUiStore } from '../store/ui'
+import type { AdminPermissionKey } from '../types/api'
 
 interface NavItem {
   to: string
   label: string
   icon: string
+  // 이 중 하나라도 있으면 보인다(없으면 모든 관리자). 같은 표가 App.tsx 라우트 가드에도 쓰인다
+  perms?: AdminPermissionKey[]
 }
 interface NavGroup {
   title: string
@@ -83,9 +89,20 @@ const linkClass = ({ isActive }: { isActive: boolean }) =>
 
 function SidebarContent({ isSuper }: { isSuper: boolean }) {
   const closeSidebar = useUiStore((s) => s.closeSidebar)
+  const user = useMeStore((s) => s.user)
+  // 권한 없는 메뉴는 숨기고, 다 숨겨진 묶음은 제목까지 뺀다
+  const groups = [...NAV_GROUPS, accountGroup(isSuper)]
+    .map((g) => ({
+      ...g,
+      items: g.items.filter((item) => {
+        const perms = item.perms ?? NAV_PERMS[item.to]
+        return !perms || hasPermission(user, ...perms)
+      }),
+    }))
+    .filter((g) => g.items.length > 0)
   return (
     <nav className="flex flex-col gap-6 p-4">
-      {[...NAV_GROUPS, accountGroup(isSuper)].map((group) => (
+      {groups.map((group) => (
         <div key={group.title}>
           <p className="mb-2 px-3 text-xs font-semibold uppercase tracking-wide text-slate-400">
             {group.title}

@@ -6,7 +6,8 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from shared.auth import require_admin
+from shared import admin_permissions as P
+from shared.auth import require_permission
 from shared.database import get_db
 from shared.models import User
 from apps.trading_game.schemas.game_dtos import AcademyQuestionAdminDTO, AcademyQuestionUpsert
@@ -29,7 +30,7 @@ def _http(e: academy_service.AcademyError) -> HTTPException:
 
 @router.get("/questions", response_model=list[AcademyQuestionAdminDTO])
 async def list_questions(
-    _admin: User = Depends(require_admin),
+    _admin: User = Depends(require_permission(P.GAME_MANAGE)),
     db: AsyncSession = Depends(get_db),
 ):
     return [_dto(q) for q in await academy_service.list_all(db)]
@@ -38,7 +39,7 @@ async def list_questions(
 @router.post("/questions", response_model=AcademyQuestionAdminDTO, status_code=status.HTTP_201_CREATED)
 async def create_question(
     body: AcademyQuestionUpsert,
-    admin: User = Depends(require_admin),
+    admin: User = Depends(require_permission(P.GAME_MANAGE)),
     db: AsyncSession = Depends(get_db),
 ):
     row = await academy_service.create_question(db, body.model_dump())
@@ -50,7 +51,7 @@ async def create_question(
 async def update_question(
     question_id: int,
     body: AcademyQuestionUpsert,
-    admin: User = Depends(require_admin),
+    admin: User = Depends(require_permission(P.GAME_MANAGE)),
     db: AsyncSession = Depends(get_db),
 ):
     try:
@@ -64,7 +65,7 @@ async def update_question(
 @router.delete("/questions/{question_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_question(
     question_id: int,
-    admin: User = Depends(require_admin),
+    admin: User = Depends(require_permission(P.GAME_MANAGE)),
     db: AsyncSession = Depends(get_db),
 ):
     try:

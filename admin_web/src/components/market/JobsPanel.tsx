@@ -2,7 +2,9 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { getJobs, runJob } from '../../api/marketAdmin'
 import { apiErrorDetail, apiErrorMessage } from '../../lib/apiError'
 import { formatDateTime } from '../../lib/marketFormat'
+import { hasPermission } from '../../lib/permissions'
 import { showToast } from '../../lib/toast'
+import { useMeStore } from '../../store/me'
 import type { AdminJob, JobStatus, JobsOverview } from '../../types/marketAdmin'
 import BootstrapProgressPanel from './BootstrapProgressPanel'
 
@@ -30,6 +32,8 @@ export default function JobsPanel({ refreshKey = 0 }: { refreshKey?: number }) {
   const [error, setError] = useState<string | null>(null)
   const seq = useRef(0)
   const [sending, setSending] = useState<string | null>(null)
+  // 수집·재계산 실행은 DATA_PIPELINE 권한(조회만 되는 분석 관리자는 버튼 비활성) — 서버도 403 으로 막는다
+  const canRun = hasPermission(useMeStore((s) => s.user), 'DATA_PIPELINE')
 
   // 폴링 중 오류는 조용히(5초마다 토스트가 쌓이지 않게)
   const load = useCallback(async (silent = false) => {
@@ -137,7 +141,8 @@ export default function JobsPanel({ refreshKey = 0 }: { refreshKey?: number }) {
                 </div>
                 <button
                   type="button"
-                  disabled={job.status !== 'idle' || sending === job.key}
+                  disabled={!canRun || job.status !== 'idle' || sending === job.key}
+                  title={canRun ? undefined : '데이터 수집·재계산 권한이 없어요'}
                   onClick={() => void run(job)}
                   className="self-start rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-40"
                 >

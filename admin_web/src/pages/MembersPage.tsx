@@ -10,6 +10,7 @@ import {
   type ProviderFilter,
 } from '../lib/moderation'
 import { showToast } from '../lib/toast'
+import { useMeStore } from '../store/me'
 import type { AdminUserOut } from '../types/api'
 
 // 회원 관리 — 검색·페이지 이동, 닉네임 강제 변경, 댓글 작성 금지 켜기/끄기, 시세 열람 권한 켜기/끄기.
@@ -29,6 +30,8 @@ export default function MembersPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [busyId, setBusyId] = useState<number | null>(null)
+  // 시세 열람 권한 부여는 시세 재배포 계약과 연결돼 슈퍼 관리자 전용(서버도 403 SUPER_ADMIN_REQUIRED)
+  const isSuper = useMeStore((s) => s.user?.is_super_admin === true)
   // 닉네임 인라인 편집 상태
   const [editingId, setEditingId] = useState<number | null>(null)
   const [nickDraft, setNickDraft] = useState('')
@@ -318,7 +321,8 @@ export default function MembersPage() {
                           role="switch"
                           aria-checked={!!u.market_data_access}
                           aria-label={`${u.nickname ?? u.email ?? u.id} 시세 열람 권한`}
-                          disabled={busy}
+                          disabled={busy || !isSuper}
+                          title={isSuper ? undefined : '시세 열람 권한은 슈퍼 관리자만 바꿀 수 있어요'}
                           onClick={() => toggleMarketAccess(u)}
                           className={`relative inline-flex h-6 w-10 shrink-0 items-center rounded-full transition focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 disabled:opacity-50 ${
                             u.market_data_access ? 'bg-amber-500' : 'bg-slate-300'

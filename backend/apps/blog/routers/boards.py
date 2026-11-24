@@ -5,7 +5,8 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from shared.auth import require_admin
+from shared import admin_permissions as P
+from shared.auth import require_permission
 from shared.database import get_db
 from shared.models import User
 
@@ -26,7 +27,7 @@ async def read_boards(
 async def create_board(
     payload: schemas.BoardCreate,
     db: AsyncSession = Depends(get_db),
-    admin: User = Depends(require_admin),
+    admin: User = Depends(require_permission(P.CONTENT_MANAGE)),
 ):
     return await crud.create_board(db, payload)
 
@@ -44,7 +45,7 @@ async def update_board(
     board_id: int,
     payload: schemas.BoardUpdate,
     db: AsyncSession = Depends(get_db),
-    admin: User = Depends(require_admin),
+    admin: User = Depends(require_permission(P.CONTENT_MANAGE)),
 ):
     board = await crud.get_board(db, board_id)
     if board is None:
@@ -56,7 +57,7 @@ async def update_board(
 async def delete_board(
     board_id: int,
     db: AsyncSession = Depends(get_db),
-    admin: User = Depends(require_admin),
+    admin: User = Depends(require_permission(P.CONTENT_MANAGE)),
 ):
     board = await crud.get_board(db, board_id)
     if board is None:

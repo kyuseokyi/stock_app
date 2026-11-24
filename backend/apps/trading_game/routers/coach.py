@@ -7,7 +7,8 @@ from datetime import date
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from shared.auth import get_current_user, require_admin
+from shared import admin_permissions as P
+from shared.auth import get_current_user, require_permission
 from shared.database import get_db
 from shared.models import User
 from apps.trading_game.schemas.game_dtos import (
@@ -29,7 +30,7 @@ _ERROR_STATUS = {
 @router.put("/admin/coach-messages", response_model=CoachMessageResponse)
 async def upsert_coach_message(
     body: CoachUpsertRequest,
-    admin: User = Depends(require_admin),
+    admin: User = Depends(require_permission(P.GAME_MANAGE)),
     db: AsyncSession = Depends(get_db),
 ):
     try:
@@ -54,7 +55,7 @@ async def upsert_coach_message(
 async def list_coach_messages(
     season_id: int,
     target_date: date,
-    _admin: User = Depends(require_admin),
+    _admin: User = Depends(require_permission(P.GAME_MANAGE)),
     db: AsyncSession = Depends(get_db),
 ):
     rows = await coach_service.list_slot_messages(db, season_id, target_date)
@@ -66,7 +67,7 @@ async def suggest_coach_levels(
     season_id: int,
     target_date: date,
     coach_type: CoachType,
-    _admin: User = Depends(require_admin),
+    _admin: User = Depends(require_permission(P.GAME_MANAGE)),
     db: AsyncSession = Depends(get_db),
 ):
     """시즌 종목 일봉으로 지지·저항 추천값 계산 — 폼 채우기용, 저장하지 않는다."""
@@ -80,7 +81,7 @@ async def suggest_coach_levels(
 
 @router.get("/admin/seasons", response_model=list[SeasonOption])
 async def list_seasons(
-    _admin: User = Depends(require_admin),
+    _admin: User = Depends(require_permission(P.GAME_MANAGE)),
     db: AsyncSession = Depends(get_db),
 ):
     return [

@@ -49,7 +49,7 @@ async def allowed_for_user(db: AsyncSession, redis, user: User | None) -> bool:
     """이미 검증된 회원(또는 None=익명) 기준 허용 여부."""
     if await flag_on(db, redis):
         return True
-    return market_viewer.user_can_view(user)
+    return await market_viewer.can_view(user, db)
 
 
 async def allowed_for_creds(db: AsyncSession, redis, creds: HTTPAuthorizationCredentials | None) -> bool:
@@ -58,7 +58,7 @@ async def allowed_for_creds(db: AsyncSession, redis, creds: HTTPAuthorizationCre
         return True
     if creds is None:
         return False
-    return market_viewer.user_can_view(await market_viewer.load_viewer(creds, db))
+    return await market_viewer.can_view(await market_viewer.load_viewer(creds, db), db)
 
 
 async def real_market_access(

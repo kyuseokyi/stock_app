@@ -7,7 +7,8 @@ from typing import Any
 from fastapi import APIRouter, Body, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from shared.auth import require_admin
+from shared import admin_permissions as P
+from shared.auth import require_permission
 from shared.database import get_db
 from shared.models import User
 from apps.trading_game.services import game_settings_service, rules_service
@@ -18,7 +19,7 @@ router = APIRouter(prefix="/api/game", tags=["trading-game-settings"])
 
 @router.get("/admin/settings")
 async def get_game_settings(
-    _admin: User = Depends(require_admin),
+    _admin: User = Depends(require_permission(P.GAME_MANAGE)),
     db: AsyncSession = Depends(get_db),
 ):
     return await game_settings_service.get_settings(db)
@@ -27,7 +28,7 @@ async def get_game_settings(
 @router.put("/admin/settings")
 async def update_game_settings(
     body: Any = Body(...),
-    admin: User = Depends(require_admin),
+    admin: User = Depends(require_permission(P.GAME_MANAGE)),
     db: AsyncSession = Depends(get_db),
 ):
     """부분 갱신 — 보낸 키만 바꾼다. 검증 실패 422."""

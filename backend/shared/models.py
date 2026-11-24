@@ -121,6 +121,10 @@ class User(Base, TimestampMixin):
     is_super_admin: Mapped[bool] = mapped_column(
         Boolean, default=False, server_default=false(), nullable=False
     )
+    # 관리자 등급(슈퍼가 아닌 관리자만): OPERATOR·ANALYST·EDITOR. NULL 이면 OPERATOR 로 본다(shared/admin_permissions.py)
+    admin_tier: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    # 등급 권한에 더할 개별 권한 — JSON 배열 문자열(예 ["DATA_PIPELINE"]). 더하기만 한다(빼기 없음)
+    custom_permissions: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # 이용약관 동의 — 마지막으로 동의한 약관 버전과 시각(미동의·기존 회원은 NULL). 판정은 apps/auth/terms.py
     terms_version: Mapped[str | None] = mapped_column(String(20), nullable=True)
@@ -138,6 +142,18 @@ class User(Base, TimestampMixin):
     posts: Mapped[list["BlogPost"]] = relationship(back_populates="author")
     comments: Mapped[list["BlogComment"]] = relationship(
         back_populates="author", cascade="all, delete-orphan"
+    )
+
+
+class AdminTierPolicy(Base):
+    """관리자 등급별 권한 표(OPERATOR·ANALYST·EDITOR). 행이 없으면 코드 기본값(shared/admin_permissions.DEFAULT_POLICIES)."""
+
+    __tablename__ = "admin_tier_policies"
+
+    tier: Mapped[str] = mapped_column(String(20), primary_key=True)
+    permissions_json: Mapped[str] = mapped_column(Text, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
     )
 
 

@@ -142,7 +142,7 @@ uv run uvicorn apps.trading_game.main:app --reload --port 8003 --workers 1
 
 **관리자 계정 체계**(마이그레이션 `c3e5a7b9d1f2`)
 - 슈퍼 관리자(`users.is_super_admin`) — 시드 계정. 어드민 **관리자 계정** 메뉴에서 다른 관리자를 아이디(영문 소문자·숫자·`._-` 4~30자)+비밀번호로 만들고, 비밀번호 초기화·사용 중지·다시 사용을 한다. API `GET·POST /api/v1/auth/admin/accounts`, `POST /{id}/password`, `PATCH /{id}/active`(슈퍼 관리자 전용 — 아니면 403 `SUPER_ADMIN_REQUIRED`).
-- 일반 관리자 — 계정 관리만 빼고 모든 메뉴. 일반 회원을 관리자로 올리는 기능은 없다.
+- 일반 관리자 — 등급(마이그레이션 `d4f6b8c0e2a4`): 운영(계정 관리만 빼고 전부·등급 없는 기존 관리자 포함)·분석(스크리너 열람·콘텐츠·게임)·에디터(콘텐츠·게임). 등급별 권한은 **관리자 계정** 화면 아래 표에서 바꾸고(`PUT /api/v1/auth/admin/role-policies/{tier}`), 사람별로 권한을 더할 수 있다(`PATCH /api/v1/auth/admin/accounts/{id}/tier`). 권한 없는 API 는 403 `INSUFFICIENT_ADMIN_PERMISSION`. 일반 회원을 관리자로 올리는 기능은 없다. 상세 `docs/admin_rbac_permissions_spec_and_plan.md` 0-1 절.
 - 모든 관리자: `POST /api/v1/auth/me/password {current_password, new_password}`(8~72자, 지금 로그인 유지).
 - 슈퍼 관리자 계정은 이 API 로 사용 중지·초기화할 수 없다(409 `SUPER_ADMIN_LOCKED`). 삭제 대신 사용 중지(쓴 댓글 보존). 초기화·사용 중지는 그 계정의 로그인을 즉시 끊는다.
 - `seed_admin` 재실행은 기존 비밀번호를 유지한다. 비밀번호를 잊었을 때만 서버에서 `ADMIN_RESET_PASSWORD=1 ADMIN_PASSWORD=<새 비밀번호>` 로 실행.

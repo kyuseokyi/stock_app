@@ -6,7 +6,8 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from shared.auth import require_admin
+from shared import admin_permissions as P
+from shared.auth import require_permission
 from shared.database import get_db
 from shared.models import User
 from apps.trading_game.schemas.game_dtos import (
@@ -56,7 +57,7 @@ async def list_quizzes(
     page: int = Query(1, ge=1),
     size: int = Query(20, ge=1, le=100),
     active: bool | None = None,
-    _admin: User = Depends(require_admin),
+    _admin: User = Depends(require_permission(P.GAME_MANAGE)),
     db: AsyncSession = Depends(get_db),
 ):
     rows, total = await quiz_admin_service.list_quizzes(db, page=page, size=size, active=active)
@@ -68,7 +69,7 @@ async def list_quizzes(
 @router.post("", response_model=QuizAdminDetail, status_code=status.HTTP_201_CREATED)
 async def create_quiz(
     body: QuizCreateRequest,
-    admin: User = Depends(require_admin),
+    admin: User = Depends(require_permission(P.GAME_MANAGE)),
     db: AsyncSession = Depends(get_db),
 ):
     try:
@@ -82,7 +83,7 @@ async def create_quiz(
 @router.post("/generate", response_model=QuizGenerateResponse)
 async def generate_quizzes(
     body: QuizGenerateRequest,
-    admin: User = Depends(require_admin),
+    admin: User = Depends(require_permission(P.GAME_MANAGE)),
     db: AsyncSession = Depends(get_db),
 ):
     created, skipped = await quiz_admin_service.generate_quizzes(db, body.count, types=body.types)
@@ -93,7 +94,7 @@ async def generate_quizzes(
 @router.get("/{quiz_id}", response_model=QuizAdminDetail)
 async def get_quiz(
     quiz_id: int,
-    _admin: User = Depends(require_admin),
+    _admin: User = Depends(require_permission(P.GAME_MANAGE)),
     db: AsyncSession = Depends(get_db),
 ):
     try:
@@ -106,7 +107,7 @@ async def get_quiz(
 async def update_quiz(
     quiz_id: int,
     body: QuizAdminUpdate,
-    admin: User = Depends(require_admin),
+    admin: User = Depends(require_permission(P.GAME_MANAGE)),
     db: AsyncSession = Depends(get_db),
 ):
     try:
@@ -120,7 +121,7 @@ async def update_quiz(
 @router.delete("/{quiz_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_quiz(
     quiz_id: int,
-    admin: User = Depends(require_admin),
+    admin: User = Depends(require_permission(P.GAME_MANAGE)),
     db: AsyncSession = Depends(get_db),
 ):
     try:

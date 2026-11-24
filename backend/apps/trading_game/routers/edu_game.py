@@ -5,7 +5,7 @@
 - 탭(메뉴) 노출 판단만 필요하면 GET /features(전역 플래그 두 개, 인증 무시, 시즌 생성 없음)를 쓴다.
 - EDU_DAILY_GAME OFF: state 는 200 {enabled:false}, action·history·leaderboard 는 403 {"detail":"edu_game_disabled"}.
 - 합성 데이터라 REAL_MARKET(A안 시세 비노출) 판정을 걸지 않는다. 비로그인도 state·leaderboard 조회 가능.
-- 관리자 API 는 플래그와 무관하게 동작(require_admin).
+- 관리자 API 는 플래그와 무관하게 동작(GAME_MANAGE 권한).
 """
 from __future__ import annotations
 
@@ -14,7 +14,8 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from shared.auth import get_current_user, get_optional_user, require_admin
+from shared import admin_permissions as P
+from shared.auth import get_current_user, get_optional_user, require_permission
 from shared.database import get_db
 from shared.models import User
 from apps.trading_game import deps
@@ -133,7 +134,7 @@ async def _admin_season_dto(db: AsyncSession, s) -> EduAdminSeasonDTO:
 
 @router.get("/api/game/admin/edu/season", response_model=EduAdminSeasonDTO | None)
 async def admin_edu_season(
-    _admin: User = Depends(require_admin),
+    _admin: User = Depends(require_permission(P.GAME_MANAGE)),
     db: AsyncSession = Depends(get_db),
 ):
     """관리자 카드용 현재 교육 시즌(국면·남은 봉 수 포함). 없으면 null."""
@@ -143,7 +144,7 @@ async def admin_edu_season(
 
 @router.post("/api/game/admin/edu/advance-day", response_model=EduAdvanceResponse)
 async def admin_edu_advance_day(
-    admin: User = Depends(require_admin),
+    admin: User = Depends(require_permission(P.GAME_MANAGE)),
     db: AsyncSession = Depends(get_db),
 ):
     """즉시 다음 봉 1개 생성 + 전 계좌 정산(하루 1회 제한 없음). 활성 시즌이 없으면 먼저 만든다."""
@@ -157,7 +158,7 @@ async def admin_edu_advance_day(
              status_code=status.HTTP_201_CREATED)
 async def admin_edu_new_season(
     body: EduNewSeasonRequest,
-    admin: User = Depends(require_admin),
+    admin: User = Depends(require_permission(P.GAME_MANAGE)),
     db: AsyncSession = Depends(get_db),
 ):
     """기존 ACTIVE 교육 시즌을 CLOSED 로 바꾸고 새 시즌 + 워밍업 120봉 생성."""
@@ -175,7 +176,7 @@ async def admin_edu_new_season(
 @router.put("/api/game/admin/edu/regime", response_model=EduAdminSeasonDTO)
 async def admin_edu_regime(
     body: EduRegimeRequest,
-    admin: User = Depends(require_admin),
+    admin: User = Depends(require_permission(P.GAME_MANAGE)),
     db: AsyncSession = Depends(get_db),
 ):
     """다음 봉부터 적용할 시장 국면 지정(null = 해제). 한 번 적용되면 자동으로 지워진다."""

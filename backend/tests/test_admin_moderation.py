@@ -39,10 +39,11 @@ async def client(maker):
     blog_app.dependency_overrides.clear()
 
 
-async def _user(maker, name: str, *, role=UserRole.FREE, nickname: str | None = None) -> User:
+async def _user(maker, name: str, *, role=UserRole.FREE, nickname: str | None = None, super_: bool = False,
+                admin_tier: str | None = None) -> User:
     async with maker() as db:
         u = User(email=f"{name}@test.local", nickname=nickname or name, role=role, is_active=True,
-                 terms_version=TERMS_VERSION)
+                 terms_version=TERMS_VERSION, is_super_admin=super_, admin_tier=admin_tier)
         db.add(u)
         await db.commit()
         await db.refresh(u)
@@ -66,7 +67,7 @@ async def world(maker, client):
         await db.refresh(post)
     author = await _user(maker, "작성자")
     r1, r2, r3 = [await _user(maker, f"신고{i}") for i in range(3)]
-    admin = await _user(maker, "관리", role=UserRole.ADMIN)
+    admin = await _user(maker, "관리", role=UserRole.ADMIN, super_=True)  # 시세 열람 권한 부여는 슈퍼 관리자 전용
     async with maker() as db:
         a = BlogComment(post_id=post.id, author_id=author.id, content="나쁜 댓글")
         b = BlogComment(post_id=post.id, author_id=author.id, content="광고 댓글")
@@ -326,3 +327,26 @@ async def test_admin_list_users_provider_filter(client, maker, world):
     # 모르는 값은 422
     r = await client.get("/api/v1/admin/users", params={"provider": "FACEBOOK"}, headers=_auth(admin))
     assert r.status_code == 422
+
+
+async def test_market_data_access_requires_super_admin(client, maker, world):
+    """시세 열람 권한 부여는 시세 재배포 계약과 연결돼 슈퍼 관리자만 — 운영 관리자도 403."""
+    op = await _user(maker, "운영", role=UserRole.ADMIN, admin_tier="OPERATOR")
+    r = await client.patch(f"/api/v1/admin/users/{world['author'].id}/market-data-access", json={"enabled": True},
+                           headers=_auth(op))
+    assert r.status_code == 403 and r.json()["detail"]["code"] == "SUPER_ADMIN_REQUIRED"
+    # 회원 목록·닉네임 등 나머지 회원 관리는 운영 관리자도 된다(CONTENT_MANAGE)
+    assert (await client.get("/api/v1/admin/users", headers=_auth(op))).status_code == 200
+
+
+async def test_editor_without_content_permission_policy_blocked(client, maker, world):
+    """등급 표에서 에디터의 CONTENT_MANAGE 를 빼면 신고 목록이 바로 403."""
+    from shared.models import AdminTierPolicy
+
+    ed = await _user(maker, "에디터", role=UserRole.ADMIN, admin_tier="EDITOR")
+    assert (await client.get(REPORTS, headers=_auth(ed))).status_code == 200
+    async with maker() as db:
+        db.add(AdminTierPolicy(tier="EDITOR", permissions_json='["GAME_MANAGE"]'))
+        await db.commit()
+    r = await client.get(REPORTS, headers=_auth(ed))
+    assert r.status_code == 403 and r.json()["detail"]["code"] == "INSUFFICIENT_ADMIN_PERMISSION"

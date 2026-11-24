@@ -9,7 +9,8 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.stock_api.services import screener_features as svc
-from shared.auth import require_admin
+from shared import admin_permissions as P
+from shared.auth import require_admin, require_permission
 from shared.database import get_db
 from shared.models import User
 
@@ -33,12 +34,13 @@ def _dto(f) -> FeatureOut:
 
 @router.get("/features", response_model=list[FeatureOut])
 async def list_features(_admin: User = Depends(require_admin), db: AsyncSession = Depends(get_db)):
+    """조회는 모든 관리자 — 블로그 편집기가 전체 시세 스위치(MARKET_DATA)를 보고 차트 삽입을 막는다. 변경만 SCREENER_SETTINGS."""
     return [_dto(f) for f in await svc.list_features(db)]
 
 
 @router.put("/features/{key}", response_model=FeatureOut)
 async def update_feature(
-    key: str, body: FeatureUpdate, admin: User = Depends(require_admin), db: AsyncSession = Depends(get_db),
+    key: str, body: FeatureUpdate, admin: User = Depends(require_permission(P.SCREENER_SETTINGS)), db: AsyncSession = Depends(get_db),
 ):
     try:
         row = await svc.set_feature(db, key, body.enabled)

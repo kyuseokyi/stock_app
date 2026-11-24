@@ -15,6 +15,7 @@ from fastapi import HTTPException
 from fastapi.security import HTTPAuthorizationCredentials
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from shared import admin_permissions
 from shared.auth import get_current_user
 from shared.models import User, UserRole
 
@@ -26,10 +27,33 @@ KR_PUBLIC_INDEX_CODES: tuple[str, ...] = ("KR:0001", "KR:1001")
 
 
 def user_can_view(user: User | None) -> bool:
-    """스위치가 꺼져 있을 때 이 사용자가 시세를 볼 수 있는가 — 관리자 또는 열람 권한 보유."""
+    """스위치가 꺼져 있을 때 이 사용자가 시세를 볼 수 있는가 — 관리자 또는 열람 권한 보유(등급 무시).
+
+    실제 요청 판정은 관리자 등급까지 보는 can_view(비동기)를 쓴다. 이 함수는 등급을 모를 때의 상한선이다.
+    """
     if user is None or not user.is_active:
         return False
     return user.role == UserRole.ADMIN or bool(getattr(user, "market_data_access", False))
+
+
+async def can_view(user: User | None, db: AsyncSession) -> bool:
+    """user_can_view + 관리자 등급 반영 — 관리자는 '스크리너 열람'(SCREENER_VIEW) 권한이 있을 때만 스위치를 우회한다.
+
+    슈퍼 관리자·등급 없는 기존 관리자(=OPERATOR)는 이 권한이 있어 지금과 같다. 에디터처럼 권한이 없는 관리자는
+    일반 회원과 똑같이 본다(시세 열람 권한 market_data_access 가 있으면 허용).
+    """
+    if user is None or not user.is_active:
+        return False
+    if bool(getattr(user, "market_data_access", False)):
+        return True
+    if user.role != UserRole.ADMIN:
+        return False
+    try:
+        perms = await admin_permissions.permissions_for(db, user)
+    except Exception as exc:  # noqa: BLE001 — 닫힘 쪽
+        log.warning("시세 열람 판정 중 관리자 권한 조회 실패: %s", type(exc).__name__)
+        return False
+    return admin_permissions.SCREENER_VIEW in perms
 
 
 def kr_index_visible(market_allowed: bool, kr_index_switch_on: bool) -> bool:

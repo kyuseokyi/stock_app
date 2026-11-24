@@ -2,13 +2,15 @@ import { useState, type FormEvent } from 'react'
 import { useLocation, useNavigate, type Location } from 'react-router-dom'
 import type { AxiosError } from 'axios'
 import { login } from '../api/auth'
+import { useMeStore } from '../store/me'
 
 export default function LoginPage() {
   const navigate = useNavigate()
   const location = useLocation()
   const from =
-    (location.state as { from?: Location } | null)?.from?.pathname || '/boards'
+    (location.state as { from?: Location } | null)?.from?.pathname || '/'
 
+  const setMe = useMeStore((s) => s.setUser)
   const [loginId, setLoginId] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
@@ -19,7 +21,8 @@ export default function LoginPage() {
     setError('')
     setLoading(true)
     try {
-      await login(loginId.trim(), password)
+      const res = await login(loginId.trim(), password)
+      setMe(res.user)
       navigate(from, { replace: true })
     } catch (caught) {
       const err = caught as AxiosError

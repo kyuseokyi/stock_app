@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
+import { hasPermission } from '../lib/permissions'
+import { useMeStore } from '../store/me'
 import type { AxiosError } from 'axios'
 import { GAME_API_URL } from '../config'
 import { listFeatureFlags, updateFeatureFlag } from '../api/featureFlags'
@@ -50,6 +52,8 @@ const formatTime = (iso: string | null): string =>
   iso ? new Date(iso).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' }) : '변경 이력 없음'
 
 function SettingsPanel() {
+  // 실시간 게임 스위치 = 실시간 시세 공개 — 시세·스크리너 노출 스위치 권한이 있어야 바꿀 수 있다(서버도 403)
+  const canSwitchRealMarket = hasPermission(useMeStore((s) => s.user), 'SCREENER_SETTINGS')
   const [flags, setFlags] = useState<FeatureFlag[]>([])
   const [loading, setLoading] = useState(true)
   const [pending, setPending] = useState<FeatureFlagKey | null>(null)
@@ -128,7 +132,8 @@ function SettingsPanel() {
                 role="switch"
                 aria-checked={flag.enabled}
                 aria-labelledby={`flag-title-${flag.key}`}
-                disabled={pending !== null}
+                disabled={pending !== null || (flag.key === 'REAL_MARKET' && !canSwitchRealMarket)}
+                title={flag.key === 'REAL_MARKET' && !canSwitchRealMarket ? '시세·스크리너 노출 스위치 권한이 없어요' : undefined}
                 onClick={() => toggle(flag)}
                 className={`relative inline-flex h-7 w-12 shrink-0 items-center rounded-full transition focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 disabled:opacity-50 ${
                   flag.enabled ? 'bg-indigo-600' : 'bg-slate-300'

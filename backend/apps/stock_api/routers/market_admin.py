@@ -5,7 +5,8 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.concurrency import run_in_threadpool
 
 from apps.stock_api.services import admin_jobs, data_status, verify_ticker
-from shared.auth import require_admin
+from shared import admin_permissions as P
+from shared.auth import require_permission
 from shared.models import User
 
 router = APIRouter(prefix="/api/v1/admin/market", tags=["market-admin"])
@@ -13,12 +14,12 @@ _QUEUE_DOWN = {"code": "QUEUE_UNAVAILABLE", "message": "작업 큐에 연결할 
 
 
 @router.get("/status")
-async def market_status(_admin: User = Depends(require_admin)):
+async def market_status(_admin: User = Depends(require_permission(P.SCREENER_VIEW, P.DATA_PIPELINE))):
     return await run_in_threadpool(data_status.build_status)
 
 
 @router.get("/jobs")
-async def list_jobs(_admin: User = Depends(require_admin)):
+async def list_jobs(_admin: User = Depends(require_permission(P.SCREENER_VIEW, P.DATA_PIPELINE))):
     try:
         return await run_in_threadpool(admin_jobs.overview)
     except admin_jobs.QueueUnavailable:
@@ -26,7 +27,7 @@ async def list_jobs(_admin: User = Depends(require_admin)):
 
 
 @router.post("/jobs/{job}", status_code=status.HTTP_202_ACCEPTED)
-async def run_job(job: str, admin: User = Depends(require_admin)):
+async def run_job(job: str, admin: User = Depends(require_permission(P.DATA_PIPELINE))):
     actor = admin.nickname or admin.email or f"#{admin.id}"
     try:
         return await run_in_threadpool(admin_jobs.run, job, actor)
@@ -45,7 +46,7 @@ async def run_job(job: str, admin: User = Depends(require_admin)):
 
 
 @router.get("/verify")
-async def verify(ticker: str = "", date: str | None = None, _admin: User = Depends(require_admin)):
+async def verify(ticker: str = "", date: str | None = None, _admin: User = Depends(require_permission(P.SCREENER_VIEW))):
     """종목 하나의 우리 값 모음(데이터 검증 화면). 형식 오류도 {code, message} 로 준다(FastAPI 기본 422 배열 아님)."""
     try:
         return await run_in_threadpool(verify_ticker.build, ticker, date)
