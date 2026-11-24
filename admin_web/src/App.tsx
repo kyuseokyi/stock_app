@@ -2,7 +2,8 @@ import { Navigate, Route, Routes } from 'react-router-dom'
 import Layout from './components/Layout'
 import RequireAuth from './components/RequireAuth'
 import RequirePermission from './components/RequirePermission'
-import { NAV_PERMS } from './lib/navPermissions'
+import { firstAllowedPath, NAV_PERMS } from './lib/navPermissions'
+import { useMeStore } from './store/me'
 import LoginPage from './pages/LoginPage'
 import BoardsPage from './pages/BoardsPage'
 import BlogListPage from './pages/BlogListPage'
@@ -30,6 +31,12 @@ import AdSettingsPage from './pages/AdSettingsPage'
 import AdminAccountsPage from './pages/AdminAccountsPage'
 import ChangePasswordPage from './pages/ChangePasswordPage'
 
+// 첫 화면 — 권한 있는 첫 메뉴로(에디터·분석 관리자가 🔒 화면부터 보지 않게)
+function HomeRedirect() {
+  const user = useMeStore((s) => s.user)
+  return <Navigate to={firstAllowedPath(user)} replace />
+}
+
 export default function App() {
   return (
     <Routes>
@@ -42,7 +49,7 @@ export default function App() {
           </RequireAuth>
         }
       >
-        <Route index element={<Navigate to="/boards" replace />} />
+        <Route index element={<HomeRedirect />} />
         <Route path="boards" element={<RequirePermission perms={NAV_PERMS['/boards'] ?? []}><BoardsPage /></RequirePermission>} />
         <Route path="blogs" element={<RequirePermission perms={NAV_PERMS['/blogs'] ?? []}><BlogListPage /></RequirePermission>} />
         <Route path="blogs/new" element={<RequirePermission perms={NAV_PERMS['/blogs'] ?? []}><BlogEditorPage /></RequirePermission>} />
@@ -69,7 +76,7 @@ export default function App() {
         <Route path="app/ads" element={<RequirePermission perms={NAV_PERMS['/app/ads'] ?? []}><AdSettingsPage /></RequirePermission>} />
         <Route path="admins" element={<AdminAccountsPage />} />
         <Route path="account/password" element={<ChangePasswordPage />} />
-        <Route path="*" element={<Navigate to="/boards" replace />} />
+        <Route path="*" element={<HomeRedirect />} />
       </Route>
     </Routes>
   )

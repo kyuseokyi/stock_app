@@ -8,7 +8,7 @@ export default function LoginPage() {
   const navigate = useNavigate()
   const location = useLocation()
   const from =
-    (location.state as { from?: Location } | null)?.from?.pathname || '/boards'
+    (location.state as { from?: Location } | null)?.from?.pathname || '/'
 
   const setMe = useMeStore((s) => s.setUser)
   const [loginId, setLoginId] = useState('')

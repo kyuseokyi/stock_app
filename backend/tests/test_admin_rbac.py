@@ -220,3 +220,17 @@ async def test_create_admin_with_tier_and_change_tier(maker):
         assert r.status_code == 422
         listed = (await c.get("/api/v1/auth/admin/accounts", headers=sup)).json()
         assert listed[0]["admin_tier"] == "SUPER_ADMIN"
+
+
+async def test_editor_can_read_market_switch_but_not_change(maker):
+    """블로그 편집기는 전체 시세 스위치 값을 읽어야 한다(차트 삽입 막기) — 조회는 모든 관리자, 변경은 SCREENER_SETTINGS."""
+    from apps.stock_api.main import app as stock_app
+
+    editor = await _admin(maker, "editor", tier="EDITOR")
+    try:
+        async with _client(stock_app, maker, editor) as c:
+            assert (await c.get("/api/v1/admin/screener/features")).status_code == 200
+            r = await c.put("/api/v1/admin/screener/features/MARKET_DATA", json={"enabled": True})
+            assert r.status_code == 403 and r.json()["detail"]["required"] == [P.SCREENER_SETTINGS]
+    finally:
+        stock_app.dependency_overrides.clear()

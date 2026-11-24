@@ -96,6 +96,10 @@ async def load_policies(db: AsyncSession) -> dict[str, frozenset[str]]:
         rows = (await db.execute(select(AdminTierPolicy))).scalars().all()
     except Exception as exc:  # noqa: BLE001 — 표 조회 실패로 관리자 전체가 막히지 않게
         log.warning("관리자 등급 표 조회 실패 — 기본값 사용: %s", type(exc).__name__)
+        try:
+            await db.rollback()  # PostgreSQL 은 실패한 트랜잭션이 같은 요청의 다음 쿼리를 막는다
+        except Exception:  # noqa: BLE001
+            pass
         return policies
     for row in rows:
         if row.tier in TIER_KEYS:
