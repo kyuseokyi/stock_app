@@ -47,7 +47,7 @@ type PrivateModal = Exclude<ActiveModal, 'ranking' | 'rules' | null>
 // 메뉴에서는 숨지만 주소로 바로 들어오면 안내 카드. 판단값을 묻는 동안은 '불러오는 중'.
 export default function GamePage() {
   const access = useGameAccess()
-  // 게임 모드 = 관리자 전역 스위치 REAL_MARKET 하나(edu/state 의 real_market_switch, 사용자별 판정 아님).
+  // 게임 모드 = 관리자 전역 스위치 REAL_MARKET 하나(edu/features 의 real_market_switch, 사용자별 판정 아님).
   // ON → 실시간 게임만(아래 기존 실시간 게이트 그대로) / OFF → 가상 데이터(교육용 종가) 게임만 / 둘 다 닫힘 → 안내 카드.
   // 두 게임을 함께 보이거나 전환하는 탭은 두지 않는다.
   const eduAccess = useEduGameAccess()

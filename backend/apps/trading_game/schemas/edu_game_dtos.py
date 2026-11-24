@@ -113,6 +113,13 @@ class EduOptionsDTO(BaseModel):
     hold_watch_bonus: int
 
 
+class EduFeaturesResponse(BaseModel):
+    """GET /api/game/edu/features — 게임 탭 노출 판단용 전역 플래그만(사용자 무관, 시즌 생성 없음). 조회 실패는 false."""
+
+    enabled: bool  # EDU_DAILY_GAME
+    real_market_switch: bool  # REAL_MARKET 관리자 전역 스위치
+
+
 class EduStateResponse(BaseModel):
     """enabled=false 면 나머지 필드는 기본값(null/빈 배열) — 프론트는 게임 화면을 숨긴다."""
 

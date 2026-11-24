@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { getActiveSeason } from '../api/game'
-import { getEduState } from '../api/eduGame'
+import { getEduFeatures } from '../api/eduGame'
 import { realMarketOf } from '../lib/marketAccess'
 import { useAuthStore } from '../store/auth'
 
@@ -52,7 +52,7 @@ export function useGameAccess(): boolean | null {
 }
 
 // ---------------------------------------------------------------- 교육용 합성 종가 게임(확장) + 게임 모드 스위치
-// GET /api/game/edu/state 한 번으로 두 값을 얻는다(비로그인 가능):
+// GET /api/game/edu/features 한 번으로 두 값을 얻는다(비로그인 가능, 전역 플래그만 — 시즌을 만들지 않는다. 옛 서버는 state 폴백):
 //  - enabled: 교육용(가상 데이터) 게임 공개 여부
 //  - real_market_switch: 관리자 전역 REAL_MARKET 스위치 — ON 이면 실시간 게임만, OFF 면 가상 데이터 게임만 보인다.
 //    (위 useGameAccess 의 real_market 은 사용자별 판정이라 관리자는 스위치 OFF 여도 true — 화면 분기에는 쓰지 않는다)
@@ -70,9 +70,9 @@ const CLOSED: EduGate = { enabled: false, realMarketSwitch: false }
 function loadEdu(token: string | null): Promise<EduGate> {
   if (eduCached?.token === token) return Promise.resolve(eduCached.value)
   if (eduInflight?.token !== token) {
-    const promise = getEduState()
-      .then((state) => {
-        const value: EduGate = { enabled: state.enabled === true, realMarketSwitch: state.real_market_switch === true }
+    const promise = getEduFeatures()
+      .then((f) => {
+        const value: EduGate = { enabled: f.enabled === true, realMarketSwitch: f.real_market_switch === true }
         if (useAuthStore.getState().token === token) eduCached = { token, value }
         return value
       })

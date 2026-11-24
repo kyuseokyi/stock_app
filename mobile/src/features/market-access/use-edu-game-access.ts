@@ -2,13 +2,14 @@ import { useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 
 import { useAuthStore } from '@/features/auth/store';
-import { getEduState, isEduConfigured } from '@/features/edu-game/api';
+import { getEduFeatures, isEduConfigured } from '@/features/edu-game/api';
 
 import { eduGateOf, type EduGate } from './access';
 
 type Viewer = number | null;
 
-// 교육용 합성 종가 게임 노출 + 게임 모드 스위치 판단값 — GET /api/game/edu/state 한 번으로 두 값을 얻는다(비로그인 가능).
+// 교육용 합성 종가 게임 노출 + 게임 모드 스위치 판단값 — GET /api/game/edu/features 한 번으로 두 값을 얻는다
+// (비로그인 가능, 전역 플래그만 — 시즌을 만들지 않는다. 옛 서버는 state 폴백. 게임 화면은 계속 state).
 //  - enabled: 교육용(가상 데이터) 게임 공개 여부
 //  - realMarketSwitch: 관리자 전역 REAL_MARKET 스위치 — ON 이면 실시간 게임만, OFF 면 가상 데이터 게임만 보인다.
 //    (use-game-access 의 real_market 은 사용자별 판정이라 관리자는 스위치 OFF 여도 true — 화면 분기에는 쓰지 않는다)
@@ -23,7 +24,7 @@ const currentViewer = (): Viewer => useAuthStore.getState().user?.id ?? null;
 
 async function fetchEduGate(): Promise<EduGate> {
   if (!isEduConfigured()) return CLOSED;
-  return eduGateOf(await getEduState());
+  return eduGateOf(await getEduFeatures());
 }
 
 /** 화면이 받은 최신 enabled·스위치 값을 탭 판단값에 반영(현재 사용자 기준) */
