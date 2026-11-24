@@ -1,18 +1,21 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
-import { listAdminUsers, setCommentBan, setMarketDataAccess, updateUserNickname } from '../api/moderation'
+import { getUser } from '../api/auth'
+import { listAdminUsers, setCommentBan, setMarketDataAccess, setUserRole, updateUserNickname } from '../api/moderation'
 import { apiErrorDetail, apiErrorMessage } from '../lib/apiError'
 import {
   formatDateTime,
   NICKNAME_MAX,
   PROVIDER_FILTER_OPTIONS,
   providerLabel,
+  roleLabel,
   validateNickname,
   type ProviderFilter,
 } from '../lib/moderation'
 import { showToast } from '../lib/toast'
 import type { AdminUserOut } from '../types/api'
 
-// 회원 관리 — 검색·페이지 이동, 닉네임 강제 변경, 댓글 작성 금지 켜기/끄기, 시세 열람 권한 켜기/끄기.
+// 회원 관리 — 검색·페이지 이동, 닉네임 강제 변경, 댓글 작성 금지 켜기/끄기, 시세 열람 권한 켜기/끄기,
+// 역할 변경(일반↔관리자 — 유료 등급 없음, 자기 자신의 관리자 해제는 막는다).
 // 설계: docs/superpowers/specs/2026-11-13-comment-report-block-design.md §3·§6,
 //       시세 열람 권한 docs/superpowers/specs/2026-11-19-market-data-off-plan-a-design.md 2-2(관리자는 항상 허용)
 
@@ -32,6 +35,7 @@ export default function MembersPage() {
   // 닉네임 인라인 편집 상태
   const [editingId, setEditingId] = useState<number | null>(null)
   const [nickDraft, setNickDraft] = useState('')
+  const myId = getUser()?.id ?? null // 로그인한 관리자 본인(자기 행의 '관리자 해제' 비활성)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -131,6 +135,25 @@ export default function MembersPage() {
           ? '관리자 계정은 항상 시세를 볼 수 있습니다.'
           : apiErrorMessage(e, '시세 열람 권한 변경에 실패했습니다.')
       setError(msg)
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  const changeRole = async (u: AdminUserOut) => {
+    const next = u.role === 'ADMIN' ? 'FREE' : 'ADMIN'
+    const name = u.nickname ?? u.email ?? '(닉네임 없음)'
+    const message =
+      next === 'ADMIN'
+        ? `'${name}' (회원 #${u.id}) 회원을 관리자로 지정할까요?\n역할: 일반 → 관리자\n\n⚠️ 관리자 웹 전체 권한이 생깁니다.`
+        : `'${name}' (회원 #${u.id}) 회원의 관리자 권한을 해제할까요?\n역할: 관리자 → 일반`
+    if (!confirm(message)) return
+    setBusyId(u.id)
+    try {
+      replaceRow(await setUserRole(u.id, next))
+      showToast(next === 'ADMIN' ? '관리자로 지정했습니다.' : '관리자 권한을 해제했습니다.', { icon: '✅' })
+    } catch (e) {
+      showToast(apiErrorMessage(e, '역할 변경에 실패했습니다.'), { icon: '⚠️' })
     } finally {
       setBusyId(null)
     }
@@ -279,13 +302,28 @@ export default function MembersPage() {
                     <td className="max-w-[220px] break-all px-3 py-3 text-slate-600">{u.email ?? '-'}</td>
                     <td className="px-3 py-3">{providerLabel(u.provider)}</td>
                     <td className="px-3 py-3">
-                      <span
-                        className={`rounded-full px-2 py-0.5 text-xs ${
-                          isAdmin ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-600'
-                        }`}
-                      >
-                        {u.role}
-                      </span>
+                      <div className="flex flex-col items-start gap-1">
+                        <span
+                          className={`whitespace-nowrap rounded-full px-2 py-0.5 text-xs ${
+                            isAdmin ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-600'
+                          }`}
+                        >
+                          {roleLabel(u.role)}
+                        </span>
+                        {/* 비활성 버튼은 마우스 이벤트가 없어 title 이 안 뜰 수 있어 바깥 span 에 둔다 */}
+                        <span title={isAdmin && u.id === myId ? '자기 자신의 관리자 권한은 해제할 수 없습니다.' : undefined}>
+                          <button
+                            type="button"
+                            onClick={() => changeRole(u)}
+                            disabled={busy || (isAdmin && u.id === myId)}
+                            className={`whitespace-nowrap text-xs font-medium disabled:pointer-events-none disabled:opacity-40 ${
+                              isAdmin ? 'text-slate-500 hover:text-slate-800' : 'text-indigo-600 hover:text-indigo-800'
+                            }`}
+                          >
+                            {isAdmin ? '관리자 해제' : '관리자로 지정'}
+                          </button>
+                        </span>
+                      </div>
                     </td>
                     <td className="whitespace-nowrap px-3 py-3 text-slate-500">
                       {formatDateTime(u.created_at)}

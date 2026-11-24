@@ -7,6 +7,7 @@
 """
 from __future__ import annotations
 
+import logging
 import os
 from collections import defaultdict
 from datetime import datetime, timezone
@@ -18,6 +19,8 @@ from shared.models import AuthProvider, BlogComment, User, UserRole
 
 from .. import crud, moderation_schemas as ms, schemas
 from ..repositories import moderation_repo as repo
+
+log = logging.getLogger("blog.admin_moderation")
 
 DEFAULT_HIDE_THRESHOLD = 3
 ADMIN_REPORT_LIMIT_MAX = 500
@@ -280,3 +283,47 @@ async def set_nickname(db: AsyncSession, user_id: int, nickname: str) -> ms.Admi
     await db.commit()
     await db.refresh(user)
     return admin_user_out(user)
+
+
+async def set_role(db: AsyncSession, user_id: int, role: str, actor: User) -> ms.AdminUserOut:
+    """회원 역할 변경 — 일반(FREE)·관리자(ADMIN) 두 가지만(유료 등급 없음).
+
+    순서: 없는 회원 404 → 같은 역할이면 그대로(변경·기록 없음) → 관리자 강등이면 자기 강등 409·마지막 관리자 409
+    → 관리자 승격이면 비활성 회원 409 → 갱신.
+    권한 반영: require_admin 은 요청마다 DB 의 users.role 을 읽으므로(JWT 의 role 클레임은 판정에 쓰지 않음)
+    강등된 회원은 이미 받은 토큰으로도 다음 요청부터 관리자 API 가 403 이다.
+    """
+    new_role = UserRole(role)
+    target = await _get_user_or_404(db, user_id)
+    if target.role == new_role:
+        return admin_user_out(target)
+
+    if target.role == UserRole.ADMIN:  # 관리자 → 일반(강등)
+        if target.id == actor.id:
+            raise ModerationError(409, "CANNOT_DEMOTE_SELF", "자기 자신의 관리자 권한은 내릴 수 없어요.")
+        # 활성 관리자 행을 잠근 뒤 판정 — 두 관리자가 서로를 동시에 내려 관리자가 0명이 되는 것을 막는다
+        admin_ids = await repo.lock_active_admin_ids(db)
+        await db.refresh(target)  # 잠금 뒤 최신 상태(다른 요청이 먼저 바꿨을 수 있다)
+        if target.role == new_role:
+            await db.commit()
+            return admin_user_out(target)
+        if target.role == UserRole.ADMIN and not [i for i in admin_ids if i != target.id]:
+            raise ModerationError(409, "LAST_ADMIN", "관리자가 1명뿐이라 관리자 권한을 내릴 수 없어요.")
+        if actor.id not in admin_ids:  # 요청자 본인이 그사이 강등·비활성화됐다
+            raise ModerationError(403, "ADMIN_REQUIRED", "관리자 권한이 필요합니다.")
+    elif new_role == UserRole.ADMIN:  # 일반 → 관리자(승격)
+        if not target.is_active:
+            raise ModerationError(409, "USER_INACTIVE", "비활성 회원은 관리자로 지정할 수 없어요.")
+
+    before = target.role
+    target.role = new_role
+    # 관리자는 댓글 금지 대상이 아니고(화면의 해제 버튼도 비활성) 금지가 남으면 풀 방법이 없어 승격 시 해제한다
+    ban_cleared = new_role == UserRole.ADMIN and target.comment_banned_at is not None
+    if ban_cleared:
+        target.comment_banned_at = None
+    await db.commit()
+    await db.refresh(target)
+    # 감사 기록 — 관리자 행동 로그 테이블이 없어 logging 으로 남긴다(이메일 등 민감값 제외, ID·닉네임만)
+    log.info("회원 역할 변경 admin=%s(%s) target=%s(%s) %s->%s%s", actor.id, actor.nickname, target.id,
+             target.nickname, before.value, new_role.value, " (댓글 금지 해제)" if ban_cleared else "")
+    return admin_user_out(target)

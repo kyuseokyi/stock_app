@@ -5,6 +5,8 @@
 export type Id = number | string
 
 export type UserRole = 'FREE' | 'PREMIUM' | 'ADMIN'
+/** 관리자 화면에서 지정할 수 있는 역할 — 유료 등급이 없어 일반·관리자 두 가지만 */
+export type AssignableRole = 'FREE' | 'ADMIN'
 
 // ---- auth ----
 export interface UserOut {
