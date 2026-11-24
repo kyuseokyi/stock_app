@@ -110,11 +110,11 @@ describe('오늘 결정 요약', () => {
     stop_loss_price: 47_500, take_profit_price: 55_000, execution_price: 50_000, realized_pnl: null, settlement_note: null,
   };
   it('진입', () => {
-    expect(actionSummary(base)).toBe('상승 진입 · 비중 50% · 2배 · 50,000원 · 손절 47,500 / 익절 55,000');
-    expect(actionSummary({ ...base, action_type: 'ENTER_SHORT' })).toContain('하락 진입');
+    expect(actionSummary(base)).toBe('상승 · 비중 50% · 2배 · 50,000원 · 손절 47,500 / 익절 55,000');
+    expect(actionSummary({ ...base, action_type: 'ENTER_SHORT' })).toContain('하락');
   });
   it('관망·유지·청산', () => {
-    expect(actionSummary({ ...base, action_type: 'HOLD_WATCH', stop_loss_price: null, take_profit_price: null })).toBe('오늘 하루 관망');
+    expect(actionSummary({ ...base, action_type: 'HOLD_WATCH', stop_loss_price: null, take_profit_price: null })).toBe('홀드');
     expect(actionSummary({ ...base, action_type: 'KEEP_POS' })).toBe('포지션 유지 · 손절 47,500 / 익절 55,000');
     expect(actionSummary({ ...base, action_type: 'PARTIAL_CLOSE', realized_pnl: 12_345 })).toBe('50% 부분 청산 · 50,000원 · 실현 +12,345원');
     expect(actionSummary({ ...base, action_type: 'FULL_CLOSE', realized_pnl: -500 })).toBe('전량 청산 · 50,000원 · 실현 -500원');

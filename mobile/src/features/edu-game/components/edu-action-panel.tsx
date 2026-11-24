@@ -102,9 +102,9 @@ function FlatPanel({ state, submitting, onSubmit, footer }: InnerProps) {
     <Card>
       <Text style={styles.title}>오늘의 결정 (하루 1회)</Text>
       <View style={styles.choices}>
-        <ChoiceButton label="📈 상승 진입" tone="up" selected={choice === 'LONG'} onPress={() => setChoice('LONG')} />
-        <ChoiceButton label="📉 하락 진입" tone="down" selected={choice === 'SHORT'} onPress={() => setChoice('SHORT')} />
-        <ChoiceButton label="👀 오늘 관망" tone="neutral" selected={choice === 'WATCH'} onPress={() => setChoice('WATCH')} />
+        <ChoiceButton label="📈 상승" tone="up" selected={choice === 'LONG'} onPress={() => setChoice('LONG')} />
+        <ChoiceButton label="📉 하락" tone="down" selected={choice === 'SHORT'} onPress={() => setChoice('SHORT')} />
+        <ChoiceButton label="👀 홀드" tone="neutral" selected={choice === 'WATCH'} onPress={() => setChoice('WATCH')} />
       </View>
       {choice === null ? <Text style={styles.body}>차트를 보고 오늘 종가 기준으로 무엇을 할지 골라 주세요.</Text> : null}
       {entering && opts ? (
@@ -156,7 +156,7 @@ function FlatPanel({ state, submitting, onSubmit, footer }: InnerProps) {
             포지션 없이 오늘을 지켜봐요. 참가로 인정되어 연속 출석이 이어지고
             {opts && opts.hold_watch_bonus > 0 ? ` 관망 학습 보너스 ${formatWon(opts.hold_watch_bonus)}을 받아요.` : ' 관망 학습 보너스를 받아요.'}
           </Text>
-          <Button label="오늘 하루 관망하기 (출석 인정)" onPress={submit} loading={submitting} />
+          <Button label="오늘 홀드하기 (출석 인정)" onPress={submit} loading={submitting} />
         </View>
       ) : null}
       <Text style={styles.hint}>제출 후 결과를 보면 다른 참가자들의 오늘 선택도 볼 수 있어요.</Text>

@@ -139,7 +139,7 @@ export default function EduDailyActionPanel({ state, submitting, error, now, onS
       <Card>
         <h2 className="text-base font-bold text-ink">로그인하고 오늘의 결정을 내려 보세요</h2>
         <p className="mt-1 text-sm text-ink-muted">
-          가상 자금 {formatWon(state.season?.initial_cash ?? 10_000_000)}으로 하루 한 번, 오늘 종가에 상승·하락 진입이나 관망을 고르고 다음 종가 캔들에서 정산돼요.
+          가상 자금 {formatWon(state.season?.initial_cash ?? 10_000_000)}으로 하루 한 번, 오늘 종가에 상승·하락·홀드 중 하나를 고르고 다음 종가 캔들에서 정산돼요.
           실제 돈은 들지 않아요.
         </p>
         <Button full className="mt-3" onClick={onLogin}>로그인</Button>
@@ -246,9 +246,9 @@ export default function EduDailyActionPanel({ state, submitting, error, now, onS
       <h2 className="text-base font-bold text-ink">오늘의 결정 (1일 1회)</h2>
       <p className="mt-0.5 text-sm text-ink-muted">사용 가능 현금 {formatWon(cash)}</p>
       <div className="mt-3 flex gap-1.5">
-        <ChoiceButton active={flat === 'ENTER_LONG'} onClick={() => setFlat('ENTER_LONG')}>📈 상승 진입</ChoiceButton>
-        <ChoiceButton active={flat === 'ENTER_SHORT'} onClick={() => setFlat('ENTER_SHORT')}>📉 하락 진입</ChoiceButton>
-        <ChoiceButton active={flat === 'HOLD_WATCH'} onClick={() => setFlat('HOLD_WATCH')}>👀 오늘 관망</ChoiceButton>
+        <ChoiceButton active={flat === 'ENTER_LONG'} onClick={() => setFlat('ENTER_LONG')}>📈 상승</ChoiceButton>
+        <ChoiceButton active={flat === 'ENTER_SHORT'} onClick={() => setFlat('ENTER_SHORT')}>📉 하락</ChoiceButton>
+        <ChoiceButton active={flat === 'HOLD_WATCH'} onClick={() => setFlat('HOLD_WATCH')}>👀 홀드</ChoiceButton>
       </div>
       {enterSide && (
         <div className="mt-3 space-y-3">
@@ -282,7 +282,7 @@ export default function EduDailyActionPanel({ state, submitting, error, now, onS
             위험해 보이는 구간에서 쉬어 가는 것도 중요한 투자 기술이에요. 관망도 오늘 참가로 인정돼 연속 출석이 이어져요
             {opts.hold_watch_bonus > 0 && ` (학습 보너스 +${formatWon(opts.hold_watch_bonus)})`}.
           </p>
-          {submitBtn('오늘 하루 관망하기 (출석 인정)', { ...base, action: 'HOLD_WATCH' })}
+          {submitBtn('오늘 홀드하기 (출석 인정)', { ...base, action: 'HOLD_WATCH' })}
         </>
       )}
       {errorLine}

@@ -111,10 +111,10 @@ export function actionSummary(a: EduAction): string {
     case 'ENTER_SHORT': {
       const side = a.action_type === 'ENTER_LONG' ? '상승' : '하락';
       const ratio = a.ratio !== null ? ` · 비중 ${ratioLabel(a.ratio)}` : '';
-      return `${side} 진입${ratio} · ${a.leverage}배 · ${formatPrice(a.execution_price)}원${levels}`;
+      return `${side}${ratio} · ${a.leverage}배 · ${formatPrice(a.execution_price)}원${levels}`;
     }
     case 'HOLD_WATCH':
-      return '오늘 하루 관망';
+      return '홀드';
     case 'KEEP_POS':
       return `포지션 유지${levels}`;
     case 'PARTIAL_CLOSE':
