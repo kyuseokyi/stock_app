@@ -12,6 +12,7 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from shared import admin_permissions
 from shared.database import get_db
 from shared.models import User, UserRole
 from shared.security import decode_token
@@ -99,3 +100,36 @@ async def get_optional_user(
     if creds is None:
         return None
     return await get_current_user(creds, db)
+
+
+INSUFFICIENT_ADMIN_PERMISSION = "INSUFFICIENT_ADMIN_PERMISSION"
+
+
+def _permission_denied(perms: tuple[str, ...]) -> HTTPException:
+    return HTTPException(
+        status.HTTP_403_FORBIDDEN,
+        {
+            "code": INSUFFICIENT_ADMIN_PERMISSION,
+            "required": list(perms),
+            "message": "이 기능을 쓸 관리자 권한이 없어요.",
+        },
+    )
+
+
+async def ensure_permission(db: AsyncSession, user: User, *perms: str) -> None:
+    """라우터 안에서 추가로 확인할 때(예: 특정 키만 더 엄격) — perms 중 하나라도 있으면 통과, 없으면 403."""
+    have = await admin_permissions.permissions_for(db, user)
+    if not have.intersection(perms):
+        raise _permission_denied(perms)
+
+
+def require_permission(*perms: str):
+    """관리자 권한 가드 — perms 중 하나라도 있으면 통과(슈퍼 관리자는 항상). 관리자가 아니면 기존처럼 403."""
+    if not perms or not set(perms) <= admin_permissions.ALL_PERMISSIONS:
+        raise ValueError(f"unknown admin permission: {perms}")
+
+    async def _guard(user: User = Depends(require_admin), db: AsyncSession = Depends(get_db)) -> User:
+        await ensure_permission(db, user, *perms)
+        return user
+
+    return _guard

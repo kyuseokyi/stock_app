@@ -4,7 +4,8 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from shared.auth import require_admin
+from shared import admin_permissions as P
+from shared.auth import require_permission
 from shared.database import get_db
 from shared.models import User
 
@@ -24,13 +25,13 @@ async def read_public_config(response: Response, db: AsyncSession = Depends(get_
 
 
 @admin_router.get("/config", response_model=list[AdConfigOut])
-async def list_ad_configs(db: AsyncSession = Depends(get_db), _: User = Depends(require_admin)):
+async def list_ad_configs(db: AsyncSession = Depends(get_db), _: User = Depends(require_permission(P.AD_MANAGE))):
     return await ad_config.list_configs(db)
 
 
 @admin_router.put("/config/{slot_key}", response_model=AdConfigOut)
 async def update_ad_config(
-    slot_key: str, payload: AdConfigIn, db: AsyncSession = Depends(get_db), admin: User = Depends(require_admin)
+    slot_key: str, payload: AdConfigIn, db: AsyncSession = Depends(get_db), admin: User = Depends(require_permission(P.AD_MANAGE))
 ):
     try:
         return await ad_config.update_config(db, slot_key=slot_key, payload=payload, admin=admin)

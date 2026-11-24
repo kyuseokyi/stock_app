@@ -4,7 +4,8 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from shared.auth import require_admin
+from shared import admin_permissions as P
+from shared.auth import require_permission
 from shared.database import get_db
 from shared.models import User
 
@@ -39,13 +40,13 @@ async def version_check(
 
 
 @admin_router.get("/app-versions", response_model=list[AppVersionOut])
-async def list_app_versions(db: AsyncSession = Depends(get_db), _: User = Depends(require_admin)):
+async def list_app_versions(db: AsyncSession = Depends(get_db), _: User = Depends(require_permission(P.APP_UPDATE_MANAGE))):
     return await app_version.list_configs(db)
 
 
 @admin_router.put("/app-versions/{platform}", response_model=AppVersionOut)
 async def update_app_version(
-    platform: str, payload: AppVersionIn, db: AsyncSession = Depends(get_db), admin: User = Depends(require_admin)
+    platform: str, payload: AppVersionIn, db: AsyncSession = Depends(get_db), admin: User = Depends(require_permission(P.APP_UPDATE_MANAGE))
 ):
     try:
         return await app_version.update_config(db, platform=platform, payload=payload, admin=admin)

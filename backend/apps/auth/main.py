@@ -37,6 +37,7 @@ app.add_middleware(
 app.include_router(auth.router)
 app.include_router(social.router)
 app.include_router(admin_accounts.router)
+app.include_router(admin_accounts.policies_router)
 
 # 간편 로그인 설정 경고(운영에서 가짜 공급자 켜짐·state 키 미설정) — 기동 시 1회
 for _msg in startup_warnings(load_social_settings()):

@@ -14,7 +14,8 @@ from datetime import datetime, timezone
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from shared.models import User, UserRole
+from shared import admin_permissions
+from shared.models import AdminTierPolicy, User, UserRole
 from shared.security import hash_password, verify_password
 from shared.sessions import publish_session_ended
 
@@ -37,7 +38,19 @@ async def list_admins(db: AsyncSession) -> list[User]:
     return await repo.list_admins(db)
 
 
-async def create_admin(db: AsyncSession, *, login_id: str, nickname: str, password: str) -> User:
+def _custom_json(keys: list[str]) -> str | None:
+    """개별 권한 키 검사 → 저장값. 모르는 키·ADMIN_ROLE_MANAGE 는 422 성격의 오류."""
+    bad = [k for k in keys if k not in admin_permissions.GRANTABLE]
+    if bad:
+        raise AdminAccountError(422, "INVALID_PERMISSION", f"줄 수 없는 권한이에요: {', '.join(bad)}")
+    return admin_permissions.dump_keys(keys) if keys else None
+
+
+async def create_admin(
+    db: AsyncSession, *, login_id: str, nickname: str, password: str,
+    admin_tier: str = admin_permissions.DEFAULT_TIER, custom_permissions: list[str] | None = None,
+) -> User:
+    custom = _custom_json(custom_permissions or [])
     if await repo.get_by_login_id(db, login_id) is not None:
         raise AdminAccountError(409, "LOGIN_ID_TAKEN", "이미 쓰고 있는 아이디예요.")
     user = User(
@@ -46,6 +59,8 @@ async def create_admin(db: AsyncSession, *, login_id: str, nickname: str, passwo
         role=UserRole.ADMIN,
         is_active=True,
         is_super_admin=False,
+        admin_tier=admin_tier,
+        custom_permissions=custom,
         password_hash=hash_password(password),
     )
     db.add(user)
@@ -102,3 +117,42 @@ async def change_own_password(db: AsyncSession, user: User, current: str, new: s
         raise AdminAccountError(400, "SAME_PASSWORD", "지금과 다른 비밀번호를 입력해 주세요.")
     user.password_hash = hash_password(new)
     await db.commit()
+
+
+async def set_tier(db: AsyncSession, admin_id: int, admin_tier: str, custom_permissions: list[str]) -> User:
+    """관리자 등급·개별 권한 변경 — 다음 요청부터 바로 반영(권한은 요청마다 DB 에서 다시 계산)."""
+    custom = _custom_json(custom_permissions)
+    user = await _target(db, admin_id)
+    user.admin_tier = admin_tier
+    user.custom_permissions = custom
+    await db.commit()
+    await db.refresh(user)
+    return user
+
+
+# --- 등급별 권한 표 ----------------------------------------------------------------------------- #
+async def role_policies(db: AsyncSession) -> dict:
+    policies = await admin_permissions.load_policies(db)
+    return {
+        "permissions": [
+            {"key": k, "label": label, "description": desc, "grantable": k in admin_permissions.GRANTABLE}
+            for k, label, desc in admin_permissions.PERMISSIONS
+        ],
+        "tiers": [
+            {"tier": t, "label": label, "permissions": admin_permissions.ordered(policies.get(t, frozenset()))}
+            for t, label in admin_permissions.TIERS
+        ],
+    }
+
+
+async def update_tier_policy(db: AsyncSession, tier: str, permissions: list[str]) -> dict:
+    if tier not in admin_permissions.TIER_KEYS:
+        raise AdminAccountError(404, "TIER_NOT_FOUND", "바꿀 수 없는 등급이에요(슈퍼 관리자는 항상 전체 권한).")
+    raw = _custom_json(permissions) or "[]"
+    row = await db.get(AdminTierPolicy, tier)
+    if row is None:
+        db.add(AdminTierPolicy(tier=tier, permissions_json=raw))
+    else:
+        row.permissions_json = raw
+    await db.commit()
+    return await role_policies(db)

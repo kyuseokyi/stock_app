@@ -8,6 +8,7 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Response, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from shared import admin_permissions
 from shared.auth import get_current_user, require_admin
 from shared.database import get_db
 from shared.models import User, UserRole
@@ -64,7 +65,7 @@ async def login(
         raise HTTPException(status.HTTP_403_FORBIDDEN, "비활성화된 계정입니다.")
 
     tokens = await issue_login_token(db, redis, user, "admin")  # /login 은 admin_web 전용
-    return schemas.token_response(tokens, user)
+    return schemas.token_response(tokens, user, await admin_permissions.permissions_for(db, user))
 
 
 @router.post(
@@ -163,8 +164,8 @@ async def logout(
 
 
 @router.get("/me", response_model=schemas.UserOut)
-async def me(user: User = Depends(get_current_user)):
-    return user
+async def me(user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    return await schemas.user_out(db, user)
 
 
 @router.post("/me/password", status_code=status.HTTP_204_NO_CONTENT)

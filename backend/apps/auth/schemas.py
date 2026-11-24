@@ -7,6 +7,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from shared import admin_permissions
 from shared.models import AuthProvider, UserRole
 
 from .terms import terms_required as _terms_required
@@ -43,6 +44,10 @@ class UserOut(BaseModel):
     provider: AuthProvider | None = None
     # 슈퍼 관리자 여부 — admin_web 이 '관리자 계정' 메뉴를 보일지 판단. 추가 필드(옛 클라이언트는 무시)
     is_super_admin: bool = False
+    # 관리자 등급(SUPER_ADMIN·OPERATOR·ANALYST·EDITOR, 일반 회원 null)과 최종 관리자 권한 키 — admin_web 메뉴 표시용.
+    # permissions 는 DB(등급 표)를 봐야 해서 /login·/me 라우터가 채운다(그 밖의 응답은 빈 배열)
+    admin_tier: str | None = None
+    permissions: list[str] = Field(default_factory=list)
 
     @model_validator(mode="before")
     @classmethod
@@ -58,6 +63,7 @@ class UserOut(BaseModel):
             "terms_required": _terms_required(data),
             "provider": getattr(data, "provider", None),
             "is_super_admin": bool(getattr(data, "is_super_admin", False)),
+            "admin_tier": admin_permissions.tier_of(data),
         }
 
 
@@ -84,14 +90,25 @@ class TokenResponse(BaseModel):
     expires_in: int | None = Field(None, description="접근 토큰 수명(초)")
 
 
-def token_response(tokens, user) -> TokenResponse:
-    """로그인·갱신 공통 응답. tokens 는 access_token·refresh_token·expires_in 을 가진 객체(LoginTokens·RefreshResult)."""
+def token_response(tokens, user, permissions=None) -> TokenResponse:
+    """로그인·갱신 공통 응답. tokens 는 access_token·refresh_token·expires_in 을 가진 객체(LoginTokens·RefreshResult).
+    permissions 를 주면(관리자 로그인) user.permissions 에 넣는다."""
+    out = UserOut.model_validate(user)
+    if permissions:
+        out = out.model_copy(update={"permissions": admin_permissions.ordered(permissions)})
     return TokenResponse(
         access_token=tokens.access_token,
         refresh_token=tokens.refresh_token,
         expires_in=tokens.expires_in,
-        user=user,
+        user=out,
     )
+
+
+async def user_out(db, user) -> UserOut:
+    """/me 용 — 관리자면 최종 권한까지 채운다(일반 회원은 DB 를 더 보지 않는다)."""
+    out = UserOut.model_validate(user)
+    perms = await admin_permissions.permissions_for(db, user)
+    return out.model_copy(update={"permissions": admin_permissions.ordered(perms)}) if perms else out
 
 
 class RefreshRequest(BaseModel):
@@ -129,10 +146,42 @@ class PasswordChangeRequest(BaseModel):
     new_password: str = Field(..., min_length=PASSWORD_MIN, max_length=PASSWORD_MAX, description="새 비밀번호(8~72자)")
 
 
+AdminTierKey = Literal["OPERATOR", "ANALYST", "EDITOR"]
+
+
 class AdminCreateRequest(BaseModel):
     login_id: str = Field(..., pattern=ADMIN_LOGIN_ID_PATTERN, description="로그인 아이디(영문 소문자·숫자·._- 4~30자)")
     nickname: str = Field(..., min_length=1, max_length=20, description="표시 이름")
     password: str = Field(..., min_length=PASSWORD_MIN, max_length=PASSWORD_MAX, description="처음 비밀번호(8~72자)")
+    admin_tier: AdminTierKey = Field("OPERATOR", description="관리자 등급(슈퍼 관리자는 만들 수 없다)")
+    custom_permissions: list[str] = Field(default_factory=list, description="등급 권한에 더할 개별 권한 키")
+
+
+class AdminTierUpdateRequest(BaseModel):
+    admin_tier: AdminTierKey
+    custom_permissions: list[str] = Field(default_factory=list)
+
+
+class TierPolicyUpdateRequest(BaseModel):
+    permissions: list[str] = Field(default_factory=list, description="이 등급에 줄 권한 키(ADMIN_ROLE_MANAGE 불가)")
+
+
+class PermissionMeta(BaseModel):
+    key: str
+    label: str
+    description: str
+    grantable: bool  # 등급·개별 권한으로 줄 수 있는가(ADMIN_ROLE_MANAGE 는 false — 슈퍼 관리자 고정)
+
+
+class TierPolicyOut(BaseModel):
+    tier: str
+    label: str
+    permissions: list[str]
+
+
+class RolePoliciesOut(BaseModel):
+    permissions: list[PermissionMeta]
+    tiers: list[TierPolicyOut]
 
 
 class AdminPasswordResetRequest(BaseModel):
@@ -151,4 +200,22 @@ class AdminAccountOut(BaseModel):
     nickname: str | None
     is_active: bool
     is_super_admin: bool
+    admin_tier: str | None = None  # 슈퍼 관리자는 SUPER_ADMIN, 비어 있던 기존 관리자는 OPERATOR 로 보여 준다
+    custom_permissions: list[str] = Field(default_factory=list)
     created_at: datetime | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def _from_user(cls, data):
+        if isinstance(data, dict) or not hasattr(data, "custom_permissions"):
+            return data
+        return {
+            "id": data.id,
+            "email": data.email,
+            "nickname": data.nickname,
+            "is_active": data.is_active,
+            "is_super_admin": bool(data.is_super_admin),
+            "admin_tier": admin_permissions.tier_of(data),
+            "custom_permissions": admin_permissions.ordered(admin_permissions.parse_keys(data.custom_permissions)),
+            "created_at": data.created_at,
+        }

@@ -6,7 +6,8 @@ from datetime import date
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from shared.auth import require_admin
+from shared import admin_permissions as P
+from shared.auth import require_permission
 from shared.database import get_db
 from shared.models import User
 
@@ -33,14 +34,14 @@ def _http(e: NoticeError) -> HTTPException:
 
 @router.get("/fund-notices/preview", response_model=FundNoticePreviewOut)
 async def preview(
-    date_: date = Query(alias="date"), db: AsyncSession = Depends(get_db), admin: User = Depends(require_admin)
+    date_: date = Query(alias="date"), db: AsyncSession = Depends(get_db), admin: User = Depends(require_permission(P.CONTENT_MANAGE))
 ):
     return await fund_notice.preview(db, admin_id=admin.id, ref_date=date_)
 
 
 @router.post("/fund-notices", response_model=PushSendOut, status_code=status.HTTP_201_CREATED)
 async def create_notice(
-    payload: FundNoticeIn, db: AsyncSession = Depends(get_db), admin: User = Depends(require_admin)
+    payload: FundNoticeIn, db: AsyncSession = Depends(get_db), admin: User = Depends(require_permission(P.CONTENT_MANAGE))
 ):
     try:
         return await fund_notice.create_notice(db, admin=admin, payload=payload)
@@ -49,7 +50,7 @@ async def create_notice(
 
 
 @router.post("/push-sends/{send_id}/cancel", response_model=PushSendOut)
-async def cancel_send(send_id: int, db: AsyncSession = Depends(get_db), _: User = Depends(require_admin)):
+async def cancel_send(send_id: int, db: AsyncSession = Depends(get_db), _: User = Depends(require_permission(P.CONTENT_MANAGE))):
     try:
         return await fund_notice.cancel(db, send_id)
     except NoticeError as e:
@@ -61,26 +62,26 @@ async def list_sends(
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_admin),
+    _: User = Depends(require_permission(P.CONTENT_MANAGE)),
 ):
     return await fund_notice.history(db, limit=limit, offset=offset)
 
 
 @router.get("/push-templates", response_model=list[PushTemplateOut])
-async def list_templates(db: AsyncSession = Depends(get_db), _: User = Depends(require_admin)):
+async def list_templates(db: AsyncSession = Depends(get_db), _: User = Depends(require_permission(P.CONTENT_MANAGE))):
     return await push_repo.list_templates(db)
 
 
 @router.post("/push-templates", response_model=PushTemplateOut, status_code=status.HTTP_201_CREATED)
 async def create_template(
-    payload: PushTemplateIn, db: AsyncSession = Depends(get_db), _: User = Depends(require_admin)
+    payload: PushTemplateIn, db: AsyncSession = Depends(get_db), _: User = Depends(require_permission(P.CONTENT_MANAGE))
 ):
     return await fund_notice.save_template(db, payload)
 
 
 @router.put("/push-templates/{template_id}", response_model=PushTemplateOut)
 async def update_template(
-    template_id: int, payload: PushTemplateIn, db: AsyncSession = Depends(get_db), _: User = Depends(require_admin)
+    template_id: int, payload: PushTemplateIn, db: AsyncSession = Depends(get_db), _: User = Depends(require_permission(P.CONTENT_MANAGE))
 ):
     try:
         return await fund_notice.save_template(db, payload, template_id)
@@ -89,7 +90,7 @@ async def update_template(
 
 
 @router.delete("/push-templates/{template_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_template(template_id: int, db: AsyncSession = Depends(get_db), _: User = Depends(require_admin)):
+async def delete_template(template_id: int, db: AsyncSession = Depends(get_db), _: User = Depends(require_permission(P.CONTENT_MANAGE))):
     try:
         tpl = await fund_notice.get_template_or_404(db, template_id)
     except NoticeError as e:
@@ -99,7 +100,7 @@ async def delete_template(template_id: int, db: AsyncSession = Depends(get_db), 
 
 
 @router.post("/push-test", response_model=TestPushOut)
-async def send_test_push(payload: TestPushIn, db: AsyncSession = Depends(get_db), admin: User = Depends(require_admin)):
+async def send_test_push(payload: TestPushIn, db: AsyncSession = Depends(get_db), admin: User = Depends(require_permission(P.CONTENT_MANAGE))):
     """입력한 제목·본문을 관리자 본인 기기로 보낸다(발송 이력에 남기지 않음)."""
     try:
         return await push_test.send_test(db, admin=admin, payload=payload)

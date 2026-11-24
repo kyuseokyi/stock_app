@@ -26,7 +26,7 @@ from apps.stock_api.services import screener_features
 from shared import database, market_viewer
 from shared.auth import bearer_scheme
 from shared.market_viewer import user_can_view  # 회원 판정은 trading_game 과 공유
-from shared.models import User
+from shared.models import User, UserRole
 
 log = logging.getLogger(__name__)
 
@@ -63,6 +63,21 @@ async def load_viewer(creds: HTTPAuthorizationCredentials) -> User | None:
         return None
 
 
+async def viewer_allowed(creds: HTTPAuthorizationCredentials) -> bool:
+    """토큰 → 스위치가 꺼져 있어도 시세를 볼 수 있는가(관리자 등급 반영 — shared.market_viewer.can_view)."""
+    user = await load_viewer(creds)
+    if not user_can_view(user):  # 등급을 보기 전 상한선 — 일반 회원(권한 없음)·익명은 DB 를 더 보지 않는다
+        return False
+    if user.role != UserRole.ADMIN or getattr(user, "is_super_admin", False):
+        return True
+    try:
+        async with database.AsyncSessionLocal() as db:
+            return await market_viewer.can_view(user, db)
+    except Exception as exc:  # noqa: BLE001 — 세션 열기 실패 등은 닫힘 쪽(익명)으로
+        log.warning("시세 열람 판정 실패: %s", type(exc).__name__)
+        return False
+
+
 async def resolve(request: Request, creds: HTTPAuthorizationCredentials | None) -> MarketAccess:
     cached = getattr(request.state, "market_access", None)
     if isinstance(cached, MarketAccess):
@@ -72,7 +87,7 @@ async def resolve(request: Request, creds: HTTPAuthorizationCredentials | None) 
     elif creds is None:
         result = MarketAccess(allowed=False, public=False)
     else:
-        result = MarketAccess(allowed=user_can_view(await load_viewer(creds)), public=False)
+        result = MarketAccess(allowed=await viewer_allowed(creds), public=False)
     request.state.market_access = result
     return result
 

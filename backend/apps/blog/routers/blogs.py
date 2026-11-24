@@ -5,7 +5,8 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from shared.auth import require_admin
+from shared import admin_permissions as P
+from shared.auth import require_permission
 from shared.database import get_db
 from shared.models import User
 
@@ -40,7 +41,7 @@ async def read_blogs(
 async def create_blog(
     payload: schemas.BlogCreate,
     db: AsyncSession = Depends(get_db),
-    admin: User = Depends(require_admin),
+    admin: User = Depends(require_permission(P.CONTENT_MANAGE)),
 ):
     if await crud.get_board(db, payload.board_id) is None:
         raise HTTPException(
@@ -77,7 +78,7 @@ async def update_blog(
     blog_id: int,
     payload: schemas.BlogUpdate,
     db: AsyncSession = Depends(get_db),
-    admin: User = Depends(require_admin),
+    admin: User = Depends(require_permission(P.CONTENT_MANAGE)),
 ):
     post = await crud.get_blog(db, blog_id)
     if post is None:
@@ -91,7 +92,7 @@ async def update_blog(
 async def delete_blog(
     blog_id: int,
     db: AsyncSession = Depends(get_db),
-    admin: User = Depends(require_admin),
+    admin: User = Depends(require_permission(P.CONTENT_MANAGE)),
 ):
     post = await crud.get_blog(db, blog_id)
     if post is None:
