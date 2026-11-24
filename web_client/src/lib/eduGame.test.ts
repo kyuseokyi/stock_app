@@ -84,12 +84,12 @@ describe('actionSummary (제출한 결정 요약)', () => {
   const base = { ratio: null, leverage: 1, stop_loss_price: null, take_profit_price: null }
   it('진입은 비중·배율·손절/익절', () => {
     expect(actionSummary({ ...base, action_type: 'ENTER_LONG', ratio: 0.5, leverage: 2, stop_loss_price: 47_500, take_profit_price: 55_000 }))
-      .toBe('📈 상승 진입 · 비중 50% · 2배 · 손절 47,500 / 익절 55,000')
+      .toBe('📈 상승 · 비중 50% · 2배 · 손절 47,500 / 익절 55,000')
   })
   it('1배는 배율 생략, 관망·전량 청산은 행동만', () => {
     expect(actionSummary({ ...base, action_type: 'ENTER_SHORT', ratio: 1, stop_loss_price: 51_500, take_profit_price: 47_500 }))
-      .toBe('📉 하락 진입 · 비중 100% · 손절 51,500 / 익절 47,500')
-    expect(actionSummary({ ...base, action_type: 'HOLD_WATCH' })).toBe('👀 오늘 관망')
+      .toBe('📉 하락 · 비중 100% · 손절 51,500 / 익절 47,500')
+    expect(actionSummary({ ...base, action_type: 'HOLD_WATCH' })).toBe('👀 홀드')
     expect(actionSummary({ ...base, action_type: 'FULL_CLOSE', stop_loss_price: 1, take_profit_price: 2 })).toBe('🚪 전량 청산')
   })
   it('모르는 행동은 원문', () => {

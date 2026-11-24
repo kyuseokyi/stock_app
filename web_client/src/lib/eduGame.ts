@@ -84,9 +84,9 @@ export function settlementPassed(nextIso: string | null | undefined, now: Date =
 }
 
 export const ACTION_LABEL: Record<EduActionType, string> = {
-  ENTER_LONG: '📈 상승 진입',
-  ENTER_SHORT: '📉 하락 진입',
-  HOLD_WATCH: '👀 오늘 관망',
+  ENTER_LONG: '📈 상승',
+  ENTER_SHORT: '📉 하락',
+  HOLD_WATCH: '👀 홀드',
   KEEP_POS: '🔒 포지션 유지',
   PARTIAL_CLOSE: '💰 50% 부분 청산',
   FULL_CLOSE: '🚪 전량 청산',
@@ -96,7 +96,7 @@ export function actionLabel(type: string): string {
   return (ACTION_LABEL as Record<string, string>)[type] ?? type
 }
 
-/** 제출한 결정 한 줄 요약 — '📈 상승 진입 · 비중 50% · 2배 · 손절 47,500 / 익절 55,000' */
+/** 제출한 결정 한 줄 요약 — '📈 상승 · 비중 50% · 2배 · 손절 47,500 / 익절 55,000' */
 export function actionSummary(a: Pick<EduAction, 'action_type' | 'ratio' | 'leverage' | 'stop_loss_price' | 'take_profit_price'>): string {
   const parts = [actionLabel(a.action_type)]
   const entering = a.action_type === 'ENTER_LONG' || a.action_type === 'ENTER_SHORT'
