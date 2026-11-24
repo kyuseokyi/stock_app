@@ -590,7 +590,7 @@ async def submit_daily_action(
     holding = acc.pos_side is not None
     if (holding and action not in HOLDING_ACTIONS) or (not holding and action not in FLAT_ACTIONS):
         msg = ("이미 보유 중인 포지션이 있어요. 유지·50% 청산·전량 청산 중에서 골라 주세요." if holding
-               else "보유 중인 포지션이 없어요. 상승 진입·하락 진입·관망 중에서 골라 주세요.")
+               else "보유 중인 포지션이 없어요. 상승·하락·홀드 중에서 골라 주세요.")
         raise EduGameError("ACTION_NOT_ALLOWED", msg, 409)
 
     row = EduGameDailyAction(
@@ -623,7 +623,7 @@ async def submit_daily_action(
         refresh_totals(acc, season, price)  # 관망은 무포지션 — 지급 직전 ROI 를 현재 값으로
         acc.bonus_cash = Decimal(acc.bonus_cash) + reward_service.principal_increment(bonus, acc.current_roi)
         acc.cash_balance = Decimal(acc.cash_balance) + bonus
-        message = "쉬어 가는 것도 중요한 투자 기술이에요! 관망 학습 보너스를 받았어요."
+        message = "쉬어 가는 것도 중요한 투자 기술이에요! 홀드 학습 보너스를 받았어요."
     elif action == "KEEP_POS":
         sl_pct, tp_pct = payload.get("stop_loss_pct"), payload.get("take_profit_pct")
         if sl_pct is not None or tp_pct is not None:
