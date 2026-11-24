@@ -25,6 +25,8 @@ import ScreenerSettings from './pages/ScreenerSettings'
 import FundNoticesPage from './pages/FundNoticesPage'
 import AppVersionsPage from './pages/AppVersionsPage'
 import AdSettingsPage from './pages/AdSettingsPage'
+import AdminAccountsPage from './pages/AdminAccountsPage'
+import ChangePasswordPage from './pages/ChangePasswordPage'
 
 export default function App() {
   return (
@@ -63,6 +65,8 @@ export default function App() {
         <Route path="fund-notices" element={<FundNoticesPage />} />
         <Route path="app/versions" element={<AppVersionsPage />} />
         <Route path="app/ads" element={<AdSettingsPage />} />
+        <Route path="admins" element={<AdminAccountsPage />} />
+        <Route path="account/password" element={<ChangePasswordPage />} />
         <Route path="*" element={<Navigate to="/boards" replace />} />
       </Route>
     </Routes>

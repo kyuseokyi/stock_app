@@ -12,6 +12,18 @@ export interface UserOut {
   email: string | null
   nickname: string | null
   role: UserRole
+  // 슈퍼 관리자(관리자 계정 생성·관리 가능). 옛 로그인 정보에는 없을 수 있다 → 없으면 false 로 본다
+  is_super_admin?: boolean
+}
+
+// 관리자 계정 — GET/POST /api/v1/auth/admin/accounts (슈퍼 관리자 전용)
+export interface AdminAccount {
+  id: number
+  login_id: string | null
+  nickname: string | null
+  is_active: boolean
+  is_super_admin: boolean
+  created_at: string | null
 }
 
 export interface TokenResponse {

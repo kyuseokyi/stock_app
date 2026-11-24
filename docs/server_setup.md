@@ -184,7 +184,7 @@ docker compose -f docker-compose.prod.yml run --rm auth_api python -m apps.auth.
 ```
 - `alembic upgrade head` — PostgreSQL 스키마(4개 마이그레이션)
 - `shared.clickhouse_schema` — ClickHouse 테이블(멱등, 재실행 안전)
-- `apps.auth.seed_admin` — 관리자 계정(`ADMIN_EMAIL`/`ADMIN_PASSWORD`)
+- `apps.auth.seed_admin` — 슈퍼 관리자 계정(`ADMIN_EMAIL`/`ADMIN_PASSWORD`). 이미 있으면 비밀번호는 유지(잊었을 때만 `ADMIN_RESET_PASSWORD=1`). 다른 관리자는 어드민 **관리자 계정** 메뉴에서 만든다.
 
 ### 7-1. 트레이딩 게임 최초 설정 (개발 서버 테스트용)
 게임 탭은 **ACTIVE 시즌**이 있어야 열리고, `game_ws` 데몬은 60초마다 ACTIVE 시즌을 확인해 그 종목을 구독한다(시즌이 없으면 대기, 월말 시즌 교체 시 자동 전환 — 재시작 불필요). 배포 후 서버에서 1회:
