@@ -1,6 +1,7 @@
 import client from './client'
 import type {
   AdminUserListOut,
+  AssignableRole,
   AdminUserOut,
   ChartPostOut,
   ReportedCommentOut,
@@ -54,6 +55,12 @@ export const setCommentBan = async (userId: number, banned: boolean): Promise<Ad
 // 회원별 시세 열람 권한 켜기·끄기(관리자 계정은 400 ADMIN_ALWAYS_ALLOWED — 항상 허용)
 export const setMarketDataAccess = async (userId: number, enabled: boolean): Promise<AdminUserOut> => {
   const { data } = await client.patch<AdminUserOut>(`/admin/users/${userId}/market-data-access`, { enabled })
+  return data
+}
+
+// 회원 역할 변경 — 일반(FREE)·관리자(ADMIN)만(유료 등급 없음). 자기 강등·마지막 관리자·비활성 승격은 409
+export const setUserRole = async (userId: number, role: AssignableRole): Promise<AdminUserOut> => {
+  const { data } = await client.patch<AdminUserOut>(`/admin/users/${userId}/role`, { role })
   return data
 }
 
