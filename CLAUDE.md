@@ -108,4 +108,8 @@ docker-compose -f docker-compose.dev.yml up -d  # Postgres, ClickHouse, Redis �
   - 작업 종료 직전: 이번 세션에 고친 하위 프로젝트만 테스트·타입검사(backend `pytest`, mobile `tsc`+`jest`, web_client `tsc`+`vitest`, admin_web `tsc`). 실패하면 고친다. **이번 작업과 무관한 기존 실패는 고치지 말고 사용자에게 알린다.**
   - main push(=운영 배포), 운영 빌드/OTA/배포 스크립트, `.env`·`mobile/secrets` 접근은 실행 전에 사용자 확인을 받는다.
 - **Skill** `kis-quote-endpoint`: KIS 시세 호출 추가·수정 절차.
-- **에이전트** `market-data-reviewer`: 시세·지표·스크리너·게임 계산 변경 후 검토(읽기 전용).
+- **에이전트** (모두 읽기 전용, 호출할 때 **이번 세션에 고친 파일 목록을 넘긴다** — 다른 세션의 변경을 검토하지 않도록)
+  - `market-data-reviewer`: 시세·지표·스크리너·게임 계산 변경 후 검토.
+  - `api-contract-reviewer`: API 응답·요청 형식(REST·GraphQL·WS·SSE·푸시) 변경 후, 세 클라이언트와 **구버전 앱** 호환 검토.
+- **리뷰어 고르기**: 위 두 영역은 해당 프로젝트 에이전트를 쓴다. 그 밖의 변경은 리뷰어를 **하나만** 쓴다(superpowers code-review 또는 ECC 리뷰어 중 하나). 같은 변경을 여러 리뷰어에게 중복으로 맡기지 않는다.
+- **전역 플러그인 훅과의 관계**: ECC 의 `stop:format-typecheck`·`stop:check-console-log` 는 위 종료 훅·eslint 와 겹쳐 이 프로젝트에서 끈다(`.claude/settings.json` 의 `env.ECC_DISABLED_HOOKS`).
