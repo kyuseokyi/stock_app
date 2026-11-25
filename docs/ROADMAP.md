@@ -279,6 +279,7 @@
 ---
 
 ## 참고 문서
+- **TradingView Advanced Charts 라이선스 신청 가이드: `docs/tradingview_advanced_charts_application_guide.md`**
 - **교육용 합성 종가 트레이딩 게임 명세 및 플랜: `docs/edu_synthetic_daily_game_spec_and_plan.md`**
 - **관리자 등급별 권한 제어(RBAC) 명세 및 플랜: `docs/admin_rbac_permissions_spec_and_plan.md`**
 - **트레이딩 게임 지지·저항 손절·익절·홀딩 경량화 명세: `docs/game_lightweight_sr_action_spec_and_plan.md`**
