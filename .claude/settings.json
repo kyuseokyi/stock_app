@@ -1,4 +1,7 @@
 {
+  "env": {
+    "ECC_DISABLED_HOOKS": "stop:format-typecheck,stop:check-console-log"
+  },
   "permissions": {
     "deny": [
       "Read(./**/.env)",

@@ -40,5 +40,6 @@ API 라우터에 로직을 넣지 않는다 (Router → Service → Repository).
 실행: `cd backend && uv run pytest -q tests/test_<이름>.py`
 
 ## 6. 마무리
-- `market-data-reviewer` 에이전트에게 변경분 검토를 맡긴다.
+- `market-data-reviewer` 에이전트에게 변경분 검토를 맡긴다. 이번 세션에 고친 파일 목록을 같이 넘긴다.
+- API 응답(REST·GraphQL) 형식까지 바뀌었으면 `api-contract-reviewer` 에이전트에게도 맡긴다.
 - 새 서버·명령·환경변수가 생겼으면 루트 `README.md` 를 갱신한다 (CLAUDE.md 규칙 7).
