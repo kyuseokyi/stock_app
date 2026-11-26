@@ -47,6 +47,10 @@ export function slotTime(iso: string | null): string {
   })
 }
 
+/** 소속 테마 이름 — KIS 보충 테마는 '(KIS)' 를 붙인다 */
+export const themeLabel = (t: { name: string; source?: string | null }): string =>
+  t.source === 'kis' ? `${t.name}(KIS)` : t.name
+
 export const THEME_SOURCE_LABEL: Record<string, string> = {
   kiwoom: '키움',
   kis: 'KIS(키움 스냅숏 없음)',

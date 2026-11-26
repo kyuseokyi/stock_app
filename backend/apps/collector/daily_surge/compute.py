@@ -211,7 +211,7 @@ THEME_LIST_MAX = 5
 
 
 def stock_theme_lists(rows: list[dict], themes: dict[int, tuple[str, list[str]]], groups: list[dict],
-                      *, limit: int = THEME_LIST_MAX) -> None:
+                      *, limit: int = THEME_LIST_MAX, source: str | None = None) -> None:
     """각 행에 소속 테마 목록(row["themes"])을 채운다 — [{id, name, size, moved}] 최대 limit 개.
 
     moved = 그날 같은 방향으로 함께 움직인 종목 수(그 테마 묶음의 종목 수, 묶음 없으면 0).
@@ -227,7 +227,21 @@ def stock_theme_lists(rows: list[dict], themes: dict[int, tuple[str, list[str]]]
     moved = {(g["theme_id"], g["direction"]): g["stock_count"] for g in groups}
     for r in rows:
         direction = "up" if r.get("is_surge") else "down" if r.get("is_plunge") else None
-        items = [{"id": i, "name": n, "size": size, "moved": moved.get((i, direction), 0) if direction else 0}
+        items = [{"id": i, "name": n, "size": size, "moved": moved.get((i, direction), 0) if direction else 0,
+                  "source": source}
                  for i, n, size in member_of.get(r["ticker"], [])]
         items.sort(key=lambda x: (-x["moved"], x["size"], x["id"]))
         r["themes"] = items[:limit]
+
+
+def fill_fallback_themes(rows: list[dict], targets_: list[dict], fallback: dict[int, tuple[str, list[str]]],
+                         *, source: str = "kis", limit: int = THEME_LIST_MAX) -> int:
+    """주 출처(키움) 소속 테마가 하나도 없는 대상 종목에만 보충 출처(KIS) 테마 목록을 채운다. 채운 종목 수.
+
+    함께 움직인 수(moved)는 보충 출처 테마 기준으로 센다(전체 행 rows 로 계산). 대표 테마·묶음·대장주는 바꾸지 않는다.
+    """
+    empty = [r for r in targets_ if not r.get("themes")]
+    if not empty or not fallback:
+        return 0
+    stock_theme_lists(empty, fallback, theme_groups(rows, fallback), limit=limit, source=source)
+    return sum(1 for r in empty if r.get("themes"))

@@ -207,3 +207,16 @@ def test_sector_and_theme_list_saved(session_factory):
         assert a.sector_name == "화학" and a.themes[0]["name"] == "화장품" and a.themes[0]["moved"] == 2
         assert c.primary_theme_id is None and [t["name"] for t in c.themes] == ["제약"]  # 묶음 없어도 소속 테마
         assert s.scalars(sa.select(DailySurgeThemeGroup)).one().theme_size == 2
+
+
+
+def test_kis_fallback_fills_stocks_without_kiwoom_theme():
+    today, prev = _universe(n_filler=20)
+    calls: list = []
+    deps = _deps(calls, today=today, prev=prev, themes={1: ("화장품", ["A", "B"])})
+    deps.fallback_themes = lambda: {9: ("제약(KIS)", ["C", "D"])}
+    out = run_day(T, deps, min_rows=10)
+    assert out["theme_fallback"] >= 1
+    by = {s["ticker"]: s for s in calls[0][1]}
+    assert by["A"]["themes"][0]["source"] == "kiwoom"
+    assert [(t["name"], t["source"]) for t in by["C"]["themes"]] == [("제약(KIS)", "kis")]

@@ -224,7 +224,7 @@ def test_stock_theme_lists_for_solo_and_value_only():
     C.stock_theme_lists(rows, themes, groups)
     by = {r["ticker"]: r for r in rows}
     assert [t["name"] for t in by["A"]["themes"]] == ["화장품", "중국 소비"]
-    assert by["A"]["themes"][0] == {"id": 1, "name": "화장품", "size": 3, "moved": 2}
+    assert by["A"]["themes"][0] == {"id": 1, "name": "화장품", "size": 3, "moved": 2, "source": None}
     # S: '중국 소비'에서 A 와 함께 급등(moved 2) → 먼저, '보안'은 혼자(moved 0)
     assert [(t["name"], t["moved"]) for t in by["S"]["themes"]] == [("중국 소비", 2), ("보안", 0)]
     assert [t["name"] for t in by["V"]["themes"]] == ["중국 소비"]  # 거래대금 상위만인 종목도 테마 표시
@@ -235,3 +235,18 @@ def test_stock_theme_lists_limit():
     themes = {i: (f"t{i}", ["A"] + [f"x{j}" for j in range(i)]) for i in range(1, 9)}
     C.stock_theme_lists(rows, themes, [])
     assert [t["id"] for t in rows[0]["themes"]] == [1, 2, 3, 4, 5]
+
+
+
+def test_fill_fallback_themes_only_for_stocks_without_primary_source():
+    """키움 테마가 없는 종목에만 KIS 테마를 보충하고 source='kis' 로 표시. 키움 테마가 있으면 그대로."""
+    rows = _rows({"A": (100.0, 120.0, 10), "B": (100.0, 118.0, 10), "C": (100.0, 115.0, 10)})
+    kiwoom = {1: ("화장품", ["A", "X"])}
+    C.stock_theme_lists(rows, kiwoom, C.theme_groups(rows, kiwoom), source="kiwoom")
+    kis = {7: ("반도체 장비", ["B", "C", "Y"]), 8: ("화장품(KIS)", ["A"])}
+    assert C.fill_fallback_themes(rows, rows, kis) == 2
+    by = {r["ticker"]: r for r in rows}
+    assert [(t["name"], t["source"]) for t in by["A"]["themes"]] == [("화장품", "kiwoom")]
+    assert by["B"]["themes"] == [{"id": 7, "name": "반도체 장비", "size": 3, "moved": 2, "source": "kis"}]
+    assert by["C"]["primary_theme_id"] is None  # 대표 테마·묶음은 키움 기준 그대로
+    assert C.fill_fallback_themes(rows, rows, {}) == 0

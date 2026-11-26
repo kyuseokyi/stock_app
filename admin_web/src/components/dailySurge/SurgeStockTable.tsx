@@ -1,5 +1,5 @@
 import type { SurgeStock } from '../../api/dailySurge'
-import { fmtDiff, fmtPrice, fmtRate, fmtValue, fmtVolume, rateClass } from '../../lib/dailySurge'
+import { fmtDiff, fmtPrice, fmtRate, fmtValue, fmtVolume, rateClass, themeLabel } from '../../lib/dailySurge'
 
 // 급등·급락·거래대금 상위·교집합 종목 표 — 이름을 누르면 오른쪽에 종목 상세.
 interface Props {
@@ -39,7 +39,7 @@ export default function SurgeStockTable({ items, selected, onSelect }: Props) {
                     {s.primary_theme_name
                       ? `${s.is_theme_leader ? '대장 · ' : ''}${s.primary_theme_name} (동반 묶음)`
                       : s.themes.length > 0
-                        ? s.themes.slice(0, 3).map((t) => t.name).join(' · ')
+                        ? s.themes.slice(0, 3).map(themeLabel).join(' · ')
                         : '소속 테마 없음'}
                   </span>
                   {s.sector_name && <span className="text-xs text-ink-muted">업종 {s.sector_name}</span>}

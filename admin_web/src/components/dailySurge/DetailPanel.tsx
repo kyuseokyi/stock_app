@@ -3,7 +3,7 @@ import {
   getStockDetail, getThemeDetail, type BoardRow, type Direction, type StockDetail, type ThemeDetail,
 } from '../../api/dailySurge'
 import StockDailyChart from '../../leaders/components/screener/StockDailyChart'
-import { fmtDiff, fmtPrice, fmtRate, fmtValue, fmtVolume, rateClass } from '../../lib/dailySurge'
+import { fmtDiff, fmtPrice, fmtRate, fmtValue, fmtVolume, rateClass, themeLabel } from '../../lib/dailySurge'
 import NaverNewsList from './NaverNewsList'
 import NoteEditor from './NoteEditor'
 
@@ -105,7 +105,7 @@ export default function DetailPanel({ date, selection, onChanged }: {
           <div className="flex flex-wrap gap-1" aria-label="소속 테마">
             {s.themes.map((t) => (
               <span key={t.id} className={`rounded-full px-2 py-0.5 text-xs ${t.moved > 1 ? 'bg-brand-soft text-brand-strong' : 'bg-fill text-ink-muted'}`}>
-                {t.name}{t.moved > 1 ? ` · 동반 ${t.moved}` : ''} <span className="opacity-70">({t.size})</span>
+                {themeLabel(t)}{t.moved > 1 ? ` · 동반 ${t.moved}` : ''} <span className="opacity-70">({t.size})</span>
               </span>
             ))}
           </div>

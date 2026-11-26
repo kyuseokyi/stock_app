@@ -33,6 +33,8 @@ export interface StockTheme {
   size: number
   /** 그날 같은 방향으로 함께 움직인 종목 수(묶음 없으면 0) */
   moved: number
+  /** 테마 출처 — 'kiwoom' 이 기본, 키움 테마가 없는 종목만 'kis' 로 보충(옛 집계는 없음) */
+  source?: string | null
 }
 
 export interface SurgeNote {

@@ -64,6 +64,7 @@ def build_deps() -> Deps:
         sectors=_with_session(repo.load_sectors),
         names=_with_session(repo.load_names),
         themes=_with_session(repo.load_themes),
+        fallback_themes=_with_session(repo.load_fallback_themes),
         dart=_dart_fetcher(),
         store=_with_session(repo.replace_day),
     )
