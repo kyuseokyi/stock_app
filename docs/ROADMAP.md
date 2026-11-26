@@ -241,6 +241,13 @@
 - [x] Phase 3 (관리자 웹 `admin_web` 전체 스크리너 상시 노출) — `feature/app-identity-nav` 구현 완료(2026-11-18, 배포·머지 전): 사용자 화면 스위치와 무관하게 관리자 웹 `시장 데이터` 사이드바에 `조건검색(/market/finder)` 및 `차트 패턴(/market/patterns)` 화면을 추가해 4대 스크리너(`주도주 · 5·20 정배열 · 조건검색 · 차트 패턴`) 전부 상시 노출
 
 
+### 관리자 전용 AI 종목 심층 분석 워크스테이션 (오픈소스 무료 금융 스킬 5종 + Gemini API 결합)
+> 상세 설계 및 로드맵: [`docs/admin_gemini_finance_skills_spec_and_plan.md`](admin_gemini_finance_skills_spec_and_plan.md)
+- [ ] Step 1: PostgreSQL `admin_ai_skill_reports` 테이블(`(ticker, as_of_date)` 유니크, 정량 팩트·SEPA 분석·EV 3-시나리오·밸류에이션·실적 품질·뉴스 촉매 Top 5 저장) 및 Alembic 마이그레이션 추가
+- [ ] Step 2: 5대 무료 오픈소스 스킬(`himself65/finance-skills`의 `sepa-strategy`, `company-valuation`, `earnings-recap`, `stock-liquidity` + `tellmefrankie/ai-investment-skills`의 `ev-calculator`, `news-sentiment-engine`)용 파이썬 정량 전처리기(`backend/apps/ai_analyst/skills/quant_facts.py` — ClickHouse 일봉 300봉 SEPA 8조건·업종 상대 멀티플·4분기 실적 가속·외인/연기금 수급·DART/뉴스 원문 결합) 구현
+- [ ] Step 3: 5대 오픈소스 스킬 루브릭 기반 Gemini 구조화 추론 엔진(`skill_runner.py`) 및 관리자 전용 REST API(`/api/v1/admin/ai-skills/*`, `require_admin` 가드) 구현
+- [ ] Step 4: 관리자 웹(`admin_web` > `시장 데이터` > `🧠 AI 종목 심층 분석 (/market/ai-lab)`) 단독 워크스테이션 화면 및 기존 스크리너(`주도주 · 5·20 정배열 · 급등락 분석`)에서의 원클릭 연동 버튼 구현
+
 ### 날짜별 종가 기준 급등주(+10~+30%) · 급락주(-10~-30%) · 거래대금 상위 & 장전·장중 뉴스·테마·대장주 분석기
 > 상세 설계 및 로드맵: [`docs/daily_surge_and_trading_value_analysis_spec.md`](daily_surge_and_trading_value_analysis_spec.md)
 - [ ] Step 1: PostgreSQL `daily_surge_analyses` 테이블(`(trade_date, ticker)` 유니크, 종가·전일대비 가격·등락률·거래량·거래대금·`is_surge`(+10~+30%)·`is_plunge`(-10~-30%)·`pre_market_reason`(장전 이유)·`intraday_reason`(장중 이유)·`news_items`(원문 링크·발행시각·`PRE_MARKET`/`INTRADAY` 구분)·테마 키워드·대장주 정보) 및 Alembic 마이그레이션 추가
@@ -286,6 +293,7 @@
 ---
 
 ## 참고 문서
+- **관리자 전용 AI 종목 심층 분석기(오픈소스 금융 스킬 + Gemini) 명세: `docs/admin_gemini_finance_skills_spec_and_plan.md`**
 - **날짜별 종가 급등주(10~30%) & 거래대금 상위·테마·대장주 분석기 명세: `docs/daily_surge_and_trading_value_analysis_spec.md`**
 - **TradingView Advanced Charts 라이선스 신청 가이드: `docs/tradingview_advanced_charts_application_guide.md`**
 - **교육용 합성 종가 트레이딩 게임 명세 및 플랜: `docs/edu_synthetic_daily_game_spec_and_plan.md`**
