@@ -53,6 +53,9 @@ JOBS: dict[str, Job] = {j.key: j for j in (
         "collector.backfill_screener", "수 분", 3600, {"days": 60}),
     Job("patterns", "차트 패턴 계산", "최신 거래일 차트 패턴(베이스·피벗·돌파)을 다시 계산해요",
         "collector.compute_patterns", "1~2분", 900),
+    # 급등락·테마 분석 — 일봉 읽기 → PG 저장(CH 쓰기 없음) → prod_readonly 개발 서버에서도 실행 가능
+    Job("daily_surge", "급등락·테마 분석", "최신 거래일 급등·급락·거래대금 상위와 테마 묶음·공시를 다시 집계해요",
+        "collector.analyze_daily_surge", "1~2분", 900, writes_market_data=False),
     Job("bootstrap", "초기 데이터 준비",
         "새 서버에 일봉 3년·지수·수급·재무를 받고 지표를 모두 계산해요(KIS 대량 호출, 1~2시간)",
         "collector.bootstrap_data", "1~2시간", 4 * 3600, {"months": 37},
