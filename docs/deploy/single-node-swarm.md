@@ -160,5 +160,6 @@ sed "s#__REPO__#$PWD#" deploy/dev/com.stockapp.pg-backup.plist > ~/Library/Launc
 launchctl load ~/Library/LaunchAgents/com.stockapp.pg-backup.plist
 launchctl list | grep pg-backup       # 등록 확인(매일 04:30 실행)
 ```
+- launchd 로 돌면 macOS 개인정보 보호가 bash 의 외장 볼륨 쓰기를 막는다(`Operation not permitted`, 2026-11-26). 그래서 스크립트는 파일 쓰기·정리를 **DB 와 같은 이미지의 보조 컨테이너**(OrbStack 바인드 마운트)에서 한다 — bash 에 '전체 디스크 접근'을 주지 않는다.
 - 기록: `/tmp/stockapp-pg-backup.log`. 지금 바로 돌려 보기: `launchctl start com.stockapp.pg-backup`.
 - 복원(빈 DB 에): `gunzip -c <파일> | docker exec -i stock_postgres_prod sh -c 'psql -U "$POSTGRES_USER" -d postgres'` — 기존 표가 있으면 '이미 있음' 오류가 나므로 DB 를 새로 만든 직후(alembic 전)에 넣는다.
