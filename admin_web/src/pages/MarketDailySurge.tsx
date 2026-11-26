@@ -50,12 +50,21 @@ export default function MarketDailySurge() {
   const [selection, setSelection] = useState<Selection | null>(null)
   const [state, setState] = useState<'loading' | 'ok' | 'failed'>('loading')
   const [busy, setBusy] = useState(false)
+  // 수동 집계 날짜(기본: 보고 있는 날짜, 없으면 오늘 KST)
+  const [runDate, setRunDate] = useState<string>(() => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10))
 
-  useEffect(() => {
+  const reloadDates = useCallback(() => {
     listDates()
-      .then((d) => { setDates(d); setDate((cur) => cur ?? d[0]?.date ?? null); if (!d.length) setState('ok') })
+      .then((d) => {
+        setDates(d)
+        setDate((cur) => (cur && d.some((x) => x.date === cur) ? cur : d[0]?.date ?? null))
+        if (!d.length) setState('ok')
+      })
       .catch(() => setState('failed'))
   }, [])
+
+  useEffect(() => { reloadDates() }, [reloadDates])
+  useEffect(() => { if (date) setRunDate(date) }, [date])
 
   const load = useCallback(async () => {
     if (!date) return
@@ -86,11 +95,11 @@ export default function MarketDailySurge() {
   const go = (next: string) => { setDate(next); setSelection(null) }
 
   const doRebuild = async () => {
-    if (!date) return
+    if (!runDate) return
     setBusy(true)
     try {
-      await rebuild(date)
-      showToast('재집계를 시작했습니다. 1~2분 뒤 새로 고침하세요.', { icon: '🔄' })
+      await rebuild(runDate)
+      showToast(`${runDate} 집계를 시작했습니다. 1~2분 뒤 '새로 고침'을 누르세요.`, { icon: '🔄' })
     } catch (e) {
       const code = apiErrorDetail(e)?.code
       showToast(code === 'ALREADY_RUNNING' ? '이미 집계 중입니다.' : apiErrorMessage(e), { icon: '⚠️' })
@@ -119,11 +128,18 @@ export default function MarketDailySurge() {
         <span className="px-2 text-xs text-ink-muted">
           테마 출처: {themeSource ? THEME_SOURCE_LABEL[themeSource] ?? themeSource : '-'}
         </span>
-        {canRebuild && date && (
-          <button type="button" onClick={doRebuild} disabled={busy}
-            className="ml-auto h-11 rounded-btn bg-ink px-4 text-sm font-medium text-surface disabled:opacity-50">
-            이 날짜 재집계
-          </button>
+        <button type="button" onClick={() => { reloadDates(); void load() }}
+          className="h-11 rounded-btn bg-surface px-3 text-sm text-ink">새로 고침</button>
+        {canRebuild && (
+          <div className="ml-auto flex flex-wrap items-center gap-2 rounded-btn bg-surface px-2 py-1">
+            <label htmlFor="surge-run-date" className="text-xs text-ink-muted">수동 집계</label>
+            <input id="surge-run-date" type="date" value={runDate} onChange={(e) => setRunDate(e.target.value)}
+              className="h-9 rounded-field bg-fill px-2 text-sm text-ink" />
+            <button type="button" onClick={doRebuild} disabled={busy || !runDate}
+              className="h-9 rounded-btn bg-ink px-3 text-sm font-medium text-surface disabled:opacity-50">
+              집계 실행
+            </button>
+          </div>
         )}
       </div>
 
@@ -161,7 +177,8 @@ export default function MarketDailySurge() {
       {state === 'failed' && <p className="rounded-card bg-danger-soft p-4 text-sm text-danger">자료를 불러오지 못했습니다.</p>}
       {state === 'ok' && dates.length === 0 && (
         <p className="rounded-card bg-surface p-6 text-center text-sm text-ink-muted">
-          아직 집계된 날짜가 없습니다. 평일 22:10 에 자동으로 집계됩니다(재집계 권한이 있으면 '데이터 현황'에서 바로 실행).
+          아직 집계된 날짜가 없습니다. 평일 22:10 에 자동으로 집계됩니다.
+          {canRebuild ? ' 지금 보려면 위의 수동 집계에서 날짜를 고르고 \'집계 실행\'을 누른 뒤 1~2분 뒤 \'새로 고침\'을 누르세요.' : ' 수동 집계는 데이터 파이프라인 권한이 있는 관리자가 할 수 있습니다.'}
         </p>
       )}
 
