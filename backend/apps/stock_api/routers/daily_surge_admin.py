@@ -6,11 +6,13 @@
 from __future__ import annotations
 
 from datetime import date as Date
+from datetime import datetime
 from typing import Literal
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from fastapi.concurrency import run_in_threadpool
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.collector.celery_app import celery_app
@@ -18,6 +20,7 @@ from apps.collector.tasks.daily_surge import TASK_NAME, lock_key
 from apps.stock_api.services import daily_surge_news as news
 from apps.stock_api.services import daily_surge_query as svc
 from shared import admin_permissions as P
+from shared import market_calendar
 from shared.auth import require_permission
 from shared.database import get_db
 from shared.models import User
@@ -25,6 +28,7 @@ from shared.sync_redis import get_sync_redis
 
 router = APIRouter(prefix="/api/v1/admin/market/daily-surge", tags=["daily-surge-admin"])
 
+KST = ZoneInfo("Asia/Seoul")
 _view = require_permission(P.SCREENER_VIEW)
 Mode = Literal["surge", "plunge", "value", "surge_value", "plunge_value"]
 Band = Literal["all", "10_15", "15_25", "25_30"]
@@ -49,6 +53,13 @@ class NoteIn(BaseModel):
         if not v:
             raise ValueError("메모가 비어 있습니다.")
         return v
+
+    @model_validator(mode="after")
+    def _theme_target(self) -> "NoteIn":
+        # 테마 메모의 대상은 테마 id(숫자) — 조회가 str(theme_id) 로 찾는다
+        if self.scope == "theme" and not self.target.isdigit():
+            raise ValueError("테마 메모의 대상은 테마 번호여야 합니다.")
+        return self
 
 
 @router.get("/dates")
@@ -95,6 +106,9 @@ async def delete_note(date: Date, scope: Literal["theme", "stock"], target: str 
 
 @router.post("/rebuild", status_code=status.HTTP_202_ACCEPTED)
 async def rebuild(date: Date, _a: User = Depends(require_permission(P.DATA_PIPELINE))):
+    if date > datetime.now(KST).date() or not market_calendar.is_trading_day(date):
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY,
+                            detail={"code": "NOT_TRADING_DAY", "message": "거래일(오늘 이전)만 집계할 수 있습니다."})
     day = date.isoformat()
     running = await run_in_threadpool(lambda: bool(get_sync_redis().exists(lock_key(day))))
     if running:

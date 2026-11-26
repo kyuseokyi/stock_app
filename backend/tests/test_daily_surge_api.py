@@ -315,6 +315,24 @@ async def test_news_unavailable(api, maker, redis, monkeypatch):
     assert body["items"] == [] and body["unavailable"] is True
     monkeypatch.setattr(news, "get_naver_news_client", lambda: _News([]))
     body = (await client.get(f"{BASE}/news", params={"kind": "stock", "date": "2026-11-26", "target": "B"})).json()
-    assert body["unavailable"] is True
+    assert body["items"] == [] and body["unavailable"] is False  # 기사 0건 ≠ 키 없음
     assert (await client.get(f"{BASE}/news", params={"kind": "stock", "date": "2026-11-26",
                                                        "target": "ZZZ"})).status_code == 404
+
+
+async def test_rebuild_rejects_non_trading_or_future_day(api, maker, redis, sent):
+    client, state = api
+    state["user"] = await _seed(maker)
+    for d in ("2026-11-28", "2099-01-05"):  # 토요일, 미래
+        r = await client.post(f"{BASE}/rebuild", params={"date": d})
+        assert r.status_code == 422 and r.json()["detail"]["code"] == "NOT_TRADING_DAY"
+    assert sent == []
+
+
+async def test_theme_note_target_must_be_number(api, maker):
+    client, state = api
+    state["user"] = await _seed(maker)
+    bad = {"date": "2026-11-26", "scope": "theme", "target": "화장품", "note": "메모"}
+    assert (await client.put(f"{BASE}/notes", json=bad)).status_code == 422
+    ok = {**bad, "scope": "stock", "target": "A"}
+    assert (await client.put(f"{BASE}/notes", json=ok)).status_code == 200

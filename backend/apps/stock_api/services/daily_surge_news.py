@@ -69,7 +69,8 @@ def _search(query: str) -> list[dict] | None:
 
 def fetch(kind: str, name: str, trade_date: date) -> dict:
     query = query_for(kind, name)
-    raw = _search(query) or []
+    found = _search(query)
+    raw = found or []
     prev = _prev_trading_day(trade_date)
     items = []
     for it in raw:
@@ -80,4 +81,5 @@ def fetch(kind: str, name: str, trade_date: date) -> dict:
             "published_at": pub.isoformat() if pub else None,
             "time_slot": time_slot(pub, trade_date, prev),
         })
-    return {"source": SOURCE, "query": query, "unavailable": not items, "items": items}
+    # unavailable = 네이버 키 없음. 기사 0건(또는 호출 실패 — 클라이언트가 빈 목록으로 숨긴다)은 items=[] 로만 알린다
+    return {"source": SOURCE, "query": query, "unavailable": found is None, "items": items}
