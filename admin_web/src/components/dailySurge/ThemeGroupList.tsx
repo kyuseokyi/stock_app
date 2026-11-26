@@ -26,7 +26,9 @@ function Section({ title, sub, tone, items, selected, onSelect }: {
             <div className="flex min-w-0 flex-col gap-1">
               <div className="flex flex-wrap items-center gap-2">
                 <strong className="text-sm text-ink">{g.theme_name}</strong>
-                <span className="text-xs text-ink-muted">{tone === 'up' ? '급등' : '급락'} {g.stock_count}종목</span>
+                <span className="text-xs text-ink-muted">
+                  {tone === 'up' ? '급등' : '급락'} {g.stock_count}종목{g.theme_size ? ` / 테마 ${g.theme_size}종목` : ''}
+                </span>
                 {g.note && <span className="rounded-full bg-brand-soft px-2 py-0.5 text-xs text-brand-strong">메모</span>}
               </div>
               <span className="text-xs text-ink-muted">대장 <strong className="text-ink">{g.leader_name}</strong> · 합계 {fmtValue(g.value_sum)}</span>

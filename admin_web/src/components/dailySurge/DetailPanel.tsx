@@ -100,6 +100,16 @@ export default function DetailPanel({ date, selection, onChanged }: {
           {s.volume_ratio != null && ` (전일의 ${Math.round(s.volume_ratio).toLocaleString('ko-KR')}%)`} · 거래대금 {fmtValue(s.trading_value)}
         </p>
         <p className={`text-2xl font-bold ${rateClass(s.change_rate)}`}>{fmtRate(s.change_rate)}</p>
+        <p className="text-sm text-ink-muted">업종 {s.sector_name ?? '-'}</p>
+        {s.themes.length > 0 && (
+          <div className="flex flex-wrap gap-1" aria-label="소속 테마">
+            {s.themes.map((t) => (
+              <span key={t.id} className={`rounded-full px-2 py-0.5 text-xs ${t.moved > 1 ? 'bg-brand-soft text-brand-strong' : 'bg-fill text-ink-muted'}`}>
+                {t.name}{t.moved > 1 ? ` · 동반 ${t.moved}` : ''} <span className="opacity-70">({t.size})</span>
+              </span>
+            ))}
+          </div>
+        )}
       </header>
       <NoteEditor date={date} scope="stock" target={s.ticker} value={stock.notes.stock}
         inherited={stock.notes.theme ? { text: stock.notes.theme, themeName: s.primary_theme_name } : null}
@@ -122,7 +132,7 @@ export default function DetailPanel({ date, selection, onChanged }: {
       {stock.group ? (
         <Board title={`대표 테마 [${stock.group.theme_name}] 종목 성적표`} rows={stock.board} highlight={s.ticker} />
       ) : (
-        <p className="text-sm text-ink-muted">대표 테마 없음 — 같은 테마에서 함께 움직인 종목이 없습니다.</p>
+        <p className="text-sm text-ink-muted">동반 묶음 없음 — 같은 테마에서 함께 ±10% 넘게 움직인 종목이 없습니다(위 소속 테마 참고).</p>
       )}
       <NaverNewsList kind="stock" date={date} target={s.ticker} />
       <StockDailyChart ticker={s.ticker} high52w={null} showMa5Ma20 />

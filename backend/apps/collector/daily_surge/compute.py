@@ -3,7 +3,9 @@
 - 종목 행: 기준일·직전 거래일 일봉(close, volume)으로 등락률·전일대비·거래대금(close × volume)·거래량 배수.
 - 분류: 급등 +10.0 ~ +30.5%, 급락 −30.5 ~ −10.0%(상·하한가 호가 단위 여유 0.5%p), 거래대금 상위 top_n.
 - 테마 묶음: 같은 테마에서 같은 방향 2종목 이상. 대장주 = 거래대금 1위(같으면 |등락률| 큰 쪽 → 코드 오름차순).
-- 대표 테마: 종목이 속한 같은 방향 묶음 중 종목 수 → 거래대금 합 → 테마 id 순.
+- 대표 테마: 종목이 속한 같은 방향 묶음 중 **함께 움직인 비율(종목 수 ÷ 테마 크기)** → 종목 수 → 거래대금 합 → 테마 id 순.
+  종목 수만 보면 구성 종목이 수백 개인 넓은 테마(신규상장·대형 묶음 등)가 우연히 여러 급등주를 품어 뽑힌다(2026-11-27 상용).
+- 소속 테마 목록: 묶음이 없는 종목도 어느 테마에 속하는지 보이게, 종목마다 최대 5개(함께 움직인 수 → 작은 테마 순).
 - 공시 키워드: 정해진 사전과 공시 제목 대조(AI·뉴스 미사용).
 - 뉴스 시각 배지: 받은 기사에 붙이는 표시일 뿐 목록 순서·개수는 바꾸지 않는다(네이버 약관 N1).
 """
@@ -114,7 +116,8 @@ def theme_groups(rows: list[dict], themes: dict[int, tuple[str, list[str]]]) -> 
     by_ticker = {r["ticker"]: r for r in rows}
     out: list[dict] = []
     for theme_id, (name, tickers) in themes.items():
-        members = [by_ticker[t] for t in dict.fromkeys(tickers) if t in by_ticker]
+        unique = list(dict.fromkeys(tickers))
+        members = [by_ticker[t] for t in unique if t in by_ticker]
         for direction, flag in (("up", "is_surge"), ("down", "is_plunge")):
             hit = sorted((m for m in members if m[flag]), key=_leader_key)
             if len(hit) < GROUP_MIN_STOCKS:
@@ -123,6 +126,7 @@ def theme_groups(rows: list[dict], themes: dict[int, tuple[str, list[str]]]) -> 
             out.append({
                 "theme_id": int(theme_id),
                 "theme_name": name,
+                "theme_size": len(unique),
                 "direction": direction,
                 "stock_count": len(hit),
                 "avg_change_rate": _round2(sum(m["change_rate"] for m in hit) / len(hit)),
@@ -147,7 +151,8 @@ def assign_primary(rows: list[dict], groups: list[dict]) -> None:
         cands = [g for g in groups if g["direction"] == direction and r["ticker"] in g["members"]]
         if not cands:
             continue
-        best = min(cands, key=lambda g: (-g["stock_count"], -g["value_sum"], g["theme_id"]))
+        best = min(cands, key=lambda g: (-g["stock_count"] / max(g.get("theme_size") or g["stock_count"], 1),
+                                          -g["stock_count"], -g["value_sum"], g["theme_id"]))
         r["primary_theme_id"] = best["theme_id"]
         r["primary_theme_name"] = best["theme_name"]
         r["is_theme_leader"] = best["leader_ticker"] == r["ticker"]
@@ -200,3 +205,29 @@ def parse_pub_date(raw: str | None) -> datetime | None:
     if d is None:
         return None
     return d if d.tzinfo else d.replace(tzinfo=KST)
+
+
+THEME_LIST_MAX = 5
+
+
+def stock_theme_lists(rows: list[dict], themes: dict[int, tuple[str, list[str]]], groups: list[dict],
+                      *, limit: int = THEME_LIST_MAX) -> None:
+    """각 행에 소속 테마 목록(row["themes"])을 채운다 — [{id, name, size, moved}] 최대 limit 개.
+
+    moved = 그날 같은 방향으로 함께 움직인 종목 수(그 테마 묶음의 종목 수, 묶음 없으면 0).
+    정렬: moved 큰 순 → 테마 크기 작은 순(구체적인 테마 먼저) → id.
+    """
+    wanted = {r["ticker"] for r in rows}
+    member_of: dict[str, list[tuple[int, str, int]]] = {}
+    for theme_id, (name, tickers) in themes.items():
+        unique = list(dict.fromkeys(tickers))
+        for t in unique:
+            if t in wanted:
+                member_of.setdefault(t, []).append((int(theme_id), name, len(unique)))
+    moved = {(g["theme_id"], g["direction"]): g["stock_count"] for g in groups}
+    for r in rows:
+        direction = "up" if r.get("is_surge") else "down" if r.get("is_plunge") else None
+        items = [{"id": i, "name": n, "size": size, "moved": moved.get((i, direction), 0) if direction else 0}
+                 for i, n, size in member_of.get(r["ticker"], [])]
+        items.sort(key=lambda x: (-x["moved"], x["size"], x["id"]))
+        r["themes"] = items[:limit]

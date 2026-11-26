@@ -61,6 +61,7 @@ def build_deps() -> Deps:
         load_day=repo.load_day,
         load_prev=repo.load_prev_last,
         profiles=_with_session(repo.load_profiles),
+        sectors=_with_session(repo.load_sectors),
         names=_with_session(repo.load_names),
         themes=_with_session(repo.load_themes),
         dart=_dart_fetcher(),

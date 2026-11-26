@@ -46,6 +46,8 @@ class DailySurgeStock(Base):
     is_theme_leader: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     dart_items: Mapped[list] = mapped_column(_JSON, nullable=False, default=list)
     dart_keywords: Mapped[list] = mapped_column(_JSON, nullable=False, default=list)
+    themes: Mapped[list] = mapped_column(_JSON, nullable=False, default=list)  # 소속 테마 [{id,name,size,moved}] 최대 5
+    sector_name: Mapped[str | None] = mapped_column(String(100), nullable=True)  # KIS 마스터 업종 이름
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
 
@@ -64,6 +66,7 @@ class DailySurgeThemeGroup(Base):
     leader_ticker: Mapped[str] = mapped_column(String(20), nullable=False)
     leader_name: Mapped[str] = mapped_column(String(100), nullable=False)
     members: Mapped[list] = mapped_column(_JSON, nullable=False, default=list)  # 거래대금 내림차순 종목코드
+    theme_size: Mapped[int | None] = mapped_column(Integer, nullable=True)  # 테마 구성 종목 수(함께 움직인 비율용)
     theme_source: Mapped[str] = mapped_column(String(10), nullable=False, default="kis")  # kiwoom | kis
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
