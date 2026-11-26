@@ -126,10 +126,10 @@ ADDR_POOL=172.30.0.0/16 bash deploy/swarm/cutover.sh
 > ⚠️ 명령을 넣기 전에 **어느 서버 창인지** 확인한다. 두 서버는 컨테이너·망·러너 폴더 이름이 같아 다른 창에서도 오류 없이 실행된다. 개발 = Mac mini(`➜`), 상용 = `ubuntu@instance-…`. `git --no-pager log -1 --oneline` 으로 커밋도 대조한다.
 
 0. **바깥에서 상태 보기** — `curl -s https://auth.<도메인>/` 가 `error code: 1033`(530) 이면 터널(cloudflared)이 안 떴다, 502 면 앱이 DB 를 못 찾는다.
-1. **(개발 Mac mini) 로그인·외장 디스크** — 재부팅 뒤 로그인해야 OrbStack·러너가 뜨고 외장 SSD 가 마운트된다. `ls /Volumes` 에 `StockData` 가 있어야 한다.
-   - 없으면 `diskutil list external` → `diskutil mount <볼륨 id>`. 마운트가 안 되면 `diskutil verifyVolume <볼륨 id>`(읽기만) 결과를 보고 판단한다.
-   - **`/Volumes/StockData` 폴더를 손으로 만들거나 권한을 바꾸지 않는다** — 내장 디스크에 빈 폴더가 생겨 DB 가 빈 채로 뜬다.
-2. **DB 3개 켜기** — `docker ps -a --filter name=_prod` 에서 `Exited` 면 `docker start stock_postgres_prod stock_clickhouse_prod stock_redis_prod`. `mkdir … permission denied` 가 나오면 1번(디스크 미마운트)이다.
+1. **(개발 Mac mini) 로그인** — 재부팅 뒤 로그인해야 OrbStack·러너가 뜬다.
+   - 2026-11-26 부터 개발 DB 3개는 **내장 디스크**(Docker 이름 있는 볼륨 `stock_app_pg_data_prod`·`stock_app_clickhouse_data_prod`·`stock_app_redis_data_prod`)에 있다. 외장 SSD(`/Volumes/StockData`)는 **백업 전용**이라 안 붙어 있어도 DB 는 뜬다(백업만 실패 — 10절).
+   - `/opt/stock_app/env/compose.env` 의 `POSTGRES_DATA_DIR`·`CLICKHOUSE_DATA_DIR`·`REDIS_DATA_DIR` 는 주석 처리돼 있어야 한다(되살리면 다시 외장 경로를 씀). 러너 폴더 이름을 바꾸면 볼륨 이름이 달라져 빈 DB 가 뜬다.
+2. **DB 3개 켜기** — `docker ps -a --filter name=_prod` 에서 `Exited` 면 `docker start stock_postgres_prod stock_clickhouse_prod stock_redis_prod`. (`mkdir … permission denied` 는 옛 외장 경로가 되살아났다는 뜻 — 1번의 compose.env 확인.)
 3. **(개발) 상용 CH 읽기 전용 터널** — `docker compose --env-file /opt/stock_app/env/ch-ro-tunnel.env -f deploy/dev/ch-ro-tunnel.yml up -d` (없으면 시세 화면·CH 작업이 `stock_ch_ro_tunnel` 이름 해석 실패).
 4. **망 다시 붙이기와 이름 확인** — 재부팅 뒤 `docker inspect` 는 '붙어 있음'인데 이름이 안 풀리는 낡은 연결이 남을 수 있다.
    ```bash
@@ -144,3 +144,21 @@ ADDR_POOL=172.30.0.0/16 bash deploy/swarm/cutover.sh
      **개발은 기본 연결이 상용 읽기 전용이라** 자체 CH 로 방향을 바꿔 실행한다:
      `… <이미지> sh -c 'CLICKHOUSE_HOST=$CLICKHOUSE_LOCAL_HOST CLICKHOUSE_PORT=$CLICKHOUSE_LOCAL_PORT CLICKHOUSE_USER=$CLICKHOUSE_LOCAL_USER CLICKHOUSE_PASSWORD=$CLICKHOUSE_LOCAL_PASSWORD python -m shared.clickhouse_schema'`
    - 슈퍼 관리자: `… <이미지> python -m apps.auth.seed_admin` → 로그인 후 바로 비밀번호 변경. 게시판·앱 버전·광고·푸시 템플릿·관리자 계정은 관리자 웹에서 다시 만든다. 개발 서버 시세는 상용에서 읽으므로 '초기 데이터 준비'는 하지 않는다.
+
+## 10. 개발 DB 매일 백업(외장 SSD)
+
+2026-11-25 장애 재발 방지 A안. DB(내장)와 백업(외장)을 다른 디스크에 둔다. 스크립트 `deploy/dev/pg-backup.sh` 는 외장 SSD 가 마운트돼 있지 않으면 폴더를 만들지 않고 실패로 끝난다.
+
+- 백업 위치: `/Volumes/StockData/backups/postgres/pg_YYYYMMDD_HHMM.sql.gz`(`pg_dumpall`, 14일 보관).
+- ClickHouse 는 백업하지 않는다 — 개발 시세는 상용 CH 에서 읽고, 자체 CH 는 게임 분봉 등 다시 쌓이는 데이터뿐이다(표는 9절 6번으로 다시 만든다).
+
+설치(맥미니, 러너 폴더에서 1회):
+```bash
+cd ~/actions-runner/_work/stock_app/stock_app
+bash deploy/dev/pg-backup.sh          # 손으로 한 번 실행해 '완료' 확인
+sed "s#__REPO__#$PWD#" deploy/dev/com.stockapp.pg-backup.plist > ~/Library/LaunchAgents/com.stockapp.pg-backup.plist
+launchctl load ~/Library/LaunchAgents/com.stockapp.pg-backup.plist
+launchctl list | grep pg-backup       # 등록 확인(매일 04:30 실행)
+```
+- 기록: `/tmp/stockapp-pg-backup.log`. 지금 바로 돌려 보기: `launchctl start com.stockapp.pg-backup`.
+- 복원(빈 DB 에): `gunzip -c <파일> | docker exec -i stock_postgres_prod sh -c 'psql -U "$POSTGRES_USER" -d postgres'` — 기존 표가 있으면 '이미 있음' 오류가 나므로 DB 를 새로 만든 직후(alembic 전)에 넣는다.

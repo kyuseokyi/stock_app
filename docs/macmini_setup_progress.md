@@ -15,7 +15,7 @@
 | **전원 및 절전** | 무인 서버 상시 전원 유지 |  완료 | `sleep 0`, `displaysleep 10`, `autorestart 1`, `womp 1` 적용 |
 | **스토리지 분리** | 추가 250GB SSD 포맷 및 분리 |  완료 | Windows 파티션 삭제 → APFS 포맷 (`/Volumes/StockData`, 238GiB) |
 | **도커 엔진** | 경량화 Docker 가동 (Intel x86_64) |  완료 | OrbStack v2.2.3 설치 및 백그라운드 엔진 가동 완료 |
-| **볼륨 마운트** | 시계열/DB 스토리지 격리 |  완료 | ClickHouse, Postgres, Redis 데이터를 `/Volumes/StockData`에 바인드 |
+| **볼륨 마운트** | DB 저장 위치 |  변경 | 2026-11-26 외장 SSD 손상 뒤 **내장 디스크(Docker 이름 있는 볼륨)로 이동**, 외장 SSD 는 백업 전용 |
 | **DB 스키마** | DB 마이그레이션 및 관리자 시드 |  완료 | Alembic 5개 마이그레이션 + ClickHouse 테이블 + admin 시드 완료 |
 | **백엔드 스택** | FastAPI 3종 + Celery 2종 |  완료 | Auth(:8001), Stock(:8002), Blog(:8003), Worker, Beat 정상 구동 |
 | **프론트엔드** | 유저 웹 + 어드민 패널 |  완료 | Web Client(:3000), Admin Web(:3001) Vite 빌드 및 서빙 완료 |
@@ -27,35 +27,26 @@
 
 ## 2. 스토리지 아키텍처 및 분리 현황
 
-분봉(1분봉) 데이터의 대량 축적(연간 2.5억 행 / 8~12GB)과 ClickHouse MergeTree 엔진의 압축/병합 임시 버퍼 공간 확보를 위해 **내장 SSD와 데이터 전용 SSD를 완전 분리**했습니다.
+> 2026-11-26 변경: 외장 SSD 손상(`docs/deploy/incident-2026-11-25-dev-ssd.md`) 뒤 DB 를 내장 디스크로 옮기고, 외장 SSD 는 백업 전용으로 바꿨다. 개발 시세는 상용 CH 에서 읽으므로 자체 DB 는 작다(수 GB). 예전 바인드 구성은 git 기록에 있다.
 
 ```mermaid
 flowchart TD
-    subgraph InternalSSD["내장 SSD (251 GB)"]
-        OS["macOS Sequoia 15.8"]
-        OrbEngine["OrbStack 가상화 엔진"]
-        SrcCode["소프트웨어 소스코드 / 빌드 캐시"]
+    subgraph InternalSSD["내장 SSD (233 GiB, 여유 172 GiB)"]
+        OS["macOS"]
+        OrbEngine["OrbStack 가상 디스크"]
+        Vols[("Docker 이름 있는 볼륨: stock_app_pg_data_prod · stock_app_clickhouse_data_prod · stock_app_redis_data_prod")]
         EnvDir["/opt/stock_app/env (호스트 시크릿)"]
     end
 
-    subgraph SecondarySSD["추가 전용 SSD - /Volumes/StockData (256 GB, 가용 238 GiB)"]
-        CH_Data[("/Volumes/StockData/clickhouse (시계열 주가 DB)")]
-        PG_Data[("/Volumes/StockData/postgres (관계형 사용자/게시판 DB)")]
-        RD_Data[("/Volumes/StockData/redis (캐시 및 Celery 브로커)")]
-        BK_Data["/Volumes/StockData/backups (데이터 백업 저장소)"]
+    subgraph SecondarySSD["외장 SSD - /Volumes/StockData (백업 전용)"]
+        BK_Data["/Volumes/StockData/backups/postgres (매일 pg_dumpall, 14일 보관)"]
     end
 
-    InternalSSD -.->|볼륨 바인드 마운트| SecondarySSD
+    Vols -.->|매일 04:30 deploy/dev/pg-backup.sh| BK_Data
 ```
 
-* **포맷 방식**: APFS (Apple File System)
-* **마운트 경로**: `/Volumes/StockData` (권한: `kyuseok:staff`, `chmod -R 777`)
-* **도커 볼륨 연동**: `/opt/stock_app/env/compose.env`를 통해 자동 주입
-  ```ini
-  CLICKHOUSE_DATA_DIR=/Volumes/StockData/clickhouse
-  POSTGRES_DATA_DIR=/Volumes/StockData/postgres
-  REDIS_DATA_DIR=/Volumes/StockData/redis
-  ```
+* **DB 저장 위치**: `/opt/stock_app/env/compose.env` 의 `CLICKHOUSE_DATA_DIR`·`POSTGRES_DATA_DIR`·`REDIS_DATA_DIR` 를 **주석 처리** → `docker-compose.prod.yml` 기본값(이름 있는 볼륨) 사용. 배포가 이 파일을 러너 폴더 `.env` 로 복사한다.
+* **백업**: `docs/deploy/single-node-swarm.md` 10절.
 
 ---
 
