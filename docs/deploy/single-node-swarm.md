@@ -163,3 +163,16 @@ launchctl list | grep pg-backup       # 등록 확인(매일 04:30 실행)
 - launchd 로 돌면 macOS 개인정보 보호가 bash 의 외장 볼륨 쓰기를 막는다(`Operation not permitted`, 2026-11-26). 그래서 스크립트는 파일 쓰기·정리를 **DB 와 같은 이미지의 보조 컨테이너**(OrbStack 바인드 마운트)에서 한다 — bash 에 '전체 디스크 접근'을 주지 않는다.
 - 기록: `/tmp/stockapp-pg-backup.log`. 지금 바로 돌려 보기: `launchctl start com.stockapp.pg-backup`.
 - 복원(빈 DB 에): `gunzip -c <파일> | docker exec -i stock_postgres_prod sh -c 'psql -U "$POSTGRES_USER" -d postgres'` — 기존 표가 있으면 '이미 있음' 오류가 나므로 DB 를 새로 만든 직후(alembic 전)에 넣는다.
+
+**스크립트를 고친 뒤 서버에 반영하기**
+`deploy/dev/` 는 서버 배포 워크플로의 감시 경로(`backend/**`·`docker-compose.prod.yml`·`deploy/swarm/**`) 밖이라 push 해도 러너 폴더가 갱신되지 않는다(백엔드 재빌드를 피하려고 일부러 넣지 않음). 맥미니에서 그 파일만 받아 덮어쓴다 — 러너 폴더 `git pull` 은 하지 않는다.
+```bash
+cd ~/actions-runner/_work/stock_app/stock_app
+git fetch -q origin main
+git show origin/main:deploy/dev/pg-backup.sh > deploy/dev/pg-backup.sh
+launchctl kickstart gui/$(id -u)/com.stockapp.pg-backup     # 바로 한 번 실행
+sleep 20; tail -3 /tmp/stockapp-pg-backup.log                # '완료:' 확인
+launchctl print gui/$(id -u)/com.stockapp.pg-backup | grep "last exit"   # 0 이면 정상
+```
+- 덮어쓴 파일은 다음 서버 배포 때 같은 내용으로 다시 체크아웃되므로 충돌하지 않는다.
+- plist 를 고쳤을 때만 다시 등록한다: `launchctl unload ~/Library/LaunchAgents/com.stockapp.pg-backup.plist` → 위 설치 명령의 `sed …`·`launchctl load …` 를 다시 실행(plist 도 같은 `git show` 로 받는다).
