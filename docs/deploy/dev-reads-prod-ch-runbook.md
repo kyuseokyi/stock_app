@@ -255,7 +255,7 @@ docker stop stock_ch_ro_tunnel
 docker start stock_ch_ro_tunnel     # → 1분 안에 정상으로 돌아오는지 확인
 ```
 
-- 서버를 재부팅하면, 이 사이드카(compose 컨테이너)가 overlay 망 `stock_net` 에 다시 붙는지 확인한다. DB 컨테이너와 같은 위험이 있다(`docs/deploy/single-node-swarm.md`). 재부팅 점검 목록에 `stock_ch_ro_tunnel` 을 추가한다.
+- 서버를 재부팅하면, 이 사이드카(compose 컨테이너)가 overlay 망 `stock_net` 에 다시 붙는지 확인한다. DB 컨테이너와 같은 위험이 있다(`docs/deploy/single-node-swarm.md`). 재부팅 점검 목록에 `stock_ch_ro_tunnel` 을 추가한다. → 반영됨(2026-11-26): `single-node-swarm.md` 9절 3번, 배포 사전 점검(`deploy/swarm/preflight.sh`)이 이 컨테이너가 있으면 실행·이름 해석까지 확인한다.
 
 ### 12. 되돌리기 (env 한 묶음)
 

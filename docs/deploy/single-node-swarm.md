@@ -42,7 +42,7 @@ VITE_ENABLE_GUEST_LOGIN=true bash deploy/swarm/cutover.sh
 - [ ] `https://app.haezean.com`·`api`·`auth`·`blog`·`game`·`admin` 정상
 - [ ] 백엔드 파일 하나 바꿔 push → Actions 로그 `모드: Swarm(start-first)` → 배포 중 브라우저에서 계속 새로고침해도 끊기지 않는지
 - [ ] `docker service ps stock_stock_api` — 옛 태스크 `Shutdown`, 새 태스크 `Running`
-- [ ] **재부팅 내성(중요, 한가한 시간에)**: OrbStack 재시작(`orb restart docker`, 또는 메뉴 막대 OrbStack → Restart) → DB 3개가 healthy 로 돌아오고 여전히 `stock_net` 에 붙어 있는지(`docker inspect -f '{{json .NetworkSettings.Networks}}' stock_postgres_prod`), 스택 9개 `1/1`. compose 컨테이너가 overlay 에 붙은 상태로 데몬이 재시작될 때 망 준비 전에 떠서 실패한 사례가 Docker 에 있었다. 불안정하면 대안: DB 를 overlay 에 붙이지 않고 스택에 `extra_hosts: ["postgres:host-gateway", …]` 로 호스트 공개 포트(5432·8123·6379)를 쓰게 바꾼다.
+- [ ] **재부팅 내성(중요, 한가한 시간에)** — 2026-11-25 개발 서버 재부팅에서 **실패**(DB 꺼짐·낡은 연결·터널, 외장 SSD 손상까지 겹침). 복구 순서는 9절, 이후 배포 스크립트가 사전 점검으로 꺼진 컨테이너·낡은 연결을 고친다: OrbStack 재시작(`orb restart docker`, 또는 메뉴 막대 OrbStack → Restart) → DB 3개가 healthy 로 돌아오고 여전히 `stock_net` 에 붙어 있는지(`docker inspect -f '{{json .NetworkSettings.Networks}}' stock_postgres_prod`), 스택 9개 `1/1`. compose 컨테이너가 overlay 에 붙은 상태로 데몬이 재시작될 때 망 준비 전에 떠서 실패한 사례가 Docker 에 있었다. 불안정하면 대안: DB 를 overlay 에 붙이지 않고 스택에 `extra_hosts: ["postgres:host-gateway", …]` 로 호스트 공개 포트(5432·8123·6379)를 쓰게 바꾼다.
 
 ## 4-1. 전환 전에 알아 둘 것
 - **스크립트는 아직 어디서도 실제로 돌려 보지 않았다**(문법 검사·`docker stack config` 렌더링만). 대신 `cutover.sh` 는 중단 전에 실패하도록 사전 점검을 모아 뒀다: DB healthy, Docker ≥ 23, live-restore 꺼짐, 10.x 대역 겹침 경고, 이미지 빌드·마이그레이션, 새 망에서 DB 이름 확인, **compose 와 Swarm 의 env 해석 비교**(따옴표·`${}`·행 끝 주석 때문에 다르게 읽히는 키가 있으면 키 이름만 출력하고 중단).
@@ -118,3 +118,29 @@ ADDR_POOL=172.30.0.0/16 bash deploy/swarm/cutover.sh
 - 외부 확인: app·admin 200, api·auth·blog·game 루트 404(서버 응답 = 정상), auth `/health` 200, 교육 게임 features·GraphQL 정상, 시세 차단 유지.
 - 첫 무중단 상용 배포(release/v1.0.15, 같은 날 14:25~14:27): `모드: Swarm(start-first)`, 마이그레이션(`users.is_super_admin` 칸 추가) → 백엔드 → 웹 순서. 배포 중 10초마다 16회 외부 점검(auth `/health`·app) 모두 200 — 끊김·502 없음.
 - 남은 확인: 한가한 시간 재부팅 내성, Oracle 보안 목록 인바운드 22 만.
+
+## 9. 재부팅 뒤 복구(서버를 다시 켠 다음)
+
+2026-11-25 개발 서버 장애에서 실제로 밟은 순서다(기록: [`incident-2026-11-25-dev-ssd.md`](incident-2026-11-25-dev-ssd.md)). 배포 스크립트의 사전 점검(`deploy/swarm/preflight.sh`)이 2~4번을 자동으로 고치지만, 1번(디스크)은 사람이 해야 한다.
+
+> ⚠️ 명령을 넣기 전에 **어느 서버 창인지** 확인한다. 두 서버는 컨테이너·망·러너 폴더 이름이 같아 다른 창에서도 오류 없이 실행된다. 개발 = Mac mini(`➜`), 상용 = `ubuntu@instance-…`. `git --no-pager log -1 --oneline` 으로 커밋도 대조한다.
+
+0. **바깥에서 상태 보기** — `curl -s https://auth.<도메인>/` 가 `error code: 1033`(530) 이면 터널(cloudflared)이 안 떴다, 502 면 앱이 DB 를 못 찾는다.
+1. **(개발 Mac mini) 로그인·외장 디스크** — 재부팅 뒤 로그인해야 OrbStack·러너가 뜨고 외장 SSD 가 마운트된다. `ls /Volumes` 에 `StockData` 가 있어야 한다.
+   - 없으면 `diskutil list external` → `diskutil mount <볼륨 id>`. 마운트가 안 되면 `diskutil verifyVolume <볼륨 id>`(읽기만) 결과를 보고 판단한다.
+   - **`/Volumes/StockData` 폴더를 손으로 만들거나 권한을 바꾸지 않는다** — 내장 디스크에 빈 폴더가 생겨 DB 가 빈 채로 뜬다.
+2. **DB 3개 켜기** — `docker ps -a --filter name=_prod` 에서 `Exited` 면 `docker start stock_postgres_prod stock_clickhouse_prod stock_redis_prod`. `mkdir … permission denied` 가 나오면 1번(디스크 미마운트)이다.
+3. **(개발) 상용 CH 읽기 전용 터널** — `docker compose --env-file /opt/stock_app/env/ch-ro-tunnel.env -f deploy/dev/ch-ro-tunnel.yml up -d` (없으면 시세 화면·CH 작업이 `stock_ch_ro_tunnel` 이름 해석 실패).
+4. **망 다시 붙이기와 이름 확인** — 재부팅 뒤 `docker inspect` 는 '붙어 있음'인데 이름이 안 풀리는 낡은 연결이 남을 수 있다.
+   ```bash
+   for p in postgres:stock_postgres_prod clickhouse:stock_clickhouse_prod redis:stock_redis_prod; do
+     a=${p%%:*}; c=${p#*:}; docker network disconnect -f stock_net "$c" 2>/dev/null; docker network connect --alias "$a" stock_net "$c"
+   done
+   docker run --rm --network stock_net alpine nslookup postgres
+   ```
+5. **배포 다시 실행** — 실패한 Actions 실행은 GitHub 화면에서 Re-run, 또는 러너 폴더에서 `bash deploy/swarm/deploy.sh backend <커밋 앞 12자리>`(러너 폴더에서 `git pull` 금지).
+6. **DB 를 새로 만들었다면(디스크 초기화 등) 1회만** — 배포가 `alembic upgrade head` 로 PG 표를 만든 뒤:
+   - ClickHouse 표: 상용은 `docker run --rm --network stock_net --env-file backend/.env.production <이미지> python -m shared.clickhouse_schema`.
+     **개발은 기본 연결이 상용 읽기 전용이라** 자체 CH 로 방향을 바꿔 실행한다:
+     `… <이미지> sh -c 'CLICKHOUSE_HOST=$CLICKHOUSE_LOCAL_HOST CLICKHOUSE_PORT=$CLICKHOUSE_LOCAL_PORT CLICKHOUSE_USER=$CLICKHOUSE_LOCAL_USER CLICKHOUSE_PASSWORD=$CLICKHOUSE_LOCAL_PASSWORD python -m shared.clickhouse_schema'`
+   - 슈퍼 관리자: `… <이미지> python -m apps.auth.seed_admin` → 로그인 후 바로 비밀번호 변경. 게시판·앱 버전·광고·푸시 템플릿·관리자 계정은 관리자 웹에서 다시 만든다. 개발 서버 시세는 상용에서 읽으므로 '초기 데이터 준비'는 하지 않는다.

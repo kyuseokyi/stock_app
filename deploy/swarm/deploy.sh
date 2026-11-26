@@ -26,13 +26,11 @@ current_tag() {
     | sed -E 's/@.*$//; s/^.*://' || true
 }
 
-# DB 컨테이너가 다시 만들어졌으면 stock_net 연결이 사라진다 — 매번 확인해 붙인다(멱등)
-for pair in postgres:stock_postgres_prod clickhouse:stock_clickhouse_prod redis:stock_redis_prod; do
-  alias=${pair%%:*}; c=${pair#*:}
-  if ! docker inspect -f '{{json .NetworkSettings.Networks}}' "$c" | grep -q '"stock_net"'; then
-    echo "🔌 $c → stock_net($alias)"; docker network connect --alias "$alias" stock_net "$c"
-  fi
-done
+# 사전 점검 — DB·터널이 실제로 떠 있고 stock_net 에서 이름이 풀리는지(재부팅 뒤 꺼짐·낡은 연결은 고친다).
+# 고칠 수 없으면(예: 외장 디스크 미마운트로 DB 시작 실패) 여기서 멈춘다 → 옛 서비스는 그대로. 내용은 preflight.sh
+# shellcheck source=deploy/swarm/preflight.sh
+. deploy/swarm/preflight.sh
+preflight "stock-app-backend:$(current_tag auth_api)" || exit 1
 
 case "$WHAT" in
   backend)
