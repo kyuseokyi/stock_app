@@ -53,6 +53,7 @@ def _deps(store_calls, *, today, prev, themes=None, theme_error=None, dart=None,
         load_day=lambda d: today if d == T else prev,
         load_prev=lambda d: last if last is not None else {t: (c, v, P) for t, (c, v) in prev.items()},
         profiles=lambda: {t: ("KOSDAQ", True) for t in today},
+        sectors=lambda: {"A": "화학", "C": "제약"},
         names=lambda tickers: {t: f"이름{t}" for t in tickers},
         themes=_themes,
         dart=_dart,
@@ -182,3 +183,27 @@ def test_dart_stops_after_consecutive_failures():
     deps.dart = boom
     out = run_day(T, deps, min_rows=10)
     assert len(tried) == 5 and out["dart_failed"] == out["saved"]
+
+
+def test_skips_when_profiles_empty():
+    """DB 재생성 직후처럼 종목 프로필이 비면 '0개 저장' 대신 이유를 남기고 건너뜀(2026-11-26 개발 서버)."""
+    today, prev = _universe(n_filler=20)
+    calls: list = []
+    deps = _deps(calls, today=today, prev=prev)
+    deps.profiles = lambda: {}
+    out = run_day(T, deps, min_rows=10)
+    assert out["skipped"].startswith("종목 프로필 없음") and calls == []
+
+
+def test_sector_and_theme_list_saved(session_factory):
+    today, prev = _universe(n_filler=20)
+    calls: list = []
+    run_day(T, _deps(calls, today=today, prev=prev, themes={1: ("화장품", ["A", "B"]), 2: ("제약", ["C", "X"])}),
+            min_rows=10)
+    _d, stocks, groups, source = calls[0]
+    with session_factory() as s:
+        repo.replace_day(s, T, stocks, groups, source)
+        a, c = s.get(DailySurgeStock, (T, "A")), s.get(DailySurgeStock, (T, "C"))
+        assert a.sector_name == "화학" and a.themes[0]["name"] == "화장품" and a.themes[0]["moved"] == 2
+        assert c.primary_theme_id is None and [t["name"] for t in c.themes] == ["제약"]  # 묶음 없어도 소속 테마
+        assert s.scalars(sa.select(DailySurgeThemeGroup)).one().theme_size == 2

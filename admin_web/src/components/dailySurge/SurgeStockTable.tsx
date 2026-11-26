@@ -37,9 +37,12 @@ export default function SurgeStockTable({ items, selected, onSelect }: Props) {
                   </span>
                   <span className="text-xs text-ink-muted">
                     {s.primary_theme_name
-                      ? `${s.is_theme_leader ? '대장 · ' : ''}${s.primary_theme_name}`
-                      : '테마 묶음 없음'}
+                      ? `${s.is_theme_leader ? '대장 · ' : ''}${s.primary_theme_name} (동반 묶음)`
+                      : s.themes.length > 0
+                        ? s.themes.slice(0, 3).map((t) => t.name).join(' · ')
+                        : '소속 테마 없음'}
                   </span>
+                  {s.sector_name && <span className="text-xs text-ink-muted">업종 {s.sector_name}</span>}
                 </button>
               </td>
               <td className="px-3 py-2 text-right">

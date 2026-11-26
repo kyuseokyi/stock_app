@@ -18,6 +18,7 @@ _STOCK_FIELDS = (
     "name", "market", "close", "prev_close", "change_price", "change_rate", "volume", "volume_ratio",
     "trading_value", "is_surge", "is_plunge", "is_top_value", "surge_rank", "plunge_rank", "value_rank",
     "primary_theme_id", "primary_theme_name", "is_theme_leader", "dart_items", "dart_keywords",
+    "themes", "sector_name",
 )
 
 
@@ -73,6 +74,13 @@ def load_profiles(session: Session) -> dict[str, tuple[str, bool]]:
     return {t: (m or "", not (etp or spac or pref)) for t, m, etp, spac, pref in rows}
 
 
+def load_sectors(session: Session) -> dict[str, str]:
+    """{ticker: 업종 이름} — KIS 마스터 업종(중분류, 없으면 대분류 — shared.sector_group 규칙)."""
+    names = market_repo.sector_name_map(session)
+    return {t: names[code] for t, (_m, code, _k, _h) in market_repo.group_profile_map(session).items()
+            if code and code in names}
+
+
 def load_names(session: Session, tickers: list[str]) -> dict[str, str]:
     return market_repo.names_for(session, tickers)
 
@@ -101,6 +109,7 @@ def replace_day(session: Session, trade_date: date, stocks: list[dict], groups: 
     session.execute(delete(DailySurgeThemeGroup).where(DailySurgeThemeGroup.trade_date == trade_date))
     for r in stocks:
         values = {k: r.get(k) for k in _STOCK_FIELDS}
+        values["themes"] = values["themes"] or []
         if values["dart_items"] is None:
             old_items, old_keywords = keep.get(r["ticker"], ([], []))
             values["dart_items"], values["dart_keywords"] = list(old_items or []), list(old_keywords or [])
@@ -110,6 +119,7 @@ def replace_day(session: Session, trade_date: date, stocks: list[dict], groups: 
             trade_date=trade_date, theme_id=g["theme_id"], direction=g["direction"], theme_name=g["theme_name"],
             stock_count=g["stock_count"], avg_change_rate=g["avg_change_rate"], value_sum=g["value_sum"],
             leader_ticker=g["leader_ticker"], leader_name=g["leader_name"], members=list(g["members"]),
+            theme_size=g.get("theme_size"),
             theme_source=source,
         ))
     session.commit()

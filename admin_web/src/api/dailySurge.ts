@@ -26,6 +26,15 @@ export interface DartItem {
   url: string
 }
 
+export interface StockTheme {
+  id: number
+  name: string
+  /** 테마 구성 종목 수 */
+  size: number
+  /** 그날 같은 방향으로 함께 움직인 종목 수(묶음 없으면 0) */
+  moved: number
+}
+
 export interface SurgeNote {
   text: string
   scope: 'stock' | 'theme'
@@ -55,6 +64,10 @@ export interface SurgeStock {
   is_theme_leader: boolean
   dart_items: DartItem[]
   dart_keywords: string[]
+  /** 소속 테마 최대 5개(함께 움직인 수 → 작은 테마 순). 2026-11-27 이전 집계는 빈 목록 */
+  themes: StockTheme[]
+  /** KIS 마스터 업종 이름 */
+  sector_name: string | null
   note?: SurgeNote | null
 }
 
@@ -71,6 +84,8 @@ export interface ThemeGroup {
   members: string[]
   theme_source: string
   note: string | null
+  /** 테마 구성 종목 수(옛 집계는 null) */
+  theme_size: number | null
 }
 
 export interface BoardRow {

@@ -25,6 +25,7 @@ def stock_out(s: DailySurgeStock) -> dict:
         "primary_theme_id": s.primary_theme_id, "primary_theme_name": s.primary_theme_name,
         "is_theme_leader": s.is_theme_leader, "dart_items": list(s.dart_items or []),
         "dart_keywords": list(s.dart_keywords or []),
+        "themes": list(s.themes or []), "sector_name": s.sector_name,
     }
 
 
@@ -34,6 +35,7 @@ def group_out(g: DailySurgeThemeGroup, note: str | None) -> dict:
         "direction": g.direction, "stock_count": g.stock_count, "avg_change_rate": g.avg_change_rate,
         "value_sum": g.value_sum, "leader_ticker": g.leader_ticker, "leader_name": g.leader_name,
         "members": list(g.members or []), "theme_source": g.theme_source, "note": note,
+        "theme_size": g.theme_size,
     }
 
 

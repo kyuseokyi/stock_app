@@ -201,3 +201,37 @@ def test_parse_pub_date():
     assert C.parse_pub_date("Thu, 26 Nov 2026 08:12:00 +0900") == datetime(2026, 11, 26, 8, 12, tzinfo=KST)
     assert C.parse_pub_date("") is None
     assert C.parse_pub_date("아무 글자") is None
+
+
+# ------------------------------------------------------------------ 넓은 테마·소속 테마 목록 (2026-11-27)
+def test_assign_primary_prefers_specific_theme_over_huge_one():
+    """300종목짜리 넓은 테마에 급등 3개가 껴도, 4종목짜리 테마에서 2개가 함께 오른 쪽이 대표."""
+    rows = _rows({"A": (100.0, 120.0, 10), "B": (100.0, 118.0, 10), "C": (100.0, 115.0, 10)})
+    huge = ["A", "B", "C"] + [f"Z{i:03d}" for i in range(297)]
+    groups = C.theme_groups(rows, {1: ("신규상장", huge), 2: ("화장품", ["A", "B", "X1", "X2"])})
+    assert {g["theme_id"]: g["theme_size"] for g in groups} == {1: 300, 2: 4}
+    C.assign_primary(rows, groups)
+    by = {r["ticker"]: r for r in rows}
+    assert by["A"]["primary_theme_name"] == "화장품" and by["B"]["primary_theme_name"] == "화장품"
+    assert by["C"]["primary_theme_name"] == "신규상장"  # C 는 넓은 테마에만 함께 움직인 종목이 있음
+
+
+def test_stock_theme_lists_for_solo_and_value_only():
+    rows = _rows({"A": (100.0, 120.0, 10), "B": (100.0, 118.0, 10), "S": (100.0, 125.0, 10),
+                  "V": (100.0, 101.0, 9999)})
+    themes = {1: ("화장품", ["A", "B", "Q"]), 2: ("중국 소비", ["A", "S", "V", "Q", "R"]), 3: ("보안", ["S"])}
+    groups = C.theme_groups(rows, themes)
+    C.stock_theme_lists(rows, themes, groups)
+    by = {r["ticker"]: r for r in rows}
+    assert [t["name"] for t in by["A"]["themes"]] == ["화장품", "중국 소비"]
+    assert by["A"]["themes"][0] == {"id": 1, "name": "화장품", "size": 3, "moved": 2}
+    # S: '중국 소비'에서 A 와 함께 급등(moved 2) → 먼저, '보안'은 혼자(moved 0)
+    assert [(t["name"], t["moved"]) for t in by["S"]["themes"]] == [("중국 소비", 2), ("보안", 0)]
+    assert [t["name"] for t in by["V"]["themes"]] == ["중국 소비"]  # 거래대금 상위만인 종목도 테마 표시
+
+
+def test_stock_theme_lists_limit():
+    rows = _rows({"A": (100.0, 120.0, 10)})
+    themes = {i: (f"t{i}", ["A"] + [f"x{j}" for j in range(i)]) for i in range(1, 9)}
+    C.stock_theme_lists(rows, themes, [])
+    assert [t["id"] for t in rows[0]["themes"]] == [1, 2, 3, 4, 5]

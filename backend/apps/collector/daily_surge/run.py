@@ -26,6 +26,7 @@ class Deps:
     load_day: Callable[[date], dict[str, tuple[float, float]]]
     load_prev: Callable[[date], dict[str, tuple[float, float, date]]]  # 종목별 기준일 전 마지막 일봉
     profiles: Callable[[], dict[str, tuple[str, bool]]]
+    sectors: Callable[[], dict[str, str]]  # {ticker: 업종 이름}(KIS 마스터)
     names: Callable[[list[str]], dict[str, str]]
     themes: Callable[[], tuple[dict[int, tuple[str, list[str]]], str]]
     dart: Callable[[str, date, date], list[tuple[str, str, str]]] | None  # None = DART 키 없음
@@ -55,20 +56,33 @@ def run_day(trade_date: date | str | None, deps: Deps, *, min_rows: int = MIN_RO
         return {"skipped": f"일봉 미확정({t.isoformat()} {len(today)}종목 / 직전 {n_prev}종목)"}
     prev = {tk: (c, v) for tk, (c, v, _d) in last.items()}
 
+    profiles = deps.profiles()
+    if len(profiles) < min_rows:
+        # 종목 프로필(PG stock_profile)이 비면 보통주 판정이 모두 실패해 '0개 저장'으로 조용히 끝난다 — 이유를 남긴다
+        return {"skipped": f"종목 프로필 없음({len(profiles)}종목) — 종목 마스터 동기화 필요"}
     names = deps.names(sorted(today))
-    rows = C.classify(C.build_rows(today, prev, deps.profiles(), names), top_n=top_n)
+    rows = C.classify(C.build_rows(today, prev, profiles, names), top_n=top_n)
 
     out: dict = {"date": t.isoformat(), "prev_date": p.isoformat()}
+    themes: dict = {}
     try:
         themes, source = deps.themes()
         groups = C.theme_groups(rows, themes)
     except Exception as e:  # noqa: BLE001 — 테마가 없어도 종목 결과는 저장한다
         log.exception("급등락 분석: 테마 조회 실패")
-        groups, source = [], "none"
+        themes, groups, source = {}, [], "none"
         out["theme_error"] = repr(e)[:200]
     C.assign_primary(rows, groups)
 
     picked = C.targets(rows)
+    C.stock_theme_lists(picked, themes, groups)
+    try:
+        sectors = deps.sectors()
+    except Exception:  # noqa: BLE001 — 업종 이름은 보조 정보
+        log.exception("급등락 분석: 업종 조회 실패")
+        sectors = {}
+    for r in picked:
+        r["sector_name"] = sectors.get(r["ticker"]) or None
     dart_failed = streak = 0
     for r in picked:
         r["dart_items"], r["dart_keywords"] = [], []
