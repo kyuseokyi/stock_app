@@ -241,6 +241,13 @@
 - [x] Phase 3 (관리자 웹 `admin_web` 전체 스크리너 상시 노출) — `feature/app-identity-nav` 구현 완료(2026-11-18, 배포·머지 전): 사용자 화면 스위치와 무관하게 관리자 웹 `시장 데이터` 사이드바에 `조건검색(/market/finder)` 및 `차트 패턴(/market/patterns)` 화면을 추가해 4대 스크리너(`주도주 · 5·20 정배열 · 조건검색 · 차트 패턴`) 전부 상시 노출
 
 
+### 날짜별 종가 기준 급등주(10~30%) & 거래대금 상위 · 테마 키워드 · 대장주 분석기
+> 상세 설계 및 로드맵: [`docs/daily_surge_and_trading_value_analysis_spec.md`](daily_surge_and_trading_value_analysis_spec.md)
+- [ ] Step 1: PostgreSQL `daily_surge_analyses` 테이블(`(trade_date, ticker)` 유니크, 종가·전일대비 가격·등락률·거래량·거래대금·테마 키워드·뉴스 이유·대장주 정보) 및 Alembic 마이그레이션 추가
+- [ ] Step 2: 장 마감 후(20:30 파이프라인 직후) ClickHouse 종가 기준 급등주(`+10% ~ +30%`) 및 거래대금 상위(Top 50) 종목 추출 + 소속 테마 매핑 + 동일 테마 당일 대장주(👑) 자동 판별 + 뉴스/공시 기반 상승 사유 및 테마 키워드(예: `#보안`, `#한한령`) 추출 배치(`backend/apps/collector/daily_surge.py`) 구현
+- [ ] Step 3: 날짜별 조회·구간 필터(`10~15%`, `15~25%`, `25~30%`)·다중 정렬(`등락률순`, `거래대금순`, `거래량순`, `전일대비순`, `테마별 묶기`) 및 동일 테마 종목 성적표 비교 REST API(`/api/v1/market/daily-surge*`) 구현
+- [ ] Step 4: 관리자 웹(`admin_web` > `시장 데이터` > `🔥 급등·거래대금 분석 (/market/daily-surge)`) 2단 스플릿 뷰(날짜 선택기, 좌측 다중 정렬 테이블, 우측 뉴스 사유·동일 테마 대장주 비교 표·일봉 차트) 구현
+
 ### 교육용 합성 종가 트레이딩 게임 (방식 A 합성 일봉 + 유형 1 하루 1회 참가 · 기존 실시간 게임 보존 & 별도 화면 분리)
 > 상세 설계 및 로드맵: [`docs/edu_synthetic_daily_game_spec_and_plan.md`](edu_synthetic_daily_game_spec_and_plan.md)
 - [x] Step 1: 기능 플래그 `EDU_DAILY_GAME`(기본 `ON`) 확장 및 신규 DB 테이블 4종(`edu_game_seasons`, `edu_game_candles`, `edu_game_accounts`, `edu_game_daily_actions`) 추가 (기존 실시간 게임 테이블·로직 100% 보존)
@@ -279,6 +286,7 @@
 ---
 
 ## 참고 문서
+- **날짜별 종가 급등주(10~30%) & 거래대금 상위·테마·대장주 분석기 명세: `docs/daily_surge_and_trading_value_analysis_spec.md`**
 - **TradingView Advanced Charts 라이선스 신청 가이드: `docs/tradingview_advanced_charts_application_guide.md`**
 - **교육용 합성 종가 트레이딩 게임 명세 및 플랜: `docs/edu_synthetic_daily_game_spec_and_plan.md`**
 - **관리자 등급별 권한 제어(RBAC) 명세 및 플랜: `docs/admin_rbac_permissions_spec_and_plan.md`**
