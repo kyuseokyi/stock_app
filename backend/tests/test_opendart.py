@@ -133,3 +133,18 @@ def test_red_flag_hints():
     assert sum("최대주주" in h for h in hints) == 1
     assert any("횡령" in h for h in hints) and any("배임" in h for h in hints)
     assert red_flag_hints([_d("분기보고서 (2026.09)")]) == []
+
+
+def test_disclosures_between_uses_given_range():
+    """급등락 분석 — 과거 기준일에도 [직전 거래일, 기준일] 그대로 조회(오늘 날짜와 무관)."""
+    body = {"status": "000", "message": "정상", "list": [
+        {"corp_name": "삼성전자", "report_nm": "주주배정 유상증자 결정", "rcept_no": "20261125000001",
+         "rcept_dt": "20261125", "flr_nm": "삼성전자"},
+    ]}
+    router = _Router(list_body=body)
+    c = OpenDartClient("k", transport=httpx.MockTransport(router), today=lambda: date(2026, 12, 31))
+    items = c.disclosures_between("005930", date(2026, 11, 25), date(2026, 11, 26))
+    assert [d.rcept_no for d in items] == ["20261125000001"]
+    req = [r for r in router.calls if r.url.path.endswith("/list.json")][0]
+    assert (req.url.params["bgn_de"], req.url.params["end_de"]) == ("20261125", "20261126")
+    assert c.disclosures_between("999999", date(2026, 11, 25), date(2026, 11, 26)) == []

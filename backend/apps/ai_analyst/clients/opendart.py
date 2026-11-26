@@ -139,11 +139,14 @@ class OpenDartClient:
         return self._corp_map().get(str(stock_code).strip())
 
     def disclosures(self, stock_code: str, *, days: int = 90) -> list[Disclosure]:
+        end = self._today()
+        return self.disclosures_between(stock_code, end - timedelta(days=days), end)
+
+    def disclosures_between(self, stock_code: str, bgn: date, end: date) -> list[Disclosure]:
+        """[bgn, end] 접수 공시(최신순, 최대 100건). 고유번호 없음·실패는 빈 목록 — 급등락 분석이 과거 날짜에도 쓴다."""
         corp = self.corp_code(stock_code)
         if not corp:
             return []
-        end = self._today()
-        bgn = end - timedelta(days=days)
         params = {"corp_code": corp, "bgn_de": bgn.strftime("%Y%m%d"), "end_de": end.strftime("%Y%m%d"),
                   "page_count": 100}
         try:
