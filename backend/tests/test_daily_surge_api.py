@@ -57,8 +57,8 @@ def sent(monkeypatch):
 @pytest.fixture
 def board(monkeypatch):
     """성적표 입출력(PG 테마 구성·CH 일봉) 가로채기 — 화장품 테마 = A·B·E(E 는 +3% 미급등)."""
-    def _load(trade_date, theme_id):
-        members = {1: ["A", "B", "E"], 2: ["C", "D"]}.get(theme_id, [])
+    def _load(trade_date, theme_id, extra=()):
+        members = list(dict.fromkeys([*{1: ["A", "B", "E"], 2: ["C", "D"]}.get(theme_id, []), *extra]))
         prices = {"A": (120.0, 100.0, 100), "B": (115.0, 100.0, 100), "E": (103.0, 100.0, 50),
                   "C": (80.0, 100.0, 10), "D": (88.0, 100.0, 5)}
         return members, {t: prices[t] for t in members if t in prices}, {t: f"이름{t}" for t in members}

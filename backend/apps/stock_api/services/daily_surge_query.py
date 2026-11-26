@@ -5,7 +5,7 @@
 """
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 
 from fastapi.concurrency import run_in_threadpool
 from sqlalchemy import delete, select
@@ -140,8 +140,13 @@ async def groups(db: AsyncSession, d: date, direction: str | None = None) -> lis
 
 
 # ---------------------------------------------------------------- 성적표
-def _load_board(trade_date: date, theme_id: int) -> tuple[list[str], dict[str, tuple[float, float, float]], dict]:
-    """(테마 구성 종목, {ticker: (종가, 전일 종가, 거래량)}, {ticker: 이름}) — 지금 테마 구성 × 그날 일봉."""
+def _load_board(trade_date: date, theme_id: int, extra: tuple[str, ...] = ()
+                ) -> tuple[list[str], dict[str, tuple[float, float, float]], dict]:
+    """(테마 구성 종목, {ticker: (종가, 전일 종가, 거래량)}, {ticker: 이름}) — 지금 테마 구성 ∪ 저장된 묶음 구성원 × 그날 일봉.
+
+    저장 뒤 테마 출처가 바뀌었거나(kis→kiwoom) 종목이 제외돼도 그날 묶음 구성원은 성적표에 남게 extra 를 합친다.
+    전일 종가는 종목별 기준일 전 마지막 일봉(집계와 같은 기준).
+    """
     from apps.collector.daily_surge import repository as repo
     from shared import market_repo
     from shared.clickhouse_schema import CLICKHOUSE_DB, get_client
@@ -149,17 +154,19 @@ def _load_board(trade_date: date, theme_id: int) -> tuple[list[str], dict[str, t
 
     with SyncSessionLocal() as db:
         name_members = market_repo.theme_groups(db).get(str(theme_id))
-        members = list(name_members[1]) if name_members else []
+        members = list(dict.fromkeys([*(name_members[1] if name_members else []), *extra]))
         names = market_repo.names_for(db, members)
-    prev = repo.prev_trade_date(trade_date)
-    if not members or prev is None:
+    if not members:
         return members, {}, names
-    rows = get_client().query(
-        f"SELECT ticker, date, close, volume FROM {CLICKHOUSE_DB}.daily_prices FINAL "
-        "WHERE date IN (%(t)s, %(p)s) AND ticker IN %(tk)s",
-        parameters={"t": trade_date, "p": prev, "tk": tuple(members)}).result_rows
-    today = {t: (float(c), float(v)) for t, d, c, v in rows if d == trade_date}
-    before = {t: float(c) for t, d, c, _v in rows if d == prev}
+    params = {"t": trade_date, "since": trade_date - timedelta(days=repo.PREV_LOOKBACK_DAYS), "tk": tuple(members)}
+    today = {t: (float(c), float(v)) for t, c, v in get_client().query(
+        f"SELECT ticker, close, volume FROM {CLICKHOUSE_DB}.daily_prices FINAL WHERE date = %(t)s AND ticker IN %(tk)s",
+        parameters=params).result_rows}
+    before = {t: float(c) for t, c in get_client().query(
+        "SELECT ticker, argMax(close, date) FROM ("
+        f"SELECT ticker, date, close FROM {CLICKHOUSE_DB}.daily_prices FINAL "
+        "WHERE date < %(t)s AND date >= %(since)s AND ticker IN %(tk)s) GROUP BY ticker",
+        parameters=params).result_rows}
     prices = {t: (c, before[t], v) for t, (c, v) in today.items() if before.get(t)}
     return members, prices, names
 
@@ -183,7 +190,8 @@ def board_rows(members: list[str], prices: dict[str, tuple[float, float, float]]
 
 
 async def _board(d: date, theme_id: int, group: DailySurgeThemeGroup | None) -> list[dict]:
-    members, prices, names = await run_in_threadpool(_load_board, d, theme_id)
+    extra = tuple(group.members or []) if group else ()
+    members, prices, names = await run_in_threadpool(_load_board, d, theme_id, extra)
     return board_rows(members, prices, names, group)
 
 

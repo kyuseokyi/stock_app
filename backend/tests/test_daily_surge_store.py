@@ -36,7 +36,7 @@ def _universe(n_filler: int = 0):
     return today, prev
 
 
-def _deps(store_calls, *, today, prev, themes=None, theme_error=None, dart=None, dart_error=()):
+def _deps(store_calls, *, today, prev, themes=None, theme_error=None, dart=None, dart_error=(), last=None):
     def _themes():
         if theme_error:
             raise theme_error
@@ -51,6 +51,7 @@ def _deps(store_calls, *, today, prev, themes=None, theme_error=None, dart=None,
         latest_date=lambda: T,
         prev_date=lambda d: P,
         load_day=lambda d: today if d == T else prev,
+        load_prev=lambda d: last if last is not None else {t: (c, v, P) for t, (c, v) in prev.items()},
         profiles=lambda: {t: ("KOSDAQ", True) for t in today},
         names=lambda tickers: {t: f"이름{t}" for t in tickers},
         themes=_themes,
@@ -59,11 +60,40 @@ def _deps(store_calls, *, today, prev, themes=None, theme_error=None, dart=None,
     )
 
 
+def test_skips_when_partial_load_vs_prev_day():
+    """기준일 1,200종목이 들어왔지만 직전 거래일(2,000종목)의 90% 미만 → 부분 적재로 보고 건너뜀."""
+    today, prev = _universe(n_filler=1196)
+    prev.update({f"P{i:04d}": (100.0, 1) for i in range(800)})
+    calls: list = []
+    out = run_day(T, _deps(calls, today=today, prev=prev), min_rows=1000)
+    assert out["skipped"].startswith("일봉 미확정") and calls == []
+
+
+def test_skips_when_prev_day_thin():
+    today, prev = _universe(n_filler=20)
+    last = {t: (c, v, date(2026, 11, 20)) for t, (c, v) in prev.items()}  # 직전 거래일(P) 행이 없음
+    calls: list = []
+    out = run_day(T, _deps(calls, today=today, prev=prev, last=last), min_rows=10)
+    assert out["skipped"].startswith("직전 거래일 일봉 부족") and calls == []
+
+
+def test_uses_each_ticker_last_close_for_resumed_stock():
+    """P 에 일봉이 없는(거래정지 후 재개) 종목도 자기 마지막 종가 대비로 들어간다."""
+    today, prev = _universe(n_filler=20)
+    today["R"] = (130.0, 50)
+    last = {t: (c, v, P) for t, (c, v) in prev.items()}
+    last["R"] = (100.0, 0, date(2026, 11, 18))
+    calls: list = []
+    run_day(T, _deps(calls, today=today, prev=prev, last=last), min_rows=10)
+    by = {s["ticker"]: s for s in calls[0][1]}
+    assert by["R"]["change_rate"] == 30.0 and by["R"]["is_surge"] is True
+
+
 def test_skips_when_day_not_settled():
     today, prev = _universe()
     calls: list = []
     out = run_day(None, _deps(calls, today=today, prev=prev), min_rows=10)
-    assert out["skipped"].startswith("일봉 미확정")
+    assert out["skipped"].startswith("직전 거래일 일봉 부족")  # 4종목뿐 — 직전 거래일부터 부족
     assert calls == []
 
 
@@ -91,7 +121,7 @@ def test_dart_and_theme_failures_are_isolated():
     assert out["dart_failed"] == 1 and out["theme_error"]
     (_d, stocks, groups, source) = calls[0]
     assert groups == [] and source == "none"
-    assert {s["ticker"]: s["dart_items"] for s in stocks}["A"] == []
+    assert {s["ticker"]: s["dart_items"] for s in stocks}["A"] is None  # 실패 = 이전 공시 유지 표시
 
 
 def test_dart_none_means_no_key():
@@ -124,3 +154,31 @@ def test_replace_day_is_idempotent_and_keeps_notes(session_factory):
         assert s.get(DailySurgeStock, (P, "OLD")) is not None
         g = s.scalars(sa.select(DailySurgeThemeGroup)).one()
         assert (g.theme_source, g.members) == ("kiwoom", ["A", "B"])
+
+
+def test_dart_failure_keeps_previous_disclosures(session_factory):
+    today, prev = _universe(n_filler=20)
+    calls: list = []
+    good = {"C": [("20261125", "R1", "주주배정 유상증자 결정")]}
+    run_day(T, _deps(calls, today=today, prev=prev, dart=good), min_rows=10, top_n=1)
+    run_day(T, _deps(calls, today=today, prev=prev, dart_error=("C",)), min_rows=10, top_n=1)
+    with session_factory() as s:
+        for _d, stocks, groups, source in calls:
+            repo.replace_day(s, T, stocks, groups, source)
+        c = s.get(DailySurgeStock, (T, "C"))
+        assert c.dart_keywords == ["#유상증자"] and c.dart_items[0]["rcept_no"] == "R1"
+
+
+def test_dart_stops_after_consecutive_failures():
+    today, prev = _universe(n_filler=20)
+    calls: list = []
+    tried: list = []
+
+    def boom(ticker, bgn, end):
+        tried.append(ticker)
+        raise RuntimeError("down")
+
+    deps = _deps(calls, today=today, prev=prev)
+    deps.dart = boom
+    out = run_day(T, deps, min_rows=10)
+    assert len(tried) == 5 and out["dart_failed"] == out["saved"]

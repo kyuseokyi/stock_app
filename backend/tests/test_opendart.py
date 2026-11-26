@@ -148,3 +148,19 @@ def test_disclosures_between_uses_given_range():
     req = [r for r in router.calls if r.url.path.endswith("/list.json")][0]
     assert (req.url.params["bgn_de"], req.url.params["end_de"]) == ("20261125", "20261126")
     assert c.disclosures_between("999999", date(2026, 11, 25), date(2026, 11, 26)) == []
+
+
+def test_disclosures_between_strict_raises_on_failure():
+    """strict: 한도 초과(020)·목록 수신 실패는 예외(공시 없음과 구분), 013(데이터 없음)·비상장은 빈 목록."""
+    c = OpenDartClient("k", transport=httpx.MockTransport(_Router(list_body={"status": "020"})),
+                       today=lambda: date(2026, 12, 31))
+    with pytest.raises(opendart.DartUnavailable):
+        c.disclosures_between("005930", date(2026, 11, 25), date(2026, 11, 26), strict=True)
+    assert c.disclosures_between("005930", date(2026, 11, 25), date(2026, 11, 26)) == []
+    ok = OpenDartClient("k", transport=httpx.MockTransport(_Router()), today=lambda: date(2026, 12, 31))
+    assert ok.disclosures_between("005930", date(2026, 11, 25), date(2026, 11, 26), strict=True) == []
+    assert ok.disclosures_between("999999", date(2026, 11, 25), date(2026, 11, 26), strict=True) == []
+    opendart.clear_corp_code_cache()
+    broken = OpenDartClient("k", transport=httpx.MockTransport(_Router(corp_status=500)), today=lambda: date(2026, 12, 31))
+    with pytest.raises(opendart.DartUnavailable):
+        broken.disclosures_between("005930", date(2026, 11, 25), date(2026, 11, 26), strict=True)
