@@ -18,6 +18,7 @@ import TradingGameSettings from './pages/TradingGameSettings'
 import TradingGameAcademy from './pages/TradingGameAcademy'
 import TradingGameQuizzes from './pages/TradingGameQuizzes'
 import MarketThemes from './pages/MarketThemes'
+import MarketDailySurge from './pages/MarketDailySurge'
 import MarketStatus from './pages/MarketStatus'
 import MarketVerify from './pages/MarketVerify'
 import MarketLeaders from './pages/MarketLeaders'
@@ -63,6 +64,7 @@ export default function App() {
         <Route path="game/settings" element={<RequirePermission perms={NAV_PERMS['/game/settings'] ?? []}><TradingGameSettings /></RequirePermission>} />
         <Route path="game/academy" element={<RequirePermission perms={NAV_PERMS['/game/academy'] ?? []}><TradingGameAcademy /></RequirePermission>} />
         <Route path="game/quizzes" element={<RequirePermission perms={NAV_PERMS['/game/quizzes'] ?? []}><TradingGameQuizzes /></RequirePermission>} />
+        <Route path="market/daily-surge" element={<RequirePermission perms={NAV_PERMS['/market/daily-surge'] ?? []}><MarketDailySurge /></RequirePermission>} />
         <Route path="market/themes" element={<RequirePermission perms={NAV_PERMS['/market/themes'] ?? []}><MarketThemes /></RequirePermission>} />
         <Route path="market/status" element={<RequirePermission perms={NAV_PERMS['/market/status'] ?? []}><MarketStatus /></RequirePermission>} />
         <Route path="market/verify" element={<RequirePermission perms={NAV_PERMS['/market/verify'] ?? []}><MarketVerify /></RequirePermission>} />

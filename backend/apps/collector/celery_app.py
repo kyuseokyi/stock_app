@@ -42,6 +42,7 @@ celery_app = Celery(
         "apps.collector.tasks.featured",
         "apps.collector.tasks.push_sends",
         "apps.collector.tasks.bootstrap",
+        "apps.collector.tasks.daily_surge",
         "apps.ai_analyst.tasks",
     ],
 )
@@ -129,6 +130,19 @@ celery_app.conf.beat_schedule = {
     "compute-canslim-after-fundamentals": {
         "task": "collector.compute_canslim",
         "schedule": crontab(hour=10, minute=40, day_of_week=6),
+    },
+    # 급등락·테마 분석 — 상용 20:30 일봉 파이프라인이 끝난 뒤. 상용 일봉 읽기 → PG 저장(개발 prod_readonly 에서도 유지)
+    # 일봉이 덜 쌓였으면(1,000종목 미만) 건너뛴다. 설계 docs/superpowers/specs/2026-11-26-daily-surge-theme-analyzer-design.md
+    "analyze-daily-surge": {
+        "task": "collector.analyze_daily_surge",
+        "schedule": crontab(hour=22, minute=10, day_of_week="mon-fri"),
+        "kwargs": {"scheduled": True},
+    },
+    # 22:10 에 일봉 미확정으로 건너뛴 날만 다시(이미 집계된 날은 DART 를 다시 부르지 않는다)
+    "analyze-daily-surge-retry": {
+        "task": "collector.analyze_daily_surge",
+        "schedule": crontab(hour=23, minute=40, day_of_week="mon-fri"),
+        "kwargs": {"scheduled": True, "only_if_missing": True},
     },
     "settle-trading-season": {
         "task": "settle_trading_season",

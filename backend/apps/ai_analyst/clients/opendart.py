@@ -107,6 +107,10 @@ def red_flag_hints(disclosures: Iterable[Disclosure]) -> list[str]:
     return hints
 
 
+class DartUnavailable(Exception):
+    """strict 조회에서 DART 를 확인하지 못함(고유번호 목록 없음·네트워크·한도 초과 등) — '공시 없음'과 구분."""
+
+
 class OpenDartClient:
     def __init__(self, api_key: str, transport: httpx.BaseTransport | None = None,
                  *, today: Callable[[], date] | None = None):
@@ -139,22 +143,36 @@ class OpenDartClient:
         return self._corp_map().get(str(stock_code).strip())
 
     def disclosures(self, stock_code: str, *, days: int = 90) -> list[Disclosure]:
-        corp = self.corp_code(stock_code)
+        end = self._today()
+        return self.disclosures_between(stock_code, end - timedelta(days=days), end)
+
+    def disclosures_between(self, stock_code: str, bgn: date, end: date, *, strict: bool = False) -> list[Disclosure]:
+        """[bgn, end] 접수 공시(최신순, 최대 100건) — 급등락 분석이 과거 날짜에도 쓴다.
+
+        기본: 고유번호 없음·실패는 빈 목록. strict=True: 실패(목록 수신 실패·네트워크·000/013 외 상태)는
+        DartUnavailable — 재집계가 받아 둔 공시를 빈 값으로 덮어쓰지 않게(상장사 아님은 여전히 빈 목록).
+        """
+        mapping = self._corp_map()
+        if strict and not mapping:
+            raise DartUnavailable("고유번호 목록 없음")
+        corp = mapping.get(str(stock_code).strip())
         if not corp:
             return []
-        end = self._today()
-        bgn = end - timedelta(days=days)
         params = {"corp_code": corp, "bgn_de": bgn.strftime("%Y%m%d"), "end_de": end.strftime("%Y%m%d"),
                   "page_count": 100}
         try:
             body = self._get(LIST_URL, params).json()
         except Exception as e:  # noqa: BLE001
             log.warning("DART 공시 목록 조회 실패 (%s)", type(e).__name__)
+            if strict:
+                raise DartUnavailable(type(e).__name__) from e
             return []
         status = str(body.get("status", ""))
         if status != "000":
             if status != "013":  # 013 = 조회된 데이터 없음(정상적인 빈 결과)
                 log.warning("DART 공시 목록 상태 코드 %s", status)
+                if strict:
+                    raise DartUnavailable(f"status {status}")
             return []
         out: list[Disclosure] = []
         for r in body.get("list") or []:

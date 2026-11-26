@@ -248,12 +248,15 @@
 - [ ] Step 3: 5대 오픈소스 스킬 루브릭 기반 Gemini 구조화 추론 엔진(`skill_runner.py`) 및 관리자 전용 REST API(`/api/v1/admin/ai-skills/*`, `require_admin` 가드) 구현
 - [ ] Step 4: 관리자 웹(`admin_web` > `시장 데이터` > `🧠 AI 종목 심층 분석 (/market/ai-lab)`) 단독 워크스테이션 화면 및 기존 스크리너(`주도주 · 5·20 정배열 · 급등락 분석`)에서의 원클릭 연동 버튼 구현
 
-### 날짜별 종가 기준 급등주(+10~+30%) · 급락주(-10~-30%) · 거래대금 상위 & 장전·장중 뉴스·테마·대장주 분석기
-> 상세 설계 및 로드맵: [`docs/daily_surge_and_trading_value_analysis_spec.md`](daily_surge_and_trading_value_analysis_spec.md)
-- [ ] Step 1: PostgreSQL `daily_surge_analyses` 테이블(`(trade_date, ticker)` 유니크, 종가·전일대비 가격·등락률·거래량·거래대금·`is_surge`(+10~+30%)·`is_plunge`(-10~-30%)·`pre_market_reason`(장전 이유)·`intraday_reason`(장중 이유)·`news_items`(원문 링크·발행시각·`PRE_MARKET`/`INTRADAY` 구분)·테마 키워드·대장주 정보) 및 Alembic 마이그레이션 추가
-- [ ] Step 2: 장 마감 후(20:30 파이프라인 직후) ClickHouse 종가 기준 급등주(`+10% ~ +30%`)·급락주(`-10% ~ -30%`)·거래대금 상위(Top 50) 추출 + 소속 테마 매핑 및 당일 대장주(👑) 판별 + 발행 시각 기준 **🌅 장 시작 전(`전일 15:30 ~ 당일 09:00`) 선행 뉴스/공시 vs ☀️ 장중(`09:00~`) 뉴스 분리** 및 원문 링크·테마 키워드(`#보안`, `#한한령`, `#유상증자`) 추출 배치(`backend/apps/collector/daily_surge.py`) 구현
-- [ ] Step 3: 날짜별 조회·모드(`surge` 급등 / `plunge` 급락 / `value` 거래대금 / 교집합)·구간 필터(`±10~15%`, `±15~25%`, `±25~30%`)·`장전 뉴스 보유 종목만` 필터·다중 정렬(`등락률순`, `거래대금순`, `거래량순`, `전일대비순`, `테마별 묶기`) 및 동일 테마 종목 성적표 비교 REST API(`/api/v1/market/daily-surge*`) 구현
-- [ ] Step 4: 관리자 웹(`admin_web` > `시장 데이터` > `🔥 급등락·거래대금 분석 (/market/daily-surge)`) 2단 스플릿 뷰(날짜 선택기, 급등/급락/거래대금 탭, 좌측 다중 정렬 테이블, 우측 **🌅 장전 선행 뉴스 원문 링크 / ☀️ 장중 뉴스 원문 링크**·동일 테마 대장주 비교 표·일봉 차트) 구현
+### 날짜별 종가 기준 급등주(+10~+30%) · 급락주(-10~-30%) · 거래대금 상위 & 테마·대장주 분석기
+> 원 기획: [`docs/daily_surge_and_trading_value_analysis_spec.md`](daily_surge_and_trading_value_analysis_spec.md) · **구현 설계(우선)**: [`superpowers/specs/2026-11-26-daily-surge-theme-analyzer-design.md`](superpowers/specs/2026-11-26-daily-surge-theme-analyzer-design.md)
+> 네이버 뉴스 약관 때문에 원 기획의 뉴스 저장·장전/장중 재배열·제목 요약은 하지 않는다 → 뉴스는 화면에서 바로 보기, 이유는 DART 공시·관리자 메모.
+- [x] Step 1: PG 3표(`daily_surge_stocks`·`daily_surge_theme_groups`·`daily_surge_notes`) + 마이그레이션 `e5a7c9b1d3f6` (2026-11-26, dev 머지 — 배포 전)
+- [x] Step 2: 집계 `collector.analyze_daily_surge`(평일 22:10, 일봉 1,000종목 미만이면 건너뜀) — 급등·급락·거래대금 상위 50, 같은 테마 같은 방향 2종목 이상 묶음·대장주·대표 테마(테마 출처 키움 우선), DART 전일·당일 공시·키워드
+- [x] Step 3: 관리자 API `/api/v1/admin/market/daily-surge*` — 목록(모드·구간·시장·공시만·정렬)·묶음·종목/테마 상세(성적표)·메모·재집계·네이버 뉴스 바로 보기(5분 캐시, 저장 안 함)
+- [x] Step 4: 관리자 웹 `/market/daily-surge` — 테마 묶음 기본 화면, 급등·급락·거래대금·교집합 탭, 상세(메모·공시·성적표·뉴스·일봉 차트)
+- [ ] 배포 후: 개발 서버 '데이터 현황 › 급등락·테마 분석' 실행으로 첫 집계 확인, 실데이터로 묶음·대장주 확인
+- [ ] 나중: 키움 업종(`ka20002`) 묶음, 개발 서버 키움 키(테마·업종 수집만), AI 관찰 요약(기본 꺼짐, 뉴스 미입력), 사용자 앱·웹 노출
 
 ### 교육용 합성 종가 트레이딩 게임 (방식 A 합성 일봉 + 유형 1 하루 1회 참가 · 기존 실시간 게임 보존 & 별도 화면 분리)
 > 상세 설계 및 로드맵: [`docs/edu_synthetic_daily_game_spec_and_plan.md`](edu_synthetic_daily_game_spec_and_plan.md)

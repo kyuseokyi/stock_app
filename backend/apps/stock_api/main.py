@@ -16,7 +16,7 @@ from strawberry.fastapi import GraphQLRouter
 
 from apps.ai_analyst.router import ai_router, market_router
 from apps.stock_api.graphql.schema import schema
-from apps.stock_api.routers import market_admin, screener_admin, stocks, themes_admin
+from apps.stock_api.routers import daily_surge_admin, market_admin, screener_admin, stocks, themes_admin
 from apps.stock_api.services.market_access import MarketAccess, market_access
 from shared.cors import build_allowed_origins
 from shared.health import add_health_routes
@@ -48,6 +48,9 @@ app.include_router(themes_admin.router)
 
 # 관리자 시장 데이터(관리자 JWT) — 데이터 현황, KIS 를 호출하지 않는 계산 수동 실행
 app.include_router(market_admin.router)
+
+# 급등락·테마 분석(관리자 JWT) — 날짜별 급등·급락·거래대금 상위, 테마 묶음·대장주, 공시, 이유 메모, 네이버 뉴스 바로 보기
+app.include_router(daily_surge_admin.router)
 
 # 스크리너 탭 보이기 스위치(관리자 JWT) — 종목 찾기 전체·조건검색·차트 패턴 탭 켜고 끄기(공개 읽기는 GraphQL screenerFeatures)
 app.include_router(screener_admin.router)
