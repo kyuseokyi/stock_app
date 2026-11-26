@@ -106,6 +106,8 @@ sudo chmod 600 /opt/stock_app/env/.env.production
 ### 3-2. `/opt/stock_app/env/compose.env` (스토리지 분리 및 DB 설정)
 `docker-compose.prod.yml`의 환경변수 치환(`${CLICKHOUSE_DATA_DIR}`, `${POSTGRES_PASSWORD}` 등)은 `backend/.env.production`이 아니라 **compose 프로젝트 루트의 `.env`**에서 읽습니다.
 
+> ⚠️ 2026-11-26 부터 개발 Mac mini 는 `*_DATA_DIR` 를 쓰지 않는다(DB=내장 디스크 이름 있는 볼륨, 외장 SSD=백업 전용 — `docs/macmini_setup_progress.md` 2절). 외장 디스크에 DB 를 두면 재부팅 때 마운트가 늦거나 디스크가 깨져 DB 가 못 뜰 수 있다.
+
 추가 SSD(`/Volumes/StockData`)로 대용량 시계열 DB 스토리지를 분리하거나 강한 비번을 쓸 때 사용합니다:
 ```ini
 # --- [스토리지 분리 (추가 SSD 지정)] ---

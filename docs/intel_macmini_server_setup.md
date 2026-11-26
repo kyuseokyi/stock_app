@@ -37,6 +37,8 @@ macOS는 사용자 로그인 세션이 열려야 Docker/OrbStack 백그라운드
   * 시스템 드라이브(내장 256GB)에 이를 두면 OS 디스크 풀(Disk Full)로 macOS 자체가 멈출 위험이 있습니다.
 * **결론**: 추가 250GB SSD를 `StockData` 볼륨으로 지정하여 ClickHouse, PostgreSQL, 백업 파일을 전용 분리 운영합니다.
 
+> ⚠️ **2026-11-26 변경**: 외장 SSD 손상 장애(`docs/deploy/incident-2026-11-25-dev-ssd.md`) 뒤 DB 는 **내장 디스크(Docker 이름 있는 볼륨)** 로 옮기고, `StockData` 는 **백업 전용**으로 바꿨다. 새로 설치할 때는 아래 `*_DATA_DIR` 바인드를 쓰지 말고 `docs/macmini_setup_progress.md` 2절·`docs/deploy/single-node-swarm.md` 10절을 따른다.
+
 ### 2) 추가 SSD 초기화 (Windows NTFS → APFS 포맷)
 맥미니 터미널에서 실행:
 
