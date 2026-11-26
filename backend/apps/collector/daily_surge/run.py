@@ -31,6 +31,8 @@ class Deps:
     themes: Callable[[], tuple[dict[int, tuple[str, list[str]]], str]]
     dart: Callable[[str, date, date], list[tuple[str, str, str]]] | None  # None = DART 키 없음
     store: Callable[[date, list[dict], list[dict], str], int]
+    # 주 출처가 키움일 때 소속 테마가 없는 종목에 채울 KIS 테마(주 출처가 KIS 면 빈 dict)
+    fallback_themes: Callable[[], dict[int, tuple[str, list[str]]]] = lambda: {}  # noqa: E731
 
 
 def _as_date(value: date | str | None) -> date | None:
@@ -75,7 +77,11 @@ def run_day(trade_date: date | str | None, deps: Deps, *, min_rows: int = MIN_RO
     C.assign_primary(rows, groups)
 
     picked = C.targets(rows)
-    C.stock_theme_lists(picked, themes, groups)
+    C.stock_theme_lists(picked, themes, groups, source=source)
+    try:
+        out["theme_fallback"] = C.fill_fallback_themes(rows, picked, deps.fallback_themes())
+    except Exception:  # noqa: BLE001 — 보충은 보조 정보
+        log.exception("급등락 분석: 보충 테마(KIS) 조회 실패")
     try:
         sectors = deps.sectors()
     except Exception:  # noqa: BLE001 — 업종 이름은 보조 정보

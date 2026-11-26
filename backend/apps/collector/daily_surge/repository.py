@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 from shared import market_repo
 from shared.clickhouse_schema import CLICKHOUSE_DB, get_client
 from shared.daily_surge_models import DailySurgeStock, DailySurgeThemeGroup
-from shared.market_models import StockProfile
+from shared.market_models import StockProfile, Theme, ThemeStock
 
 _STOCK_FIELDS = (
     "name", "market", "close", "prev_close", "change_price", "change_rate", "volume", "volume_ratio",
@@ -83,6 +83,23 @@ def load_sectors(session: Session) -> dict[str, str]:
 
 def load_names(session: Session, tickers: list[str]) -> dict[str, str]:
     return market_repo.names_for(session, tickers)
+
+
+def load_fallback_themes(session: Session) -> dict[int, tuple[str, list[str]]]:
+    """보충용 KIS 테마 — 지금 출처가 키움일 때만(키움 테마에 없는 종목을 KIS 로 채움). KIS 가 출처면 빈 dict."""
+    if market_repo.active_theme_source(session)["source"] != market_repo.THEME_SOURCE_KIWOOM:
+        return {}
+    rows = session.execute(
+        select(Theme.id, Theme.name, ThemeStock.ticker)
+        .join(ThemeStock, ThemeStock.theme_id == Theme.id)
+        .where(Theme.source == market_repo.THEME_SOURCE_KIS, Theme.is_hidden.is_(False),
+               ThemeStock.is_excluded.is_(False))
+        .order_by(Theme.id, ThemeStock.ticker)
+    ).all()
+    out: dict[int, tuple[str, list[str]]] = {}
+    for tid, name, ticker in rows:
+        out.setdefault(int(tid), (name, []))[1].append(ticker)
+    return out
 
 
 def load_themes(session: Session) -> tuple[dict[int, tuple[str, list[str]]], str]:
