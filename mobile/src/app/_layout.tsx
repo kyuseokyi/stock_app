@@ -1,3 +1,4 @@
+import { QueryClientProvider } from '@tanstack/react-query';
 import { type Href, Stack, ThemeProvider } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
@@ -14,6 +15,7 @@ import { usePushSetup } from '@/features/push/handlers';
 import { lastScreenerFeatures } from '@/features/screener/use-screener-features';
 import { stockBackHref } from '@/features/screener/visibility';
 import { useSystemTheme } from '@/hooks/use-system-theme';
+import { getQueryClient } from '@/lib/query-client';
 import { ApiProgressBar, AppToaster, HeaderBack } from '@/ui';
 
 /** 탭 밖 화면 헤더 — iOS·Android 같은 모양(꺾쇠 + 가운데 제목). fallback: 푸시·딥링크로 바로 열었을 때 돌아갈 곳.
@@ -51,23 +53,26 @@ export default function RootLayout() {
   }, []);
 
   return (
-    <ThemeProvider value={navTheme}>
-      <StatusBar style="auto" />
-      <Stack screenOptions={{ headerShown: false }}>
-        <Stack.Screen name="(tabs)" />
-        <Stack.Screen name="blog/[id]" options={detail('글 상세', '/community', bottom)} />
-        <Stack.Screen name="blocked-users" options={detail('차단한 사용자', '/profile', bottom)} />
-        <Stack.Screen name="fund/index" options={detail('내 펀드 수익', '/profile', bottom)} />
-        <Stack.Screen name="fund/[id]" options={detail('펀드 리포트', '/fund', bottom)} />
-        <Stack.Screen name="fund/history/[id]" options={detail('수익 히스토리', '/fund', bottom)} />
-        <Stack.Screen name="fund/backup" options={detail('기록 백업', '/fund', bottom)} />
-        <Stack.Screen name="market/[kind]/[id]" options={detail('그룹 상세', '/market', bottom)} />
-        <Stack.Screen name="stock/[ticker]" options={detail('종목 상세', () => stockBackHref(lastScreenerFeatures()), bottom)} />
-      </Stack>
-      <AppToaster />
-      <ApiProgressBar />
-      <AppUpdateGate />
-      <TermsGate />
-    </ThemeProvider>
+    // 가장 바깥 — 시트·모달(AppUpdateGate·TermsGate 등)까지 모두 같은 Query 클라이언트를 본다
+    <QueryClientProvider client={getQueryClient()}>
+      <ThemeProvider value={navTheme}>
+        <StatusBar style="auto" />
+        <Stack screenOptions={{ headerShown: false }}>
+          <Stack.Screen name="(tabs)" />
+          <Stack.Screen name="blog/[id]" options={detail('글 상세', '/community', bottom)} />
+          <Stack.Screen name="blocked-users" options={detail('차단한 사용자', '/profile', bottom)} />
+          <Stack.Screen name="fund/index" options={detail('내 펀드 수익', '/profile', bottom)} />
+          <Stack.Screen name="fund/[id]" options={detail('펀드 리포트', '/fund', bottom)} />
+          <Stack.Screen name="fund/history/[id]" options={detail('수익 히스토리', '/fund', bottom)} />
+          <Stack.Screen name="fund/backup" options={detail('기록 백업', '/fund', bottom)} />
+          <Stack.Screen name="market/[kind]/[id]" options={detail('그룹 상세', '/market', bottom)} />
+          <Stack.Screen name="stock/[ticker]" options={detail('종목 상세', () => stockBackHref(lastScreenerFeatures()), bottom)} />
+        </Stack>
+        <AppToaster />
+        <ApiProgressBar />
+        <AppUpdateGate />
+        <TermsGate />
+      </ThemeProvider>
+    </QueryClientProvider>
   );
 }
