@@ -1,21 +1,17 @@
-import { useEffect, useState } from 'react'
-import { getNews, type NewsResult } from '../../api/dailySurge'
+import { useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import type { NewsResult } from '../../api/dailySurge'
+import { screenerQueries } from '../../queries/screenerQueries'
 import { SLOT_CLASS, SLOT_LABEL, slotTime } from '../../lib/dailySurge'
 
 // 네이버 뉴스 검색 결과 — 받은 순서·개수 그대로, 기사마다 시각 배지만(약관 N1~N8, docs/naver-search-api-terms-issue.md).
 // 이 목록을 다시 정렬·필터하거나 AI 문장과 섞지 않는다. 저장도 하지 않는다(서버가 5분만 캐시).
 export default function NaverNewsList({ kind, date, target }: { kind: 'stock' | 'theme'; date: string; target: string }) {
+  const q = useQuery(screenerQueries.dailySurge.news(kind, date, target))
+  // 마지막으로 받은 결과 — 대상이 바뀌어 다시 받는 동안에도 머리글 검색어는 직전 값(지금 동작)
   const [data, setData] = useState<NewsResult | null>(null)
-  const [state, setState] = useState<'loading' | 'ok' | 'failed'>('loading')
-
-  useEffect(() => {
-    let alive = true
-    setState('loading')
-    getNews(kind, date, target)
-      .then((r) => { if (alive) { setData(r); setState('ok') } })
-      .catch(() => { if (alive) setState('failed') })
-    return () => { alive = false }
-  }, [kind, date, target])
+  if (q.data !== undefined && q.data !== data) setData(q.data)
+  const state: 'loading' | 'ok' | 'failed' = q.isPending ? 'loading' : q.isError ? 'failed' : 'ok'
 
   return (
     <section className="flex flex-col gap-2" aria-label="네이버 뉴스 검색 결과">
