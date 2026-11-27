@@ -241,6 +241,14 @@
 - [x] Phase 3 (관리자 웹 `admin_web` 전체 스크리너 상시 노출) — `feature/app-identity-nav` 구현 완료(2026-11-18, 배포·머지 전): 사용자 화면 스위치와 무관하게 관리자 웹 `시장 데이터` 사이드바에 `조건검색(/market/finder)` 및 `차트 패턴(/market/patterns)` 화면을 추가해 4대 스크리너(`주도주 · 5·20 정배열 · 조건검색 · 차트 패턴`) 전부 상시 노출
 
 
+### 프론트엔드 전체 아키텍처 & 디자인 시스템 현대화 (Tailwind CSS v4 + shadcn/ui + Zustand + TanStack Query + TanStack Virtual / FlashList)
+> 상세 설계 및 로드맵: [`docs/frontend_modernization_tailwind4_shadcn_tanstack_spec.md`](frontend_modernization_tailwind4_shadcn_tanstack_spec.md)
+- [ ] Phase 1 (스타일링 & 컴포넌트 — `web_client` & `admin_web`): Tailwind CSS v4(`@theme` CSS 변수 기반 파스텔 C안 + `shadcn/ui` 시맨틱 토큰 통합) 및 Radix 기반 `shadcn/ui` 컴포넌트(`Dialog`, `Sheet`, `Tabs`, `Select`, `Table`, `Switch`, `Command`) 구축 (기존 클래스명·컴포넌트 Props 100% 하위 호환)
+- [ ] Phase 2 (클라이언트 상태 — `Zustand v5`): 원자적 Selector 및 `useShallow` 강제, SSR/Next.js 대비 `createStore` Context Factory + `"use client"` 경계 분리 및 안전한 Hydration(`useHydrated`) 적용
+- [ ] Phase 3 (서버 상태 — `TanStack Query v5`): 도메인별 `queryOptions` 팩토리(`market`, `screener`, `blog`, `game`), SSR 프리패칭 + `HydrationBoundary` 브릿지 및 수동 `useEffect` 패칭의 `useQuery`/`useMutation` 일원화
+- [ ] Phase 4 (대용량 리스트 가상화 — `@tanstack/react-virtual`): 공통 `VirtualList` & `VirtualTable` (`measureElement` 가변 높이 측정 + `React.memo`) 구축 후 관리자 스크리너·급등락 분석·테마·회원 목록 및 유저 웹 순위/랭킹/게시판 목록에 적용
+- [ ] Phase 5 & 6 (모바일 `mobile` 업그레이드 & 통합 폴리싱): 모바일 `TanStack Query`(`AppState`·`NetInfo` 연동) + `@shopify/flash-list` 가상화 + NativeWind v4 / Shadcn RN(`@rn-primitives/*`) 적용 및 전 플랫폼 회귀 검증
+
 ### 관리자 전용 AI 종목 심층 분석 워크스테이션 (오픈소스 무료 금융 스킬 5종 + Gemini API 결합)
 > 상세 설계 및 로드맵: [`docs/admin_gemini_finance_skills_spec_and_plan.md`](admin_gemini_finance_skills_spec_and_plan.md)
 - [ ] Step 1: PostgreSQL `admin_ai_skill_reports` 테이블(`(ticker, as_of_date)` 유니크, 정량 팩트·SEPA 분석·EV 3-시나리오·밸류에이션·실적 품질·뉴스 촉매 Top 5 저장) 및 Alembic 마이그레이션 추가
@@ -296,6 +304,7 @@
 ---
 
 ## 참고 문서
+- **프론트엔드 전체 아키텍처 & 디자인 시스템 현대화(Tailwind v4 + shadcn/ui + TanStack) 명세: `docs/frontend_modernization_tailwind4_shadcn_tanstack_spec.md`**
 - **관리자 전용 AI 종목 심층 분석기(오픈소스 금융 스킬 + Gemini) 명세: `docs/admin_gemini_finance_skills_spec_and_plan.md`**
 - **날짜별 종가 급등주(10~30%) & 거래대금 상위·테마·대장주 분석기 명세: `docs/daily_surge_and_trading_value_analysis_spec.md`**
 - **TradingView Advanced Charts 라이선스 신청 가이드: `docs/tradingview_advanced_charts_application_guide.md`**
