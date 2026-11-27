@@ -15,6 +15,7 @@ export const NAV_PERMS: Record<string, AdminPermissionKey[]> = {
   '/game/quizzes': ['GAME_MANAGE'],
   '/game/settings': ['GAME_MANAGE'],
   '/market/daily-surge': ['SCREENER_VIEW'],
+  '/market/ai-lab': ['SCREENER_VIEW'],
   '/market/themes': ['DATA_PIPELINE'],
   '/market/status': ['SCREENER_VIEW', 'DATA_PIPELINE'],
   '/market/verify': ['SCREENER_VIEW'],

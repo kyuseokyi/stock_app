@@ -42,6 +42,7 @@ const NAV_GROUPS: NavGroup[] = [
     title: '시장 데이터',
     items: [
       { to: '/market/daily-surge', label: '급등락·테마 분석', icon: '🔥' },
+      { to: '/market/ai-lab', label: 'AI 종목 심층 분석', icon: '🧠' },
       { to: '/market/themes', label: '테마 보정', icon: '🏷️' },
       { to: '/market/status', label: '데이터 현황', icon: '🩺' },
       { to: '/market/verify', label: '데이터 검증', icon: '🔍' },
