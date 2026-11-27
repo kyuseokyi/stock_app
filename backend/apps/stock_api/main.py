@@ -15,6 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from strawberry.fastapi import GraphQLRouter
 
 from apps.ai_analyst.router import ai_router, market_router
+from apps.ai_analyst.skills.router import router as ai_skills_router
 from apps.stock_api.graphql.schema import schema
 from apps.stock_api.routers import daily_surge_admin, market_admin, screener_admin, stocks, themes_admin
 from apps.stock_api.services.market_access import MarketAccess, market_access
@@ -61,6 +62,9 @@ app.include_router(stocks.router)
 # AI 시황(공개 GET) — 모닝 브리핑·급등락 원인·수급·트리맵(/api/v1/market/*), 스크리너 정성 분석(/api/v1/ai/*)
 app.include_router(market_router)
 app.include_router(ai_router)
+
+# 관리자 AI Lab A단계(관리자 JWT·SCREENER_VIEW) — 스킬 카탈로그 열람·정량 팩트 미리 보기(외부 AI 호출 없음)
+app.include_router(ai_skills_router)
 
 
 @app.get("/health", tags=["health"])
