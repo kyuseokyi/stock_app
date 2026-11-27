@@ -304,3 +304,146 @@ def test_earnings_trend_decelerating_and_short():
     short = Q.earnings_trend([_q("202606", 10.0)])
     assert short["accelerating"] is None
     assert Q.earnings_trend([])["latest"] is None
+
+
+# ================= 검토 반영(2026-11-27) =================
+
+# ---- 52주 창 경계 ----
+
+@pytest.mark.parametrize("idx,expected", [(9, True), (10, False)])
+def test_sepa_52w_window_boundary(idx, expected):
+    """260봉 → 최근 250봉 = idx 10..259. idx 9 고점은 창 밖, idx 10 고점은 창 안."""
+    closes = [100.0] * 259 + [150.0]
+    highs = list(closes)
+    highs[idx] = 300.0
+    res = Q.compute_sepa_template(_bars(closes, highs=highs), 90)
+    assert _cond(res, 7)["pass"] is expected
+
+
+# ---- SEPA ③ False · Stage 1·3 ----
+
+def test_sepa_ma200_falling_cond3_false():
+    closes = [200.0] * 30 + [100.0] * 200  # 200일선 20봉 전 110 → 지금 100
+    res = Q.compute_sepa_template(_bars(closes), 90)
+    assert _cond(res, 3)["pass"] is False
+
+
+def test_sepa_stage1_basing():
+    closes = [200.0] * 100 + [100.0] * 159 + [120.0]  # 150 ≤ 200일선, 종가 > 150일선
+    res = Q.compute_sepa_template(_bars(closes), 50)
+    assert res["stage"] == 1
+
+
+def test_sepa_stage3_topping():
+    bars = _uptrend()
+    bars[-1] = {**bars[-1], "close": 100.0, "low": 100.0}  # 150 > 200일선 유지, 종가는 150일선 아래
+    res = Q.compute_sepa_template(bars, 50)
+    assert res["stage"] == 3
+
+
+# ---- 백테스트 미래 봉 경계 ----
+
+@pytest.mark.parametrize("after,count,excluded", [(20, 1, 0), (19, 0, 1)])
+def test_backtest_future_boundary(after, count, excluded):
+    """신호 i=10: i+20 == n-1(뒤 20봉) 은 포함, i+20 == n(뒤 19봉) 은 제외."""
+    res = Q.run_setup_backtest(_bars([100.0] * 10 + [110.0] + [110.0] * after))
+    c = res["setups"]["C"]
+    assert (c["count"], c["excluded_recent"]) == (count, excluded)
+
+
+# ---- 미래 참조 회귀 ----
+
+def test_backtest_no_lookahead():
+    """각 봉 i 의 신호는 i 까지의 봉만으로 정해진다 — 앞부분만 잘라 돌린 today 와 전체 감지가 같고,
+    i 이후 봉을 바꿔도 i 까지의 감지는 그대로."""
+    closes = _c_series()
+    full = Q.run_setup_backtest(_bars(closes))
+    altered = closes[:40] + [c * 0.8 for c in closes[40:]]  # idx40 에서 −20% 후 다른 경로
+    alt = Q.run_setup_backtest(_bars(altered))
+    bars = _bars(closes)
+    for i in range(len(closes)):
+        today = set(Q.run_setup_backtest(bars[:i + 1])["today"])
+        d = str(bars[i]["date"])
+        assert today == {k for k, s in full["setups"].items() if d in s["signal_dates"]}, i
+        if i < 40:
+            assert today == {k for k, s in alt["setups"].items() if d in s["signal_dates"]}, i
+
+
+# ---- 시장 폭 50일선 55% 경계 ----
+
+@pytest.mark.parametrize("a50,regime", [(11, "BULL"), (10, "CHOPPY")])
+def test_market_breadth_ma50_55_boundary(a50, regime):
+    res = Q.compute_market_breadth(_rows(12, a50, total=20))
+    assert res["pct_above_ma20"] == 60.0
+    assert res["regime"] == regime
+
+
+# ---- 수정주가 미반영 방어(split_cut) ----
+
+def test_split_cut_keeps_bars_after_latest_jump():
+    closes = [100.0] * 10 + [200.0] * 10 + [90.0] * 5  # idx10 +100%, idx20 −55%
+    bars, cut = Q.split_cut(_bars(closes))
+    assert cut["dropped"] == 20 and cut["jump_pct"] == -55.0
+    assert len(bars) == 5 and cut["date"] == bars[0]["date"]
+
+
+def test_split_cut_none_for_limit_moves():
+    closes = [100.0, 130.0, 91.0, 100.0]  # 상하한가(±30%)는 자르지 않음
+    bars, cut = Q.split_cut(_bars(closes))
+    assert cut is None and len(bars) == 4
+
+
+# ---- DART 해지·해제·철회·취소 ----
+
+def test_classify_dart_cancel_words():
+    titles = ["관리종목지정해제", "단일판매ㆍ공급계약해지", "자기주식취득신탁계약해지결정",
+              "주요사항보고서(유상증자철회)", "무상증자결정취소"]
+    res = Q.classify_dart([{"report_nm": t, "rcept_dt": "20261120", "rcept_no": str(i)}
+                           for i, t in enumerate(titles)])
+    tags = [it["tag"] for it in res["items"]]
+    assert tags == [None, "negative", "negative", None, "negative"]
+    assert res["positive_count"] == 0
+    assert res["fatal"] is False and res["overhang"] is False
+    assert all(it["cancelled"] for it in res["items"])
+
+
+# ---- 셋업 A 거래량 0 봉 ----
+
+def _a_series(zero_count, today_vol):
+    closes = [100.0] * 30 + [105.0]
+    vols = [1000] * 30 + [today_vol]
+    for j in range(zero_count):
+        vols[29 - j] = 0  # 직전 20봉 안에 거래정지 봉
+    return _bars(closes, vols=vols)
+
+
+def test_setup_a_excludes_zero_volume_from_average():
+    # 0 봉 5개: 예전(0 포함) 평균 750 이면 1200 이 1.5배 넘지만, 0 제외 평균 1000 이면 아님
+    assert "A" not in Q.run_setup_backtest(_a_series(5, 1200))["today"]
+    assert "A" in Q.run_setup_backtest(_a_series(5, 1500))["today"]
+
+
+def test_setup_a_needs_15_valid_volume_bars():
+    assert "A" in Q.run_setup_backtest(_a_series(5, 5000))["today"]      # 유효 15봉
+    assert "A" not in Q.run_setup_backtest(_a_series(6, 5000))["today"]  # 유효 14봉 → 판정 안 함
+
+
+# ---- 분기 이익 흐름 None 끼임 ----
+
+def test_earnings_trend_none_in_last3_is_null():
+    res = Q.earnings_trend([_q("202512", 10.0), _q("202603", None), _q("202606", 30.0), _q("202609", 40.0)])
+    assert res["accelerating"] is None and res["decelerating"] is None
+    ok = Q.earnings_trend([_q("202512", None), _q("202603", 10.0), _q("202606", 20.0), _q("202609", 30.0)])
+    assert ok["accelerating"] is True  # None 이 최근 3개 밖이면 판정
+
+
+# ---- 백테스트 쿨다운 5봉 ----
+
+@pytest.mark.parametrize("gap,count,cooled", [(3, 1, 1), (5, 1, 1), (6, 2, 0)])
+def test_backtest_cooldown(gap, count, cooled):
+    closes = [100.0] * 10 + [110.0] + [110.0] * (gap - 1) + [121.0] + [121.0] * 30
+    res = Q.run_setup_backtest(_bars(closes))
+    c = res["setups"]["C"]
+    assert res["cooldown"] == 5
+    assert (c["count"], c["skipped_cooldown"]) == (count, cooled)
+    assert len(c["signal_dates"]) == 2

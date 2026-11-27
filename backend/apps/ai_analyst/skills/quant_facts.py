@@ -16,6 +16,9 @@ _EPS = 1e-9
 HORIZONS = (3, 5, 10, 20)
 MAX_HORIZON = 20
 WEEK52 = 250  # 52주 ≈ 250거래일
+SPLIT_JUMP = 0.5  # 하루 종가 변동 ±50% 초과 = 수정주가 미반영 의심(patterns/kinds/htf.py 와 같은 기준)
+COOLDOWN = 5  # 같은 셋업 신호가 직전 집계 신호 후 5봉 이내면 집계 제외(표본 겹침 방지)
+VOL_MIN_VALID = 15  # 셋업 A 거래량 평균에 필요한 유효(거래량 > 0) 봉 수
 
 SETUP_LABELS = {
     "A": "5일선 20일선 상향 돌파 + 거래량 1.5배",
@@ -38,6 +41,27 @@ def _sma(values: list[float], k: int, end: int) -> float | None:
 
 def _pct(a: float, b: float) -> float:
     return (a / b - 1.0) * 100.0
+
+
+# ---------------------------------------------------------------- 수정주가 방어
+
+def split_cut(bars: list[dict]) -> tuple[list[dict], dict | None]:
+    """하루 종가 변동이 ±50% 를 넘는 봉(가장 최근 것)이 있으면 그 봉부터만 남긴다.
+
+    KIS 수정주가 미반영(감자·액면 변경 등)으로 생긴 가짜 급등락이 이동평균·52주 고저·백테스트를 왜곡하지 않게.
+    반환: (잘린 봉, {"date", "jump_pct", "dropped"} | None).
+    """
+    cut = None
+    for i in range(len(bars) - 1, 0, -1):
+        prev, cur = float(bars[i - 1]["close"]), float(bars[i]["close"])
+        if prev > 0 and abs(cur / prev - 1.0) > SPLIT_JUMP:
+            cut = i
+            break
+    if cut is None:
+        return bars, None
+    return bars[cut:], {"date": bars[cut]["date"], "jump_pct": _r(_pct(float(bars[cut]["close"]),
+                                                                        float(bars[cut - 1]["close"]))),
+                        "dropped": cut}
 
 
 # ---------------------------------------------------------------- SEPA
@@ -104,8 +128,10 @@ def compute_sepa_template(bars: list[dict], rs: float | None) -> dict:
 def _setups_at(i: int, closes, lows, vols, ma5, ma20, ma50) -> list[str]:
     hits: list[str] = []
     # A: 5일선이 20일선을 아래→위 돌파 + 거래량 ≥ 직전 20일(당일 제외) 평균 × 1.5
+    #    거래량 0 봉(거래정지)은 평균에서 빼고, 유효 봉이 15개 미만이면 판정하지 않는다
     if i >= 20 and None not in (ma5[i], ma20[i], ma5[i - 1], ma20[i - 1]):
-        avg_v = sum(vols[i - 20:i]) / 20
+        valid = [v for v in vols[i - 20:i] if v > 0]
+        avg_v = sum(valid) / len(valid) if len(valid) >= VOL_MIN_VALID else 0.0
         if ma5[i - 1] <= ma20[i - 1] + _EPS and ma5[i] > ma20[i] + _EPS and avg_v > 0 \
                 and vols[i] >= avg_v * 1.5 - _EPS:
             hits.append("A")
@@ -123,6 +149,7 @@ def _setups_at(i: int, closes, lows, vols, ma5, ma20, ma50) -> list[str]:
 def run_setup_backtest(bars: list[dict]) -> dict:
     """셋업 A·B·C 신호일 종가 진입 → D+3·5·10·20 종가 수익률(승률 = 수익률 > 0 비율·평균),
     D+1~D+20 고가·저가로 MFE·MAE 평균. D+20 봉이 없는 신호는 모든 통계에서 제외(지평별 발생 수가 같게).
+    같은 셋업 신호가 직전 집계 신호 후 COOLDOWN(5)봉 이내면 집계 제외(skipped_cooldown). today 는 쿨다운과 무관.
     """
     n = len(bars)
     closes = [float(b["close"]) for b in bars]
@@ -135,12 +162,20 @@ def run_setup_backtest(bars: list[dict]) -> dict:
 
     samples: dict[str, list[dict]] = {k: [] for k in SETUP_LABELS}
     excluded = {k: 0 for k in SETUP_LABELS}
+    cooled = {k: 0 for k in SETUP_LABELS}
+    last_taken: dict[str, int] = {}
+    detected: dict[str, list[str]] = {k: [] for k in SETUP_LABELS}
     today: list[str] = []
     for i in range(n):
         hits = _setups_at(i, closes, lows, vols, ma5, ma20, ma50)
         if i == n - 1:
             today = hits
         for k in hits:
+            detected[k].append(str(bars[i]["date"]))
+            if k in last_taken and i - last_taken[k] <= COOLDOWN:
+                cooled[k] += 1
+                continue
+            last_taken[k] = i
             if i + MAX_HORIZON > n - 1:
                 excluded[k] += 1
                 continue
@@ -164,12 +199,14 @@ def run_setup_backtest(bars: list[dict]) -> dict:
                 "avg_return": _r(sum(rets) / len(rets)) if rets else None,
             }
         setups[k] = {
-            "label": label, "count": len(ss), "excluded_recent": excluded[k], "horizons": horizons,
+            "label": label, "count": len(ss), "excluded_recent": excluded[k], "skipped_cooldown": cooled[k],
+            "horizons": horizons,
             "mfe_avg": _r(sum(s["mfe"] for s in ss) / len(ss)) if ss else None,
             "mae_avg": _r(sum(s["mae"] for s in ss) / len(ss)) if ss else None,
             "last_signal_date": ss[-1]["date"] if ss else None,
+            "signal_dates": detected[k],  # 감지된 모든 신호일(쿨다운·미래 부족 제외 포함)
         }
-    return {"bars": n, "setups": setups, "today": today}
+    return {"bars": n, "cooldown": COOLDOWN, "setups": setups, "today": today}
 
 
 # ---------------------------------------------------------------- 시장 폭
@@ -259,11 +296,14 @@ _NEGATIVE = [
     ("불성실공시", re.compile(r"불성실공시"), False),
 ]
 _FATAL = {"감사의견", "관리종목"}
+# 해지·해제·철회·취소 — 호재 공시가 무르는 것이면 호재가 아니다(공급계약 해지는 악재), 지정 해제·결정 철회는 악재 아님
+_CANCEL = re.compile(r"해지|해제|철회|취소")
 
 
 def classify_dart(disclosures: list[dict]) -> dict:
     """공시 제목 → 호재(positive)/악재·오버행(negative) 태그. 둘 다 걸리면 악재 우선.
-    자기주식처분은 호재가 아니다(태그 없음). overhang = 증자·CB·BW·EB·전환청구·신주인수권행사 존재,
+    자기주식처분은 호재가 아니다(태그 없음). 해지·해제·철회·취소가 든 제목은 호재가 아니며(호재 해지=악재,
+    악재 해제·철회=태그 없음, overhang·fatal 아님). overhang = 증자·CB·BW·EB·전환청구·신주인수권행사 존재,
     fatal = 감사의견(거절·한정·부적정)·관리종목 존재.
     """
     items = []
@@ -272,24 +312,36 @@ def classify_dart(disclosures: list[dict]) -> dict:
     for d in disclosures:
         title = str(d.get("report_nm") or d.get("title") or "").strip()
         flat = re.sub(r"\s+", "", title)
+        cancelled = bool(_CANCEL.search(flat))
         labels: list[str] = []
         is_neg = False
-        for label, pat, is_overhang in _NEGATIVE:
-            if pat.search(flat):
-                labels.append(label)
-                is_neg = True
-                overhang = overhang or is_overhang
-                fatal = fatal or label in _FATAL
         is_pos = False
-        for label, pat in _POSITIVE:
-            if pat.search(flat) and "처분" not in flat:
-                labels.append(label)
-                is_pos = True
+        if cancelled:
+            # 호재를 무르는 공시(공급계약 해지 등)는 악재, 악재를 무르는 공시(관리종목 지정 해제·증자 철회)는 태그 없음
+            for label, pat in _POSITIVE:
+                if pat.search(flat) and "처분" not in flat:
+                    labels.append(f"{label} 해지·철회")
+                    is_neg = True
+            for label, pat, _ in _NEGATIVE:
+                if pat.search(flat):
+                    labels.append(f"{label} 해제·철회")
+        else:
+            for label, pat, is_overhang in _NEGATIVE:
+                if pat.search(flat):
+                    labels.append(label)
+                    is_neg = True
+                    overhang = overhang or is_overhang
+                    fatal = fatal or label in _FATAL
+            for label, pat in _POSITIVE:
+                if pat.search(flat) and "처분" not in flat:
+                    labels.append(label)
+                    is_pos = True
         tag = "negative" if is_neg else ("positive" if is_pos else None)
         pos += tag == "positive"
         neg += tag == "negative"
         items.append({"title": title, "rcept_dt": d.get("rcept_dt"), "rcept_no": d.get("rcept_no"),
-                      "url": d.get("url"), "tag": tag, "labels": labels, "corrected": "정정" in flat})
+                      "url": d.get("url"), "tag": tag, "labels": labels, "corrected": "정정" in flat,
+                      "cancelled": cancelled})
     return {"items": items, "positive_count": pos, "negative_count": neg, "overhang": overhang, "fatal": fatal}
 
 
@@ -323,14 +375,14 @@ def peer_valuation(target: dict, peers: list[dict]) -> dict:
 # ---------------------------------------------------------------- 분기 이익 흐름
 
 def earnings_trend(quarters: list[dict]) -> dict:
-    """최근 4개 분기(stac_yymm 오름차순) 영업이익 증가율 나열. 최근 3개 값이 연속 상승이면 가속, 연속 하락이면 감속
-    (값 3개 미만이면 None)."""
+    """최근 4개 분기(stac_yymm 오름차순) 영업이익 증가율 나열. 최근 3개 분기 값이 연속 상승이면 가속, 연속 하락이면 감속
+    (분기 3개 미만이거나 최근 3개 중 값 없는 분기가 끼면 None — 연속이 아니므로 판정하지 않음)."""
     qs = sorted((q for q in quarters if q.get("stac_yymm")), key=lambda q: str(q["stac_yymm"]))[-4:]
     rows = [{"stac_yymm": str(q["stac_yymm"]), "op_growth": _r(q.get("op_growth")),
              "sales_growth": _r(q.get("sales_growth")), "ni_growth": _r(q.get("ni_growth"))} for q in qs]
     series = [r["op_growth"] for r in rows]
-    vals = [v for v in series if v is not None][-3:]
-    if len(vals) < 3:
+    vals = series[-3:]
+    if len(vals) < 3 or None in vals:
         acc = dec = None
     else:
         acc = vals[0] < vals[1] < vals[2]
