@@ -71,6 +71,8 @@ export interface SurgeStock {
   /** KIS 마스터 업종 이름 */
   sector_name: string | null
   note?: SurgeNote | null
+  /** 거르기·정렬 뒤 전체 순위(쪽이 바뀌어도 이어짐) */
+  rank?: number
 }
 
 export interface ThemeGroup {
@@ -136,12 +138,28 @@ export interface ListParams {
   dart_only?: boolean
   sort?: SurgeSort
   order?: 'asc' | 'desc'
+  page?: number
+  page_size?: number
 }
 
-export interface ListResult {
+/** 서버 쪽 나누기 정보(1부터) */
+export interface PageMeta {
+  total: number
+  page: number
+  page_size: number
+  pages: number
+}
+
+export interface ListResult extends PageMeta {
   date: string
   theme_source: string | null
   items: SurgeStock[]
+}
+
+export interface GroupPage extends PageMeta {
+  date: string
+  theme_source: string | null
+  items: ThemeGroup[]
 }
 
 export const listDates = async (): Promise<SurgeDate[]> => (await http.get<SurgeDate[]>(`${BASE}/dates`)).data
@@ -149,8 +167,8 @@ export const listDates = async (): Promise<SurgeDate[]> => (await http.get<Surge
 export const listStocks = async (params: ListParams): Promise<ListResult> =>
   (await http.get<ListResult>(BASE, { params })).data
 
-export const listGroups = async (date: string): Promise<ThemeGroup[]> =>
-  (await http.get<ThemeGroup[]>(`${BASE}/groups`, { params: { date } })).data
+export const listGroups = async (date: string, page = 1, pageSize = 20): Promise<GroupPage> =>
+  (await http.get<GroupPage>(`${BASE}/groups`, { params: { date, page, page_size: pageSize } })).data
 
 export const getStockDetail = async (date: string, ticker: string): Promise<StockDetail> =>
   (await http.get<StockDetail>(`${BASE}/${date}/stocks/${encodeURIComponent(ticker)}`)).data

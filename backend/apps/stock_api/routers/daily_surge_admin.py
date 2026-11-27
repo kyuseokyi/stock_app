@@ -72,15 +72,20 @@ async def list_dates(limit: int = Query(60, ge=1, le=250), _a: User = Depends(_v
 async def list_stocks(date: Date, mode: Mode = "surge", band: Band = "all",
                       market: Literal["ALL", "KOSPI", "KOSDAQ"] = "ALL", dart_only: bool = False,
                       sort: Sort | None = None, order: Literal["asc", "desc"] | None = None,
+                      page: int = Query(1, ge=1), page_size: int = Query(30, ge=5, le=100),
                       _a: User = Depends(_view), db: AsyncSession = Depends(get_db)):
     return await svc.list_stocks(db, date, mode=mode, band=band, market=market, dart_only=dart_only,
-                                 sort=sort, order=order)
+                                 sort=sort, order=order, page=page, page_size=page_size)
 
 
 @router.get("/groups")
-async def list_groups(date: Date, direction: Direction | None = None, _a: User = Depends(_view),
+async def list_groups(date: Date, direction: Direction | None = None, page: int | None = Query(None, ge=1),
+                      page_size: int = Query(20, ge=5, le=100), _a: User = Depends(_view),
                       db: AsyncSession = Depends(get_db)):
-    return await svc.groups(db, date, direction)
+    # page 없이 부르면 예전처럼 배열 전체(이미 배포된 화면 호환), page 를 주면 {items, total, page, …}
+    if page is None:
+        return await svc.groups(db, date, direction)
+    return await svc.groups_page(db, date, direction, page=page, page_size=page_size)
 
 
 @router.get("/news")

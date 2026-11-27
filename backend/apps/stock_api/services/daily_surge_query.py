@@ -106,8 +106,18 @@ async def _theme_source(db: AsyncSession, d: date) -> str | None:
                            .where(DailySurgeThemeGroup.trade_date == d).limit(1))
 
 
+def _page(items: list, page: int, page_size: int) -> tuple[list, dict]:
+    """1부터 세는 쪽. 범위를 넘으면 마지막 쪽으로 맞춘다(목록이 줄어든 뒤 남은 쪽 번호 대비)."""
+    total = len(items)
+    pages = max(1, -(-total // page_size))
+    page = min(max(1, page), pages)
+    start = (page - 1) * page_size
+    return items[start:start + page_size], {"total": total, "page": page, "page_size": page_size, "pages": pages}
+
+
 async def list_stocks(db: AsyncSession, d: date, *, mode: str, band: str = "all", market: str = "ALL",
-                      dart_only: bool = False, sort: str | None = None, order: str | None = None) -> dict:
+                      dart_only: bool = False, sort: str | None = None, order: str | None = None,
+                      page: int = 1, page_size: int = 30) -> dict:
     stocks = (await db.scalars(select(DailySurgeStock).where(DailySurgeStock.trade_date == d))).all()
     picked = [s for s in stocks if _in_mode(s, mode)]
     if mode != "value":
@@ -126,12 +136,16 @@ async def list_stocks(db: AsyncSession, d: date, *, mode: str, band: str = "all"
         return (v is None, -(v or 0) if desc else (v or 0), s.ticker)
 
     picked.sort(key=_key)
+    ranks = {s.ticker: i for i, s in enumerate(picked, 1)}  # 거르기·정렬 뒤 전체 순위(쪽이 바뀌어도 이어짐)
+    shown, meta = _page(picked, page, page_size)
     notes = await _notes(db, d)
-    items = [{**stock_out(s), "note": note_for(s, notes)} for s in picked]
-    return {"date": d.isoformat(), "theme_source": await _theme_source(db, d) if stocks else None, "items": items}
+    items = [{**stock_out(s), "note": note_for(s, notes), "rank": ranks[s.ticker]} for s in shown]
+    return {"date": d.isoformat(), "theme_source": await _theme_source(db, d) if stocks else None, "items": items,
+            **meta}
 
 
 async def groups(db: AsyncSession, d: date, direction: str | None = None) -> list[dict]:
+    """방향별 묶음 전체(정렬됨) — 화면 쪽 나누기는 groups_page."""
     stmt = select(DailySurgeThemeGroup).where(DailySurgeThemeGroup.trade_date == d)
     if direction:
         stmt = stmt.where(DailySurgeThemeGroup.direction == direction)
@@ -253,3 +267,12 @@ async def name_for(db: AsyncSession, d: date, kind: str, target: str) -> str | N
         return None
     return await db.scalar(select(DailySurgeThemeGroup.theme_name).where(
         DailySurgeThemeGroup.trade_date == d, DailySurgeThemeGroup.theme_id == int(target)).limit(1))
+
+
+async def groups_page(db: AsyncSession, d: date, direction: str | None = None, *, page: int = 1,
+                      page_size: int = 20) -> dict:
+    """묶음 목록 한 쪽 + 전체 수. 급등 묶음이 먼저(정렬은 groups 와 같음)."""
+    rows = await groups(db, d, direction)
+    shown, meta = _page(rows, page, page_size)
+    theme_source = rows[0]["theme_source"] if rows else None
+    return {"date": d.isoformat(), "theme_source": theme_source, "items": shown, **meta}
