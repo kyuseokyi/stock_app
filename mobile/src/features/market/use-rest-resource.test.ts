@@ -10,7 +10,9 @@ import { useRestResource } from './use-rest-resource';
 
 function wrapper() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
-  return ({ children }: { children: ReactNode }) => createElement(QueryClientProvider, { client: qc }, children);
+  return function QueryWrapper({ children }: { children: ReactNode }) {
+    return createElement(QueryClientProvider, { client: qc }, children);
+  };
 }
 
 function deferred<T>() {
