@@ -179,12 +179,12 @@ def fake_repo(monkeypatch):
     monkeypatch.setattr(repo, "load_breadth_rows",
                         lambda s, m, d: [{"close": 10.0, "ma20": 9.0, "ma50": 9.0}] * 7
                         + [{"close": 10.0, "ma20": 11.0, "ma50": 11.0}] * 3)
-    monkeypatch.setattr(repo, "load_fundamentals", lambda t: {
+    monkeypatch.setattr(repo, "load_fundamentals", lambda t, as_of=None: {
         "annual": {"period": "Y", "stac_yymm": "202512", "eps": 22.95, "bps": 100.0, "roe": 15.0,
                    "sales_growth": 1.0, "op_growth": 2.0, "ni_growth": 3.0, "debt_ratio": 50.0},
         "quarters": [{"stac_yymm": f"2026{m:02d}", "op_growth": g, "sales_growth": 1.0, "ni_growth": 1.0,
                       "debt_ratio": 50.0} for m, g in ((3, 5.0), (6, 10.0), (9, 20.0))]})
-    monkeypatch.setattr(repo, "load_sector_peers", lambda s, d: [
+    monkeypatch.setattr(repo, "load_sector_peers", lambda s, cd, pd, as_of=None: [
         {"ticker": "A", "close": 100.0, "eps": 10.0, "bps": 50.0, "roe": 10.0}])
     monkeypatch.setattr(repo, "load_dart", lambda t, as_of=None: [
         {"report_nm": "주요사항보고서(전환사채권발행결정)", "rcept_no": "1", "rcept_dt": "20261120", "url": "u"}])
@@ -257,18 +257,88 @@ def test_repository_bars_and_fundamentals_shape():
     assert "FINAL" in ch.calls[0][0]
 
 
-def test_repository_sector_peers_two_queries():
+def test_repository_sector_peers_closes_from_daily_prices_on_price_date():
     from datetime import date
 
     from apps.ai_analyst.skills import quant_repository as repo
 
-    ch = _CH([("A", 100.0), ("B", 50.0)], [("A", 10.0, 50.0, 12.0)])
-    peers = repo.load_sector_peers("0013", date(2026, 11, 26), client=ch)
+    cd, pd = date(2026, 11, 25), date(2026, 11, 26)
+    ch = _CH([("A",), ("B",), ("C",)], [("A", 100.0), ("B", 50.0)], [("A", 10.0, 50.0, 12.0)])
+    peers = repo.load_sector_peers("0013", cd, pd, client=ch)
     assert peers == [{"ticker": "A", "close": 100.0, "eps": 10.0, "bps": 50.0, "roe": 12.0},
-                     {"ticker": "B", "close": 50.0, "eps": None, "bps": None, "roe": None}]
-    assert len(ch.calls) == 2 and all("FINAL" in c[0] for c in ch.calls)
-    assert "LIMIT 1 BY ticker" in ch.calls[1][0]
-    assert repo.load_sector_peers("", date(2026, 11, 26), client=_CH()) == []
+                     {"ticker": "B", "close": 50.0, "eps": None, "bps": None, "roe": None}]  # C 는 그날 일봉 없음
+    assert len(ch.calls) == 3 and all("FINAL" in c[0] for c in ch.calls)
+    assert "canslim_daily" in ch.calls[0][0] and ch.calls[0][1]["d"] == cd
+    assert "daily_prices" in ch.calls[1][0] and ch.calls[1][1]["d"] == pd
+    assert "LIMIT 1 BY ticker" in ch.calls[2][0] and "stac_yymm <=" not in ch.calls[2][0]
+    assert repo.load_sector_peers("", cd, pd, client=_CH()) == []
+
+
+def test_repository_sector_peers_as_of_cutoff():
+    from datetime import date
+
+    from apps.ai_analyst.skills import quant_repository as repo
+
+    ch = _CH([("A",)], [("A", 100.0)], [])
+    repo.load_sector_peers("0013", date(2026, 3, 30), date(2026, 3, 31), as_of=date(2026, 3, 31), client=ch)
+    sql, params = ch.calls[2]
+    assert "stac_yymm <= %(ym)s" in sql and params["ym"] == "202512"  # 3/31 − 90일 = 12/31(월말) → 202512
+
+
+@pytest.mark.parametrize("as_of,period,expected", [
+    ("2026-03-31", "Y", "202512"),   # 90일 전 = 2025-12-31(월말) → 12월 결산 사용 가능
+    ("2026-03-30", "Y", "202511"),   # 90일 전 = 2025-12-30 → 12월은 아직
+    ("2026-05-15", "Q", "202603"),   # 45일 전 = 2026-03-31(월말)
+    ("2026-05-14", "Q", "202602"),
+])
+def test_cutoff_yymm_boundaries(as_of, period, expected):
+    from datetime import date
+
+    from apps.ai_analyst.skills import quant_repository as repo
+
+    assert repo.cutoff_yymm(date.fromisoformat(as_of), period) == expected
+
+
+def test_repository_fundamentals_as_of_excludes_future():
+    from datetime import date
+
+    from apps.ai_analyst.skills import quant_repository as repo
+
+    rows = [("Y", "202612", 9, 9, 9, 9, 9, 9, 9), ("Q", "202609", 1, 1, 1, 1, 30.0, 1, 1),
+            ("Q", "202606", 1, 1, 1, 1, 20.0, 1, 1), ("Y", "202512", 8, 8, 8, 8, 8, 8, 8),
+            ("Q", "202603", 1, 1, 1, 1, 10.0, 1, 1), ("Q", "202512", 1, 1, 1, 1, 5.0, 1, 1)]
+    f = repo.load_fundamentals("005930", as_of=date(2026, 8, 14), client=_CH(list(rows)))
+    # 연간 컷 = 2026-05-16 이전 월말 → 202604, 분기 컷 = 2026-06-30 → 202606
+    assert f["annual"]["stac_yymm"] == "202512"
+    assert [q["stac_yymm"] for q in f["quarters"]] == ["202512", "202603", "202606"]
+    latest = repo.load_fundamentals("005930", client=_CH(list(rows)))  # as_of 없으면 최신 그대로
+    assert latest["annual"]["stac_yymm"] == "202612" and latest["quarters"][-1]["stac_yymm"] == "202609"
+
+
+class _Dart:
+    def __init__(self):
+        self.calls: list = []
+
+    def disclosures(self, t, days=90):
+        self.calls.append(("recent", t, days))
+        return []
+
+    def disclosures_between(self, t, bgn, end):
+        self.calls.append(("between", t, bgn, end))
+        return []
+
+
+def test_repository_dart_window(monkeypatch):
+    from datetime import date
+
+    from apps.ai_analyst.skills import quant_repository as repo
+
+    dart = _Dart()
+    monkeypatch.setattr(opendart, "get_opendart_client", lambda: dart)
+    assert repo.load_dart("005930") == []
+    assert repo.load_dart("005930", as_of=date(2026, 11, 26)) == []
+    assert dart.calls == [("recent", "005930", 90),
+                          ("between", "005930", date(2026, 8, 28), date(2026, 11, 25))]  # as_of 전날까지
 
 
 def test_repository_bars_zero_high_low_replaced_and_zero_close_dropped():
@@ -293,3 +363,42 @@ def test_catalog_uses_facts_match_preview_keys(fake_repo):
     keys = set(svc.quant_preview("005930"))
     for s in skill_loader.list_installed_skills():
         assert set(s["uses_facts"]) <= keys, (s["id"], set(s["uses_facts"]) - keys)
+
+
+def test_service_split_cut_marks_and_trims(fake_repo, monkeypatch):
+    from datetime import date, timedelta
+
+    from apps.ai_analyst.skills import quant_repository as repo
+
+    d0 = date(2025, 1, 1)
+    closes = [1000.0] * 100 + [400.0] + [400.0 + i * 0.5 for i in range(1, 150)]  # 100번 봉 −60% 점프
+    bars = [{"date": d0 + timedelta(days=i), "open": c, "high": c, "low": c, "close": c, "volume": 1000.0}
+            for i, c in enumerate(closes)]
+    monkeypatch.setattr(repo, "load_daily_bars", lambda t, as_of=None: bars)
+    out = svc.quant_preview("005930")
+    assert out["split_cut"] == {"date": (d0 + timedelta(days=100)).isoformat(), "jump_pct": -60.0, "dropped": 100}
+    assert out["bars_used"] == 150
+    assert out["sepa"]["evaluable"] is False  # 잘린 뒤 200봉 미만
+
+
+def test_service_passes_as_of_to_fundamentals_and_peers(fake_repo, monkeypatch):
+    from datetime import date
+
+    from apps.ai_analyst.skills import quant_repository as repo
+
+    seen: dict = {}
+    orig_f, orig_p = repo.load_fundamentals, repo.load_sector_peers
+
+    def _f(t, as_of=None):
+        seen["fund"] = as_of
+        return orig_f(t, as_of)
+
+    def _p(s, cd, pd, as_of=None):
+        seen["peers"] = (cd, pd, as_of)
+        return orig_p(s, cd, pd, as_of)
+    monkeypatch.setattr(repo, "load_fundamentals", _f)
+    monkeypatch.setattr(repo, "load_sector_peers", _p)
+    out = svc.quant_preview("005930", as_of=date(2026, 9, 17))
+    assert seen["fund"] == date(2026, 9, 17)
+    assert seen["peers"] == (fake_repo, fake_repo, date(2026, 9, 17))  # 업종 종가 = 일봉 날짜 d
+    assert out["liquidity"]["canslim_date"] == fake_repo.isoformat()

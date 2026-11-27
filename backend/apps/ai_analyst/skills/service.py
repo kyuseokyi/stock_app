@@ -28,9 +28,10 @@ def quant_preview(ticker: str, capital: float = 10_000_000, risk_pct: float = 1.
                   as_of: date | None = None) -> dict | None:
     """종목 정량 팩트 묶음. 일봉이 없으면(없는 종목) None."""
     ticker = ticker.strip()
-    bars = repo.load_daily_bars(ticker, as_of)
-    if not bars:
+    raw = repo.load_daily_bars(ticker, as_of)
+    if not raw:
         return None
+    bars, split = Q.split_cut(raw)  # 수정주가 미반영 의심 점프 이전 구간은 버린다
     d = bars[-1]["date"]
     close = bars[-1]["close"]
     canslim = repo.load_canslim(ticker, d) or {}
@@ -50,11 +51,11 @@ def quant_preview(ticker: str, capital: float = 10_000_000, risk_pct: float = 1.
     except ValueError as e:
         position, position_error = None, str(e)
 
-    fund = repo.load_fundamentals(ticker)
+    fund = repo.load_fundamentals(ticker, as_of)
     annual = fund["annual"] or {}
     target = {"ticker": ticker, "close": close, "eps": annual.get("eps"), "bps": annual.get("bps"),
               "roe": annual.get("roe")}
-    peers = repo.load_sector_peers(sector, canslim["date"]) if sector and canslim.get("date") else []
+    peers = repo.load_sector_peers(sector, canslim["date"], d, as_of) if sector and canslim.get("date") else []
 
     disclosures = repo.load_dart(ticker, as_of)
     dart = {"available": disclosures is not None, "days": 90,
@@ -64,7 +65,7 @@ def quant_preview(ticker: str, capital: float = 10_000_000, risk_pct: float = 1.
     breadth = Q.compute_market_breadth(breadth_rows)
     return _jsonable({
         "ticker": ticker, "name": name, "market": market or None, "sector_m": sector or None,
-        "as_of": d, "close": close,
+        "as_of": d, "close": close, "bars_used": len(bars), "split_cut": split,
         "liquidity": {"rs": rs, "avg_value_20d": canslim.get("avg_value_20d"), "canslim_date": canslim.get("date")},
         "sepa": Q.compute_sepa_template(bars, rs),
         "backtest": Q.run_setup_backtest(bars),

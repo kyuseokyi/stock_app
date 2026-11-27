@@ -43,6 +43,8 @@
   - `peer_valuation(target, peers)` — 업종 중앙값 PER·PBR·ROE(EPS·BPS 양수만) 대비 괴리율, 표본 수.
   - `earnings_trend(quarters)` — 최근 4분기 영업이익 성장률 나열·가속 여부.
 - `quant_repository.py` — CH 일봉 520봉(FINAL), `canslim_daily` 최신(RS·업종·20일 평균 거래대금), `fundamentals_periodic`(연간 최신·분기 4개), 같은 업종 종목의 최신 연간 재무와 종가, 시장 폭용 그날 일봉 × 프로필(PG), DART 최근 90일(`OpenDartClient`, 키 없으면 생략).
+  - **과거 기준일(as_of) 미래 자료 차단(보수적 규칙)**: 재무는 결산월 말일이 as_of 보다 연간(Y) 90일·분기(Q) 45일 이상 이전인 것만, DART 는 as_of 전날까지. as_of 가 없으면(오늘 기준) 최신 재무·오늘까지 공시. 업종 비교 종가는 대상 종목 일봉 날짜의 `daily_prices FINAL` 종가.
+- 계산 보완(검토 반영): 하루 종가 변동 ±50% 초과 봉이 있으면 가장 최근 점프 이후 봉만 사용(`split_cut` 표시, 수정주가 미반영 방어), 백테스트 같은 셋업 쿨다운 5봉, 셋업 A 거래량 평균은 거래량 0 봉 제외·유효 15봉 이상, 분기 가속은 최근 3개 분기에 값 없는 분기가 끼면 판정 안 함, 해지·해제·철회·취소 공시는 호재 아님.
 - `service.py` — `quant_preview(ticker, capital, risk_pct, as_of=None)` 가 위를 묶어 JSON.
 - `router.py` — `/api/v1/admin/ai-skills`: `GET /catalog`, `GET /catalog/{id}`, `GET /quant-preview/{ticker}?capital&risk_pct`. stock_api 에 등록.
 
