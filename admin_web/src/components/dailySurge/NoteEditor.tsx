@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useMutation } from '@tanstack/react-query'
 import { deleteNote, putNote } from '../../api/dailySurge'
 import { apiErrorMessage } from '../../lib/apiError'
 import { showToast } from '../../lib/toast'
@@ -18,33 +19,30 @@ interface Props {
 export default function NoteEditor({ date, scope, target, value, inherited, onSaved }: Props) {
   const [editing, setEditing] = useState(false)
   const [text, setText] = useState(value ?? '')
-  const [busy, setBusy] = useState(false)
+  // 저장·지우기 — 성공 뒤 다시 받기는 부른 쪽(onSaved)이 정한다. 실패 안내 토스트는 그대로
+  const putM = useMutation({ mutationFn: (note: string) => putNote(date, scope, target, note) })
+  const deleteM = useMutation({ mutationFn: () => deleteNote(date, scope, target) })
+  const busy = putM.isPending || deleteM.isPending
 
   useEffect(() => { setText(value ?? ''); setEditing(false) }, [value, date, target])
 
   const save = async () => {
     if (!text.trim()) return
-    setBusy(true)
     try {
-      await putNote(date, scope, target, text.trim())
+      await putM.mutateAsync(text.trim())
       setEditing(false)
       onSaved()
     } catch (e) {
       showToast(apiErrorMessage(e), { icon: '⚠️' })
-    } finally {
-      setBusy(false)
     }
   }
 
   const remove = async () => {
-    setBusy(true)
     try {
-      await deleteNote(date, scope, target)
+      await deleteM.mutateAsync()
       onSaved()
     } catch (e) {
       showToast(apiErrorMessage(e), { icon: '⚠️' })
-    } finally {
-      setBusy(false)
     }
   }
 
