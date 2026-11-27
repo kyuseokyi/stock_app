@@ -243,6 +243,12 @@ def test_classify_dart_tags():
     assert "CB" in res["items"][6]["labels"]
 
 
+def test_classify_dart_unfaithful_disclosure_negative_not_overhang():
+    res = Q.classify_dart([{"report_nm": "불성실공시법인지정", "rcept_dt": "20261120", "rcept_no": "1"}])
+    assert res["items"][0]["tag"] == "negative"
+    assert res["overhang"] is False and res["fatal"] is False
+
+
 def test_classify_dart_positive_only():
     res = Q.classify_dart([{"report_nm": "[기재정정]단일판매ㆍ공급계약체결", "rcept_dt": "20261120",
                             "rcept_no": "1"}])

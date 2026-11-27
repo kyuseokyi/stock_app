@@ -256,6 +256,7 @@ _NEGATIVE = [
     ("신주인수권행사", re.compile(r"신주인수권행사"), True),
     ("감사의견", re.compile(r"감사의견.*(거절|한정|부적정)|의견거절"), False),
     ("관리종목", re.compile(r"관리종목"), False),
+    ("불성실공시", re.compile(r"불성실공시"), False),
 ]
 _FATAL = {"감사의견", "관리종목"}
 

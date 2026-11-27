@@ -269,3 +269,27 @@ def test_repository_sector_peers_two_queries():
     assert len(ch.calls) == 2 and all("FINAL" in c[0] for c in ch.calls)
     assert "LIMIT 1 BY ticker" in ch.calls[1][0]
     assert repo.load_sector_peers("", date(2026, 11, 26), client=_CH()) == []
+
+
+def test_repository_bars_zero_high_low_replaced_and_zero_close_dropped():
+    from datetime import date
+
+    from apps.ai_analyst.skills import quant_repository as repo
+
+    ch = _CH([(date(2026, 11, 26), 0, 0, 0, 100.0, 0),      # 거래정지일 — 고가·저가 0
+              (date(2026, 11, 25), 0, 0, 0, 0, 0),          # 종가도 0 → 버림
+              (date(2026, 11, 24), 99, 105, 95, 101.0, 10)])
+    bars = repo.load_daily_bars("005930", client=ch)
+    assert [b["date"] for b in bars] == [date(2026, 11, 24), date(2026, 11, 26)]
+    assert bars[-1] == {"date": date(2026, 11, 26), "open": 100.0, "high": 100.0, "low": 100.0,
+                        "close": 100.0, "volume": 0.0}
+    assert bars[0]["low"] == 95.0
+
+
+def test_catalog_uses_facts_match_preview_keys(fake_repo):
+    """계약 — 카탈로그 uses_facts 키는 모두 quant_preview 결과의 최상위 키여야 한다(B단계 프롬프트 조립용)."""
+    from apps.ai_analyst.skills import skill_loader
+
+    keys = set(svc.quant_preview("005930"))
+    for s in skill_loader.list_installed_skills():
+        assert set(s["uses_facts"]) <= keys, (s["id"], set(s["uses_facts"]) - keys)

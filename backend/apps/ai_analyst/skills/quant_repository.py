@@ -32,8 +32,17 @@ def load_daily_bars(ticker: str, as_of: date | None = None, limit: int = BARS_LI
     where = "ticker = %(t)s" + (" AND date <= %(d)s" if as_of else "")
     rows = _rows(f"SELECT date, open, high, low, close, volume FROM {CLICKHOUSE_DB}.daily_prices FINAL "
                  f"WHERE {where} ORDER BY date DESC LIMIT %(n)s", {"t": ticker, "d": as_of, "n": int(limit)}, client)
-    return [{"date": d, "open": float(o or 0), "high": float(h or 0), "low": float(lo or 0), "close": float(c or 0),
-             "volume": float(v or 0)} for d, o, h, lo, c, v in reversed(rows)]
+    out: list[dict] = []
+    for d, o, h, lo, c, v in reversed(rows):
+        close = float(c or 0)
+        if close <= 0:  # 종가 없는 봉은 버린다
+            continue
+        # 거래정지일 등 시가·고가·저가가 0 인 봉 — 0 이 52주 최저·MAE·10봉 최저를 왜곡하지 않게 종가로 대체
+        hi = float(h) if h and h > 0 else close
+        low = float(lo) if lo and lo > 0 else close
+        out.append({"date": d, "open": float(o) if o and o > 0 else close, "high": max(hi, close),
+                    "low": min(low, close), "close": close, "volume": float(v or 0)})
+    return out
 
 
 def load_canslim(ticker: str, as_of: date, client=None) -> dict | None:
