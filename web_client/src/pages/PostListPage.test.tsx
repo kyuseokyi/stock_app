@@ -4,7 +4,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react'
 import { Route, Routes } from 'react-router-dom'
-import { deferred, renderWithClient } from '../test/query'
+import { deferred, refetchActiveFailing, renderWithClient } from '../test/query'
 import type { BlogListOut } from '../types/api'
 
 const listBlogs = vi.fn<(p: { boardId?: number; page?: number; size?: number }) => Promise<BlogListOut>>()
@@ -88,5 +88,15 @@ describe('PostListPage', () => {
     await waitFor(() => expect(screen.getByText('1 / 3')).toBeTruthy())
     expect(screen.getByText('1쪽 글')).toBeTruthy()
     expect(screen.getByText(/게시글을 불러오지 못했어요\./)).toBeTruthy()
+  })
+
+  it('캐시된 데이터가 있을 때 재조회가 실패해도 목록이 그대로', async () => {
+    listBlogs.mockResolvedValue(page(1, 1, ['첫 글']))
+    const { client } = renderWithClient(ui, { route: '/boards/3' })
+    await screen.findByText('첫 글')
+    await refetchActiveFailing(client, () => listBlogs.mockRejectedValue(new Error('x')))
+    expect(listBlogs).toHaveBeenCalledTimes(2)
+    expect(screen.getByText('첫 글')).toBeTruthy()
+    expect(screen.queryByText(/게시글을 불러오지 못했어요\./)).toBeNull()
   })
 })

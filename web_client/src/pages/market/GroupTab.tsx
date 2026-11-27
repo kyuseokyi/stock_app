@@ -49,7 +49,9 @@ export default function GroupTab({ kind }: { kind: GroupKind }) {
   const date = query.data !== undefined ? query.data.date : lastDate
   const total = query.data?.total ?? 0
   const items = query.data ? (more.key === condKey ? [...query.data.items, ...more.items] : query.data.items) : []
-  const state: 'loading' | 'ready' | 'failed' = query.isPending ? 'loading' : query.isError ? 'failed' : 'ready'
+  // 받은 데이터가 있으면 재조회가 실패해도 그대로 보인다 — 오류 안내는 데이터가 없을 때만
+  const state: 'loading' | 'ready' | 'failed' =
+    query.data !== undefined ? 'ready' : query.isError && !query.isFetching ? 'failed' : 'loading'
   const fetchedAt = useQueryFetchedAt(query) // 마지막 조회가 끝난 시각(복귀 재조회 판정용)
 
   // 순위는 기준일(20:30 갱신)이 바뀔 때만 달라진다 — 탭 복귀 때 마지막 조회 후 10분이 지났으면 1회만 조용히 확인하고,

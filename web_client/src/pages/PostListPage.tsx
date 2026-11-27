@@ -40,7 +40,8 @@ export default function PostListPage() {
   if (query.data && query.data !== data) setData(query.data)
   const [error, setError] = useState('')
   const [seenError, setSeenError] = useState<unknown>(null)
-  if (query.error && query.error !== seenError) {
+  // 오류 안내는 보여 줄 데이터가 없을 때만(받아 둔 쪽을 다시 받다 실패하면 목록을 그대로 둔다)
+  if (query.error && query.data === undefined && query.error !== seenError) {
     setSeenError(query.error)
     setError(withErrorCode('게시글을 불러오지 못했어요.', query.error))
   }

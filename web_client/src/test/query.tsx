@@ -48,3 +48,15 @@ export async function returnToTabAfterIdle() {
     document.dispatchEvent(new Event('visibilitychange'))
   })
 }
+
+/** 캐시된 데이터가 있을 때 재조회가 실패하는 상황 — fail() 로 api 를 실패하게 바꾼 뒤 보이는 조회를 모두 다시 받는다 */
+export async function refetchActiveFailing(client: QueryClient, fail: () => void) {
+  fail()
+  await act(async () => {
+    await client.refetchQueries({ type: 'active' })
+  })
+  // Query 의 화면 알림은 setTimeout 으로 나간다 — 실패 상태가 화면에 반영될 때까지 한 박자 기다린다
+  await act(async () => {
+    await new Promise((r) => setTimeout(r, 30))
+  })
+}

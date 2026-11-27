@@ -3,7 +3,7 @@
 // 데이터 조회 방식을 바꿔도 이 테스트는 그대로 통과해야 한다.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react'
-import { deferred, renderWithClient, returnToTabAfterIdle } from '../../test/query'
+import { deferred, refetchActiveFailing, renderWithClient, returnToTabAfterIdle } from '../../test/query'
 import type { GroupItem, GroupRanking } from '../../types/market'
 
 type Args = [string, string, string, number?, number?]
@@ -104,6 +104,16 @@ describe('GroupTab', () => {
     await screen.findByText('불러오지 못했어요')
     await returnToTabAfterIdle()
     expect(await screen.findByText('테마back')).toBeTruthy()
+    expect(screen.queryByText('불러오지 못했어요')).toBeNull()
+  })
+
+  it('캐시된 데이터가 있을 때 재조회가 실패해도 목록이 그대로', async () => {
+    getMarketGroups.mockResolvedValue(ranking('2026-11-26', 1, ['a']))
+    const { client } = renderWithClient(<GroupTab kind="theme" />)
+    await screen.findByText('테마a')
+    await refetchActiveFailing(client, () => getMarketGroups.mockRejectedValue(new Error('x')))
+    expect(getMarketGroups).toHaveBeenCalledTimes(2)
+    expect(screen.getByText('테마a')).toBeTruthy()
     expect(screen.queryByText('불러오지 못했어요')).toBeNull()
   })
 })

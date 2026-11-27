@@ -2,7 +2,7 @@
 // 일정 탭 — 로딩·성공·오류·분류 바꾸기·탭 복귀 재조회. 데이터 조회 방식을 바꿔도 이 테스트는 그대로 통과해야 한다.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react'
-import { deferred, renderWithClient, returnToTabAfterIdle } from '../../test/query'
+import { deferred, refetchActiveFailing, renderWithClient, returnToTabAfterIdle } from '../../test/query'
 import type { CalendarEvent } from '../../types/market'
 
 const getMarketCalendar = vi.fn<(start: string, end: string, category?: string) => Promise<CalendarEvent[]>>()
@@ -72,6 +72,16 @@ describe('CalendarTab', () => {
     await waitFor(() => expect(getMarketCalendar).toHaveBeenCalledTimes(3))
     await new Promise((r) => setTimeout(r, 10))
     expect(screen.getByText('LG 청약')).toBeTruthy()
+    expect(screen.queryByText('일정을 불러오지 못했어요')).toBeNull()
+  })
+
+  it('캐시된 데이터가 있을 때 재조회가 실패해도 목록이 그대로', async () => {
+    getMarketCalendar.mockResolvedValue([ev('삼성 청약')])
+    const { client } = renderWithClient(<CalendarTab />)
+    await screen.findByText('삼성 청약')
+    await refetchActiveFailing(client, () => getMarketCalendar.mockRejectedValue(new Error('x')))
+    expect(getMarketCalendar).toHaveBeenCalledTimes(2)
+    expect(screen.getByText('삼성 청약')).toBeTruthy()
     expect(screen.queryByText('일정을 불러오지 못했어요')).toBeNull()
   })
 })
