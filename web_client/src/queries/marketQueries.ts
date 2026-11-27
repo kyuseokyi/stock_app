@@ -16,5 +16,7 @@ export const marketQueries = {
     queryOptions({
       queryKey: ['market', 'groups', kind, period, sort] as const,
       queryFn: () => getMarketGroups(kind, period, sort),
+      // 재연결 때 첫 쪽만 바꾸면 이어 붙인 쪽과 순서가 섞인다 — 지금처럼 재연결 재조회 없음
+      refetchOnReconnect: false,
     }),
 }

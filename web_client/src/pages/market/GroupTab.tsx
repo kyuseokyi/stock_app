@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react'
+import { useState } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import Card from '../../components/ui/Card'
 import EmptyState from '../../components/ui/EmptyState'
 import BasisNote from '../../components/market/BasisNote'
@@ -8,6 +9,8 @@ import GroupList from '../../components/market/GroupList'
 import { GROUP_PAGE, getMarketGroups } from '../../api/market'
 import { useMediaQuery } from '../../hooks/useMediaQuery'
 import { useReturnRefresh } from '../../hooks/useReturnRefresh'
+import { useQueryFetchedAt } from '../../hooks/useQueryFetchedAt'
+import { marketQueries } from '../../queries/marketQueries'
 import { closeBasisLabel } from '../../lib/format'
 import type { GroupItem, GroupKind } from '../../types/market'
 import PageHeader from '../../components/ui/PageHeader'
@@ -31,56 +34,41 @@ const TEXT: Record<GroupKind, { title: string; desc: string; empty: string }> = 
 export default function GroupTab({ kind }: { kind: GroupKind }) {
   const wide = useMediaQuery('(min-width: 1024px)')
   const [ctrl, setCtrl] = useState<GroupControlValue>({ period: '1d', sort: 'chg' })
-  const [date, setDate] = useState<string | null>(null)
-  const [items, setItems] = useState<GroupItem[]>([])
-  const [total, setTotal] = useState(0)
-  const [state, setState] = useState<'loading' | 'ready' | 'failed'>('loading')
   const [loadingMore, setLoadingMore] = useState(false)
   const [selected, setSelected] = useState<string | null>(null)
-  const fetchedAt = useRef<number | null>(null) // 마지막 조회가 끝난 시각(복귀 재조회 판정용)
-  const loadSeq = useRef(0) // 조건이 바뀌면 진행 중인 복귀 재조회 응답을 버린다
-
-  useEffect(() => {
-    let cancelled = false
-    loadSeq.current += 1
-    setState('loading')
-    getMarketGroups(kind, ctrl.period, ctrl.sort)
-      .then((r) => {
-        if (cancelled) return
-        setDate(r.date)
-        setItems(r.items)
-        setTotal(r.total)
-      })
-      .then(() => !cancelled && setState('ready'))
-      .catch(() => !cancelled && setState('failed'))
-      .finally(() => {
-        fetchedAt.current = Date.now()
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [kind, ctrl.period, ctrl.sort])
+  const qc = useQueryClient()
+  // 첫 쪽은 Query, '더 보기'로 이어 붙인 쪽은 화면이 들고 있다(조건이 바뀌면 비운다)
+  const groups = marketQueries.groups(kind, ctrl.period, ctrl.sort)
+  const query = useQuery(groups)
+  const condKey = groups.queryKey.join('|')
+  const [more, setMore] = useState<{ key: string; items: GroupItem[] }>({ key: condKey, items: [] })
+  if (more.key !== condKey) setMore({ key: condKey, items: [] })
+  const date = query.data?.date ?? null
+  const total = query.data?.total ?? 0
+  const items = query.data ? (more.key === condKey ? [...query.data.items, ...more.items] : query.data.items) : []
+  const state: 'loading' | 'ready' | 'failed' = query.isPending ? 'loading' : query.isError ? 'failed' : 'ready'
+  const fetchedAt = useQueryFetchedAt(query) // 마지막 조회가 끝난 시각(복귀 재조회 판정용)
 
   // 순위는 기준일(20:30 갱신)이 바뀔 때만 달라진다 — 탭 복귀 때 마지막 조회 후 10분이 지났으면 1회만 조용히 확인하고,
-  // 기준일이 같으면 더 불러온 목록을 그대로 둔다
+  // 기준일이 같으면 더 불러온 목록을 그대로 둔다. 실패는 삼키고 보이던 값을 둔다(그래서 refetch 대신 직접 받아 캐시에 넣는다)
   useReturnRefresh(async () => {
-    const seq = loadSeq.current
     try {
       const r = await getMarketGroups(kind, ctrl.period, ctrl.sort)
-      if (seq !== loadSeq.current || (state === 'ready' && r.date === date)) return
-      setDate(r.date)
-      setItems(r.items)
-      setTotal(r.total)
-      setState('ready')
+      const cur = qc.getQueryState(groups.queryKey)
+      if (cur?.status === 'success' && r.date === cur.data?.date) return
+      qc.setQueryData(groups.queryKey, r)
+      setMore((m) => (m.key === condKey ? { key: condKey, items: [] } : m))
     } finally {
       fetchedAt.current = Date.now()
     }
   }, fetchedAt)
 
   const loadMore = () => {
+    const key = condKey
     setLoadingMore(true)
     getMarketGroups(kind, ctrl.period, ctrl.sort, items.length)
-      .then((r) => setItems((cur) => [...cur, ...r.items]))
+      // 조건이 바뀐 뒤 늦게 온 응답은 새 목록에 붙이지 않는다
+      .then((r) => setMore((m) => (m.key === key ? { key, items: [...m.items, ...r.items] } : m)))
       .catch(() => undefined)
       .finally(() => setLoadingMore(false))
   }
