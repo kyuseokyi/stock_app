@@ -29,7 +29,7 @@ export default function SurgeStockTable({ items, selected, onSelect }: Props) {
         <tbody>
           {items.map((s, i) => (
             <tr key={s.ticker} className={`border-t border-line ${selected === s.ticker ? 'bg-brand-soft' : ''}`}>
-              <td className="px-3 py-2 text-ink-muted">{i + 1}</td>
+              <td className="px-3 py-2 text-ink-muted">{s.rank ?? i + 1}</td>
               <td className="px-3 py-1">
                 <button type="button" onClick={() => onSelect(s)} className="flex min-h-[44px] flex-col justify-center text-left">
                   <span className="font-bold text-ink">

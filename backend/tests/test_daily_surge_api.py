@@ -183,7 +183,8 @@ async def test_list_band_dart_market_sort(api, maker):
     kospi = (await client.get(BASE, params={"date": "2026-11-26", "mode": "surge", "market": "KOSPI"})).json()
     assert kospi["items"] == []
     empty = (await client.get(BASE, params={"date": "2026-01-02", "mode": "surge"})).json()
-    assert empty == {"date": "2026-01-02", "theme_source": None, "items": []}
+    assert empty == {"date": "2026-01-02", "theme_source": None, "items": [],
+                     "total": 0, "page": 1, "page_size": 30, "pages": 1}
     assert (await client.get(BASE, params={"date": "2026-11-26", "mode": "nope"})).status_code == 422
 
 
@@ -336,3 +337,30 @@ async def test_theme_note_target_must_be_number(api, maker):
     assert (await client.put(f"{BASE}/notes", json=bad)).status_code == 422
     ok = {**bad, "scope": "stock", "target": "A"}
     assert (await client.put(f"{BASE}/notes", json=ok)).status_code == 200
+
+
+
+async def test_list_paging(api, maker):
+    client, state = api
+    state["user"] = await _seed(maker)
+    first = (await client.get(BASE, params={"date": "2026-11-26", "mode": "surge", "page_size": 5})).json()
+    assert (first["total"], first["page"], first["pages"], first["page_size"]) == (3, 1, 1, 5)
+    async with maker() as s:  # 급등 12개 더 → 15개
+        s.add_all([_stock(f"S{i:02d}", 11.0 + i * 0.1, 100.0 + i, surge=True) for i in range(12)])
+        await s.commit()
+    p2 = (await client.get(BASE, params={"date": "2026-11-26", "mode": "surge", "page_size": 5, "page": 2})).json()
+    assert (p2["total"], p2["page"], p2["pages"]) == (15, 2, 3) and len(p2["items"]) == 5
+    assert [i["rank"] for i in p2["items"]] == [6, 7, 8, 9, 10]  # 순위는 쪽이 바뀌어도 이어짐
+    over = (await client.get(BASE, params={"date": "2026-11-26", "mode": "surge", "page_size": 5, "page": 9})).json()
+    assert over["page"] == 3 and len(over["items"]) == 5  # 범위를 넘으면 마지막 쪽
+    assert (await client.get(BASE, params={"date": "2026-11-26", "mode": "surge", "page_size": 500})).status_code == 422
+
+
+async def test_groups_paging_and_legacy_array(api, maker):
+    client, state = api
+    state["user"] = await _seed(maker)
+    legacy = (await client.get(f"{BASE}/groups", params={"date": "2026-11-26"})).json()
+    assert isinstance(legacy, list) and len(legacy) == 2  # page 없이 부르면 예전 배열 그대로
+    paged = (await client.get(f"{BASE}/groups", params={"date": "2026-11-26", "page": 1, "page_size": 5})).json()
+    assert paged["total"] == 2 and [g["direction"] for g in paged["items"]] == ["up", "down"]
+    assert paged["theme_source"] == "kiwoom"

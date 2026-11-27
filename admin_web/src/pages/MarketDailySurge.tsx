@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   listDates, listGroups, listStocks, rebuild,
-  type SurgeBand, type SurgeDate, type SurgeMode, type SurgeSort, type SurgeStock, type ThemeGroup,
+  type PageMeta, type SurgeBand, type SurgeDate, type SurgeMode, type SurgeSort, type SurgeStock, type ThemeGroup,
 } from '../api/dailySurge'
+import Pagination from '../components/Pagination'
 import DetailPanel, { type Selection } from '../components/dailySurge/DetailPanel'
 import SurgeStockTable from '../components/dailySurge/SurgeStockTable'
 import ThemeGroupList from '../components/dailySurge/ThemeGroupList'
 import PageHeader from '../leaders/components/ui/PageHeader'
+import { useMediaQuery } from '../leaders/hooks/useMediaQuery'
 import { chipClass } from '../leaders/components/ui/Chip'
 import { apiErrorDetail, apiErrorMessage } from '../lib/apiError'
 import { THEME_SOURCE_LABEL, weekday } from '../lib/dailySurge'
@@ -17,6 +19,9 @@ import { useMeStore } from '../store/me'
 // 관리자 '급등락·테마 분석' — 날짜별 급등·급락·거래대금 상위, 같은 테마 동반 급등락 묶음(대장주), 공시, 이유 메모,
 // 네이버 뉴스 바로 보기. 설계 docs/superpowers/specs/2026-11-26-daily-surge-theme-analyzer-design.md
 type View = 'groups' | SurgeMode
+const STOCK_PAGE_SIZE = 30
+const GROUP_PAGE_SIZE = 20
+const EMPTY_META: PageMeta = { total: 0, page: 1, page_size: STOCK_PAGE_SIZE, pages: 1 }
 
 const VIEWS: { id: View; label: string; count?: (d: SurgeDate) => number }[] = [
   { id: 'groups', label: '테마 묶음', count: (d) => d.group_count },
@@ -38,6 +43,11 @@ const SORTS: { id: '' | SurgeSort; label: string }[] = [
 
 export default function MarketDailySurge() {
   const canRebuild = hasPermission(useMeStore((s) => s.user), 'DATA_PIPELINE')
+  // 넓은 화면은 오른쪽 상세 패널, 좁은 화면(모바일·태블릿)은 누를 때만 전체 화면 상세(목록 위치·거르기 유지)
+  const wide = useMediaQuery('(min-width: 1024px)')
+  const [sheetOpen, setSheetOpen] = useState(false)
+  const [page, setPage] = useState(1)
+  const [meta, setMeta] = useState<PageMeta>(EMPTY_META)
   const [dates, setDates] = useState<SurgeDate[]>([])
   const [date, setDate] = useState<string | null>(null)
   const [view, setView] = useState<View>('groups')
@@ -71,24 +81,37 @@ export default function MarketDailySurge() {
     setState('loading')
     try {
       if (view === 'groups') {
-        const g = await listGroups(date)
+        const r = await listGroups(date, page, GROUP_PAGE_SIZE)
+        const g = r.items
         setGroups(g)
-        setThemeSource(g[0]?.theme_source ?? null)
-        setSelection((cur) => (cur?.kind === 'theme' ? cur : g[0] ? { kind: 'theme', themeId: g[0].theme_id, direction: g[0].direction } : null))
+        setMeta(r)
+        setThemeSource(r.theme_source)
+        // 넓은 화면만 첫 항목을 미리 열어 둔다(좁은 화면은 누를 때 전체 화면으로)
+        setSelection((cur) => (cur?.kind === 'theme' || !wide ? cur
+          : g[0] ? { kind: 'theme', themeId: g[0].theme_id, direction: g[0].direction } : null))
       } else {
-        const r = await listStocks({ date, mode: view, band, dart_only: dartOnly, sort: sort || undefined })
+        const r = await listStocks({ date, mode: view, band, dart_only: dartOnly, sort: sort || undefined,
+          page, page_size: STOCK_PAGE_SIZE })
         setStocks(r.items)
+        setMeta(r)
         setThemeSource(r.theme_source)
         setSelection((cur) => (cur?.kind === 'stock' && r.items.some((s) => s.ticker === cur.ticker)
-          ? cur : r.items[0] ? { kind: 'stock', ticker: r.items[0].ticker } : null))
+          ? cur : wide && r.items[0] ? { kind: 'stock', ticker: r.items[0].ticker } : cur))
       }
       setState('ok')
     } catch {
       setState('failed')
     }
-  }, [date, view, band, dartOnly, sort])
+  }, [date, view, band, dartOnly, sort, page, wide])
 
+  // 날짜·보기·거르기·정렬이 바뀌면 첫 쪽부터
+  useEffect(() => { setPage(1) }, [date, view, band, dartOnly, sort])
   useEffect(() => { void load() }, [load])
+
+  const open = (next: Selection) => {
+    setSelection(next)
+    if (!wide) setSheetOpen(true)
+  }
 
   const idx = useMemo(() => dates.findIndex((d) => d.date === date), [dates, date])
   const current = idx >= 0 ? dates[idx] : null
@@ -189,16 +212,37 @@ export default function MarketDailySurge() {
             {state === 'ok' && view === 'groups' && (
               <ThemeGroupList groups={groups}
                 selected={selection?.kind === 'theme' ? { themeId: selection.themeId, direction: selection.direction } : null}
-                onSelect={(g) => setSelection({ kind: 'theme', themeId: g.theme_id, direction: g.direction })} />
+                onSelect={(g) => open({ kind: 'theme', themeId: g.theme_id, direction: g.direction })} />
             )}
             {state === 'ok' && view !== 'groups' && (
               <SurgeStockTable items={stocks} selected={selection?.kind === 'stock' ? selection.ticker : null}
-                onSelect={(s) => setSelection({ kind: 'stock', ticker: s.ticker })} />
+                onSelect={(s) => open({ kind: 'stock', ticker: s.ticker })} />
+            )}
+            {state === 'ok' && (
+              <Pagination page={meta.page} pages={meta.pages} total={meta.total}
+                unit={view === 'groups' ? '개 묶음' : '종목'}
+                onChange={(p) => { setPage(p); window.scrollTo({ top: 0, behavior: 'smooth' }) }} />
             )}
           </div>
-          <aside className="min-w-0 flex-[1_1_420px] rounded-card bg-surface p-4" aria-label="상세">
+          {wide && (
+            <aside className="min-w-0 flex-[1_1_420px] rounded-card bg-surface p-4" aria-label="상세">
+              <DetailPanel date={date} selection={selection} onChanged={() => void load()} />
+            </aside>
+          )}
+        </div>
+      )}
+
+      {!wide && sheetOpen && date && (
+        <div role="dialog" aria-modal="true" aria-label="상세"
+          className="fixed inset-0 z-50 flex flex-col overflow-hidden bg-canvas">
+          <div className="flex items-center justify-between gap-2 border-b border-line bg-surface px-4 py-2">
+            <strong className="text-sm text-ink">상세</strong>
+            <button type="button" onClick={() => setSheetOpen(false)} autoFocus
+              className="h-11 min-w-[44px] rounded-btn bg-fill px-4 text-sm font-medium text-ink">닫기</button>
+          </div>
+          <div className="flex-1 overflow-y-auto p-4">
             <DetailPanel date={date} selection={selection} onChanged={() => void load()} />
-          </aside>
+          </div>
         </div>
       )}
     </div>
