@@ -2,38 +2,61 @@
 
 @plugin '@tailwindcss/typography';
 
-@theme {
+/*
+  토큰 — 기존 이름(brand·ink·surface…)은 v3 tailwind.config.js 와 같은 이름·같은 값(라이트 기준).
+  shadcn/ui 시맨틱 이름(background·primary·muted…)은 같은 CSS 변수에 연결한다.
+  관리자 기존 화면은 기본 팔레트(slate·indigo)를 그대로 쓴다. sky 는 기본 팔레트에 sky-soft 만 더한다.
+*/
+:root {
+  --background: #f7f5ff; --foreground: #25223a;
+  --card: #ffffff; --card-foreground: #25223a;
+  --popover: #ffffff; --popover-foreground: #25223a;
+  --primary: #4963c1; --primary-soft: #e2ecff; --primary-foreground: #ffffff;
+  --secondary: #efebfb; --secondary-foreground: #25223a;
+  --muted: #efebfb; --muted-foreground: #6a6681;
+  --accent: #aa5278; --accent-foreground: #ffffff;
+  --up: #b6265d; --up-soft: #fbd6e4; --down: #3c5dc1; --down-soft: #d8e3fd;
+  --destructive: #a14f09; --destructive-soft: #fde7d4;
+  --border: #ebe7f7; --input: #efebfb; --ring: #6f8ef0;
+}
+/* 다크 값은 정의만 — dark 클래스를 붙이는 곳이 아직 없다(Phase 6) */
+.dark {
+  --background: #1a1826; --foreground: #f3f1fa;
+  --card: #24212f; --card-foreground: #f3f1fa;
+  --popover: #24212f; --popover-foreground: #f3f1fa;
+  --primary: #9fb4f7; --primary-soft: #2a3150; --primary-foreground: #1a1826;
+  --secondary: #2c2839; --secondary-foreground: #f3f1fa;
+  --muted: #2c2839; --muted-foreground: #a6a1bd;
+  --accent: #f0a0c0;
+  --up: #ff7aa2; --up-soft: #3d2230; --down: #8aa4ff; --down-soft: #23305a;
+  --destructive: #ff8f80; --destructive-soft: #46231f;
+  --border: #322e40; --input: #2c2839; --ring: #9fb4f7;
+}
+@theme inline {
+  /* 기존 이름(라이트 값은 v3 tailwind.config.js 와 같음) */
   --color-brand: #6f8ef0;
-  --color-brand-soft: #e2ecff;
-  --color-brand-strong: #4963c1;
-
-  --color-up: #b6265d;
-  --color-up-soft: #fbd6e4;
-
-  --color-down: #3c5dc1;
-  --color-down-soft: #d8e3fd;
-
-  --color-ink: #25223a;
-  --color-ink-muted: #6a6681;
-
-  --color-canvas: #f7f5ff;
-  --color-surface: #ffffff;
-  --color-fill: #efebfb;
-
+  --color-brand-soft: var(--primary-soft);
+  --color-brand-strong: var(--primary);
+  --color-up: var(--up); --color-up-soft: var(--up-soft);
+  --color-down: var(--down); --color-down-soft: var(--down-soft);
+  --color-ink: var(--foreground); --color-ink-muted: var(--muted-foreground);
+  --color-canvas: var(--background); --color-surface: var(--card); --color-fill: var(--secondary);
   --color-sky-soft: #e2ecff;
-
-  --color-accent: #aa5278;
-
-  --color-danger: #a14f09;
-  --color-danger-soft: #fde7d4;
-
-  --color-line: #ebe7f7;
-  --color-kakao: #fee500;
-  --color-naver: #03c75a;
-
-  --radius-card: 20px;
-  --radius-btn: 14px;
-  --radius-field: 12px;
+  --color-accent: var(--accent);
+  --color-danger: var(--destructive); --color-danger-soft: var(--destructive-soft);
+  --color-line: var(--border);
+  --color-kakao: #FEE500; --color-naver: #03C75A;
+  --radius-card: 20px; --radius-btn: 14px; --radius-field: 12px;
+  /* shadcn 이름(같은 변수) */
+  --color-background: var(--background); --color-foreground: var(--foreground);
+  --color-card: var(--card); --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover); --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary); --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary); --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted); --color-muted-foreground: var(--muted-foreground);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border); --color-input: var(--input); --color-ring: var(--ring);
 }
 
 /*
