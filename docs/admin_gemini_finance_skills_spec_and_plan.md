@@ -152,17 +152,60 @@ CREATE INDEX idx_admin_skill_reports_date ON admin_ai_skill_reports (as_of_date 
 | `POST /api/v1/admin/ai-skills/analyze/{ticker}` | 정량 팩트 위에 Gemini API를 호출하여 **인과 전달 사슬(Logic Chain), EV 3-시나리오, 투자 가설 Kill Switch, 뉴스 촉매 감성 점수**까지 포함한 전체 7대 스킬 통합 리포트 생성 및 DB 저장 (`?force_refresh=true&capital=10000000&risk_pct=1.0`) |
 | `GET /api/v1/admin/ai-skills/reports` | 최근 분석한 종목 리포트 히스토리 목록 조회 (`?limit=30`) |
 | `GET /api/v1/admin/ai-skills/reports/{ticker}` | 특정 종목의 저장된 분석 리포트 조회 |
+| `GET /api/v1/admin/ai-skills/catalog` | 서버(`backend/apps/ai_analyst/skills/catalog/*/SKILL.md`)에 내장된 7대 오픈소스 스킬 파일 목록 및 각 `SKILL.md` 본문 조회 |
 | `POST /api/v1/admin/ai-skills/batch-top` | **일괄 분석 버튼**: 당일 `급등·거래대금 대장주 Top 5` 또는 `주도주 Top 5` 종목을 한 번에 분석 |
 
 ---
 
-## 5. 클로드코드(Claude Code) 단계별 구현 계획
+## 5. 서버 내장 스킬 카탈로그(`SKILL.md`) 자동 구축 및 구동 아키텍처
+
+> 💡 **사용자 사전 설치 불필요 (Zero Manual Setup)**:  
+> 사용자가 개발 PC나 운영 서버에 `npx skills add` 등을 수동으로 설치할 필요가 **전혀 없습니다**.  
+> 클로드 코드(Claude Code)가 구현할 때 아래 디렉토리 구조대로 **7대 오픈소스 스킬의 핵심 루브릭을 `backend/apps/ai_analyst/skills/catalog/<skill_id>/SKILL.md` 마크다운 파일로 서버 코드베이스 안에 직접 생성·내장**하며, Git 커밋 및 Docker 이미지 빌드 시 개발/상용 서버 컨테이너에 자동으로 포함됩니다.
+
+```text
+backend/apps/ai_analyst/skills/
+├── __init__.py
+├── catalog/                                     # 👈 서버에 실제 파일로 내장되는 7대 오픈소스 SKILL.md 카탈로그
+│   ├── sepa_strategy/
+│   │   └── SKILL.md                             # [1] himself65/finance-skills (SEPA & VCP 8조건 루브릭)
+│   ├── ev_and_news_sentiment/
+│   │   └── SKILL.md                             # [2] tellmefrankie/ai-investment-skills (3-시나리오 EV & 뉴스 5단계 루브릭)
+│   ├── financial_services/
+│   │   └── SKILL.md                             # [3] anthropics/financial-services (3대 재무 교차검증 & Thesis Kill Switch)
+│   ├── vibe_trading/
+│   │   └── SKILL.md                             # [4] HKUDS/Vibe-Trading (과거 셋업 승률 백테스트 해석 & 리스크 엑스레이)
+│   ├── trading_skills/
+│   │   └── SKILL.md                             # [5] tradermonty/claude-trading-skills (시장 폭 Exposure Coach & 포지션 사이저)
+│   ├── k_skill/
+│   │   └── SKILL.md                             # [6] NomaDamas/k-skill (한국 DART CB/BW/수주 공시 & 6섹션 한국형 기업분석)
+│   └── awesome_finance/
+│       └── SKILL.md                             # [7] RKiding/Awesome-finance-skills (4단계 인과 전달 사슬 Logic Chain & 시그널 추적)
+├── skill_loader.py                              # 👈 catalog/*/SKILL.md 파일들을 읽어 메타데이터와 프롬프트 지침을 동적 로드
+├── quant_facts.py                               # 👈 ClickHouse·PG·OpenDART에서 각 스킬이 요구하는 정량 지표를 오차 없이 계산
+├── schemas.py                                   # 👈 Gemini 구조화 출력(response_schema)용 Pydantic 모델
+├── skill_runner.py                              # 👈 [skill_loader가 읽은 SKILL.md] + [quant_facts 정량 데이터]로 GEMINI_API_KEY 호출
+└── router.py                                    # 👈 관리자 전용(/api/v1/admin/ai-skills/*) FastAPI 라우터
+```
+
+* **동적 스킬 선택 지원 (`?skills=sepa_strategy,financial_services,...`)**:
+  * `skill_loader.py`는 `catalog/` 하위 폴더의 `SKILL.md`(YAML frontmatter `name`, `description`, `source_repo` + 마크다운 본문)를 읽어들입니다.
+  * 관리자 웹(`/market/ai-lab`)에서 7개 스킬 중 원하는 스킬 칩만 켜거나 전체를 선택하면, 선택된 `SKILL.md` 파일들의 지침만 조합하여 Gemini API를 호출합니다.
+  * 나중에 새로운 스킬을 추가하고 싶을 때도 `catalog/<새_스킬>/SKILL.md` 파일 하나만 추가하면 서버가 자동으로 인식합니다.
+
+---
+
+## 6. 클로드코드(Claude Code) 단계별 구현 계획
 
 프론트엔드 UI 개편 전에 클로드 코드로 아래 5단계를 순서대로 구현합니다.
 
-### Step 1: DB 모델(`AdminAiSkillReport`) 및 마이그레이션 추가
-* `backend/shared/ai_models.py`에 `AdminAiSkillReport` 모델 추가.
-* Alembic 마이그레이션 생성 (`admin_ai_skill_reports` 테이블).
+### Step 1: 7대 오픈소스 `SKILL.md` 카탈로그 파일 생성 및 `skill_loader.py` + DB 모델 추가
+* **신규 스킬 파일 생성 (`backend/apps/ai_analyst/skills/catalog/*/SKILL.md`)**:
+  * 클로드 코드가 7개 오픈소스 스킬(`sepa_strategy`, `ev_and_news_sentiment`, `financial_services`, `vibe_trading`, `trading_skills`, `k_skill`, `awesome_finance`)의 YAML frontmatter와 한국 주식(KRX/DART) 맞춤형 상세 분석 루브릭 본문을 갖춘 `SKILL.md` 파일 7개를 생성합니다.
+* **`backend/apps/ai_analyst/skills/skill_loader.py` 구현**:
+  * `list_installed_skills()` 및 `build_combined_skill_prompt(skill_ids: list[str] | None)` 함수를 구현하여 서버 디스크의 `SKILL.md` 파일들을 읽고 캐싱합니다.
+* **DB 모델 및 마이그레이션**:
+  * `backend/shared/ai_models.py`에 `AdminAiSkillReport` 모델을 추가하고 Alembic 마이그레이션을 생성합니다.
 
 ### Step 2: 7대 오픈소스 스킬 파이썬 정량 엔진 구현 (`backend/apps/ai_analyst/skills/quant_facts.py`)
 1. **`compute_sepa_template(candles_300d, rs_score)`** (`himself65/finance-skills`):
@@ -174,13 +217,13 @@ CREATE INDEX idx_admin_skill_reports_date ON admin_ai_skill_reports (as_of_date 
 4. **`scan_k_dart_and_peer_valuation(ticker, sector_m)`** (`NomaDamas/k-skill` & `anthropics/financial-services`):
    * OpenDART 최근 공시에서 호재(수주/자사주/실적) vs 악재·오버행(CB/BW/유상증자/전환청구) 자동 태깅 + 동일 업종(`sector_m`) 중앙값 PER·PBR·ROE 대비 상대 밸류에이션 격차 및 최근 4분기 영업이익/EPS 가속 여부 계산.
 
-### Step 3: 7대 스킬 통합 Gemini 프롬프트 & 추론 서비스 구현 (`backend/apps/ai_analyst/skills/`)
+### Step 3: 7대 스킬 통합 Gemini 추론 서비스 및 라우터 구현 (`backend/apps/ai_analyst/skills/`)
 * `backend/apps/ai_analyst/skills/schemas.py`:
   * `SepaSkillOutput`, `VibeBacktestOutput`, `ExposureSizingOutput`, `LogicChainAndThesisOutput`(`Awesome-Finance` 4단계 인과 노드 + `Financial-Services` 가설 기각 Kill Switch), `EvCalculatorOutput`, `KDartValuationOutput`, `NewsCatalystItem`, `AdminSkillReportResponse` 정의.
-* `backend/apps/ai_analyst/skills/prompts.py` & `skill_runner.py`:
-  * Step 2의 정량 팩트 JSON과 뉴스/공시 제목을 입력받아 Gemini 1회 구조화 호출로 전체 리포트를 생성하고 `admin_ai_skill_reports`에 Upsert.
+* `backend/apps/ai_analyst/skills/skill_runner.py`:
+  * `skill_loader.py`가 로드한 7대 `SKILL.md` 지침서와 Step 2의 정량 팩트 JSON 및 뉴스/공시 제목을 결합하여 Gemini 1회 구조화 호출로 전체 리포트를 생성하고 `admin_ai_skill_reports`에 Upsert.
 * `backend/apps/ai_analyst/skills/router.py`:
-  * `require_admin` 가드가 적용된 5개 엔드포인트 구현 및 `backend/apps/stock_api/main.py`에 라우터 등록.
+  * `require_admin` 가드가 적용된 엔드포인트(`/catalog`, `/quant-preview/{ticker}`, `/analyze/{ticker}`, `/reports`, `/batch-top`) 구현 및 `backend/apps/stock_api/main.py`에 라우터 등록.
 
 ### Step 4: 관리자 웹(`admin_web`) `/market/ai-lab` 화면 및 기존 스크리너 연동
 * **신규 파일**:
@@ -191,11 +234,14 @@ CREATE INDEX idx_admin_skill_reports_date ON admin_ai_skill_reports (as_of_date 
     * `시장 데이터` 사이드바에 `{ to: '/market/ai-lab', label: 'AI 종목 심층 분석', icon: '🧠' }` 추가.
   * 기존 관리자 화면(`MarketDailySurge.tsx`, `MarketMaScreener.tsx`, `LeadersPage`)의 종목 상세 영역에 **`[🧠 AI 심층 분석 열기]`** 버튼(`/market/ai-lab?ticker=${ticker}`) 추가.
 * **핵심 UX**:
-  * 종목을 고르는 즉시 **`quant-preview` API(0원, 0.1초)**가 먼저 호출되어 **SEPA 8조건 표, Vibe-Trading 2년 백테스트 승률 표, 포지션 사이징(권장 매수 주식 수), 업종 상대 PER, DART 공시 체크**가 화면에 즉시 뜹니다!
-  * 이어서 저장된 Gemini 리포트가 있으면 바로 보여주고, 없거나 **`[⚡ Gemini 7대 스킬 심층 추론 실행]`** 버튼을 누르면 **인과 전달 사슬(Logic Chain 플로우), Bull/Base/Bear EV 시나리오, 투자 가설 Kill Switch, 뉴스 감성 랭킹**이 완성됩니다. (토큰 비용을 아끼면서도 모든 종목의 정량 백테스트·SEPA·사이징은 무제한 0원으로 즉시 확인 가능!)
+  * 상단에 서버에 설치된 **7대 `SKILL.md` 카탈로그 배지**가 표시되며, 클릭하면 각 스킬의 `SKILL.md` 지침서 원문을 모달로 확인할 수도 있습니다.
+  * 종목을 고르는 즉시 **`quant-preview` API(0원, 0.1초)**가 먼저 호출되어 **SEPA 8조건 표, Vibe-Trading 2년 백테스트 승률 표, 포지션 사이징(권장 매수 주식 수), 업종 상대 PER, DART 공시 체크**가 화면에 즉시 뜹니다.
+  * 이어서 저장된 Gemini 리포트가 있으면 바로 보여주고, 없거나 **`[⚡ Gemini 7대 스킬 심층 추론 실행]`** 버튼을 누르면 **인과 전달 사슬(Logic Chain 플로우), Bull/Base/Bear EV 시나리오, 투자 가설 Kill Switch, 뉴스 감성 랭킹**이 완성됩니다.
 
 ### Step 5: 테스트 및 검증
 * `backend/tests/test_admin_ai_skills.py`:
+  * `skill_loader.py`가 7개의 `catalog/*/SKILL.md` 파일을 모두 정상적으로 읽고 프롬프트를 조립하는지 검증.
   * SEPA 8조건 판정, Vibe-Trading 과거 셋업 백테스트(`D+5`, `D+10` 승률 계산), Trading-Skills 포지션 사이저(자본금·리스크%·손절폭 기반 매수 주식 수), K-Skill DART 오버행 키워드 탐지 단위 테스트.
   * `quant-preview` 무과금 즉시 응답 및 Fake Gemini 기반 `analyze` E2E 테스트, 비관리자 401/403 차단 테스트.
 * `admin_web`: `tsc --noEmit` 및 `vitest` 통과 확인.
+
