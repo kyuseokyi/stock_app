@@ -32,7 +32,7 @@ function ContentCell({ content }: { content: string }) {
   const long = content.length > CONTENT_PREVIEW
   return (
     <div className="max-w-xs">
-      <p className="whitespace-pre-wrap break-words text-slate-800">
+      <p className="whitespace-pre-wrap wrap-break-word text-slate-800">
         {long && !open ? `${content.slice(0, CONTENT_PREVIEW)}…` : content}
       </p>
       {long && (
@@ -161,7 +161,7 @@ export default function CommentReportsPage() {
                     <td className="px-4 py-3">
                       <Link
                         to={`/blogs/${r.post_id}`}
-                        className="line-clamp-2 max-w-[12rem] text-indigo-600 hover:underline"
+                        className="line-clamp-2 max-w-48 text-indigo-600 hover:underline"
                         title={r.post_title}
                       >
                         {r.post_title}

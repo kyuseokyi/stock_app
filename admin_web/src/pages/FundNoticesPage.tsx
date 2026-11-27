@@ -19,7 +19,7 @@ const STATUS_CLASS: Record<PushSendOut['status'], string> = {
   failed: 'bg-red-100 text-red-700',
   cancelled: 'bg-slate-100 text-slate-500',
 }
-const inputClass = 'w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none'
+const inputClass = 'w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-hidden'
 const fmt = (iso: string | null) => (iso ? new Date(iso).toLocaleString('ko-KR', { dateStyle: 'short', timeStyle: 'short' }) : '-')
 
 function errorCode(e: unknown): string | undefined {
@@ -191,7 +191,7 @@ function SendPanel() {
 
         <div className="rounded-xl bg-slate-100 p-3">
           <p className="mb-1 text-xs text-slate-500">폰 알림 미리보기</p>
-          <div className="rounded-lg bg-white p-3 shadow-sm">
+          <div className="rounded-lg bg-white p-3 shadow-xs">
             <p className="text-sm font-semibold text-slate-900">{renderPushText(title, date) || '제목'}</p>
             <p className="text-sm text-slate-600">{renderPushText(body, date) || '본문'}</p>
           </div>

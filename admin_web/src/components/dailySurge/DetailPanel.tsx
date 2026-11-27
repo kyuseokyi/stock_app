@@ -23,7 +23,7 @@ function Board({ title, rows, highlight }: { title: string; rows: BoardRow[]; hi
           className={`flex items-center justify-between gap-2 rounded-field px-3 py-2 text-sm ${
             highlight === r.ticker ? 'bg-brand-soft' : r.in_group ? 'bg-fill' : 'bg-canvas text-ink-muted'}`}>
           <span className="flex min-w-0 items-center gap-2">
-            {r.is_leader && <span className="rounded bg-ink px-1.5 py-0.5 text-xs text-surface">대장</span>}
+            {r.is_leader && <span className="rounded-sm bg-ink px-1.5 py-0.5 text-xs text-surface">대장</span>}
             <span className="truncate">{r.name}</span>
           </span>
           <span className="flex shrink-0 gap-4">
@@ -125,7 +125,7 @@ export default function DetailPanel({ date, selection, onChanged }: {
           {s.dart_items.map((d) => (
             <div key={d.rcept_no} className="flex items-start justify-between gap-3 border-b border-line pb-2 text-sm">
               <p className="text-ink">
-                <span className="mr-1 rounded bg-danger-soft px-1.5 py-0.5 text-xs text-danger">{d.when === 'same' ? '당일' : '전일'}</span>
+                <span className="mr-1 rounded-sm bg-danger-soft px-1.5 py-0.5 text-xs text-danger">{d.when === 'same' ? '당일' : '전일'}</span>
                 {d.title}
               </p>
               <a href={d.url} target="_blank" rel="noopener noreferrer" className="shrink-0 text-xs text-brand-strong hover:underline">원문 보기</a>

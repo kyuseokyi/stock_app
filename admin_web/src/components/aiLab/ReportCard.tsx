@@ -141,7 +141,7 @@ export default function ReportCard({ report, saved }: { report: AiReport; saved:
               <li key={c.rcept_no} className="flex items-start justify-between gap-3 border-b border-line py-2 text-sm">
                 <div className="flex min-w-0 flex-col gap-1">
                   <p className="text-ink">
-                    <span className="mr-1 rounded bg-fill px-1.5 py-0.5 text-xs text-ink">{labelOf(IMPACT_LABEL, c.impact_grade)}</span>
+                    <span className="mr-1 rounded-sm bg-fill px-1.5 py-0.5 text-xs text-ink">{labelOf(IMPACT_LABEL, c.impact_grade)}</span>
                     {c.title}
                   </p>
                   <p className="text-xs text-ink-muted">

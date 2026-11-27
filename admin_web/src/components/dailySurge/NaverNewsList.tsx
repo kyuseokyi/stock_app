@@ -36,7 +36,7 @@ export default function NaverNewsList({ kind, date, target }: { kind: 'stock' | 
             <li key={`${i}-${n.url}`} className="flex items-start justify-between gap-3 border-b border-line py-2 text-sm">
               <div className="flex min-w-0 flex-col gap-1">
                 <p className="text-ink">
-                  <span className={`mr-1 rounded px-1.5 py-0.5 text-xs font-medium ${SLOT_CLASS[n.time_slot]}`}>
+                  <span className={`mr-1 rounded-sm px-1.5 py-0.5 text-xs font-medium ${SLOT_CLASS[n.time_slot]}`}>
                     {SLOT_LABEL[n.time_slot]}
                   </span>
                   {n.title}

@@ -7,7 +7,7 @@ import { showToast } from '../lib/toast'
 // 내 비밀번호 변경 — 모든 관리자. 현재 비밀번호를 확인한 뒤 바꾸고, 지금 로그인은 유지된다.
 
 const inputClass =
-  'w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none'
+  'w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-hidden'
 
 export default function ChangePasswordPage() {
   const [current, setCurrent] = useState('')

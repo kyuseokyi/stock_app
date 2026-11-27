@@ -20,7 +20,7 @@ const FILTER_PARAM: Record<ActiveFilter, boolean | undefined> = {
 }
 
 const inputCls =
-  'w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none'
+  'w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-hidden'
 
 /** YYYY-MM-DD + n일 (UTC 기준 날짜 산술) */
 const addDays = (iso: string, n: number): string => {
@@ -315,7 +315,7 @@ function DirectCreatePanel({ onCreated, onClose }: { onCreated: (id: number) => 
             }}
           />
           {!stock && query.trim() && (
-            <ul className="absolute z-10 mt-1 max-h-60 w-full overflow-auto rounded-lg border border-slate-200 bg-white shadow">
+            <ul className="absolute z-10 mt-1 max-h-60 w-full overflow-auto rounded-lg border border-slate-200 bg-white shadow-sm">
               {searching ? (
                 <li className="px-3 py-2 text-sm text-slate-400">검색 중…</li>
               ) : results.length === 0 ? (

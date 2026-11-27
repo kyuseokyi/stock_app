@@ -107,7 +107,7 @@ export default function BlogListPage() {
             setPage(1)
             setBoardId(e.target.value)
           }}
-          className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm focus:border-indigo-500 focus:outline-none"
+          className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm focus:border-indigo-500 focus:outline-hidden"
         >
           <option value="">전체</option>
           {boards.map((b) => (

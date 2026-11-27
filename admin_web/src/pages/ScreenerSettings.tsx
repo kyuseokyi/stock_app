@@ -120,13 +120,13 @@ export default function ScreenerSettings() {
                 aria-labelledby={`screener-feature-${item.key}`}
                 disabled={pending !== null}
                 onClick={() => toggle(item)}
-                className={`relative inline-flex h-7 w-12 shrink-0 items-center rounded-full transition focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 disabled:opacity-50 ${
+                className={`relative inline-flex h-7 w-12 shrink-0 items-center rounded-full transition focus:outline-hidden focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 disabled:opacity-50 ${
                   item.enabled ? 'bg-indigo-600' : 'bg-slate-300'
                 }`}
               >
                 <span
                   aria-hidden="true"
-                  className={`inline-block h-5 w-5 rounded-full bg-white shadow transition ${item.enabled ? 'translate-x-6' : 'translate-x-1'}`}
+                  className={`inline-block h-5 w-5 rounded-full bg-white shadow-sm transition ${item.enabled ? 'translate-x-6' : 'translate-x-1'}`}
                 />
               </button>
             </li>

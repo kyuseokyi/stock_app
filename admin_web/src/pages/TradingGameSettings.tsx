@@ -135,7 +135,7 @@ function SettingsPanel() {
                 disabled={pending !== null || (flag.key === 'REAL_MARKET' && !canSwitchRealMarket)}
                 title={flag.key === 'REAL_MARKET' && !canSwitchRealMarket ? '시세·스크리너 노출 스위치 권한이 없어요' : undefined}
                 onClick={() => toggle(flag)}
-                className={`relative inline-flex h-7 w-12 shrink-0 items-center rounded-full transition focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 disabled:opacity-50 ${
+                className={`relative inline-flex h-7 w-12 shrink-0 items-center rounded-full transition focus:outline-hidden focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 disabled:opacity-50 ${
                   flag.enabled ? 'bg-indigo-600' : 'bg-slate-300'
                 }`}
               >

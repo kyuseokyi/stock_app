@@ -162,7 +162,7 @@ export default function MembersPage() {
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="닉네임·이메일·회원 번호(#12) 검색"
-          className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none"
+          className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-hidden"
         />
         <button
           type="submit"
@@ -177,7 +177,7 @@ export default function MembersPage() {
             setProvider(e.target.value as ProviderFilter)
           }}
           aria-label="가입 방식"
-          className="shrink-0 rounded-lg border border-slate-300 px-2 py-2 text-sm text-slate-700 focus:border-indigo-500 focus:outline-none"
+          className="shrink-0 rounded-lg border border-slate-300 px-2 py-2 text-sm text-slate-700 focus:border-indigo-500 focus:outline-hidden"
         >
           {PROVIDER_FILTER_OPTIONS.map((o) => (
             <option key={o.value} value={o.value}>
@@ -193,7 +193,7 @@ export default function MembersPage() {
               setPage(1)
               setMarketOnly(e.target.checked)
             }}
-            className="h-4 w-4 rounded border-slate-300"
+            className="h-4 w-4 rounded-sm border-slate-300"
           />
           시세 권한 있는 회원만
         </label>
@@ -258,7 +258,7 @@ export default function MembersPage() {
                             onChange={(e) => setNickDraft(e.target.value)}
                             maxLength={NICKNAME_MAX}
                             autoFocus
-                            className="w-36 rounded-lg border border-slate-300 px-2 py-1 text-sm focus:border-indigo-500 focus:outline-none"
+                            className="w-36 rounded-lg border border-slate-300 px-2 py-1 text-sm focus:border-indigo-500 focus:outline-hidden"
                           />
                           <button
                             type="submit"
@@ -324,7 +324,7 @@ export default function MembersPage() {
                           disabled={busy || !isSuper}
                           title={isSuper ? undefined : '시세 열람 권한은 슈퍼 관리자만 바꿀 수 있어요'}
                           onClick={() => toggleMarketAccess(u)}
-                          className={`relative inline-flex h-6 w-10 shrink-0 items-center rounded-full transition focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 disabled:opacity-50 ${
+                          className={`relative inline-flex h-6 w-10 shrink-0 items-center rounded-full transition focus:outline-hidden focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 disabled:opacity-50 ${
                             u.market_data_access ? 'bg-amber-500' : 'bg-slate-300'
                           }`}
                         >

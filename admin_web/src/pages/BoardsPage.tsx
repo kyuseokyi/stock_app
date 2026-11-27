@@ -81,7 +81,7 @@ export default function BoardsPage() {
           value={name}
           onChange={(e) => setName(e.target.value)}
           placeholder="새 게시판 이름 (예: 공지사항)"
-          className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none"
+          className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-hidden"
         />
         <button
           type="submit"

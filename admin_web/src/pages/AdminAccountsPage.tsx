@@ -14,7 +14,7 @@ import type { AdminAccount, EditableTier, RolePolicies } from '../types/api'
 // 명세: docs/admin_rbac_permissions_spec_and_plan.md
 
 const inputClass =
-  'w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none'
+  'w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-hidden'
 
 export default function AdminAccountsPage() {
   const [items, setItems] = useState<AdminAccount[]>([])

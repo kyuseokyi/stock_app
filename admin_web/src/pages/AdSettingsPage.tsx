@@ -38,7 +38,7 @@ const INFEED_MIN = 4
 const INFEED_MAX = 50
 
 const inputClass =
-  'w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500'
+  'w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-hidden focus:ring-1 focus:ring-indigo-500'
 
 const toPayload = (c: AdConfigOut): AdConfigIn => ({
   enabled: c.enabled,
@@ -63,13 +63,13 @@ function Switch({ checked, labelledBy, disabled, onToggle }: {
       aria-labelledby={labelledBy}
       disabled={disabled}
       onClick={onToggle}
-      className={`relative inline-flex h-7 w-12 shrink-0 items-center rounded-full transition focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 disabled:opacity-50 ${
+      className={`relative inline-flex h-7 w-12 shrink-0 items-center rounded-full transition focus:outline-hidden focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 disabled:opacity-50 ${
         checked ? 'bg-indigo-600' : 'bg-slate-300'
       }`}
     >
       <span
         aria-hidden="true"
-        className={`inline-block h-5 w-5 rounded-full bg-white shadow transition ${checked ? 'translate-x-6' : 'translate-x-1'}`}
+        className={`inline-block h-5 w-5 rounded-full bg-white shadow-sm transition ${checked ? 'translate-x-6' : 'translate-x-1'}`}
       />
     </button>
   )

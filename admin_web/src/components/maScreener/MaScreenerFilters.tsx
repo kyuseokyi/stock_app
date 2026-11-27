@@ -28,7 +28,7 @@ function NumInput({ value, onCommit, label, placeholder }: { value: string; onCo
       onChange={(e) => setDraft(e.target.value)}
       onBlur={commit}
       onKeyDown={(e) => e.key === 'Enter' && commit()}
-      className="w-20 rounded-lg border border-slate-200 bg-white px-2 py-1 text-right text-sm tabular-nums text-ink focus:border-indigo-400 focus:outline-none"
+      className="w-20 rounded-lg border border-slate-200 bg-white px-2 py-1 text-right text-sm tabular-nums text-ink focus:border-indigo-400 focus:outline-hidden"
     />
   )
 }
