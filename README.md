@@ -695,6 +695,7 @@ cd backend && uv run --with pykrx python -m apps.collector.verify.spot_check --n
   | `ai-screener-evaluation` | `ai.evaluate_screener_stocks` | 평일 16:00 | CANSLIM 상위 30종목 DART·뉴스 → Gemini 정성 평가 → PG `ai_stock_evaluations`(이미 평가한 종목 건너뜀) |
 
   수동 실행 예: `uv run celery -A apps.collector.celery_app call ai.generate_morning_briefing`
+- **관리자 AI Lab(종목 심층 분석)**: stock_api `/api/v1/admin/ai-skills/*` — A단계 `GET /catalog`·`GET /quant-preview/{ticker}`(Gemini 미호출), B단계 `POST /analyze/{ticker}?force=&skills=`(정량 팩트 + DART 공시만 Gemini 1회 → 검증 → PG `admin_ai_skill_reports` upsert, 같은 종목·기준일은 저장분 재사용, 키 없음 503·응답 거부 502·분석 중 409), `GET /reports`(페이징)·`GET /reports/{ticker}?as_of=`, `POST /batch-top?source=surge|leaders&limit≤5`(`DATA_PIPELINE`, Celery `ai.skills_batch_top`, 스케줄 없음). 권한 `SCREENER_VIEW`. 네이버 뉴스는 입력·저장하지 않는다. 설계 [`docs/superpowers/specs/2026-11-27-admin-ai-lab-design.md`](docs/superpowers/specs/2026-11-27-admin-ai-lab-design.md)
 - **REST(stock_api, 공개 GET, `Cache-Control: public, max-age=30`)**:
   - `GET /api/v1/market/morning-brief` → `{"brief": {...} | null}` (오늘 것, 없으면 최근 1건)
   - `GET /api/v1/market/movers` → `{"updated_at", "gainers": [...], "losers": [...], "keywords": [...]}` (오늘 캐시가 없으면 마지막 결과 — 화면은 `updated_at` 을 보여 줄 것)

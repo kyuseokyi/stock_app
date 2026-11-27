@@ -298,12 +298,14 @@ _NEGATIVE = [
 _FATAL = {"감사의견", "관리종목"}
 # 해지·해제·철회·취소 — 호재 공시가 무르는 것이면 호재가 아니다(공급계약 해지는 악재), 지정 해제·결정 철회는 악재 아님
 _CANCEL = re.compile(r"해지|해제|철회|취소")
+# 자기주식취득 신탁계약 해지 — 만기 정상 종료가 많아 호재 철회(악재)로 보지 않고 중립(태그 없음)으로 둔다(사용자 결정 2026-11-27)
+_TRUST_TERMINATION = re.compile(r"자기주식취득신탁계약")
 
 
 def classify_dart(disclosures: list[dict]) -> dict:
     """공시 제목 → 호재(positive)/악재·오버행(negative) 태그. 둘 다 걸리면 악재 우선.
     자기주식처분은 호재가 아니다(태그 없음). 해지·해제·철회·취소가 든 제목은 호재가 아니며(호재 해지=악재,
-    악재 해제·철회=태그 없음, overhang·fatal 아님). overhang = 증자·CB·BW·EB·전환청구·신주인수권행사 존재,
+    단 자기주식취득 신탁계약 해지는 만기 정상 종료가 많아 태그 없음, 악재 해제·철회=태그 없음, overhang·fatal 아님). overhang = 증자·CB·BW·EB·전환청구·신주인수권행사 존재,
     fatal = 감사의견(거절·한정·부적정)·관리종목 존재.
     """
     items = []
@@ -320,6 +322,9 @@ def classify_dart(disclosures: list[dict]) -> dict:
             # 호재를 무르는 공시(공급계약 해지 등)는 악재, 악재를 무르는 공시(관리종목 지정 해제·증자 철회)는 태그 없음
             for label, pat in _POSITIVE:
                 if pat.search(flat) and "처분" not in flat:
+                    if _TRUST_TERMINATION.search(flat):
+                        labels.append(f"{label} 신탁계약 해지")  # 중립 — is_neg 아님
+                        continue
                     labels.append(f"{label} 해지·철회")
                     is_neg = True
             for label, pat, _ in _NEGATIVE:

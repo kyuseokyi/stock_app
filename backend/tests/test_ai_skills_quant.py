@@ -401,10 +401,22 @@ def test_classify_dart_cancel_words():
     res = Q.classify_dart([{"report_nm": t, "rcept_dt": "20261120", "rcept_no": str(i)}
                            for i, t in enumerate(titles)])
     tags = [it["tag"] for it in res["items"]]
-    assert tags == [None, "negative", "negative", None, "negative"]
-    assert res["positive_count"] == 0
+    # 자사주 신탁계약 해지는 만기 정상 종료가 많아 중립(태그 없음), 공급계약 해지·무상증자 취소는 악재 유지
+    assert tags == [None, "negative", None, None, "negative"]
+    assert res["positive_count"] == 0 and res["negative_count"] == 2
     assert res["fatal"] is False and res["overhang"] is False
     assert all(it["cancelled"] for it in res["items"])
+
+
+def test_classify_dart_treasury_trust_termination_neutral():
+    res = Q.classify_dart([{"report_nm": t, "rcept_dt": "20261120", "rcept_no": str(i)} for i, t in enumerate(
+        ["자기주식취득신탁계약해지결정", "자기주식 취득 신탁계약 해지 결정", "[기재정정]자기주식취득신탁계약해지결정"])])
+    assert [it["tag"] for it in res["items"]] == [None, None, None]
+    assert res["negative_count"] == 0 and res["positive_count"] == 0
+    assert res["overhang"] is False and res["fatal"] is False
+    supply = Q.classify_dart([{"report_nm": "단일판매ㆍ공급계약해지", "rcept_no": "1"},
+                              {"report_nm": "무상증자결정취소", "rcept_no": "2"}])
+    assert [it["tag"] for it in supply["items"]] == ["negative", "negative"]
 
 
 # ---- 셋업 A 거래량 0 봉 ----
