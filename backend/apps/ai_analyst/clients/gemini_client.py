@@ -7,6 +7,8 @@
 from __future__ import annotations
 
 import logging
+import time
+from collections.abc import Callable
 from typing import TypeVar
 
 from pydantic import BaseModel
@@ -18,6 +20,10 @@ log = logging.getLogger(__name__)
 T = TypeVar("T", bound=BaseModel)
 
 _TEMPERATURE = 0.2
+# 일시 오류(혼잡 503·한도 429·서버 5xx)는 잠시 뒤 다시 부른다 — 2026-11-28 상용에서 503 "high demand" 한 번에
+# 일괄 분석 5종목이 모두 실패했다. 키·요청 오류(4xx)는 다시 불러도 같으므로 바로 포기.
+_RETRY_CODES = frozenset({429, 500, 502, 503, 504})
+_RETRY_WAITS = (5.0, 15.0)  # 최대 3번 호출, 추가 대기 최대 20초
 
 
 def _short(e: Exception) -> str:
@@ -26,9 +32,12 @@ def _short(e: Exception) -> str:
 
 
 class GeminiClient:
-    def __init__(self, api_key: str | None, model: str | None = None, *, client=None):
-        """client: 테스트용 주입(`.models.generate_content(...)` 를 가진 객체). 없으면 genai.Client 를 만든다."""
+    def __init__(self, api_key: str | None, model: str | None = None, *, client=None,
+                 sleep: Callable[[float], None] = time.sleep):
+        """client: 테스트용 주입(`.models.generate_content(...)` 를 가진 객체). 없으면 genai.Client 를 만든다.
+        sleep: 재시도 대기 함수(테스트에서 바꿔 끼운다)."""
         self.api_key = api_key
+        self._sleep = sleep
         self.model = model or config.gemini_model()
         self._client = client
         if self._client is None and api_key:
@@ -40,22 +49,25 @@ class GeminiClient:
         if self._client is None:
             log.warning("Gemini 키가 없어 호출을 건너뜀")
             return None
-        try:
-            from google.genai import types
+        from google.genai import types
 
-            resp = self._client.models.generate_content(
-                model=self.model,
-                contents=prompt,
-                config=types.GenerateContentConfig(
-                    response_mime_type="application/json",
-                    response_schema=schema,
-                    temperature=_TEMPERATURE,
-                    system_instruction=system,
-                ),
-            )
-        except Exception as e:  # noqa: BLE001 — 외부 API 실패는 None 으로 흡수
-            log.warning("Gemini 호출 실패 (%s)", _short(e))
-            return None
+        cfg = types.GenerateContentConfig(
+            response_mime_type="application/json",
+            response_schema=schema,
+            temperature=_TEMPERATURE,
+            system_instruction=system,
+        )
+        resp = None
+        for attempt in range(len(_RETRY_WAITS) + 1):
+            try:
+                resp = self._client.models.generate_content(model=self.model, contents=prompt, config=cfg)
+                break
+            except Exception as e:  # noqa: BLE001 — 외부 API 실패는 None 으로 흡수
+                retry = getattr(e, "code", None) in _RETRY_CODES and attempt < len(_RETRY_WAITS)
+                log.warning("Gemini 호출 실패 (%s)%s", _short(e), " — 잠시 뒤 다시 시도" if retry else "")
+                if not retry:
+                    return None
+                self._sleep(_RETRY_WAITS[attempt])
         text = getattr(resp, "text", None)
         if not text:
             log.warning("Gemini 응답이 비어 있음")
