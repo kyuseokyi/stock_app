@@ -1,3 +1,4 @@
+import { fileURLToPath, URL } from 'node:url'
 import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
@@ -21,6 +22,10 @@ export default defineConfig(({ command, mode }) => {
   return {
     // Tailwind v4 — PostCSS 대신 vite 플러그인으로 처리
     plugins: [react(), tailwindcss()],
+    // shadcn/ui 부품용 @/ 별칭(기존 상대 경로 import 는 그대로)
+    resolve: { alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) } },
+    // vitest — 부품 단위 테스트(jsdom)
+    test: { environment: 'jsdom', setupFiles: ['./src/test/setup.ts'], include: ['src/**/*.test.{ts,tsx}'], css: false },
     server: {
       port: 5173,
       host: true,
