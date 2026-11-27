@@ -11,6 +11,8 @@ export function FullScreenSheet({ title, onClose, children }: { title: string; o
   return (
     <DialogPrimitive.Root open onOpenChange={(o) => { if (!o) onClose() }}>
       <DialogPrimitive.Portal>
+        {/* Radix 는 뒤 화면 스크롤 잠금을 Overlay 에 건다 — 화면을 다 덮는 시트라도 Overlay 가 있어야 잠긴다 */}
+        <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-canvas" />
         <DialogPrimitive.Content
           aria-describedby={undefined}
           className="fixed inset-0 z-50 flex flex-col overflow-hidden bg-canvas"

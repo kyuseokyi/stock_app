@@ -13,6 +13,8 @@ describe('FullScreenSheet', () => {
     )
     const dlg = screen.getByRole('dialog', { name: '상세' })
     expect(dlg).toHaveTextContent('본문')
+    // 뒤 화면 스크롤 잠금 — Radix 는 Overlay 가 있어야 건다(빼먹으면 잠기지 않음)
+    await waitFor(() => expect(document.body).toHaveAttribute('data-scroll-locked'))
     await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('button', { name: '닫기' })))
     await userEvent.keyboard('{Escape}')
     expect(onClose).toHaveBeenCalledTimes(1)
