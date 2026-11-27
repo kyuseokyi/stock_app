@@ -1,4 +1,5 @@
 import Button from '../ui/Button'
+import VirtualList from '../ui/VirtualList'
 import { usePeriodRanking, type RankingPeriod } from '../../hooks/usePeriodRanking'
 import { useRewardConfig } from '../../hooks/useRewardConfig'
 import { formatPct, formatRewardTiers, formatWeekRange, formatWon, pnlClass } from '../../lib/format'
@@ -36,6 +37,7 @@ export default function WeeklyRankingTab({ seasonId, myUserId, period = 'week' }
     )
 
   const { board, me, last } = state.data
+  const isMine = (userId: number) => myUserId !== null && userId === myUserId
   return (
     <div className="space-y-4">
       <div className="text-xs text-ink-muted">
@@ -73,26 +75,30 @@ export default function WeeklyRankingTab({ seasonId, myUserId, period = 'week' }
       {board.entries.length === 0 ? (
         <p className="py-6 text-center text-sm text-ink-muted">{label.empty}</p>
       ) : (
-        <ol className="space-y-1">
-          {board.entries.map((r) => {
-            const mine = myUserId !== null && r.user_id === myUserId
-            return (
-              <li
-                key={r.user_id}
-                className={`flex items-center gap-3 rounded-field px-3 py-2 text-sm ${mine ? 'bg-brand-soft' : ''}`}
-              >
-                <span className="w-8 shrink-0 font-bold tabular-nums text-ink">{r.rank}</span>
-                <span className="flex-1 truncate text-ink">
-                  {r.nickname ?? '익명'}
-                  {mine && <span className="ml-1 text-xs font-semibold text-brand-strong">나</span>}
-                </span>
-                <span className={`w-16 text-right font-semibold tabular-nums ${pnlClass(r.roi)}`}>
-                  {formatPct(r.roi)}
-                </span>
-              </li>
-            )
-          })}
-        </ol>
+        <VirtualList
+          as="ol"
+          items={board.entries}
+          getKey={(r) => r.user_id}
+          estimateSize={36}
+          gap={4}
+          className="space-y-1"
+          virtualClassName="flex flex-col"
+          itemClassName={(r) =>
+            `flex items-center gap-3 rounded-field px-3 py-2 text-sm ${isMine(r.user_id) ? 'bg-brand-soft' : ''}`
+          }
+          renderItem={(r) => (
+            <>
+              <span className="w-8 shrink-0 font-bold tabular-nums text-ink">{r.rank}</span>
+              <span className="flex-1 truncate text-ink">
+                {r.nickname ?? '익명'}
+                {isMine(r.user_id) && <span className="ml-1 text-xs font-semibold text-brand-strong">나</span>}
+              </span>
+              <span className={`w-16 text-right font-semibold tabular-nums ${pnlClass(r.roi)}`}>
+                {formatPct(r.roi)}
+              </span>
+            </>
+          )}
+        />
       )}
     </div>
   )
