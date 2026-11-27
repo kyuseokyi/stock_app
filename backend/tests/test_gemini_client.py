@@ -78,3 +78,57 @@ def test_empty_text_returns_none():
 def test_no_key_no_client_returns_none():
     c = GeminiClient(None, "m")
     assert c.generate_json("p", _Brief) is None
+
+
+# ---- 일시 오류 재시도(2026-11-28 상용: 503 "high demand" 한 번에 종목 전체 실패)
+class _ApiErr(Exception):
+    """google.genai.errors.APIError 흉내 — .code 에 HTTP 상태."""
+
+    def __init__(self, code: int):
+        super().__init__(f"{code} ERR")
+        self.code = code
+
+
+class _SeqModels:
+    def __init__(self, results):
+        self.results = list(results)
+        self.calls = 0
+
+    def generate_content(self, **kw):
+        self.calls += 1
+        r = self.results.pop(0)
+        if isinstance(r, Exception):
+            raise r
+        return _Resp(r)
+
+
+class _SeqGenai:
+    def __init__(self, results):
+        self.models = _SeqModels(results)
+
+
+def test_transient_503_is_retried_then_succeeds():
+    waits: list[float] = []
+    fake = _SeqGenai([_ApiErr(503), _ApiErr(503), '{"headline": "h", "score": 1}'])
+    c = GeminiClient("k", "m", client=fake, sleep=waits.append)
+    assert c.generate_json("p", _Brief) == _Brief(headline="h", score=1)
+    assert fake.models.calls == 3
+    assert len(waits) == 2 and waits[0] < waits[1]
+
+
+def test_transient_errors_give_up_after_max_attempts():
+    waits: list[float] = []
+    fake = _SeqGenai([_ApiErr(503), _ApiErr(429), _ApiErr(500), '{"headline": "h", "score": 1}'])
+    c = GeminiClient("k", "m", client=fake, sleep=waits.append)
+    assert c.generate_json("p", _Brief) is None
+    assert fake.models.calls == 3  # 최대 3번
+    assert len(waits) == 2
+
+
+def test_permanent_error_is_not_retried():
+    waits: list[float] = []
+    fake = _SeqGenai([_ApiErr(400), '{"headline": "h", "score": 1}'])
+    c = GeminiClient("k", "m", client=fake, sleep=waits.append)
+    assert c.generate_json("p", _Brief) is None
+    assert fake.models.calls == 1
+    assert waits == []
