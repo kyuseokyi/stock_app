@@ -1,4 +1,4 @@
-"""AI 시황 분석 Celery 태스크 — 모닝 브리핑·급등락 순위·급등락 원인·수급 해설·스크리너 정성 평가.
+"""AI 시황 분석 Celery 태스크 — 모닝 브리핑·급등락 순위·급등락 원인·수급 해설·스크리너 정성 평가·AI Lab 일괄 분석.
 
 원칙(Graceful Fail): 외부 키가 없거나 휴장일이면 `{"skipped": 사유}`, 예외는 잡아서 `{"error": ...}` 로 끝낸다
 (워커를 흔들지 않고, 비밀값은 로그에 남기지 않는다 — repr 은 300자로 자른다).
@@ -191,4 +191,18 @@ def evaluate_screener_stocks() -> dict:
             return stock_qualitative.evaluate_batch(today, session=db)
     except Exception as e:  # noqa: BLE001
         log.exception("스크리너 정성 평가 태스크 실패")
+        return {"error": repr(e)[:300]}
+
+
+# ---------------------------------------------------------------- AI Lab 일괄 분석(관리자 수동 실행, 스케줄 없음)
+# 급등 상위·주도주 상위 최대 5종목을 차례로 분석. 오늘 리포트가 있는 종목·같은 기준일 저장분은 추론 없이 건너뛴다.
+# 종목당 추론 1회(수십 초) × 5 + 정량 계산 — 넉넉히 20분.
+@celery_app.task(name="ai.skills_batch_top", soft_time_limit=1200, time_limit=1260)
+def skills_batch_top(source: str = "surge", limit: int = 5) -> dict:
+    try:
+        from apps.ai_analyst.skills import report_service  # 지연 import — 워커 기동 시 정량 엔진 로딩을 미룬다
+
+        return report_service.batch_top(source, limit)
+    except Exception as e:  # noqa: BLE001 — 시간 제한 예외 포함
+        log.exception("AI Lab 일괄 분석 태스크 실패")
         return {"error": repr(e)[:300]}

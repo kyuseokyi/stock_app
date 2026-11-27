@@ -144,11 +144,23 @@ async def test_permissions(api, maker, preview, tier, role, code):
     assert (await client.get(f"{BASE}/quant-preview/005930")).status_code == code
 
 
-def test_skills_package_never_references_gemini():
-    """정적 검사 — A단계 skills 패키지 코드는 Gemini 클라이언트를 import 하지 않는다."""
+A_STAGE_MODULES = ("quant_facts.py", "quant_repository.py", "service.py", "skill_loader.py")
+
+
+def test_a_stage_modules_never_reference_gemini():
+    """정적 검사 — A단계 모듈(정량 엔진·미리 보기·로더)은 Gemini 클라이언트를 import 하지 않는다.
+    B단계 추론(skill_runner·report_service·router 의 analyze)은 Gemini 를 쓰므로 대상에서 뺀다."""
     root = Path(svc.__file__).parent
-    for p in root.glob("*.py"):
-        assert "gemini" not in p.read_text(encoding="utf-8").lower(), p.name
+    for name in A_STAGE_MODULES:
+        assert "gemini" not in (root / name).read_text(encoding="utf-8").lower(), name
+
+
+def test_skills_package_never_references_naver():
+    """정적 검사 — skills 패키지(코드·카탈로그)에는 네이버 검색 데이터가 들어가지 않는다(AI 입력·저장 금지)."""
+    root = Path(svc.__file__).parent
+    for p in [*root.glob("*.py"), *root.glob("catalog/*/SKILL.md")]:
+        text = p.read_text(encoding="utf-8").lower()
+        assert "naver" not in text and "네이버" not in text, p.name
 
 
 # ---------------- 서비스 묶음(가짜 저장소 — CH·PG·DART 접속 없음) ----------------
