@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import { useShallow } from 'zustand/react/shallow'
 import Button from '../components/ui/Button'
 import LoginModal from '../components/LoginModal'
 import DeleteAccountModal from '../components/DeleteAccountModal'
@@ -15,7 +16,7 @@ import { gameVisible } from '../lib/marketAccess'
 // 내정보(/me) — 앱 내정보 탭과 같은 자리. 비로그인: 간편 로그인 / 로그인: 닉네임·게임 바로가기·로그아웃·탈퇴.
 // 헤더의 닉네임 메뉴(UserMenu)도 그대로 둔다(데스크톱 동선).
 export default function MyPage() {
-  const { user, logout } = useAuthStore()
+  const { user, logout } = useAuthStore(useShallow((s) => ({ user: s.user, logout: s.logout })))
   const [loginOpen, setLoginOpen] = useState(false)
   const [deleteOpen, setDeleteOpen] = useState(false)
   const navigate = useNavigate()

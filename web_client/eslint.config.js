@@ -25,4 +25,15 @@ export default defineConfig([
       'react-hooks/refs': 'warn',
     },
   },
+  {
+    // 재발 방지 — 인자 없는 스토어 훅 호출(전체 구독)은 아무 필드가 바뀌어도 다시 그려진다
+    files: ['**/*.{ts,tsx}'],
+    ignores: ['**/*.test.{ts,tsx}'],
+    rules: {
+      'no-restricted-syntax': ['error', {
+        selector: 'CallExpression[callee.name=/^use[A-Z][A-Za-z]*(Store|Sheet)$/][arguments.length=0]',
+        message: '스토어 전체 구독 금지 — useX((s) => s.f) 또는 useX(useShallow((s) => ({ ... }))) 를 쓰세요',
+      }],
+    },
+  },
 ])

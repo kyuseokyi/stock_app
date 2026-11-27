@@ -3,6 +3,7 @@
  * useAppUpdate 는 AppUpdateGate 한 곳에서만 쓴다(검사·리스너 시작). 다른 화면은 useAppUpdateBlocking 만 읽는다.
  */
 import { useEffect } from 'react';
+import { useShallow } from 'zustand/react/shallow';
 
 import {
   currentMode,
@@ -17,8 +18,11 @@ import {
 } from './controller';
 
 export function useAppUpdate() {
-  const state = useAppUpdateStore();
-  const mode = currentMode(state);
+  // 스토어 전체 구독 대신 — 모드는 문자열을 돌려주는 선택자로, 나머지는 반환에 쓰는 필드만 고른다(반환 모양은 그대로)
+  const state = useAppUpdateStore(
+    useShallow((s) => ({ check: s.check, restarting: s.restarting, notice: s.notice })),
+  );
+  const mode = useAppUpdateStore(currentMode);
 
   useEffect(() => startAppUpdateLifecycle(), []);
 

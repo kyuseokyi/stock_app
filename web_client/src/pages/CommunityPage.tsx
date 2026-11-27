@@ -1,9 +1,10 @@
 import { Navigate } from 'react-router-dom'
+import { useShallow } from 'zustand/react/shallow'
 import { useBoardStore } from '../store/boards'
 
 // 커뮤니티(/community) — 첫 게시판으로 자동 이동 (없으면 안내). 홈(/)은 추천 글.
 export default function CommunityPage() {
-  const { boards, loaded, error } = useBoardStore()
+  const { boards, loaded, error } = useBoardStore(useShallow((s) => ({ boards: s.boards, loaded: s.loaded, error: s.error })))
 
   if (loaded && boards.length > 0) {
     return <Navigate to={`/boards/${boards[0].id}`} replace />
