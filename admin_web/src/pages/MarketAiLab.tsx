@@ -277,7 +277,7 @@ export default function MarketAiLab() {
             </div>
           ) : workspace}
         </div>
-        <aside className="min-w-0 lg:sticky lg:top-20" aria-label="리포트 히스토리 목록">
+        <aside className="min-w-0 lg:sticky lg:top-20 lg:max-h-[calc(100vh-6rem)] lg:overflow-y-auto" aria-label="리포트 히스토리 목록">
           <ReportHistory reloadKey={historyKey} selectedId={historyReport?.id ?? null}
             onOpen={(r) => void openHistory(r)} />
           {historyLoading && <p className="mt-2 text-xs text-ink-muted">리포트를 여는 중…</p>}

@@ -52,6 +52,9 @@ export default function FinderDetail({ item, bbSigma, date }: { item: FinderItem
       <Link to={`/market/verify?ticker=${encodeURIComponent(item.ticker)}`} className="-my-2 inline-flex min-h-11 items-center text-sm font-medium text-brand-strong">
         데이터 검증에서 보기 →
       </Link>
+      <Link to={`/market/ai-lab?ticker=${encodeURIComponent(item.ticker)}`} className="-my-2 inline-flex min-h-11 items-center text-sm font-medium text-brand-strong">
+        🧠 AI 심층 분석 열기 →
+      </Link>
       <p className="text-xs text-ink-muted">재무는 최신 연간 결산 기준이에요.</p>
     </div>
   )

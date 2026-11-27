@@ -45,9 +45,14 @@ export default function MaScreenerDetail({ item }: { item: MaScreenerItem }) {
           </div>
         ))}
       </dl>
-      <Link to={`/market/verify?ticker=${encodeURIComponent(item.ticker)}`} className="inline-block text-sm font-semibold text-indigo-600 hover:underline">
-        데이터 검증 화면에서 열기 →
-      </Link>
+      <div className="flex flex-wrap gap-x-4 gap-y-1">
+        <Link to={`/market/verify?ticker=${encodeURIComponent(item.ticker)}`} className="inline-block text-sm font-semibold text-indigo-600 hover:underline">
+          데이터 검증 화면에서 열기 →
+        </Link>
+        <Link to={`/market/ai-lab?ticker=${encodeURIComponent(item.ticker)}`} className="inline-block text-sm font-semibold text-indigo-600 hover:underline">
+          🧠 AI 심층 분석 열기 →
+        </Link>
+      </div>
     </div>
   )
 }

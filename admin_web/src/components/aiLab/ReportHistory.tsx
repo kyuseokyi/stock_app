@@ -16,6 +16,7 @@ export default function ReportHistory({ reloadKey, selectedId, onOpen }: {
   const [ticker, setTicker] = useState('')
   const [data, setData] = useState<ReportPage | null>(null)
   const [state, setState] = useState<'loading' | 'ok' | 'failed'>('loading')
+  const [refresh, setRefresh] = useState(0) // 일괄 분석 뒤 손으로 새로 고침
 
   useEffect(() => {
     let alive = true
@@ -24,7 +25,7 @@ export default function ReportHistory({ reloadKey, selectedId, onOpen }: {
       .then((r) => { if (alive) { setData(r); setState('ok') } })
       .catch(() => { if (alive) setState('failed') })
     return () => { alive = false }
-  }, [page, ticker, reloadKey])
+  }, [page, ticker, reloadKey, refresh])
 
   const applyFilter = (v: string) => {
     const t = v.trim().toUpperCase()
@@ -36,7 +37,11 @@ export default function ReportHistory({ reloadKey, selectedId, onOpen }: {
   return (
     <section className="flex flex-col gap-3 rounded-card bg-surface p-4" aria-label="리포트 히스토리">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-base font-bold text-ink">리포트 히스토리</h2>
+        <div className="flex items-center gap-2">
+          <h2 className="text-base font-bold text-ink">리포트 히스토리</h2>
+          <button type="button" onClick={() => setRefresh((x) => x + 1)}
+            className="h-9 rounded-btn bg-fill px-3 text-xs text-ink">새로 고침</button>
+        </div>
         <form className="flex items-center gap-2" onSubmit={(e) => { e.preventDefault(); applyFilter(filterInput) }}>
           <label htmlFor="ai-lab-history-ticker" className="sr-only">종목코드로 거르기</label>
           <input id="ai-lab-history-ticker" value={filterInput} onChange={(e) => setFilterInput(e.target.value)}

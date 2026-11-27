@@ -106,6 +106,10 @@ export default function CanslimDetail({ ticker }: { ticker: string }) {
       <Link to={`/market/verify?ticker=${encodeURIComponent(data.ticker)}`} className="-my-2 inline-flex min-h-11 items-center text-sm font-medium text-brand-strong">
         데이터 검증에서 보기 →
       </Link>
+      {/* 관리자 전용(웹 원본에는 없음) — AI Lab 으로 바로 열기 */}
+      <Link to={`/market/ai-lab?ticker=${encodeURIComponent(data.ticker)}`} className="-my-2 inline-flex min-h-11 items-center text-sm font-medium text-brand-strong">
+        🧠 AI 심층 분석 열기 →
+      </Link>
     </div>
   )
 }

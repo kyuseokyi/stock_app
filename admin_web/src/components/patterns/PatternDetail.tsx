@@ -106,6 +106,9 @@ export default function PatternDetail({ item }: { item: PatternItem }) {
       <Link to={`/market/verify?ticker=${encodeURIComponent(item.ticker)}`} className="-my-2 inline-flex min-h-11 items-center text-sm font-medium text-brand-strong">
         데이터 검증에서 보기 →
       </Link>
+      <Link to={`/market/ai-lab?ticker=${encodeURIComponent(item.ticker)}`} className="-my-2 inline-flex min-h-11 items-center text-sm font-medium text-brand-strong">
+        🧠 AI 심층 분석 열기 →
+      </Link>
     </div>
   )
 }
