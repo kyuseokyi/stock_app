@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import {
   getStockDetail, getThemeDetail, type BoardRow, type Direction, type StockDetail, type ThemeDetail,
 } from '../../api/dailySurge'
@@ -101,6 +102,10 @@ export default function DetailPanel({ date, selection, onChanged }: {
         </p>
         <p className={`text-2xl font-bold ${rateClass(s.change_rate)}`}>{fmtRate(s.change_rate)}</p>
         <p className="text-sm text-ink-muted">업종 {s.sector_name ?? '-'}</p>
+        <Link to={`/market/ai-lab?ticker=${encodeURIComponent(s.ticker)}`}
+          className="inline-flex min-h-11 w-fit items-center text-sm font-medium text-brand-strong hover:underline">
+          🧠 AI 심층 분석 열기 →
+        </Link>
         {s.themes.length > 0 && (
           <div className="flex flex-wrap gap-1" aria-label="소속 테마">
             {s.themes.map((t) => (
