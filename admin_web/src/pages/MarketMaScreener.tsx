@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { getMarketStatus } from '../api/marketAdmin'
 import { MA_PAGE_SIZE, getMaScreener, getScreenerDataset, type MaScreenerItem } from '../api/maScreener'
@@ -14,6 +15,7 @@ import PageHeader from '../leaders/components/ui/PageHeader'
 import { ListSkeleton } from '../leaders/components/ui/Skeleton'
 import StockRow from '../leaders/components/screener/StockRow'
 import { useMediaQuery } from '../leaders/hooks/useMediaQuery'
+import { screenerQueries } from '../queries/screenerQueries'
 import { formatPct, formatPrice } from '../leaders/lib/format'
 import {
   DEFAULT_MA_FILTERS, MA_MODES, activeMaFilters, datasetStatus, formatEok, formatManShares, positionBadge,
@@ -26,40 +28,36 @@ import type { Dataset } from '../types/marketAdmin'
 export default function MarketMaScreener() {
   const wide = useMediaQuery('(min-width: 1024px)')
   const [filters, setFilters] = useState<MaFilters>(DEFAULT_MA_FILTERS)
-  const [date, setDate] = useState<string | null>(null)
-  const [items, setItems] = useState<MaScreenerItem[]>([])
-  const [total, setTotal] = useState(0)
-  const [state, setState] = useState<'loading' | 'ready' | 'failed'>('loading')
   const [loadingMore, setLoadingMore] = useState(false)
   const [selected, setSelected] = useState<string | null>(null)
   const input = useMemo(() => toFilterInput(filters), [filters])
-
-  useEffect(() => {
-    let cancelled = false
-    setState('loading')
-    getMaScreener(input, filters.sort)
-      .then((r) => {
-        if (cancelled) return
-        setDate(r.date)
-        setItems(r.items)
-        setTotal(r.total)
-        setSelected((cur) => (r.items.some((i) => i.ticker === cur) ? cur : null))
-        setState('ready')
-      })
-      .catch(() => !cancelled && setState('failed'))
-    return () => {
-      cancelled = true
-    }
-  }, [input, filters.sort])
+  // 첫 쪽은 Query, '더 보기'로 이어 붙인 쪽은 조건 키에 묶어 화면이 들고 있다(조건이 바뀌면 비운다)
+  const firstPage = useQuery(screenerQueries.maScreener(input, filters.sort))
+  const condKey = JSON.stringify([input, filters.sort])
+  const [more, setMore] = useState<{ key: string; items: MaScreenerItem[] }>({ key: condKey, items: [] })
+  if (more.key !== condKey) setMore({ key: condKey, items: [] })
+  // 새로 받으면 고른 종목이 새 목록에 없을 때 닫는다(지금 동작)
+  const [last, setLast] = useState(firstPage.data)
+  if (firstPage.data !== undefined && firstPage.data !== last) {
+    const next = firstPage.data
+    setLast(next)
+    setSelected((cur) => (next.items.some((i) => i.ticker === cur) ? cur : null))
+  }
+  const date = last?.date ?? null
+  const total = firstPage.data?.total ?? 0
+  const items = firstPage.data ? (more.key === condKey ? [...firstPage.data.items, ...more.items] : firstPage.data.items) : []
+  const state: 'loading' | 'ready' | 'failed' = firstPage.isPending ? 'loading' : firstPage.isError ? 'failed' : 'ready'
 
   // 넓은 화면은 첫 종목을 오른쪽에 바로 보여준다(좁은 화면은 누를 때만 펼침)
   const shownTicker = selected ?? (wide ? items[0]?.ticker ?? null : null)
   const shown = items.find((i) => i.ticker === shownTicker) ?? null
 
   const loadMore = () => {
+    const key = condKey
     setLoadingMore(true)
     getMaScreener(input, filters.sort, items.length)
-      .then((r) => setItems((cur) => [...cur, ...r.items]))
+      // 조건이 바뀐 뒤 늦게 온 응답은 새 목록에 붙이지 않는다
+      .then((r) => setMore((m) => (m.key === key ? { key, items: [...m.items, ...r.items] } : m)))
       .catch(() => undefined)
       .finally(() => setLoadingMore(false))
   }
