@@ -5,6 +5,7 @@ import type { AppPlatform, AppVersionIn, AppVersionOut, OtaPolicy } from '../api
 import { apiErrorMessage } from '../lib/apiError'
 import { compareSemver, isValidSemver } from '../lib/semver'
 import { showToast } from '../lib/toast'
+import { confirmAction } from '@/lib/confirm'
 
 // 앱 버전 & 업데이트 — 플랫폼별 점검 모드·스토어 강제/권장·OTA 정책(명세 docs/app_update_management_spec.md §4)
 
@@ -190,7 +191,7 @@ export default function AppVersionsPage() {
     }
     const danger = dangerList(form)
     const name = platform === 'android' ? 'Android' : 'iOS'
-    if (danger.length && !confirm(`${name} 에 아래 설정을 적용할까요?\n\n${danger.join('\n')}`)) return
+    if (danger.length && !await confirmAction(`${name} 에 아래 설정을 적용할까요?\n\n${danger.join('\n')}`)) return
     setBusy(true)
     try {
       const out = await updateAppVersion(platform, toPayload(form))

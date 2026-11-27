@@ -12,6 +12,7 @@ import {
 import { showToast } from '../lib/toast'
 import { useMeStore } from '../store/me'
 import type { AdminUserOut } from '../types/api'
+import { confirmAction } from '@/lib/confirm'
 
 // 회원 관리 — 검색·페이지 이동, 닉네임 강제 변경, 댓글 작성 금지 켜기/끄기, 시세 열람 권한 켜기/끄기.
 // 설계: docs/superpowers/specs/2026-11-13-comment-report-block-design.md §3·§6,
@@ -93,7 +94,7 @@ export default function MembersPage() {
   const toggleBan = async (u: AdminUserOut) => {
     const next = !u.comment_banned
     const name = u.nickname ?? u.email ?? `#${u.id}`
-    if (next && !confirm(`'${name}' 회원의 댓글 작성을 금지할까요?`)) return
+    if (next && !await confirmAction(`'${name}' 회원의 댓글 작성을 금지할까요?`, { danger: true, confirmLabel: '금지' })) return
     setBusyId(u.id)
     setError('')
     try {
@@ -115,7 +116,7 @@ export default function MembersPage() {
     const name = u.nickname ?? u.email ?? `#${u.id}`
     if (
       next &&
-      !confirm(
+      !await confirmAction(
         `'${name}' 회원에게 시세 열람 권한을 줄까요?\n운영자 본인 확인용이에요. 다른 사람에게 주면 시세 재배포에 해당할 수 있어요.`,
       )
     )

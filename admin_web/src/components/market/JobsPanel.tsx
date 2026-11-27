@@ -7,6 +7,7 @@ import { showToast } from '../../lib/toast'
 import { useMeStore } from '../../store/me'
 import type { AdminJob, JobStatus, JobsOverview } from '../../types/marketAdmin'
 import BootstrapProgressPanel from './BootstrapProgressPanel'
+import { confirmAction } from '@/lib/confirm'
 
 const POLL_MS = 5000
 const JOB_STATUS: Record<JobStatus, string> = { idle: '실행', queued: '대기 중', running: '실행 중' }
@@ -74,7 +75,7 @@ export default function JobsPanel({ refreshKey = 0 }: { refreshKey?: number }) {
   const run = async (job: AdminJob) => {
     // 작업별 확인 문구가 있으면 그 문구로(초기 데이터 준비), 없으면 기존 기본 문구
     const message = job.confirm ?? `${job.label}을(를) 실행할까요?\n예상 시간: ${job.eta} · KIS 호출 없음`
-    if (!window.confirm(message)) return
+    if (!await confirmAction(message)) return
     setSending(job.key)
     try {
       await runJob(job.key)

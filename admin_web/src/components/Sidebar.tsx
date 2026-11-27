@@ -1,3 +1,5 @@
+import * as DialogPrimitive from '@radix-ui/react-dialog'
+import { useEffect } from 'react'
 import { NavLink } from 'react-router-dom'
 import { useShallow } from 'zustand/react/shallow'
 import { hasPermission } from '../lib/permissions'
@@ -132,6 +134,15 @@ function SidebarContent({ isSuper }: { isSuper: boolean }) {
 export default function Sidebar({ isSuper = false }: { isSuper?: boolean }) {
   const { sidebarOpen, closeSidebar } = useUiStore(useShallow((s) => ({ sidebarOpen: s.sidebarOpen, closeSidebar: s.closeSidebar })))
 
+  // 드로어를 연 채 넓은 화면(lg)이 되면 닫는다 — 열린 채 남으면 넓은 화면에서도 스크롤 잠금이 걸린다
+  useEffect(() => {
+    if (typeof window.matchMedia !== 'function') return
+    const mq = window.matchMedia('(min-width: 1024px)')
+    const onChange = () => { if (mq.matches) closeSidebar() }
+    mq.addEventListener('change', onChange)
+    return () => mq.removeEventListener('change', onChange)
+  }, [closeSidebar])
+
   return (
     <>
       {/* 데스크톱: 고정 사이드바 */}
@@ -139,19 +150,18 @@ export default function Sidebar({ isSuper = false }: { isSuper?: boolean }) {
         <SidebarContent isSuper={isSuper} />
       </aside>
 
-      {/* 모바일: 오버레이 드로어 */}
-      {sidebarOpen && (
-        <div className="fixed inset-0 z-40 lg:hidden">
-          <div
-            className="absolute inset-0 bg-black/40"
-            onClick={closeSidebar}
-            aria-hidden="true"
-          />
-          <aside className="absolute left-0 top-0 h-full w-64 border-r border-slate-200 bg-white shadow-xl">
-            <SidebarContent isSuper={isSuper} />
-          </aside>
-        </div>
-      )}
+      {/* 모바일: 오버레이 드로어 — Radix Dialog(Esc 닫기·포커스 가두기·스크롤 잠금), 모양은 예전 그대로 */}
+      <DialogPrimitive.Root open={sidebarOpen} onOpenChange={(o) => { if (!o) closeSidebar() }}>
+        <DialogPrimitive.Portal>
+          <DialogPrimitive.Overlay className="fixed inset-0 z-40 bg-black/40 lg:hidden" />
+          <DialogPrimitive.Content asChild aria-describedby={undefined}>
+            <aside className="fixed left-0 top-0 z-40 h-full w-64 border-r border-slate-200 bg-white shadow-xl lg:hidden">
+              <DialogPrimitive.Title className="sr-only">메뉴</DialogPrimitive.Title>
+              <SidebarContent isSuper={isSuper} />
+            </aside>
+          </DialogPrimitive.Content>
+        </DialogPrimitive.Portal>
+      </DialogPrimitive.Root>
     </>
   )
 }

@@ -287,3 +287,11 @@ body {
   content: '본문을 입력하세요…';
   @apply pointer-events-none float-left h-0 text-slate-400;
 }
+
+/* 표 숫자 정렬(Phase 6) — 표 안 숫자는 자릿수 폭을 같게 해 위아래 줄의 숫자가 세로로 맞는다.
+   호환 CSS 가 아니라 계속 두는 규칙. 표 밖 숫자는 필요한 곳에서 tabular-nums 클래스를 쓴다. */
+@layer base {
+  table {
+    font-variant-numeric: tabular-nums;
+  }
+}

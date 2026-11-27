@@ -3,6 +3,7 @@ import { listScreenerFeatures, updateScreenerFeature, type ScreenerFeature, type
 import { apiErrorMessage } from '../lib/apiError'
 import { formatDateTime } from '../lib/marketFormat'
 import { showToast } from '../lib/toast'
+import { confirmAction } from '@/lib/confirm'
 
 // 스크리너 탭 보이기 — 다듬는 중인 탭을 사용자 화면(웹·앱)에서 숨기거나 다시 연다. 기본은 꺼짐.
 // 목록 순서는 서버(KNOWN) 순서 — 종목 찾기 전체가 맨 위. 관리자 화면(주도주·패턴 관리 등)은 이 스위치와 무관하게 항상 보인다.
@@ -58,8 +59,8 @@ export default function ScreenerSettings() {
   const toggle = async (item: ScreenerFeature) => {
     const next = !item.enabled
     // 사용자 시세 노출을 켜면 일반 사용자에게 KIS 시세가 나간다 — 라이선스 없이 켜면 재배포(A안 설계)
-    if (item.key === 'MARKET_DATA' && next && !confirm('사용자 시세 노출을 켤까요?\nKRX/코스콤 시세 라이선스가 있어야 켤 수 있어요.')) return
-    if (item.key === 'MARKET_INDEX_KR' && next && !confirm('국내 지수(코스피·코스닥)를 모든 사용자에게 공개할까요?\n지수도 KRX 시세예요. Play 비공개 테스트 전에는 꺼 두세요.')) return
+    if (item.key === 'MARKET_DATA' && next && !await confirmAction('사용자 시세 노출을 켤까요?\nKRX/코스콤 시세 라이선스가 있어야 켤 수 있어요.')) return
+    if (item.key === 'MARKET_INDEX_KR' && next && !await confirmAction('국내 지수(코스피·코스닥)를 모든 사용자에게 공개할까요?\n지수도 KRX 시세예요. Play 비공개 테스트 전에는 꺼 두세요.')) return
     setPending(item.key)
     setItems((prev) => prev.map((f) => (f.key === item.key ? { ...f, enabled: next } : f)))
     try {

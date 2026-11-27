@@ -8,6 +8,7 @@ import {
   listComments,
 } from '../api/comments'
 import type { BlogOut, CommentOut } from '../types/api'
+import { confirmAction } from '@/lib/confirm'
 
 export default function BlogDetailPage() {
   const { id } = useParams()
@@ -60,7 +61,7 @@ export default function BlogDetailPage() {
   }
 
   const onDeleteComment = async (commentId: number) => {
-    if (!confirm('이 댓글을 삭제할까요?')) return
+    if (!await confirmAction('이 댓글을 삭제할까요?', { danger: true, confirmLabel: '삭제' })) return
     try {
       await deleteComment(commentId)
       loadComments()

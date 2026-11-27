@@ -5,6 +5,7 @@ import { formatPct, pctClass } from '../../lib/marketFormat'
 import { showToast } from '../../lib/toast'
 import type { AdminTheme, ThemeStockRow } from '../../types/marketAdmin'
 import StockSearchAdd from './StockSearchAdd'
+import { confirmAction } from '@/lib/confirm'
 
 export const THEME_SAVED_MESSAGE = '저장했어요. 테마 순위는 잠시 뒤 다시 계산돼요'
 
@@ -66,8 +67,8 @@ export default function ThemeDetail({ theme, onChanged, onClose }: Props) {
     }
     void act(() => updateTheme(theme.id, { name: name.trim(), description: description.trim() || null }))
   }
-  const exclude = (s: ThemeStockRow) => {
-    if (!window.confirm(`${s.name ?? s.ticker} 을(를) 이 테마에서 제외할까요?`)) return
+  const exclude = async (s: ThemeStockRow) => {
+    if (!await confirmAction(`${s.name ?? s.ticker} 을(를) 이 테마에서 제외할까요?`, { danger: true, confirmLabel: '제외' })) return
     void act(() => excludeThemeStock(theme.id, s.ticker), true)
   }
 

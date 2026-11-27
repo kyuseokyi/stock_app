@@ -17,6 +17,7 @@ import { hasPermission } from '../lib/permissions'
 import { showToast } from '../lib/toast'
 import { useMeStore } from '../store/me'
 import { screenerQueries } from '../queries/screenerQueries'
+import { FullScreenSheet } from '@/components/ui/full-screen-sheet'
 
 // 관리자 '급등락·테마 분석' — 날짜별 급등·급락·거래대금 상위, 같은 테마 동반 급등락 묶음(대장주), 공시, 이유 메모,
 // 네이버 뉴스 바로 보기. 설계 docs/superpowers/specs/2026-11-26-daily-surge-theme-analyzer-design.md
@@ -240,17 +241,9 @@ export default function MarketDailySurge() {
       )}
 
       {!wide && sheetOpen && date && (
-        <div role="dialog" aria-modal="true" aria-label="상세"
-          className="fixed inset-0 z-50 flex flex-col overflow-hidden bg-canvas">
-          <div className="flex items-center justify-between gap-2 border-b border-line bg-surface px-4 py-2">
-            <strong className="text-sm text-ink">상세</strong>
-            <button type="button" onClick={() => setSheetOpen(false)} autoFocus
-              className="h-11 min-w-[44px] rounded-btn bg-fill px-4 text-sm font-medium text-ink">닫기</button>
-          </div>
-          <div className="flex-1 overflow-y-auto p-4">
-            <DetailPanel date={date} selection={selection} onChanged={onChanged} />
-          </div>
-        </div>
+        <FullScreenSheet title="상세" onClose={() => setSheetOpen(false)}>
+          <DetailPanel date={date} selection={selection} onChanged={onChanged} />
+        </FullScreenSheet>
       )}
     </div>
   )

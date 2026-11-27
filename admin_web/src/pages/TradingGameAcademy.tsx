@@ -9,6 +9,7 @@ import {
 import { gameErrorMessage } from '../lib/gameApiError'
 import { showToast } from '../lib/toast'
 import type { AcademyQuestionAdmin, AcademyQuestionBody } from '../types/game'
+import { confirmAction } from '@/lib/confirm'
 
 const MIN_CHOICES = 2
 const MAX_CHOICES = 6
@@ -273,7 +274,7 @@ function AcademyPanel() {
   }
 
   const remove = async (q: AcademyQuestionAdmin) => {
-    if (!window.confirm(`문항 #${q.id} 을(를) 삭제할까요? 되돌릴 수 없습니다.`)) return
+    if (!await confirmAction(`문항 #${q.id} 을(를) 삭제할까요? 되돌릴 수 없습니다.`, { danger: true, confirmLabel: '삭제' })) return
     setPendingId(q.id)
     try {
       await deleteAcademyQuestion(q.id)

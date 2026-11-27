@@ -8,6 +8,7 @@ import { showToast } from '../lib/toast'
 import GameSeasonRewardSettings from '../components/GameSeasonRewardSettings'
 import EduGameOperations from '../components/EduGameOperations'
 import type { FeatureFlag, FeatureFlagKey } from '../types/game'
+import { confirmAction } from '@/lib/confirm'
 
 const FLAG_META: Record<FeatureFlagKey, { title: string; description: string }> = {
   QUIZ: {
@@ -78,8 +79,8 @@ function SettingsPanel() {
 
   const toggle = async (flag: FeatureFlag) => {
     const next = !flag.enabled
-    if (flag.key === 'REAL_MARKET' && next && !confirm('실제 시세 게임을 모든 사용자에게 공개할까요?\nKRX/코스콤 시세 라이선스가 있어야 켤 수 있어요.')) return
-    if (flag.key === 'EDU_DAILY_GAME' && !next && !confirm('가상 데이터(교육용 종가) 게임을 닫을까요?\n실시간 게임 스위치도 꺼져 있으면 사용자에게 게임 탭이 사라집니다.')) return
+    if (flag.key === 'REAL_MARKET' && next && !await confirmAction('실제 시세 게임을 모든 사용자에게 공개할까요?\nKRX/코스콤 시세 라이선스가 있어야 켤 수 있어요.')) return
+    if (flag.key === 'EDU_DAILY_GAME' && !next && !await confirmAction('가상 데이터(교육용 종가) 게임을 닫을까요?\n실시간 게임 스위치도 꺼져 있으면 사용자에게 게임 탭이 사라집니다.')) return
     setPending(flag.key)
     setFlags((prev) => prev.map((f) => (f.key === flag.key ? { ...f, enabled: next } : f)))
     try {

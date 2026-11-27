@@ -5,6 +5,7 @@ import { BrowserRouter } from 'react-router-dom'
 import App from './App'
 import './index.css'
 import { installChunkReload } from './lib/chunkReload'
+import { ConfirmHost } from './lib/confirm'
 import { getQueryClient } from './lib/queryClient'
 
 // TanStack Query 개발 도구 — 개발 모드에서만 동적으로 불러온다(운영 번들에 들어가지 않음)
@@ -22,6 +23,8 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
       <BrowserRouter>
         <App />
       </BrowserRouter>
+      {/* confirmAction() 이 띄우는 확인 대화상자 자리(브라우저 confirm 대체) */}
+      <ConfirmHost />
       {Devtools && (
         <Suspense fallback={null}>
           <Devtools initialIsOpen={false} />

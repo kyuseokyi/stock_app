@@ -4,6 +4,7 @@ import { listBoards } from '../api/boards'
 import { deleteBlog, listBlogs, updateBlog } from '../api/blogs'
 import { showToast } from '../lib/toast'
 import type { BlogListOut, BlogOut, BoardOut } from '../types/api'
+import { confirmAction } from '@/lib/confirm'
 
 const PAGE_SIZE = 10
 
@@ -46,7 +47,7 @@ export default function BlogListPage() {
   const totalPages = Math.max(1, Math.ceil(data.total / PAGE_SIZE))
 
   const onDelete = async (id: number) => {
-    if (!confirm('이 게시글을 삭제할까요?')) return
+    if (!await confirmAction('이 게시글을 삭제할까요?', { danger: true, confirmLabel: '삭제' })) return
     const prev = data
     // 낙관적 제거: 목록을 통째로 다시 그리지 않고 해당 행만 즉시 제거(깜빡임 방지)
     setData((d) => ({
