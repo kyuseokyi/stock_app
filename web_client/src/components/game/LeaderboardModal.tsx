@@ -135,7 +135,6 @@ export default function LeaderboardModal({ seasonId, myUserId, seasonPeriod, onC
             estimateSize={36}
             gap={4}
             className="space-y-1"
-            virtualClassName="flex flex-col"
             itemClassName={(r) =>
               `flex items-center gap-3 rounded-field px-3 py-2 text-sm ${isMine(r.user_id) ? 'bg-brand-soft' : ''}`
             }

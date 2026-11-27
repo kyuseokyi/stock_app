@@ -49,7 +49,23 @@ describe('VirtualList', () => {
     expect(items.length).toBeLessThan(100)
     expect(screen.getByText('사용자1')).toBeTruthy()
     expect(screen.queryByText('사용자500')).toBeNull()
-    expect(screen.getByRole('list').className).toBe('flex flex-col')
+    const list = screen.getByRole('list')
+    expect(list.className).toBe('flex flex-col')
+    // 계산에 쓴 gap 이 화면 간격으로도 걸린다(클래스에 gap-* 를 빠뜨려도 끝에 빈 공간이 안 생김)
+    expect(list.style.rowGap).toBe('4px')
+  })
+
+  it('가상 모드에서는 일반 모드 className(space-y 등 margin)을 대신 쓰지 않는다', () => {
+    render(
+      <VirtualList
+        items={rows(200)}
+        getKey={(r) => r.id}
+        estimateSize={40}
+        className="space-y-1"
+        renderItem={(r) => <span>{r.name}</span>}
+      />,
+    )
+    expect(screen.getByRole('list').className).toBe('')
   })
 
   it('가장 가까운 스크롤 상자 안에서도 일부만 그린다(모달 본문)', () => {

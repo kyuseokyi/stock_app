@@ -18,12 +18,12 @@ export interface VirtualListProps<T> {
   itemClassName?: (item: T, index: number) => string | undefined
   /** 한 줄 예상 높이(px) — 실제 높이는 그린 뒤 잰다 */
   estimateSize: number
-  /** 가상 모드 줄 간격(px). space-y 는 margin 이라 실측에 안 잡혀서 flex gap 과 같이 쓴다 */
+  /** 가상 모드 줄 간격(px). space-y 는 margin 이라 실측에 안 잡혀서, 주면 부품이 flex column + row-gap 을 직접 건다 */
   gap?: number
   as?: 'ul' | 'ol'
   /** 일반 모드 ul/ol 클래스 */
   className?: string
-  /** 가상 모드 ul/ol 클래스(없으면 className) */
+  /** 가상 모드 ul/ol 클래스 — className 을 대신 쓰지 않는다(space-y 같은 margin 이 섞이면 높이 계산이 어긋남) */
   virtualClassName?: string
   /** 가상 모드 바깥 상자 클래스 — 그리드 자식 클래스(min-w-0, self-start 등)를 여기로 */
   wrapperClassName?: string
@@ -64,7 +64,14 @@ function VirtualMode<T>(props: VirtualListProps<T>) {
   const hostRef = useRef<HTMLDivElement>(null)
   // undefined = 아직 못 찾음, null = 창(window) 스크롤
   const [scroller, setScroller] = useState<HTMLElement | null | undefined>(undefined)
-  useLayoutEffect(() => setScroller(findScrollParent(hostRef.current)), [])
+  // 부모가 다시 그릴 때마다 다시 찾는다 — React 가 같은 DOM 을 다른 자리에 재사용하면(조상 overflow 가 바뀜)
+  // 처음 찾은 상자가 더는 스크롤 상자가 아니어서 전 줄을 그리게 된다. 스크롤 중 재렌더는 Body 안에서만 일어나 비용 없음.
+  // 같은 상자면 prev 를 그대로 돌려줘 다시 그리지 않으므로 무한 갱신이 없다.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useLayoutEffect(() => {
+    const found = findScrollParent(hostRef.current)
+    setScroller((prev) => (prev === found ? prev : found))
+  })
   const margin = useScrollMargin(hostRef, scroller, props.items.length)
 
   return (
@@ -145,8 +152,8 @@ function Rows<T>({
   renderItem,
   itemClassName,
   as = 'ul',
-  className,
   virtualClassName,
+  gap,
 }: BodyProps<T> & { v: Virtualizer<HTMLElement, Element> | Virtualizer<Window, Element> }) {
   const Tag = as
   const vItems = v.getVirtualItems()
@@ -154,8 +161,16 @@ function Rows<T>({
   return (
     <div style={{ position: 'relative', height: v.getTotalSize() }}>
       <Tag
-        className={virtualClassName ?? className}
-        style={{ position: 'absolute', top: 0, left: 0, width: '100%', transform: `translateY(${offset}px)` }}
+        className={virtualClassName}
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          width: '100%',
+          transform: `translateY(${offset}px)`,
+          // 계산에 쓴 gap 과 화면 간격을 반드시 일치시킨다 — 클래스로 맡기면 빠뜨렸을 때 끝에 빈 공간이 생긴다.
+          ...(gap ? { display: 'flex', flexDirection: 'column', rowGap: gap } : null),
+        }}
       >
         {vItems.map((vi) => {
           const item = items[vi.index]
