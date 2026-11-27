@@ -33,7 +33,7 @@ export default function ScrollRow({ fade = 'surface', className = '', children, 
         {children}
       </div>
       {more && (
-        <div aria-hidden className={`pointer-events-none absolute inset-y-0 right-0 w-8 bg-linear-to-l ${FADE[fade]}`} />
+        <div aria-hidden className={`pointer-events-none absolute inset-y-0 right-0 w-8 bg-linear-to-l/srgb ${FADE[fade]}`} />
       )}
     </div>
   )
