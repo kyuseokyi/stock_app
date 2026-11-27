@@ -14,7 +14,7 @@ backend/
 │   └── collector/   # 수집·알림 워커 (Celery) — 새 글 알림 · 펀드 리포트 알림(Expo Push)
 ├── shared/          # 공통 DB 모델·세션·JWT 검증·보안
 └── alembic/         # DB 마이그레이션
-admin_web/           # 관리자 웹 (React + Vite + TailwindCSS, TypeScript)  (포트 5173)
+admin_web/           # 관리자 웹 (React + Vite + TailwindCSS v4 + shadcn/ui, TypeScript)  (포트 5173)
 web_client/          # 일반 유저 웹 (React + Vite + Tailwind + Zustand)   (포트 3000)
 docs/                # 아키텍처·기획·프롬프트 문서
 docker-compose.dev.yml
@@ -156,6 +156,8 @@ npm run dev        # http://localhost:5173
 - admin_web 은 **TypeScript(strict)** 다. `npm run build` = `tsc --noEmit && vite build` 이므로 타입 에러가 있으면 빌드(및 Docker 배포 빌드)가 실패한다. 타입만 확인하려면 `npx tsc --noEmit`.
 - 로컬에서 배포용 빌드를 확인할 때는 VITE_* 가 필수다: `VITE_API_BASE_URL=http://x VITE_AUTH_BASE_URL=http://x VITE_STOCK_API_URL=http://x npm run build`.
 - API 응답 타입은 `admin_web/src/types/`(백엔드 pydantic·GraphQL 스키마 기준)에 있다. 백엔드 응답 스키마를 바꾸면 여기도 함께 갱신한다.
+- 스타일: Tailwind CSS v4(`src/index.css` 의 `@theme inline` 토큰, 설정 파일 없음) + shadcn/ui 코어 부품(`src/components/ui/`)
+- 테스트: `cd admin_web && npm test` (vitest + Testing Library)
 - **트레이딩 게임 > 데일리 코치**(`/game/coach`)는 trading_game(8003)을 호출한다. `VITE_GAME_API_URL`은 **선택** 변수 — dev 에서 미설정 시 `http://localhost:8003`, 배포 빌드에서 미설정이면 화면에 "게임 서버 미연결" 안내(빌드는 실패하지 않음). trading_game 운영 배포 전까지 필수 목록(`vite.config.js` REQUIRED)에 넣지 않는다.
 - **트레이딩 게임 > 🎓 아카데미 문항**(`/game/academy`): 문항 추가·편집(선택지 2~6·정답 라디오·해설·순서)·활성 토글·삭제, 활성 문항 수 표시(활성 문항을 모두 맞혀야 5배 해금). **🧩 퀴즈 관리**(`/game/quizzes`): 활성 필터·페이지네이션 목록, 상세 차트(기준일선 + 이후 5거래일은 stock_api 일봉으로 다른 색), 패턴·해설 편집, 활성 토글, 삭제(시도 있으면 비활성 안내), "N개 자동 생성", "직접 출제"(국내 종목 검색·기준일). 게임 서버(8003)와 차트·검색용 stock_api(8002) 필요.
 - **시장 데이터 › 급등락·테마 분석**(`/market/daily-surge`, 권한 `SCREENER_VIEW`): 날짜별 급등(+10~+30%)·급락(−10~−30%)·거래대금 상위 50과 **같은 테마 동반 급등락 묶음**(대장주 = 묶음 안 거래대금 1위, 테마 출처 키움 우선). 테마·종목 이유 메모(날짜별 저장), DART 공시(전일·당일), 네이버 뉴스 바로 보기(저장 안 함·받은 순서 그대로 — 약관), 일봉 차트. 집계는 평일 22:10 `collector.analyze_daily_surge`(상용 CH 일봉 읽기 → PG `daily_surge_*` 3표), 재집계는 화면 버튼·데이터 현황 작업(`DATA_PIPELINE`). API `/api/v1/admin/market/daily-surge*`. 설계 [`docs/superpowers/specs/2026-11-26-daily-surge-theme-analyzer-design.md`](docs/superpowers/specs/2026-11-26-daily-surge-theme-analyzer-design.md)
