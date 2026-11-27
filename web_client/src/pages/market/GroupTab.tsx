@@ -43,7 +43,10 @@ export default function GroupTab({ kind }: { kind: GroupKind }) {
   const condKey = groups.queryKey.join('|')
   const [more, setMore] = useState<{ key: string; items: GroupItem[] }>({ key: condKey, items: [] })
   if (more.key !== condKey) setMore({ key: condKey, items: [] })
-  const date = query.data?.date ?? null
+  // 마지막으로 받은 첫 쪽의 기준일 — 조건을 바꿔 불러오는 동안·실패 때도 아래 기준일 줄은 직전 값을 보인다(지금 동작)
+  const [lastDate, setLastDate] = useState<string | null>(null)
+  if (query.data !== undefined && query.data.date !== lastDate) setLastDate(query.data.date)
+  const date = query.data !== undefined ? query.data.date : lastDate
   const total = query.data?.total ?? 0
   const items = query.data ? (more.key === condKey ? [...query.data.items, ...more.items] : query.data.items) : []
   const state: 'loading' | 'ready' | 'failed' = query.isPending ? 'loading' : query.isError ? 'failed' : 'ready'
