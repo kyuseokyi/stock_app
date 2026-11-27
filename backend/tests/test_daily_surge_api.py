@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from shared.auth import get_current_user
 from shared.daily_surge_models import DailySurgeNote, DailySurgeStock, DailySurgeThemeGroup
 from shared.database import get_db
-from shared.models import Base, User, UserRole
+from shared.models import Base, MarketType, StockMeta, User, UserRole
 from apps.stock_api.main import app
 from apps.stock_api.routers import daily_surge_admin as router_mod
 from apps.stock_api.services import daily_surge_news as news
@@ -319,6 +319,23 @@ async def test_news_unavailable(api, maker, redis, monkeypatch):
     assert body["items"] == [] and body["unavailable"] is False  # 기사 0건 ≠ 키 없음
     assert (await client.get(f"{BASE}/news", params={"kind": "stock", "date": "2026-11-26",
                                                        "target": "ZZZ"})).status_code == 404
+
+
+async def test_news_falls_back_to_stock_master_name(api, maker, redis, monkeypatch):
+    """그날 급등락 목록에 없는 종목(AI Lab)도 종목 마스터 이름으로 검색 — 저장은 여전히 안 함."""
+    client, state = api
+    state["user"] = await _seed(maker)
+    async with maker() as s:
+        s.add(StockMeta(ticker="005930", name="삼성전자", market=MarketType.KOSPI, is_active=True))
+        await s.commit()
+    fake = _News([_item("기사", "Thu, 26 Nov 2026 10:00:00 +0900")])
+    monkeypatch.setattr(news, "get_naver_news_client", lambda: fake)
+    body = (await client.get(f"{BASE}/news", params={"kind": "stock", "date": "2026-11-26",
+                                                       "target": "005930"})).json()
+    assert body["query"] == "삼성전자 특징주" and fake.calls == [("삼성전자 특징주", 10, "date")]
+    # 급등락 행이 있으면 그 이름이 먼저(기존 동작 그대로)
+    assert (await client.get(f"{BASE}/news", params={"kind": "stock", "date": "2026-11-26",
+                                                       "target": "A"})).json()["query"] == "이름A 특징주"
 
 
 async def test_rebuild_rejects_non_trading_or_future_day(api, maker, redis, sent):

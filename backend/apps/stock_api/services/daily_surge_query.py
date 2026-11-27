@@ -12,6 +12,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from shared.daily_surge_models import DailySurgeNote, DailySurgeStock, DailySurgeThemeGroup
+from shared.models import StockMeta
 
 
 # ---------------------------------------------------------------- 표시 변환
@@ -259,10 +260,13 @@ async def delete_note(db: AsyncSession, d: date, scope: str, target: str) -> Non
 
 
 async def name_for(db: AsyncSession, d: date, kind: str, target: str) -> str | None:
-    """뉴스 검색어에 쓸 이름 — 그날 저장된 종목명 또는 테마명(없으면 None → 404)."""
+    """뉴스 검색어에 쓸 이름 — 그날 저장된 종목명 또는 테마명(없으면 None → 404).
+    종목이 그날 급등락 목록에 없으면(AI Lab 처럼 아무 종목이나 여는 화면) 종목 마스터 이름을 쓴다 — 뉴스는 여전히 저장 안 함."""
     if kind == "stock":
         s = await db.get(DailySurgeStock, (d, target))
-        return s.name if s else None
+        if s:
+            return s.name
+        return await db.scalar(select(StockMeta.name).where(StockMeta.ticker == target).limit(1))
     if not target.isdigit():
         return None
     return await db.scalar(select(DailySurgeThemeGroup.theme_name).where(
