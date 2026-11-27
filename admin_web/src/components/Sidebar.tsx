@@ -1,4 +1,5 @@
 import { NavLink } from 'react-router-dom'
+import { useShallow } from 'zustand/react/shallow'
 import { hasPermission } from '../lib/permissions'
 import { NAV_PERMS } from '../lib/navPermissions'
 import { useMeStore } from '../store/me'
@@ -129,7 +130,7 @@ function SidebarContent({ isSuper }: { isSuper: boolean }) {
 }
 
 export default function Sidebar({ isSuper = false }: { isSuper?: boolean }) {
-  const { sidebarOpen, closeSidebar } = useUiStore()
+  const { sidebarOpen, closeSidebar } = useUiStore(useShallow((s) => ({ sidebarOpen: s.sidebarOpen, closeSidebar: s.closeSidebar })))
 
   return (
     <>

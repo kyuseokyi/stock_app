@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
+import { useShallow } from 'zustand/react/shallow'
 import { useBoardStore } from '../store/boards'
 import { useAuthStore } from '../store/auth'
 import { openLogin, useLoginPromptStore } from '../store/loginPrompt'
@@ -20,10 +21,15 @@ import Button from './ui/Button'
 import { titleFor } from '../lib/pageTitle'
 
 export default function Layout() {
-  const { boards, fetchBoards, boardName } = useBoardStore()
-  const { user, token, logout } = useAuthStore()
+  const { boards, fetchBoards, boardName } = useBoardStore(
+    useShallow((s) => ({ boards: s.boards, fetchBoards: s.fetchBoards, boardName: s.boardName })),
+  )
+  const { user, token, logout } = useAuthStore(useShallow((s) => ({ user: s.user, token: s.token, logout: s.logout })))
   // 로그인 모달은 전역 스토어 하나 — 헤더 버튼·'내 펀드' 탭·홈 카드가 같은 모달을 연다
-  const loginPrompt = useLoginPromptStore()
+  // 모달이 쓰는 필드만 구독(open·close·description·returnTo) — 이름 loginPrompt 는 그대로
+  const loginPrompt = useLoginPromptStore(
+    useShallow((s) => ({ open: s.open, close: s.close, description: s.description, returnTo: s.returnTo })),
+  )
   const [deleteOpen, setDeleteOpen] = useState(false)
   const location = useLocation()
   const navigate = useNavigate()

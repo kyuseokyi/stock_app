@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StyleSheet } from 'react-native-unistyles';
+import { useShallow } from 'zustand/react/shallow';
 
 import { infeedInterval, isInfeedAfter } from '@/features/ads/ad-config';
 import { HouseAdSlot } from '@/features/ads/house-ad-card';
@@ -19,7 +20,9 @@ const PAGE_SIZE = 10;
  *  탭 화면은 Stack 헤더가 없어 상단 안전 영역을 직접 비운다 */
 export default function CommunityScreen() {
   const insets = useSafeAreaInsets();
-  const { boards, loaded: boardsLoaded, error: boardsError, load: loadBoards } = useBoardStore();
+  const { boards, loaded: boardsLoaded, error: boardsError, load: loadBoards } = useBoardStore(
+    useShallow((s) => ({ boards: s.boards, loaded: s.loaded, error: s.error, load: s.load })),
+  );
   const refreshBoards = useBoardStore((s) => s.refresh);
   const [selected, setSelected] = useState<BoardFilter>(null);
   const [page, setPage] = useState(1);

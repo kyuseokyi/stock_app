@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { useShallow } from 'zustand/react/shallow'
 import LoginModal from '../components/LoginModal'
 import Button from '../components/ui/Button'
 import Card from '../components/ui/Card'
@@ -79,11 +80,25 @@ function GameScreen() {
   const userId = useAuthStore((s) => s.user?.id ?? null)
   const expireSession = useAuthStore((s) => s.expireSession)
   const loggedIn = token !== null
+  // 스토어 전체 구독 대신 쓰는 필드만 성격별로 고른다(꺼내는 이름은 그대로) — 고르지 않은 필드(toasts 등)가 바뀌어도 다시 그려지지 않는다
+  // 시즌·내 상태
   const {
-    status, season, account, position, myRank, coach, academyUnlocked, streak, quizDisabled, lastPrice, sentiment,
-    submitting, closing, loadSeason, loadPrivate, resetPrivate, refreshRank, placeOrder, closePosition,
-    marketStatus, loadMarketStatus, streamEpoch,
-  } = useTradingGameStore()
+    status, season, account, position, myRank, coach, academyUnlocked, streak, quizDisabled,
+    submitting, closing, marketStatus, streamEpoch,
+  } = useTradingGameStore(useShallow((s) => ({
+    status: s.status, season: s.season, account: s.account, position: s.position, myRank: s.myRank, coach: s.coach,
+    academyUnlocked: s.academyUnlocked, streak: s.streak, quizDisabled: s.quizDisabled,
+    submitting: s.submitting, closing: s.closing, marketStatus: s.marketStatus, streamEpoch: s.streamEpoch,
+  })))
+  // 실시간 시세(틱마다 바뀜)
+  const { lastPrice, sentiment } = useTradingGameStore(useShallow((s) => ({ lastPrice: s.lastPrice, sentiment: s.sentiment })))
+  // 동작 함수(참조가 바뀌지 않음)
+  const { loadSeason, loadPrivate, resetPrivate, refreshRank, placeOrder, closePosition, loadMarketStatus } = useTradingGameStore(
+    useShallow((s) => ({
+      loadSeason: s.loadSeason, loadPrivate: s.loadPrivate, resetPrivate: s.resetPrivate, refreshRank: s.refreshRank,
+      placeOrder: s.placeOrder, closePosition: s.closePosition, loadMarketStatus: s.loadMarketStatus,
+    })),
+  )
   const [loginOpen, setLoginOpen] = useState(false)
   const [activeModal, setActiveModal] = useState<ActiveModal>(null)
   const pushToast = useTradingGameStore((s) => s.pushToast)
