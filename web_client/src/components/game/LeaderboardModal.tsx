@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import Button from '../ui/Button'
 import { chipClass } from '../ui/Chip'
 import Modal from '../ui/Modal'
+import VirtualList from '../ui/VirtualList'
 import WeeklyRankingTab from './WeeklyRankingTab'
 import { getHallOfFame, getLeaderboard } from '../../api/game'
 import { RANKING_REFRESH_MS } from '../../hooks/usePeriodRanking'
@@ -87,6 +88,7 @@ export default function LeaderboardModal({ seasonId, myUserId, seasonPeriod, onC
   }, RANKING_REFRESH_MS, tab === 'season')
 
   const current = tab === 'season' ? board : hof
+  const isMine = (userId: number) => myUserId !== null && userId === myUserId
 
   return (
     <Modal title="랭킹" onClose={onClose}>
@@ -126,27 +128,30 @@ export default function LeaderboardModal({ seasonId, myUserId, seasonPeriod, onC
         board.data.length === 0 ? (
           <p className="py-10 text-center text-sm text-ink-muted">아직 순위가 없어요</p>
         ) : (
-          <ol className="space-y-1">
-            {board.data.map((r) => {
-              const mine = myUserId !== null && r.user_id === myUserId
-              return (
-                <li
-                  key={r.user_id}
-                  className={`flex items-center gap-3 rounded-field px-3 py-2 text-sm ${mine ? 'bg-brand-soft' : ''}`}
-                >
-                  <span className="w-8 shrink-0 font-bold tabular-nums text-ink">{r.rank}</span>
-                  <span className="flex-1 truncate text-ink">
-                    {r.nickname ?? '익명'}
-                    {mine && <span className="ml-1 text-xs font-semibold text-brand-strong">나</span>}
-                  </span>
-                  <span className={`w-16 text-right font-semibold tabular-nums ${pnlClass(r.roi_pct)}`}>
-                    {formatPct(r.roi_pct)}
-                  </span>
-                  <span className="w-20 text-right text-xs text-ink-muted tabular-nums">승률 {winRate(r.win_rate)}</span>
-                </li>
-              )
-            })}
-          </ol>
+          <VirtualList
+            as="ol"
+            items={board.data}
+            getKey={(r) => r.user_id}
+            estimateSize={36}
+            gap={4}
+            className="space-y-1"
+            itemClassName={(r) =>
+              `flex items-center gap-3 rounded-field px-3 py-2 text-sm ${isMine(r.user_id) ? 'bg-brand-soft' : ''}`
+            }
+            renderItem={(r) => (
+              <>
+                <span className="w-8 shrink-0 font-bold tabular-nums text-ink">{r.rank}</span>
+                <span className="flex-1 truncate text-ink">
+                  {r.nickname ?? '익명'}
+                  {isMine(r.user_id) && <span className="ml-1 text-xs font-semibold text-brand-strong">나</span>}
+                </span>
+                <span className={`w-16 text-right font-semibold tabular-nums ${pnlClass(r.roi_pct)}`}>
+                  {formatPct(r.roi_pct)}
+                </span>
+                <span className="w-20 text-right text-xs text-ink-muted tabular-nums">승률 {winRate(r.win_rate)}</span>
+              </>
+            )}
+          />
         )
       )}
 
