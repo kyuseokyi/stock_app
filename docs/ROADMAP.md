@@ -249,11 +249,11 @@
 - [ ] Phase 4 (대용량 리스트 가상화 — `@tanstack/react-virtual`): 공통 `VirtualList` & `VirtualTable` (`measureElement` 가변 높이 측정 + `React.memo`) 구축 후 관리자 스크리너·급등락 분석·테마·회원 목록 및 유저 웹 순위/랭킹/게시판 목록에 적용
 - [ ] Phase 5 & 6 (모바일 `mobile` 업그레이드 & 통합 폴리싱): 모바일 `TanStack Query`(`AppState`·`NetInfo` 연동) + `@shopify/flash-list` 가상화 + NativeWind v4 / Shadcn RN(`@rn-primitives/*`) 적용 및 전 플랫폼 회귀 검증
 
-### 관리자 전용 AI 종목 심층 분석 워크스테이션 (오픈소스 무료 금융 스킬 5종 + Gemini API 결합)
+### 관리자 전용 AI 종목 심층 분석 워크스테이션 (7대 오픈소스 무료 금융 스킬 생태계 + Gemini API 결합)
 > 상세 설계 및 로드맵: [`docs/admin_gemini_finance_skills_spec_and_plan.md`](admin_gemini_finance_skills_spec_and_plan.md)
-- [ ] Step 1: PostgreSQL `admin_ai_skill_reports` 테이블(`(ticker, as_of_date)` 유니크, 정량 팩트·SEPA 분석·EV 3-시나리오·밸류에이션·실적 품질·뉴스 촉매 Top 5 저장) 및 Alembic 마이그레이션 추가
-- [ ] Step 2: 5대 무료 오픈소스 스킬(`himself65/finance-skills`의 `sepa-strategy`, `company-valuation`, `earnings-recap`, `stock-liquidity` + `tellmefrankie/ai-investment-skills`의 `ev-calculator`, `news-sentiment-engine`)용 파이썬 정량 전처리기(`backend/apps/ai_analyst/skills/quant_facts.py` — ClickHouse 일봉 300봉 SEPA 8조건·업종 상대 멀티플·4분기 실적 가속·외인/연기금 수급·DART/뉴스 원문 결합) 구현
-- [ ] Step 3: 5대 오픈소스 스킬 루브릭 기반 Gemini 구조화 추론 엔진(`skill_runner.py`) 및 관리자 전용 REST API(`/api/v1/admin/ai-skills/*`, `require_admin` 가드) 구현
+- [ ] Step 1: PostgreSQL `admin_ai_skill_reports` 테이블(`(ticker, as_of_date)` 유니크, 정량 팩트·SEPA 분석·Vibe 백테스트·포지션 사이징·인과 전달 사슬(Logic Chain) & 가설 기각 조건·EV 3-시나리오·K-Skill DART/밸류에이션·뉴스 촉매 Top 5 저장) 및 Alembic 마이그레이션 추가
+- [ ] Step 2: 7대 오픈소스 금융 스킬 생태계(**`파이낸스 스킬즈` · `AI 투자 스킬즈` · `파이낸셜 서비스` · `바이브 트레이딩` · `트레이딩 스킬즈` · `K 스킬` · `어썸 파이낸스`**) 통합 파이썬 정량 엔진(`backend/apps/ai_analyst/skills/quant_facts.py` — SEPA 8조건, Vibe-Trading 최근 2년 동일 셋업 D+5/10/20 승률 백테스트, Trading-Skills 시장 폭 기반 포지션 사이저, K-Skill DART 오버행/수주 스캐너, 업종 상대 멀티플) 구현
+- [ ] Step 3: 0원 즉시 조회용 `GET /quant-preview/{ticker}` + Gemini 7대 스킬 추론용 `POST /analyze/{ticker}`(Awesome-Finance 4단계 인과 전달 사슬·Financial-Services 가설 Kill Switch·EV 3-시나리오·뉴스 감성 랭킹) 관리자 전용 REST API(`/api/v1/admin/ai-skills/*`, `require_admin` 가드) 구현
 - [ ] Step 4: 관리자 웹(`admin_web` > `시장 데이터` > `🧠 AI 종목 심층 분석 (/market/ai-lab)`) 단독 워크스테이션 화면 및 기존 스크리너(`주도주 · 5·20 정배열 · 급등락 분석`)에서의 원클릭 연동 버튼 구현
 
 ### 날짜별 종가 기준 급등주(+10~+30%) · 급락주(-10~-30%) · 거래대금 상위 & 테마·대장주 분석기
