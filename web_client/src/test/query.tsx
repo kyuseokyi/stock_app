@@ -7,6 +7,14 @@ import { MemoryRouter } from 'react-router-dom'
 import { vi } from 'vitest'
 import { RETURN_REFRESH_MS } from '../lib/marketLive'
 
+// jsdom 에 없는 ResizeObserver(가로 스크롤 줄 ScrollRow 가 쓴다) — 최소 대체
+class NoopResizeObserver {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+}
+globalThis.ResizeObserver ??= NoopResizeObserver as unknown as typeof ResizeObserver
+
 export function renderWithClient(ui: ReactElement, { route = '/' }: { route?: string } = {}) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   const view = render(
