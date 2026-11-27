@@ -19,7 +19,8 @@ export default defineConfig(({ command, mode }) => {
   return {
     plugins: [react()],
     server: { port: 3000, host: true },
-    // 단위 테스트(Vitest) — src 의 순수 함수 *.test.ts. DOM 없이 node 에서(화면 테스트가 생기면 jsdom 추가)
-    test: { environment: 'node', include: ['src/**/*.test.ts'] },
+    // 단위 테스트(Vitest) — 기본은 DOM 없이 node 에서(src 의 순수 함수 *.test.ts).
+    // 화면 테스트(*.test.tsx)는 파일 첫 줄 `// @vitest-environment jsdom` 으로 그 파일만 jsdom 에서 돈다.
+    test: { environment: 'node', include: ['src/**/*.test.ts', 'src/**/*.test.tsx'] },
   }
 })
