@@ -48,10 +48,21 @@
 - `service.py` — `quant_preview(ticker, capital, risk_pct, as_of=None)` 가 위를 묶어 JSON.
 - `router.py` — `/api/v1/admin/ai-skills`: `GET /catalog`, `GET /catalog/{id}`, `GET /quant-preview/{ticker}?capital&risk_pct`. stock_api 에 등록.
 
-## 3. B단계 — Gemini 추론·저장 (다음)
+## 3. B단계 — Gemini 추론·저장
 - 모델 `AdminAiSkillReport`(원 기획 4.1, `news_catalysts` → `dart_catalysts`), 마이그레이션.
 - `schemas.py`(구조화 출력), `skill_runner.py`: 선택 스킬 프롬프트 + 정량 팩트 + DART 제목 → `generate_json` 1회. 응답의 숫자(목표가·확률 합 100%)는 검증 후 저장.
 - `POST /analyze/{ticker}`, `GET /reports`(페이징), `GET /reports/{ticker}`, `POST /batch-top`(급등락 대장주·주도주 Top 5, `DATA_PIPELINE`).
+- **최종 규칙(2026-11-27 구현)** — 코드 `skills/schemas.py`·`skill_runner.py`·`report_repository.py`·`report_service.py`, 마이그레이션 `5ee4ded7e917`
+  - 입력은 스킬 루브릭 + 정량 팩트 JSON(공시 항목은 뺀 요약) + DART 공시(접수번호·접수일·제목·파이썬 태그)뿐. 공시 링크·제출인·언론 기사는 넣지 않는다.
+  - 응답 스키마에는 손절·피벗·주식 수·리스크%·기대수익률 필드가 없다(숫자는 정량 팩트 값만 저장). 허용값·범위는 스키마가 아니라 검증 함수가 본다.
+  - EV: 기준 종가 ≤ 0 → 거부(`CLOSE_INVALID`), 목표가 ≤ 0 → 거부(`EV_TARGET_INVALID`), 확률 음수·합 ≤ 0 → 거부(`EV_PROB_INVALID`), 합이 100±1 밖이면 비율대로 100 으로 정규화. `weighted_ev_pct = Σ(목표가/종가 − 1)×100×확률/100` 을 파이썬이 다시 계산.
+  - 판정·시그널이 허용값 밖이면 거부(`VERDICT_INVALID`·`SIGNAL_INVALID`), 3줄 요약이 비면 거부(`SUMMARY_EMPTY`). 시나리오 신뢰도가 허용값 밖이면 `LOW`.
+  - 공시 촉매: 입력 목록에 있는 접수번호만, 중복은 첫 항목, 별점 1~5·감성 −1~1 로 자르고, 모르는 등급은 `general`. 제목·접수일·원문 링크(`https://dart.fss.or.kr/dsaf001/main.do?rcpNo=…`)는 파이썬이 붙임. 등급 순 → 별점 순 최대 5개.
+  - 비용 보호: 같은 (종목, 정량 기준일) 리포트가 있으면 Gemini 미호출(키가 없어도 저장분 반환), `force=true` 만 다시 분석해 같은 행 upsert. 종목별 Redis 잠금 `ai:skills:analyze:<ticker>`(300초, 내 토큰만 해제, Redis 장애면 잠금 없이 진행).
+  - 오류: 일봉 없음 404 `NOT_FOUND` → 저장분 확인 → 키 없음 503 `GEMINI_UNAVAILABLE` → 응답 없음·거부 502 `AI_RESPONSE_INVALID`(+`reason`), 분석 중 409 `ANALYZING`, 모르는 스킬 422 `UNKNOWN_SKILL`.
+  - `batch-top`: 202 + task id(Celery `ai.skills_batch_top`, 일괄 잠금 중이면 409). 대상 surge = `daily_surge_stocks` 최신 집계일의 급등 `surge_rank` 순, leaders = `canslim_query.screen(ALL, score, 유동성 통과)` 상위. 오늘 기준일이거나 오늘 갱신한 리포트가 있는 종목은 건너뜀, 키가 없으면 첫 종목에서 멈춤.
+  - 목록 `GET /reports?page&page_size(≤100)&ticker` → `{items,total,page,page_size,pages}`, 항목은 요약(판정·시그널·기대수익률·첫 줄)만, 최근 기준일 순.
+  - 카탈로그 두 곳의 "뉴스 기사" 표현을 "언론 기사"로 바꿔 프롬프트 전체에 뉴스·네이버 단어가 없게 했다(정적·프롬프트 테스트로 고정).
 
 ## 4. C단계 — 관리자 화면 `/market/ai-lab` (다음)
 - 원 기획 3절 화면 구성. 네이버 뉴스는 별도 칸(`NaverNewsList` 재사용). 목록은 페이징, 모바일 상세는 전체 화면(사용자 규칙).
