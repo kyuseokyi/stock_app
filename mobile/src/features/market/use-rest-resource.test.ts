@@ -23,6 +23,9 @@ function deferred<T>() {
   return { promise, resolve, reject };
 }
 
+/** 늦춰진 알림(Query 는 setTimeout 0 으로 묶어 알린다)까지 흘려보낸다 — "바뀌지 않아야 함"을 확인할 때 */
+const flush = () => act(async () => new Promise<void>((r) => setTimeout(r, 20)));
+
 const httpError = (status: number) => Object.assign(new Error(`HTTP ${status}`), { response: { status } });
 
 describe('useRestResource', () => {
@@ -65,7 +68,7 @@ describe('useRestResource', () => {
     await act(async () => {
       await result.current.reload();
     });
-    expect(result.current).toMatchObject({ data: 'first', loading: false, error: 'HTTP 500' });
+    await waitFor(() => expect(result.current).toMatchObject({ data: 'first', loading: false, error: 'HTTP 500' }));
     expect(result.current.fetchedAt.current).not.toBeNull();
   });
 
@@ -77,7 +80,7 @@ describe('useRestResource', () => {
     await act(async () => {
       await result.current.reload();
     });
-    expect(result.current).toMatchObject({ data: 'back', loading: false, error: null });
+    await waitFor(() => expect(result.current).toMatchObject({ data: 'back', loading: false, error: null }));
   });
 
   it('refresh(당겨서 새로고침)는 실패하면 throw 하고 보이던 data 는 그대로 둔다', async () => {
@@ -87,11 +90,12 @@ describe('useRestResource', () => {
     await act(async () => {
       await expect(result.current.refresh()).rejects.toBeTruthy();
     });
-    expect(result.current.data).toBe('a');
+    await flush();
+    expect(result.current).toMatchObject({ data: 'a', error: null });
     await act(async () => {
       await result.current.refresh();
     });
-    expect(result.current).toMatchObject({ data: 'b', error: null, loading: false });
+    await waitFor(() => expect(result.current).toMatchObject({ data: 'b', error: null, loading: false }));
   });
 
   it('silentRefresh 는 실패하면 throw 하고 data 는 그대로, 성공하면 data 를 바꾸고 오류를 지운다', async () => {
@@ -105,11 +109,12 @@ describe('useRestResource', () => {
     await act(async () => {
       await expect(result.current.silentRefresh()).rejects.toBeTruthy();
     });
-    expect(result.current.data).toBeNull();
+    await flush();
+    expect(result.current).toMatchObject({ data: null, error: 'NETWORK' });
     await act(async () => {
       await result.current.silentRefresh();
     });
-    expect(result.current).toMatchObject({ data: 'fresh', error: null });
+    await waitFor(() => expect(result.current).toMatchObject({ data: 'fresh', error: null }));
   });
 
   it('reload 전에 시작한 silentRefresh 응답은 버린다(늦게 온 옛 응답이 새 결과를 덮지 않음)', async () => {
@@ -128,11 +133,12 @@ describe('useRestResource', () => {
     await act(async () => {
       await result.current.reload();
     });
-    expect(result.current.data).toBe('reloaded');
+    await waitFor(() => expect(result.current.data).toBe('reloaded'));
     await act(async () => {
       slow.resolve('stale');
       await silent;
     });
+    await flush();
     expect(result.current.data).toBe('reloaded');
   });
 
