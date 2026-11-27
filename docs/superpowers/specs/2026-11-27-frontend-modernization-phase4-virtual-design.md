@@ -36,7 +36,7 @@ interface VirtualListProps<T> {
   gap?: number              // 가상 모드 줄 간격(px)
   as?: 'ul' | 'ol'
   className?: string        // 일반 모드 ul/ol 클래스
-  virtualClassName?: string // 가상 모드 ul/ol 클래스(없으면 className)
+  virtualClassName?: string // 가상 모드 ul/ol 클래스 — className 을 대신 쓰지 않는다(space-y margin 이 섞이면 높이 계산이 어긋남)
   threshold?: number        // 이 개수 미만이면 가상 스크롤 없이 전부 그림(기본 60)
 }
 ```
@@ -44,17 +44,18 @@ interface VirtualListProps<T> {
 동작:
 1. `items.length < threshold` → 지금과 **똑같은 마크업**(ul/ol + li 전부)을 그린다. 짧은 목록은 화면·Ctrl+F·테스트가 그대로다.
 2. 그 이상 → `useVirtualizer` 로 보이는 줄 + 앞뒤 여유(overscan 8)만 그린다.
-   - **스크롤 상자 자동 찾기**: 목록에서 위로 올라가며 `overflow-y` 가 `auto|scroll` 인 첫 조상을 쓴다. 없으면 window(`observeWindowRect`·`observeWindowOffset`·`windowScroll`).
-   - **scrollMargin**: 목록 윗변이 스크롤 내용 맨 위에서 떨어진 거리. 마운트·항목 수 변경·창 크기 변경 때 다시 잰다.
+   - **스크롤 상자 자동 찾기**: 목록에서 위로 올라가며 `overflow-y` 가 `auto|scroll` 인 첫 조상을 쓴다. 없으면 window(`useWindowVirtualizer`). 부모가 다시 그릴 때마다 다시 찾는다(React 가 DOM 을 재사용해 조상 overflow 가 바뀌면 옛 상자를 쓰는 문제 — 브라우저 확인에서 발견).
+   - **scrollMargin**: 목록 윗변이 스크롤 내용 맨 위에서 떨어진 거리. 부모 재렌더·창 크기 변경 때 다시 잰다(위쪽 '내 순위' 등 높이는 줄 수와 무관하게 바뀜). 둘 다 같은 값이면 상태를 안 바꿔 무한 갱신 없음.
    - 바깥 `div` 높이 = 전체 높이, 안쪽 ul/ol 을 `translateY(첫 줄 시작 − scrollMargin)` 로 내린다. ul/ol 이 li 의 직계 부모라서 `divide-y` 가 그대로 먹는다.
-   - `space-y-*` 는 margin 이라 실측 높이에 안 잡히므로, 가상 모드는 `flex flex-col` + `gap` 옵션을 같은 값으로 쓴다.
+   - `space-y-*` 는 margin 이라 실측 높이에 안 잡힌다. `gap` 을 주면 부품이 ul/ol 에 `display:flex; flex-direction:column; row-gap` 을 직접 걸어 계산 간격과 화면 간격을 항상 맞춘다(클래스로 맡기면 빠뜨렸을 때 목록 끝에 빈 공간).
    - 줄 높이는 `measureElement` 로 실측(테두리·줄바꿈 차이 흡수).
    - `initialRect` 를 주어 jsdom(레이아웃 없음)에서도 앞쪽 줄이 그려지게 한다.
 
 ## 화면별 바꾸는 것
 
 - ThemeList: `<ul>…rows.map…</ul>` → `<VirtualList as="ul" className=기존 클래스 …/>`. 버튼 내용은 그대로.
-- LeaderboardModal 시즌 탭·WeeklyRankingTab 본 목록: `className="space-y-1"`, `virtualClassName="flex flex-col"`, `gap={4}`. 일반 모드 모양 그대로.
+- LeaderboardModal 시즌 탭·WeeklyRankingTab 본 목록: `className="space-y-1"`, `gap={4}`. 일반 모드 모양 그대로.
+- ThemeList 는 그리드 자식이라 `wrapperClassName="min-w-0 self-start"`, 테두리·구분선은 `virtualClassName`. 관리자 Layout 조상에 overflow 가 없어 창 스크롤로 잡힌다(`Layout.tsx:42·81` 확인).
 
 ## 오류·한계
 

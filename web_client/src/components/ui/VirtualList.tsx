@@ -72,7 +72,7 @@ function VirtualMode<T>(props: VirtualListProps<T>) {
     const found = findScrollParent(hostRef.current)
     setScroller((prev) => (prev === found ? prev : found))
   })
-  const margin = useScrollMargin(hostRef, scroller, props.items.length)
+  const margin = useScrollMargin(hostRef, scroller)
 
   return (
     <div ref={hostRef} className={props.wrapperClassName}>
@@ -85,25 +85,26 @@ function VirtualMode<T>(props: VirtualListProps<T>) {
   )
 }
 
-/** 목록 윗변이 스크롤 내용 맨 위에서 떨어진 거리(px). 창 크기 변경·항목 수 변경 때 다시 잰다. */
-function useScrollMargin(hostRef: RefObject<HTMLDivElement | null>, scroller: HTMLElement | null | undefined, count: number) {
+/** 목록 윗변이 스크롤 내용 맨 위에서 떨어진 거리(px). */
+function useScrollMargin(hostRef: RefObject<HTMLDivElement | null>, scroller: HTMLElement | null | undefined) {
   const [margin, setMargin] = useState(0)
+  // 위쪽 내용(내 순위·지난주 Top3 등) 높이는 줄 수와 상관없이 바뀐다 — 부모가 다시 그릴 때마다·창 크기가 바뀔 때 다시 잰다.
+  // 같은 값이면 prev 를 돌려줘 다시 그리지 않으므로 무한 갱신이 없다.
   useLayoutEffect(() => {
     if (scroller === undefined) return
     const measure = () => {
       const host = hostRef.current
       if (!host) return
       const top = host.getBoundingClientRect().top
-      setMargin(
-        scroller
-          ? Math.round(top - scroller.getBoundingClientRect().top + scroller.scrollTop)
-          : Math.round(top + window.scrollY),
-      )
+      const next = scroller
+        ? Math.round(top - scroller.getBoundingClientRect().top + scroller.scrollTop)
+        : Math.round(top + window.scrollY)
+      setMargin((prev) => (prev === next ? prev : next))
     }
     measure()
     window.addEventListener('resize', measure)
     return () => window.removeEventListener('resize', measure)
-  }, [hostRef, scroller, count])
+  })
   return margin
 }
 
