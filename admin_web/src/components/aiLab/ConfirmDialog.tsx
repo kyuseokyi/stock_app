@@ -20,7 +20,7 @@ export default function ConfirmDialog({ open, title, children, confirmLabel = 'ì
 
   if (!open) return null
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-ink/40 p-4" onClick={onCancel}>
+    <div className="fixed inset-0 z-60 flex items-center justify-center bg-ink/40 p-4" onClick={onCancel}>
       <div role="alertdialog" aria-modal="true" aria-labelledby="ai-lab-confirm-title"
         className="flex w-full max-w-md flex-col gap-3 rounded-card bg-surface p-5 shadow-xl"
         onClick={(e) => e.stopPropagation()}>

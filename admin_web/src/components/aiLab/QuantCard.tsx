@@ -42,7 +42,7 @@ function SepaTable({ sepa }: { sepa: Sepa }) {
                 <p className="text-ink">{c.no}. {c.label}</p>
                 <p className="text-xs text-ink-muted">{conditionValues(c.values)}</p>
               </div>
-              <span className={`shrink-0 rounded px-1.5 py-0.5 text-xs font-medium ${passClass(c.pass)}`}>{passLabel(c.pass)}</span>
+              <span className={`shrink-0 rounded-sm px-1.5 py-0.5 text-xs font-medium ${passClass(c.pass)}`}>{passLabel(c.pass)}</span>
             </li>
           ))}
         </ul>
@@ -123,7 +123,7 @@ function Exposure({ breadth, stop, position, positionError }: {
       <div className="flex flex-wrap items-center gap-2 text-sm">
         <span className="text-ink-muted">시장 폭{breadth.market ? `(${breadth.market})` : ''}</span>
         {breadth.regime ? (
-          <span className={`rounded px-1.5 py-0.5 text-xs font-medium ${classOf(REGIME_CLASS, breadth.regime)}`}>
+          <span className={`rounded-sm px-1.5 py-0.5 text-xs font-medium ${classOf(REGIME_CLASS, breadth.regime)}`}>
             {labelOf(REGIME_LABEL, breadth.regime)}
           </span>
         ) : <span className="text-ink-muted">자료 없음</span>}
@@ -181,10 +181,10 @@ function DartList({ dart }: { dart: DartFacts }) {
       {!dart.available && <p className="text-sm text-ink-muted">DART 키가 없거나 불러오지 못해 공시를 넣지 못했습니다.</p>}
       {dart.available && (
         <div className="flex flex-wrap gap-2 text-xs">
-          <span className={`rounded px-1.5 py-0.5 font-medium ${dart.overhang ? 'bg-danger-soft text-danger' : 'bg-fill text-ink-muted'}`}>
+          <span className={`rounded-sm px-1.5 py-0.5 font-medium ${dart.overhang ? 'bg-danger-soft text-danger' : 'bg-fill text-ink-muted'}`}>
             오버행 {dart.overhang ? '있음(증자·CB·BW·EB 등)' : '없음'}
           </span>
-          {dart.fatal && <span className="rounded bg-danger-soft px-1.5 py-0.5 font-medium text-danger">감사의견·관리종목 경고</span>}
+          {dart.fatal && <span className="rounded-sm bg-danger-soft px-1.5 py-0.5 font-medium text-danger">감사의견·관리종목 경고</span>}
         </div>
       )}
       {dart.available && dart.items.length === 0 && <p className="text-sm text-ink-muted">공시가 없습니다.</p>}
@@ -194,8 +194,8 @@ function DartList({ dart }: { dart: DartFacts }) {
             <li key={d.rcept_no ?? i} className="flex items-start justify-between gap-3 border-b border-line py-1.5 text-sm">
               <div className="min-w-0">
                 <p className="text-ink">
-                  {d.tag === 'positive' && <span className="mr-1 rounded bg-up-soft px-1.5 py-0.5 text-xs text-up">호재</span>}
-                  {d.tag === 'negative' && <span className="mr-1 rounded bg-down-soft px-1.5 py-0.5 text-xs text-down">악재</span>}
+                  {d.tag === 'positive' && <span className="mr-1 rounded-sm bg-up-soft px-1.5 py-0.5 text-xs text-up">호재</span>}
+                  {d.tag === 'negative' && <span className="mr-1 rounded-sm bg-down-soft px-1.5 py-0.5 text-xs text-down">악재</span>}
                   {d.title}
                 </p>
                 <p className="text-xs text-ink-muted">

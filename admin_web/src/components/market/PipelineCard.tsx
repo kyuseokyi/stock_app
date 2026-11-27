@@ -43,7 +43,7 @@ export default function PipelineCard({ record }: { record: PipelineRecord | null
                   <span className="text-xs text-slate-500">{formatSeconds(s.seconds)}</span>
                 </button>
                 {openStep === s.name && (
-                  <pre className="mx-2 mb-1 whitespace-pre-wrap break-all rounded bg-slate-50 p-2 text-[11px] text-slate-600">
+                  <pre className="mx-2 mb-1 whitespace-pre-wrap break-all rounded-sm bg-slate-50 p-2 text-[11px] text-slate-600">
                     {s.summary}
                   </pre>
                 )}

@@ -98,7 +98,7 @@ function AmountInput({
           disabled={disabled}
           value={withComma(value)}
           onChange={(e) => onChange(e.target.value.replace(/[^\d]/g, '').replace(/^0+(?=\d)/, '').slice(0, 10))}
-          className="w-full min-w-0 bg-transparent text-right text-sm text-slate-900 outline-none disabled:opacity-50"
+          className="w-full min-w-0 bg-transparent text-right text-sm text-slate-900 outline-hidden disabled:opacity-50"
         />
         <span className="ml-1 shrink-0 text-sm text-slate-500">원</span>
       </div>
@@ -269,7 +269,7 @@ export default function GameSeasonRewardSettings() {
                 onChange={(e) =>
                   setForm((f) => (f ? { ...f, chart_interval_default: e.target.value as ChartInterval } : f))
                 }
-                className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-indigo-200 disabled:opacity-50"
+                className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-hidden focus:ring-2 focus:ring-indigo-200 disabled:opacity-50"
               >
                 {CHART_INTERVALS.map((v) => (
                   <option key={v} value={v}>

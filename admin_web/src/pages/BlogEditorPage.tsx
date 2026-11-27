@@ -103,7 +103,7 @@ export default function BlogEditorPage() {
           <select
             value={form.board_id}
             onChange={setField('board_id')}
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none"
+            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-hidden"
           >
             <option value="">게시판 선택</option>
             {boards.map((b) => (
@@ -120,7 +120,7 @@ export default function BlogEditorPage() {
             value={form.title}
             onChange={setField('title')}
             placeholder="제목을 입력하세요"
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none"
+            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-hidden"
           />
         </div>
 
@@ -140,7 +140,7 @@ export default function BlogEditorPage() {
               type="checkbox"
               checked={notify}
               onChange={(e) => setNotify(e.target.checked)}
-              className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+              className="h-4 w-4 rounded-sm border-slate-300 text-indigo-600 focus:ring-indigo-500"
             />
             앱 알림 보내기
             <span className="text-xs text-slate-400">

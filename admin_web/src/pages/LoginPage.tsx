@@ -45,7 +45,7 @@ export default function LoginPage() {
 
   return (
     <div className="flex min-h-screen items-center justify-center px-4">
-      <div className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
+      <div className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-8 shadow-xs">
         <h1 className="mb-1 text-center text-xl font-bold text-slate-900">
           <img src="/favicon.svg" alt="" aria-hidden className="mr-1 inline-block h-6 w-6 align-[-5px]" />FunNote <span className="text-indigo-600">Admin</span>
         </h1>
@@ -70,7 +70,7 @@ export default function LoginPage() {
               value={loginId}
               onChange={(e) => setLoginId(e.target.value)}
               placeholder="아이디"
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none"
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-hidden"
             />
           </div>
           <div>
@@ -83,7 +83,7 @@ export default function LoginPage() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="비밀번호"
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none"
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-hidden"
             />
           </div>
           <button

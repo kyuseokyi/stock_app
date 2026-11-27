@@ -41,7 +41,7 @@ export default function ThemeList({ rows, loading, selectedId, onSelect }: Props
                   {t.source === 'admin' ? '관리자' : t.source === 'kiwoom' ? '키움' : 'KIS'}
                 </span>
                 {t.is_hidden && (
-                  <span className="shrink-0 rounded bg-slate-200 px-1.5 py-0.5 text-[10px] text-slate-600">숨김</span>
+                  <span className="shrink-0 rounded-sm bg-slate-200 px-1.5 py-0.5 text-[10px] text-slate-600">숨김</span>
                 )}
               </span>
               <span className="text-xs text-slate-400">

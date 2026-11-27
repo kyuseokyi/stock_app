@@ -124,7 +124,7 @@ export default function RichTextEditor({ value, onChange }: RichTextEditorProps)
     editorProps: {
       attributes: {
         class:
-          'prose max-w-none min-h-[280px] px-3 py-2 focus:outline-none text-sm',
+          'prose max-w-none min-h-[280px] px-3 py-2 focus:outline-hidden text-sm',
       },
     },
   })

@@ -67,7 +67,7 @@ const validate = (f: FormState): string | null => {
 }
 
 const inputCls =
-  'w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none'
+  'w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-hidden'
 
 function QuestionEditor({
   initial,
@@ -349,7 +349,7 @@ function AcademyPanel() {
                 <div className="min-w-0 flex-1">
                   <p className="text-xs text-slate-400">
                     순서 {q.sort_order} · #{q.id}
-                    {!q.is_active && <span className="ml-2 rounded bg-slate-100 px-1.5 py-0.5 text-slate-500">비활성</span>}
+                    {!q.is_active && <span className="ml-2 rounded-sm bg-slate-100 px-1.5 py-0.5 text-slate-500">비활성</span>}
                   </p>
                   <p className="mt-1 font-medium text-slate-900">{q.question}</p>
                   <ol className="mt-2 space-y-0.5 text-sm text-slate-600">

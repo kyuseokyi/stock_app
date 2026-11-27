@@ -25,7 +25,7 @@ const advanceMessage = (r: EduAdvanceResult): { text: string; icon: string } => 
   return { text: `결과: ${r.status}`, icon: 'ℹ️' }
 }
 
-const input = 'w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-200'
+const input = 'w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:outline-hidden focus:ring-2 focus:ring-indigo-200'
 const btnPrimary = 'rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50'
 const btnSecondary = 'rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50'
 

@@ -690,7 +690,7 @@ export default function ChartSnapshotModal({ open, onClose, onInsert }: ChartSna
               }
             }}
             placeholder="국내외 종목·지수 검색 (예: 삼성, AAPL, KOSPI)"
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none"
+            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-hidden"
           />
           {!selected && results.length > 0 && (
             <ul className="absolute z-10 mt-1 max-h-56 w-full overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-lg">
@@ -905,7 +905,7 @@ export default function ChartSnapshotModal({ open, onClose, onInsert }: ChartSna
                 {/* 캔들 정보(마우스오버) */}
                 {hover && hoverCandle && (
                   <div
-                    className="pointer-events-none absolute z-10 rounded-md border border-slate-200 bg-white/95 px-2.5 py-1.5 text-xs text-slate-700 shadow"
+                    className="pointer-events-none absolute z-10 rounded-md border border-slate-200 bg-white/95 px-2.5 py-1.5 text-xs text-slate-700 shadow-sm"
                     style={{
                       left: hover.x + 180 > boxWidth ? hover.x - 172 : hover.x + 14,
                       top: Math.max(4, hover.y - 60),
@@ -958,7 +958,7 @@ export default function ChartSnapshotModal({ open, onClose, onInsert }: ChartSna
                       left: Math.max(0, Math.min(textInput.px, boxWidth - 170)),
                       top: textInput.py,
                     }}
-                    className="z-10 w-40 rounded border border-indigo-400 bg-white px-2 py-1 text-xs shadow"
+                    className="z-10 w-40 rounded-sm border border-indigo-400 bg-white px-2 py-1 text-xs shadow-sm"
                   />
                 )}
               </div>

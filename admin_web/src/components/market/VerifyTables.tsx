@@ -152,7 +152,7 @@ export function MembershipsCard({ rows, note, className }: TableCardProps<Verify
               {rows.map((m) => (
                 <tr key={`${m.kind}:${m.group_id}`} className="border-t border-slate-100">
                   <td className={TD_LEFT}>{m.kind === 'sector' ? '업종' : '테마'}</td>
-                  <td className="min-w-[8rem] break-keep px-3 py-1">
+                  <td className="min-w-32 break-keep px-3 py-1">
                     {m.name} <span className="text-xs text-slate-400">{m.group_id}</span>
                   </td>
                   <td className={TD}>{rankText(m.rank)}</td>

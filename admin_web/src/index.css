@@ -1,6 +1,58 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import 'tailwindcss';
+
+@plugin '@tailwindcss/typography';
+
+@theme {
+  --color-brand: #6f8ef0;
+  --color-brand-soft: #e2ecff;
+  --color-brand-strong: #4963c1;
+
+  --color-up: #b6265d;
+  --color-up-soft: #fbd6e4;
+
+  --color-down: #3c5dc1;
+  --color-down-soft: #d8e3fd;
+
+  --color-ink: #25223a;
+  --color-ink-muted: #6a6681;
+
+  --color-canvas: #f7f5ff;
+  --color-surface: #ffffff;
+  --color-fill: #efebfb;
+
+  --color-sky-soft: #e2ecff;
+
+  --color-accent: #aa5278;
+
+  --color-danger: #a14f09;
+  --color-danger-soft: #fde7d4;
+
+  --color-line: #ebe7f7;
+  --color-kakao: #fee500;
+  --color-naver: #03c75a;
+
+  --radius-card: 20px;
+  --radius-btn: 14px;
+  --radius-field: 12px;
+}
+
+/*
+  The default border color has changed to `currentcolor` in Tailwind CSS v4,
+  so we've added these compatibility styles to make sure everything still
+  looks the same as it did with Tailwind CSS v3.
+
+  If we ever want to remove these styles, we need to add an explicit border
+  color utility to any element that depends on these defaults.
+*/
+@layer base {
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--color-gray-200, currentcolor);
+  }
+}
 
 body {
   @apply bg-slate-50 text-slate-800 antialiased;
@@ -38,7 +90,7 @@ body {
   @apply my-3 max-w-full rounded-lg;
 }
 .ProseMirror img.ProseMirror-selectednode {
-  @apply outline outline-2 outline-indigo-400;
+  @apply outline-solid outline-2 outline-indigo-400;
 }
 .ProseMirror p.is-editor-empty:first-child::before {
   content: '본문을 입력하세요…';

@@ -29,11 +29,11 @@ export default function ScrollRow({ fade = 'surface', className = '', children, 
 
   return (
     <div className="relative">
-      <div ref={ref} className={`flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none] ${className}`} {...props}>
+      <div ref={ref} className={`flex gap-2 overflow-x-auto pb-1 scrollbar-none ${className}`} {...props}>
         {children}
       </div>
       {more && (
-        <div aria-hidden className={`pointer-events-none absolute inset-y-0 right-0 w-8 bg-gradient-to-l ${FADE[fade]}`} />
+        <div aria-hidden className={`pointer-events-none absolute inset-y-0 right-0 w-8 bg-linear-to-l ${FADE[fade]}`} />
       )}
     </div>
   )

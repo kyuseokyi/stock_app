@@ -68,7 +68,7 @@ export default function ReportHistory({ reloadKey, selectedId, onOpen }: {
                 <span className="flex flex-wrap items-center gap-2">
                   <strong className="text-ink">{r.stock_name}</strong>
                   <span className="text-xs text-ink-muted">{r.ticker} · 기준일 {r.as_of_date}</span>
-                  <span className={`rounded px-1.5 py-0.5 text-xs font-medium ${classOf(VERDICT_CLASS, r.overall_verdict)}`}>
+                  <span className={`rounded-sm px-1.5 py-0.5 text-xs font-medium ${classOf(VERDICT_CLASS, r.overall_verdict)}`}>
                     {labelOf(VERDICT_LABEL, r.overall_verdict)}
                   </span>
                   {r.signal && <span className="text-xs text-ink-muted">시그널 {labelOf(SIGNAL_LABEL, r.signal)}</span>}
