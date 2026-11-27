@@ -13,7 +13,7 @@ uses_facts: [sepa, backtest, market_breadth, stop, position, dart, peer_valuatio
 
 ## 입력
 - 모든 정량 팩트(`sepa`, `backtest`, `market_breadth`, `stop`, `position`, `dart`, `peer_valuation`, `earnings_trend`)와 다른 스킬의 결론.
-- 사건(원인)은 DART 공시 제목과 정량 변화에서만 찾는다. 뉴스 기사는 입력으로 쓰지 않는다.
+- 사건(원인)은 DART 공시 제목과 정량 변화에서만 찾는다. 언론 기사는 입력으로 쓰지 않는다.
 
 ## 사슬 만들기
 1. **사건**: 공시·실적·가격 변화 중 가장 중요한 것 1~3개.
