@@ -1,5 +1,6 @@
 import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
+import tailwindcss from '@tailwindcss/vite'
 
 // 배포 빌드 시 반드시 주입돼야 하는 공개 설정(누락 시 빌드 실패 → 'green-but-broken' 차단)
 const REQUIRED = ['VITE_API_BASE_URL', 'VITE_AUTH_BASE_URL', 'VITE_STOCK_API_URL']
@@ -18,7 +19,8 @@ export default defineConfig(({ command, mode }) => {
     }
   }
   return {
-    plugins: [react()],
+    // Tailwind v4 — PostCSS 대신 vite 플러그인으로 처리
+    plugins: [react(), tailwindcss()],
     server: {
       port: 5173,
       host: true,
