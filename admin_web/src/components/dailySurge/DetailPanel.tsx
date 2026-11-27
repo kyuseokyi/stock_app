@@ -1,8 +1,7 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
-import {
-  getStockDetail, getThemeDetail, type BoardRow, type Direction, type StockDetail, type ThemeDetail,
-} from '../../api/dailySurge'
+import type { BoardRow, Direction } from '../../api/dailySurge'
+import { screenerQueries } from '../../queries/screenerQueries'
 import StockDailyChart from '../../leaders/components/screener/StockDailyChart'
 import { fmtDiff, fmtPrice, fmtRate, fmtValue, fmtVolume, rateClass, themeLabel } from '../../lib/dailySurge'
 import NaverNewsList from './NaverNewsList'
@@ -40,30 +39,20 @@ function Board({ title, rows, highlight }: { title: string; rows: BoardRow[]; hi
 export default function DetailPanel({ date, selection, onChanged }: {
   date: string; selection: Selection | null; onChanged: () => void
 }) {
-  const [stock, setStock] = useState<StockDetail | null>(null)
-  const [theme, setTheme] = useState<ThemeDetail | null>(null)
-  const [state, setState] = useState<'idle' | 'loading' | 'ok' | 'failed'>('idle')
+  const qc = useQueryClient()
+  const detail = screenerQueries.dailySurge.detail(date, selection)
+  const q = useQuery(detail)
+  // 고를 때·메모 저장 뒤 다시 받는 동안은 지금처럼 '불러오는 중…'. 받은 상세가 있으면 재조회가 실패해도 그대로 보인다
+  const state: 'idle' | 'loading' | 'ok' | 'failed' =
+    !selection ? 'idle' : q.isPending || q.isFetching ? 'loading' : q.isError && q.data === undefined ? 'failed' : 'ok'
+  const theme = q.data?.kind === 'theme' ? q.data.theme : null
+  const stock = q.data?.kind === 'stock' ? q.data.stock : null
 
-  const load = useCallback(async () => {
-    if (!selection) { setState('idle'); return }
-    setState('loading')
-    try {
-      if (selection.kind === 'stock') {
-        setTheme(null)
-        setStock(await getStockDetail(date, selection.ticker))
-      } else {
-        setStock(null)
-        setTheme(await getThemeDetail(date, selection.themeId, selection.direction))
-      }
-      setState('ok')
-    } catch {
-      setState('failed')
-    }
-  }, [date, selection])
-
-  useEffect(() => { void load() }, [load])
-
-  const saved = () => { void load(); onChanged() }
+  // 메모 저장·지우기 뒤 — 이 상세를 다시 받고, 목록 갱신은 화면(onChanged)에 맡긴다
+  const saved = () => {
+    void qc.invalidateQueries({ queryKey: detail.queryKey, exact: true })
+    onChanged()
+  }
 
   if (state === 'idle') return <p className="text-sm text-ink-muted">왼쪽에서 테마나 종목을 고르세요.</p>
   if (state === 'loading') return <p className="text-sm text-ink-muted">불러오는 중…</p>

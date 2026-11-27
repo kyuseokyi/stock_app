@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { Link, useSearchParams } from 'react-router-dom'
 import { getMarketStatus } from '../api/marketAdmin'
 import DatasetCard from '../components/market/DatasetCard'
@@ -11,8 +12,9 @@ import CanslimList from '../leaders/components/screener/CanslimList'
 import MarketStrip from '../leaders/components/screener/MarketStrip'
 import { PAGE_SIZE, getCanslimScreen } from '../leaders/api/screener'
 import { useMediaQuery } from '../leaders/hooks/useMediaQuery'
+import { screenerQueries } from '../queries/screenerQueries'
 import { DEFAULT_FILTERS, activeCanslimFilters } from '../leaders/lib/canslim'
-import type { CanslimItem, CanslimMarket, ScreenFilters } from '../leaders/types/screener'
+import type { CanslimItem, ScreenFilters } from '../leaders/types/screener'
 import PageHeader from '../leaders/components/ui/PageHeader'
 import FilterPanel from '../leaders/components/ui/FilterPanel'
 import { ListSkeleton } from '../leaders/components/ui/Skeleton'
@@ -26,40 +28,40 @@ export default function MarketLeaders() {
   const [params, setParams] = useSearchParams()
   const linked = params.get('ticker')
   const [filters, setFilters] = useState<ScreenFilters>(DEFAULT_FILTERS)
-  const [markets, setMarkets] = useState<CanslimMarket[]>([])
-  const [date, setDate] = useState<string | null>(null)
-  const [items, setItems] = useState<CanslimItem[]>([])
-  const [total, setTotal] = useState(0)
-  const [state, setState] = useState<'loading' | 'ready' | 'failed'>('loading')
   const [loadingMore, setLoadingMore] = useState(false)
   const [selected, setSelected] = useState<string | null>(null)
-
-  useEffect(() => {
-    let cancelled = false
-    setState('loading')
-    getCanslimScreen(filters)
-      .then(({ markets: m, screen }) => {
-        if (cancelled) return
-        setMarkets(m)
-        setDate(screen.date)
-        setItems(screen.items)
-        setTotal(screen.total)
-        setSelected((cur) => (screen.items.some((i) => i.ticker === cur) ? cur : null))
-        setState('ready')
-      })
-      .catch(() => !cancelled && setState('failed'))
-    return () => {
-      cancelled = true
-    }
-  }, [filters])
+  // 첫 쪽(시장 상태 + 목록)은 Query, '더 보기'로 이어 붙인 쪽은 조건 키에 묶어 화면이 들고 있다(조건이 바뀌면 비운다)
+  const firstPage = useQuery(screenerQueries.leaders(filters))
+  const condKey = JSON.stringify(filters)
+  const [more, setMore] = useState<{ key: string; items: CanslimItem[] }>({ key: condKey, items: [] })
+  if (more.key !== condKey) setMore({ key: condKey, items: [] })
+  // 마지막으로 받은 첫 쪽 — 불러오는 동안·실패 때도 시장 띠는 직전 값을 보인다(지금 동작).
+  // 새로 받으면 고른 종목이 새 목록에 없을 때 닫는다
+  const [last, setLast] = useState(firstPage.data)
+  if (firstPage.data !== undefined && firstPage.data !== last) {
+    const next = firstPage.data
+    setLast(next)
+    setSelected((cur) => (next.screen.items.some((i) => i.ticker === cur) ? cur : null))
+  }
+  const markets = last?.markets ?? []
+  const date = last?.screen.date ?? null
+  const total = firstPage.data?.screen.total ?? 0
+  const items = firstPage.data
+    ? more.key === condKey ? [...firstPage.data.screen.items, ...more.items] : firstPage.data.screen.items
+    : []
+  // 받은 데이터가 있으면 재조회가 실패해도 그대로 보인다 — 오류 안내는 데이터가 없을 때만
+  const state: 'loading' | 'ready' | 'failed' =
+    firstPage.data !== undefined ? 'ready' : firstPage.isError && !firstPage.isFetching ? 'failed' : 'loading'
 
   // 넓은 화면은 첫 종목을 오른쪽에 바로 보여준다(좁은 화면은 누를 때만 펼침)
   const shown = selected ?? (wide ? items[0]?.ticker ?? null : null)
 
   const loadMore = () => {
+    const key = condKey
     setLoadingMore(true)
     getCanslimScreen(filters, items.length)
-      .then(({ screen }) => setItems((cur) => [...cur, ...screen.items]))
+      // 조건이 바뀐 뒤 늦게 온 응답은 새 목록에 붙이지 않는다
+      .then(({ screen }) => setMore((m) => (m.key === key ? { key, items: [...m.items, ...screen.items] } : m)))
       .catch(() => undefined)
       .finally(() => setLoadingMore(false))
   }

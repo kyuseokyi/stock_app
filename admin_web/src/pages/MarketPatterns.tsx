@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react'
+import { useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import Card from '../leaders/components/ui/Card'
 import EmptyState from '../leaders/components/ui/EmptyState'
 import { chipClass } from '../leaders/components/ui/Chip'
@@ -6,8 +7,9 @@ import PatternDetail from '../components/patterns/PatternDetail'
 import PatternList from '../components/patterns/PatternList'
 import { getPatternDataset, getPatternScreen } from '../leaders/api/patterns'
 import { useMediaQuery } from '../leaders/hooks/useMediaQuery'
+import { screenerQueries } from '../queries/screenerQueries'
 import { PATTERN_KINDS, PATTERN_MARKETS, PATTERN_PAGE, PATTERN_REPORTS, PATTERN_SORTS } from '../leaders/lib/patterns'
-import type { PatternItem, PatternQuery } from '../leaders/types/patterns'
+import type { PatternItem, PatternQuery, PatternScreen } from '../leaders/types/patterns'
 import PageHeader from '../leaders/components/ui/PageHeader'
 import ScrollRow from '../leaders/components/ui/ScrollRow'
 import FilterPanel from '../leaders/components/ui/FilterPanel'
@@ -17,6 +19,15 @@ import ScreenDatasetStatus from '../components/market/ScreenDatasetStatus'
 
 const INITIAL_QUERY: PatternQuery = { report: 'forming', patternType: null, market: 'ALL', sort: 'pivot_dist' }
 
+// '더 보기'로 이어 붙인 쪽과 진행·실패 표시 — 어느 조건(key)의 것인지 함께 든다
+interface MoreState {
+  key: string
+  items: PatternItem[]
+  loading: boolean
+  failed: boolean
+}
+const emptyMore = (key: string): MoreState => ({ key, items: [], loading: false, failed: false })
+
 // 관리자 '차트 패턴' — web_client pages/screener/PatternsTab.tsx 이식(원본과 같이 고칠 것).
 // 리포트·패턴·시장·정렬 칩 + 목록(50개씩 더 보기). 넓은 화면은 오른쪽 상세, 좁은 화면은 행 펼침.
 // 다른 점: 사용자 화면 노출 스위치(STOCK_FINDER·PATTERNS)와 무관하게 항상 보이고, 상단에 패턴 데이터 갱신 현황 카드,
@@ -24,58 +35,48 @@ const INITIAL_QUERY: PatternQuery = { report: 'forming', patternType: null, mark
 export default function MarketPatterns() {
   const wide = useMediaQuery('(min-width: 1024px)')
   const [query, setQuery] = useState<PatternQuery>(INITIAL_QUERY)
-  const [date, setDate] = useState<string | null>(null)
-  const [items, setItems] = useState<PatternItem[]>([])
-  const [total, setTotal] = useState(0)
-  const [state, setState] = useState<'loading' | 'ready' | 'failed'>('loading')
-  const [loadingMore, setLoadingMore] = useState(false)
-  const [moreFailed, setMoreFailed] = useState(false)
-  const [reloadKey, setReloadKey] = useState(0)
   const [selected, setSelected] = useState<string | null>(null)
-  // 요청 번호 — 조건을 바꾼 뒤 늦게 온 '더 보기' 응답이 새 목록에 붙지 않게
-  const seq = useRef(0)
-
-  useEffect(() => {
-    let cancelled = false
-    seq.current += 1
-    setState('loading')
-    setLoadingMore(false)
-    setMoreFailed(false)
-    getPatternScreen(query)
-      .then((s) => {
-        if (cancelled) return
-        setDate(s.date)
-        setItems(s.items)
-        setTotal(s.total)
-        setSelected((cur) => (s.items.some((i) => i.ticker === cur) ? cur : null))
-        setState('ready')
-      })
-      .catch(() => !cancelled && setState('failed'))
-    return () => {
-      cancelled = true
-    }
-  }, [query, reloadKey])
+  // 첫 쪽은 Query, '더 보기'로 이어 붙인 쪽·진행·실패 표시는 조건 키에 묶어 화면이 들고 있다(조건이 바뀌면 비운다 —
+  // 조건을 바꾼 뒤 늦게 온 '더 보기' 응답은 키가 달라 새 목록에 붙지 않는다)
+  const firstPage = useQuery(screenerQueries.patterns(query))
+  const condKey = JSON.stringify(query)
+  const [more, setMore] = useState<MoreState>(() => emptyMore(condKey))
+  if (more.key !== condKey) setMore(emptyMore(condKey))
+  // 마지막으로 받은 첫 쪽 — 불러오는 동안·실패 때도 아래 기준일 줄은 직전 값을 보인다(지금 동작).
+  // 새로 받으면 고른 종목이 새 목록에 없을 때 닫는다
+  const [last, setLast] = useState<PatternScreen | undefined>(firstPage.data)
+  if (firstPage.data !== undefined && firstPage.data !== last) {
+    const next = firstPage.data
+    setLast(next)
+    setSelected((cur) => (next.items.some((i) => i.ticker === cur) ? cur : null))
+  }
+  const date = last?.date ?? null
+  const total = firstPage.data?.total ?? 0
+  const sameKey = more.key === condKey
+  const items = firstPage.data ? (sameKey ? [...firstPage.data.items, ...more.items] : firstPage.data.items) : []
+  const loadingMore = sameKey && more.loading
+  const moreFailed = sameKey && more.failed
+  // 받은 데이터가 있으면 재조회가 실패해도 그대로 보인다 — 오류 안내는 데이터가 없을 때만
+  // ([다시 시도] 중에는 지금처럼 스켈레톤)
+  const state: 'loading' | 'ready' | 'failed' =
+    firstPage.data !== undefined ? 'ready' : firstPage.isError && !firstPage.isFetching ? 'failed' : 'loading'
 
   const update = (patch: Partial<PatternQuery>) => setQuery((cur) => ({ ...cur, ...patch }))
 
   const loadMore = () => {
-    const id = seq.current
-    setLoadingMore(true)
-    setMoreFailed(false)
+    const key = condKey
+    const shownNow = items
+    const patch = (f: (m: MoreState) => MoreState) => setMore((m) => (m.key === key ? f(m) : m))
+    patch((m) => ({ ...m, loading: true, failed: false }))
     getPatternScreen(query, items.length)
-      .then((s) => {
-        if (id !== seq.current) return
-        setItems((cur) => {
-          const seen = new Set(cur.map((x) => x.ticker))
-          return [...cur, ...s.items.filter((x) => !seen.has(x.ticker))]
-        })
-      })
-      .catch(() => {
-        if (id === seq.current) setMoreFailed(true)
-      })
-      .finally(() => {
-        if (id === seq.current) setLoadingMore(false)
-      })
+      .then((s) =>
+        patch((m) => {
+          const seen = new Set(shownNow.concat(m.items).map((x) => x.ticker))
+          return { ...m, items: [...m.items, ...s.items.filter((x) => !seen.has(x.ticker))] }
+        }),
+      )
+      .catch(() => patch((m) => ({ ...m, failed: true })))
+      .finally(() => patch((m) => ({ ...m, loading: false })))
   }
 
   const shown = selected ?? (wide ? items[0]?.ticker ?? null : null)
@@ -173,7 +174,7 @@ export default function MarketPatterns() {
           <EmptyState emoji="⚠️" title="목록을 불러오지 못했어요" description="잠시 뒤 다시 시도해 주세요." />
           <button
             type="button"
-            onClick={() => setReloadKey((k) => k + 1)}
+            onClick={() => void firstPage.refetch()}
             className="mx-auto mt-2 block rounded-btn bg-fill px-4 py-2 text-sm font-medium text-ink"
           >
             다시 시도

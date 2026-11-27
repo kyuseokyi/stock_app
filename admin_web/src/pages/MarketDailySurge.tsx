@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  listDates, listGroups, listStocks, rebuild,
-  type PageMeta, type SurgeBand, type SurgeDate, type SurgeMode, type SurgeSort, type SurgeStock, type ThemeGroup,
+  rebuild,
+  type GroupPage, type ListResult, type PageMeta, type SurgeBand, type SurgeDate, type SurgeMode, type SurgeSort, type SurgeStock, type ThemeGroup,
 } from '../api/dailySurge'
 import Pagination from '../components/Pagination'
 import DetailPanel, { type Selection } from '../components/dailySurge/DetailPanel'
@@ -15,6 +16,7 @@ import { THEME_SOURCE_LABEL, weekday } from '../lib/dailySurge'
 import { hasPermission } from '../lib/permissions'
 import { showToast } from '../lib/toast'
 import { useMeStore } from '../store/me'
+import { screenerQueries } from '../queries/screenerQueries'
 
 // 관리자 '급등락·테마 분석' — 날짜별 급등·급락·거래대금 상위, 같은 테마 동반 급등락 묶음(대장주), 공시, 이유 메모,
 // 네이버 뉴스 바로 보기. 설계 docs/superpowers/specs/2026-11-26-daily-surge-theme-analyzer-design.md
@@ -47,66 +49,71 @@ export default function MarketDailySurge() {
   const wide = useMediaQuery('(min-width: 1024px)')
   const [sheetOpen, setSheetOpen] = useState(false)
   const [page, setPage] = useState(1)
-  const [meta, setMeta] = useState<PageMeta>(EMPTY_META)
-  const [dates, setDates] = useState<SurgeDate[]>([])
   const [date, setDate] = useState<string | null>(null)
   const [view, setView] = useState<View>('groups')
   const [band, setBand] = useState<SurgeBand>('all')
   const [dartOnly, setDartOnly] = useState(false)
   const [sort, setSort] = useState<'' | SurgeSort>('')
-  const [groups, setGroups] = useState<ThemeGroup[]>([])
-  const [stocks, setStocks] = useState<SurgeStock[]>([])
-  const [themeSource, setThemeSource] = useState<string | null>(null)
   const [selection, setSelection] = useState<Selection | null>(null)
-  const [state, setState] = useState<'loading' | 'ok' | 'failed'>('loading')
-  const [busy, setBusy] = useState(false)
   // 수동 집계 날짜(기본: 보고 있는 날짜, 없으면 오늘 KST)
   const [runDate, setRunDate] = useState<string>(() => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10))
+  const qc = useQueryClient()
 
-  const reloadDates = useCallback(() => {
-    listDates()
-      .then((d) => {
-        setDates(d)
-        setDate((cur) => (cur && d.some((x) => x.date === cur) ? cur : d[0]?.date ?? null))
-        if (!d.length) setState('ok')
-      })
-      .catch(() => setState('failed'))
-  }, [])
+  // 집계된 날짜 — 받으면 보고 있던 날짜가 남아 있으면 그대로, 없으면 최신 날짜
+  const datesQ = useQuery(screenerQueries.dailySurge.dates())
+  const dates: SurgeDate[] = datesQ.data ?? []
+  const [seenDates, setSeenDates] = useState<SurgeDate[] | undefined>(undefined)
+  if (datesQ.data !== undefined && datesQ.data !== seenDates) {
+    const d = datesQ.data
+    setSeenDates(d)
+    setDate((cur) => (cur && d.some((x) => x.date === cur) ? cur : d[0]?.date ?? null))
+  }
 
-  useEffect(() => { reloadDates() }, [reloadDates])
   useEffect(() => { if (date) setRunDate(date) }, [date])
 
-  const load = useCallback(async () => {
-    if (!date) return
-    setState('loading')
-    try {
-      if (view === 'groups') {
-        const r = await listGroups(date, page, GROUP_PAGE_SIZE)
-        const g = r.items
-        setGroups(g)
-        setMeta(r)
-        setThemeSource(r.theme_source)
-        // 넓은 화면만 첫 항목을 미리 열어 둔다(좁은 화면은 누를 때 전체 화면으로)
-        setSelection((cur) => (cur?.kind === 'theme' || !wide ? cur
-          : g[0] ? { kind: 'theme', themeId: g[0].theme_id, direction: g[0].direction } : null))
-      } else {
-        const r = await listStocks({ date, mode: view, band, dart_only: dartOnly, sort: sort || undefined,
-          page, page_size: STOCK_PAGE_SIZE })
-        setStocks(r.items)
-        setMeta(r)
-        setThemeSource(r.theme_source)
-        setSelection((cur) => (cur?.kind === 'stock' && r.items.some((s) => s.ticker === cur.ticker)
-          ? cur : wide && r.items[0] ? { kind: 'stock', ticker: r.items[0].ticker } : cur))
-      }
-      setState('ok')
-    } catch {
-      setState('failed')
+  // 목록 — 보기에 따라 테마 묶음 또는 종목 한 쪽(보지 않는 쪽은 요청하지 않음)
+  const groupsQ = useQuery(screenerQueries.dailySurge.groups(view === 'groups' ? date : null, page, GROUP_PAGE_SIZE))
+  const stocksQ = useQuery(screenerQueries.dailySurge.stocks(view !== 'groups' && date ? {
+    date, mode: view, band, dart_only: dartOnly, sort: sort || undefined, page, page_size: STOCK_PAGE_SIZE,
+  } : null))
+  const listQ = view === 'groups' ? groupsQ : stocksQ
+  const listData: GroupPage | ListResult | undefined = listQ.data
+
+  // 마지막으로 받은 새 목록 기준으로 쪽 정보·테마 출처·선택을 맞춘다(쪽 넘김 중 이전 쪽 자리표시에는 돌리지 않음).
+  // 넓은 화면만 첫 항목을 미리 열어 둔다(좁은 화면은 누를 때 전체 화면으로) — 화면 폭이 바뀌면 다시 맞춘다
+  const [seenList, setSeenList] = useState<{ data: GroupPage | ListResult | undefined; wide: boolean }>({ data: undefined, wide })
+  const [meta, setMeta] = useState<PageMeta>(EMPTY_META)
+  const [themeSource, setThemeSource] = useState<string | null>(null)
+  if (listData !== undefined && !listQ.isPlaceholderData && (listData !== seenList.data || wide !== seenList.wide)) {
+    setSeenList({ data: listData, wide })
+    setMeta(listData)
+    setThemeSource(listData.theme_source)
+    if (view === 'groups') {
+      const g = (listData as GroupPage).items
+      setSelection((cur) => (cur?.kind === 'theme' || !wide ? cur
+        : g[0] ? { kind: 'theme', themeId: g[0].theme_id, direction: g[0].direction } : null))
+    } else {
+      const items = (listData as ListResult).items
+      setSelection((cur) => (cur?.kind === 'stock' && items.some((x) => x.ticker === cur.ticker)
+        ? cur : wide && items[0] ? { kind: 'stock', ticker: items[0].ticker } : cur))
     }
-  }, [date, view, band, dartOnly, sort, page, wide])
+  }
+  const groups: ThemeGroup[] = view === 'groups' ? (groupsQ.data?.items ?? []) : []
+  const stocks: SurgeStock[] = view !== 'groups' ? (stocksQ.data?.items ?? []) : []
+
+  // 새로 고침·메모 저장 뒤 다시 받는 동안에는 지금처럼 '불러오는 중…', 쪽 넘김은 이전 쪽을 보여 주며 넘긴다
+  const listLoading = !!date && (listQ.isPending || (listQ.isFetching && !listQ.isPlaceholderData))
+  // 받은 데이터가 있으면 재조회가 실패해도 그대로 보인다 — 오류 안내는 데이터가 없을 때만
+  const failed = (datesQ.isError && !datesQ.isFetching && datesQ.data === undefined)
+    || (!!date && listQ.isError && !listQ.isFetching && listQ.data === undefined)
+  const state: 'loading' | 'ok' | 'failed' = failed ? 'failed' : datesQ.isPending || listLoading ? 'loading' : 'ok'
+
+  const refreshList = () => { if (date) void listQ.refetch() }
+  // 메모 저장·지우기 뒤 — 목록(묶음·종목)만 다시 받는다(날짜·뉴스는 그대로)
+  const onChanged = () => { void qc.invalidateQueries({ queryKey: ['screener', 'dailySurge', 'list'] }) }
 
   // 날짜·보기·거르기·정렬이 바뀌면 첫 쪽부터
   useEffect(() => { setPage(1) }, [date, view, band, dartOnly, sort])
-  useEffect(() => { void load() }, [load])
 
   const open = (next: Selection) => {
     setSelection(next)
@@ -117,17 +124,17 @@ export default function MarketDailySurge() {
   const current = idx >= 0 ? dates[idx] : null
   const go = (next: string) => { setDate(next); setSelection(null) }
 
+  // 수동 집계 — 서버가 1~2분 뒤 끝내므로 목록은 바로 다시 받지 않는다(관리자가 '새로 고침')
+  const rebuildM = useMutation({ mutationFn: (d: string) => rebuild(d) })
+  const busy = rebuildM.isPending
   const doRebuild = async () => {
     if (!runDate) return
-    setBusy(true)
     try {
-      await rebuild(runDate)
+      await rebuildM.mutateAsync(runDate)
       showToast(`${runDate} 집계를 시작했습니다. 1~2분 뒤 '새로 고침'을 누르세요.`, { icon: '🔄' })
     } catch (e) {
       const code = apiErrorDetail(e)?.code
       showToast(code === 'ALREADY_RUNNING' ? '이미 집계 중입니다.' : apiErrorMessage(e), { icon: '⚠️' })
-    } finally {
-      setBusy(false)
     }
   }
 
@@ -151,7 +158,7 @@ export default function MarketDailySurge() {
         <span className="px-2 text-xs text-ink-muted">
           테마 출처: {themeSource ? THEME_SOURCE_LABEL[themeSource] ?? themeSource : '-'}
         </span>
-        <button type="button" onClick={() => { reloadDates(); void load() }}
+        <button type="button" onClick={() => { void datesQ.refetch(); refreshList() }}
           className="h-11 rounded-btn bg-surface px-3 text-sm text-ink">새로 고침</button>
         {canRebuild && (
           <div className="ml-auto flex flex-wrap items-center gap-2 rounded-btn bg-surface px-2 py-1">
@@ -226,7 +233,7 @@ export default function MarketDailySurge() {
           </div>
           {wide && (
             <aside className="min-w-0 flex-[1_1_420px] rounded-card bg-surface p-4" aria-label="상세">
-              <DetailPanel date={date} selection={selection} onChanged={() => void load()} />
+              <DetailPanel date={date} selection={selection} onChanged={onChanged} />
             </aside>
           )}
         </div>
@@ -241,7 +248,7 @@ export default function MarketDailySurge() {
               className="h-11 min-w-[44px] rounded-btn bg-fill px-4 text-sm font-medium text-ink">닫기</button>
           </div>
           <div className="flex-1 overflow-y-auto p-4">
-            <DetailPanel date={date} selection={selection} onChanged={() => void load()} />
+            <DetailPanel date={date} selection={selection} onChanged={onChanged} />
           </div>
         </div>
       )}

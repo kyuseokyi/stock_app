@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { Link, useParams } from 'react-router-dom'
-import { listBlogs } from '../api/blog'
+import { blogQueries } from '../queries/blogQueries'
 import { useBoardStore } from '../store/boards'
 import { withErrorCode } from '../lib/errorCode'
 import type { BlogListOut } from '../types/api'
@@ -24,10 +25,7 @@ const toPreview = (html: string, n = 100) => {
 export default function PostListPage() {
   const { boardId } = useParams()
   const boardName = useBoardStore((s) => s.boardName)
-  const [data, setData] = useState<Pick<BlogListOut, 'total' | 'items'>>({ total: 0, items: [] })
   const [page, setPage] = useState(1)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
   const ads = useAdConfig()
   const adEvery = infeedInterval(ads, 'WEB_POST_LIST_INFEED')
 
@@ -35,13 +33,18 @@ export default function PostListPage() {
     setPage(1)
   }, [boardId])
 
-  useEffect(() => {
-    setLoading(true)
-    listBlogs({ boardId: Number(boardId), page, size: PAGE_SIZE })
-      .then(setData)
-      .catch((err) => setError(withErrorCode('게시글을 불러오지 못했어요.', err)))
-      .finally(() => setLoading(false))
-  }, [boardId, page])
+  const query = useQuery(blogQueries.posts(Number(boardId), page, PAGE_SIZE))
+  const loading = query.isPending
+  // 지금 동작 유지 — 불러오기에 실패해도 마지막으로 받은 목록·쪽 이동은 남기고, 오류 안내는 한 번 뜨면 화면을 떠날 때까지 둔다
+  const [data, setData] = useState<Pick<BlogListOut, 'total' | 'items'>>({ total: 0, items: [] })
+  if (query.data && query.data !== data) setData(query.data)
+  const [error, setError] = useState('')
+  const [seenError, setSeenError] = useState<unknown>(null)
+  // 오류 안내는 보여 줄 데이터가 없을 때만(받아 둔 쪽을 다시 받다 실패하면 목록을 그대로 둔다)
+  if (query.error && query.data === undefined && query.error !== seenError) {
+    setSeenError(query.error)
+    setError(withErrorCode('게시글을 불러오지 못했어요.', query.error))
+  }
 
   const totalPages = Math.max(1, Math.ceil(data.total / PAGE_SIZE))
   // 넓은 화면(lg+): 목록 + 추천 글 옆 칸 2단. 좁은 화면은 옆 칸을 그리지 않는다(불필요한 요청 없음).
