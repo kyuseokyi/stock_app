@@ -14,7 +14,9 @@ const ev = (title: string, category = '공모주'): CalendarEvent => ({
   date: '2099-01-02', title, category, ticker: null, name: null, detail: '',
 })
 
-beforeEach(() => getMarketCalendar.mockReset())
+beforeEach(() => {
+  getMarketCalendar.mockReset()
+})
 afterEach(() => {
   cleanup()
   vi.restoreAllMocks()
