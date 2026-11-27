@@ -109,7 +109,7 @@ describe('MarketDailySurge', () => {
     renderWithClient(<MarketDailySurge />)
     await screen.findByText('반도체')
     fireEvent.click(screen.getByRole('tab', { name: /급등주/ }))
-    expect(await screen.findByText(/삼성전자/)).toBeTruthy()
+    expect(within(await screen.findByRole('table')).getByText(/삼성전자/)).toBeTruthy()
     expect(api.listStocks).toHaveBeenLastCalledWith({
       date: '2026-11-26', mode: 'surge', band: 'all', dart_only: false, sort: undefined, page: 1, page_size: 30,
     })
