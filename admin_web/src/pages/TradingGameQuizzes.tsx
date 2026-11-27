@@ -7,6 +7,7 @@ import { gameErrorCode, gameErrorMessage } from '../lib/gameApiError'
 import { showToast } from '../lib/toast'
 import type { QuizAdminDetail, QuizAdminItem, QuizAdminList, QuizType } from '../types/game'
 import type { Candle, Stock } from '../types/stock'
+import { confirmAction } from '@/lib/confirm'
 
 const PAGE_SIZE = 20
 const DEFAULT_HORIZON = 5
@@ -134,7 +135,7 @@ function QuizDetailPanel({
       showToast('시도 기록이 있는 퀴즈는 삭제할 수 없습니다. 비활성으로 전환하세요.', { icon: '⚠️' })
       return
     }
-    if (!window.confirm(`퀴즈 #${quiz.id} 을(를) 삭제할까요?`)) return
+    if (!await confirmAction(`퀴즈 #${quiz.id} 을(를) 삭제할까요?`, { danger: true, confirmLabel: '삭제' })) return
     setBusy(true)
     try {
       await deleteQuiz(quiz.id)

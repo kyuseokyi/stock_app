@@ -5,6 +5,7 @@ import { apiErrorDetail, apiErrorMessage } from '../lib/apiError'
 import { formatDateTime, reasonCountEntries } from '../lib/moderation'
 import { showToast } from '../lib/toast'
 import type { ReportedCommentOut, ReportStatusFilter, ResolveAction } from '../types/api'
+import { confirmAction } from '@/lib/confirm'
 
 // 댓글 신고 관리 — 신고를 댓글 단위로 묶어 보여주고 [삭제]/[작성자 금지]/[기각]으로 처리한다.
 // 설계: docs/superpowers/specs/2026-11-13-comment-report-block-design.md §6
@@ -72,7 +73,7 @@ export default function CommentReportsPage() {
 
   const onResolve = async (row: ReportedCommentOut, action: ResolveAction) => {
     const ask = CONFIRM_TEXT[action]
-    if (ask && !confirm(ask)) return
+    if (ask && !await confirmAction(ask)) return
     setBusyId(row.comment_id)
     setError('')
     try {

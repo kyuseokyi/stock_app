@@ -3,6 +3,7 @@ import { advanceEduDay, createEduSeason, getEduSeason, setEduRegime } from '../a
 import { gameErrorMessage } from '../lib/gameApiError'
 import { showToast } from '../lib/toast'
 import type { EduAdminSeason, EduAdvanceResult, EduRegime } from '../types/game'
+import { confirmAction } from '@/lib/confirm'
 
 // [교육용 종가 게임 운영] 카드 — 명세 docs/edu_synthetic_daily_game_spec_and_plan.md Step 4.
 // 현재 시즌(Day N·국면·남은 봉·지정 국면·참가자 수) + 다음 봉 즉시 진행 + 다음 국면 지정 + 새 시즌 생성.
@@ -71,7 +72,7 @@ export default function EduGameOperations() {
   }, [load])
 
   const advance = async () => {
-    if (!confirm('다음 종가 캔들 1개를 지금 만들고 모든 참가자의 포지션을 정산할까요?\n전 유저 계좌에 바로 반영되며 되돌릴 수 없습니다.')) return
+    if (!await confirmAction('다음 종가 캔들 1개를 지금 만들고 모든 참가자의 포지션을 정산할까요?\n전 유저 계좌에 바로 반영되며 되돌릴 수 없습니다.', { danger: true, confirmLabel: '정산' })) return
     setBusy('advance')
     try {
       const r = await advanceEduDay()
@@ -104,7 +105,7 @@ export default function EduGameOperations() {
       return
     }
     const closing = season ? `\n현재 시즌 ${season.season_number}기는 종료(CLOSED)되고 참가자 계좌도 새 시즌으로 바뀝니다.` : ''
-    if (!confirm(`새 교육 시즌을 만들까요?${closing}`)) return
+    if (!await confirmAction(`새 교육 시즌을 만들까요?${closing}`)) return
     setBusy('season')
     try {
       apply(await createEduSeason({ title: title.trim(), theme_category: theme.trim(), hide_name: hideName, start_price: startPrice }))

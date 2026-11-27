@@ -8,6 +8,7 @@ import AdminTierEditor from '../components/admin/AdminTierEditor'
 import TierPolicyMatrix from '../components/admin/TierPolicyMatrix'
 import { TIER_LABEL } from '../lib/permissions'
 import type { AdminAccount, EditableTier, RolePolicies } from '../types/api'
+import { confirmAction } from '@/lib/confirm'
 
 // 관리자 계정(슈퍼 관리자 전용) — 새 관리자 만들기(등급 선택), 등급·개별 권한 변경, 비밀번호 초기화, 사용 중지·다시 사용,
 // 아래에 등급별 권한 표. 슈퍼 관리자 계정은 여기서 바꿀 수 없고(서버도 막음), 삭제 대신 사용 중지로 한다(쓴 글·댓글 보존).
@@ -78,7 +79,7 @@ export default function AdminAccountsPage() {
 
   const onToggleActive = async (a: AdminAccount) => {
     const stop = a.is_active
-    if (stop && !window.confirm(`'${a.login_id}' 계정을 사용 중지할까요? 지금 로그인도 바로 끊겨요.`)) return
+    if (stop && !await confirmAction(`'${a.login_id}' 계정을 사용 중지할까요? 지금 로그인도 바로 끊겨요.`, { danger: true, confirmLabel: '사용 중지' })) return
     setBusyId(a.id)
     try {
       replace(await setAdminActive(a.id, !stop))

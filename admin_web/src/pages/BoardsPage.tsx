@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { createBoard, deleteBoard, listBoards, updateBoard } from '../api/boards'
 import { showToast } from '../lib/toast'
 import type { BoardOut } from '../types/api'
+import { confirmAction } from '@/lib/confirm'
 
 export default function BoardsPage() {
   const [boards, setBoards] = useState<BoardOut[]>([])
@@ -43,7 +44,7 @@ export default function BoardsPage() {
   }
 
   const onDelete = async (id: number) => {
-    if (!confirm('이 게시판을 삭제할까요? (하위 게시글도 함께 삭제됩니다)')) return
+    if (!await confirmAction('이 게시판을 삭제할까요? (하위 게시글도 함께 삭제됩니다)', { danger: true, confirmLabel: '삭제' })) return
     try {
       await deleteBoard(id)
       load()
@@ -56,7 +57,7 @@ export default function BoardsPage() {
     // 켤 때만 확인(끌 때는 기존대로 바로). 사용자 글 공개 → 신고 처리 책임 안내
     if (
       !board.comments_enabled &&
-      !window.confirm(
+      !await confirmAction(
         "댓글을 켜면 사용자가 쓴 글이 공개됩니다. 신고가 들어오면 '신고 관리'에서 처리해 주세요. 켤까요?",
       )
     )

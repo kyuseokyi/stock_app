@@ -6,6 +6,7 @@ import { apiErrorDetail, apiErrorMessage } from '../lib/apiError'
 import { minScheduleLocal, renderPushText, todayKst } from '../lib/pushText'
 import { showToast } from '../lib/toast'
 import type { FundNoticePreviewOut, PushSendMode, PushSendOut, PushTemplateOut } from '../types/api'
+import { confirmAction } from '@/lib/confirm'
 
 const TAB_LABEL = { send: '발송', templates: '문구 템플릿', test: '테스트 알림' } as const
 const MODE_LABEL: Record<PushSendMode, string> = { now: '즉시', test: '테스트', scheduled: '예약' }
@@ -132,7 +133,7 @@ function SendPanel() {
       await Promise.all([loadSends(), loadPreview()])
     } catch (e) {
       if (errorCode(e) === 'already_sent' && !force) {
-        if (confirm('이 기준일에 이미 보냈거나 예약된 알림이 있어요. 그래도 보낼까요?')) await submit(mode, true)
+        if (await confirmAction('이 기준일에 이미 보냈거나 예약된 알림이 있어요. 그래도 보낼까요?')) await submit(mode, true)
       } else {
         showToast(apiErrorMessage(e), { icon: '⚠️' })
       }
@@ -142,7 +143,7 @@ function SendPanel() {
   }
 
   async function onCancel(id: number) {
-    if (!confirm('예약을 취소할까요?')) return
+    if (!await confirmAction('예약을 취소할까요?')) return
     try {
       await cancelPushSend(id)
       showToast('예약을 취소했어요.', { icon: '✅' })
@@ -324,7 +325,7 @@ function TemplatesPanel() {
   }
 
   async function onDelete(t: PushTemplateOut) {
-    if (!confirm(`'${t.title}' 템플릿을 삭제할까요?`)) return
+    if (!await confirmAction(`'${t.title}' 템플릿을 삭제할까요?`, { danger: true, confirmLabel: '삭제' })) return
     try {
       await deletePushTemplate(t.id)
       await load()
