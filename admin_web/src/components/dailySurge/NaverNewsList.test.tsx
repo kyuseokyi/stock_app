@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { screen } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render } from '@testing-library/react'
-import { deferred, renderWithClient } from '../../test/query'
+import { deferred, refetchActiveFailing, renderWithClient } from '../../test/query'
 import type { NewsResult } from '../../api/dailySurge'
 
 const getNews = vi.fn<(k: 'stock' | 'theme', d: string, t: string) => Promise<NewsResult>>()
@@ -61,5 +61,15 @@ describe('NaverNewsList', () => {
     next.resolve(news('SK하이닉스', ['기사 둘']))
     expect(await screen.findByText('기사 둘')).toBeTruthy()
     expect(screen.getByText("'SK하이닉스' · 최신순")).toBeTruthy()
+  })
+
+  it('캐시된 데이터가 있을 때 재조회가 실패해도 목록이 그대로', async () => {
+    getNews.mockResolvedValue(news('삼성전자', ['기사 하나']))
+    const { client } = renderWithClient(<NaverNewsList kind="stock" date="2026-11-26" target="005930" />)
+    await screen.findByText('기사 하나')
+    await refetchActiveFailing(client, () => getNews.mockRejectedValue(new Error('x')))
+    expect(getNews).toHaveBeenCalledTimes(2)
+    expect(screen.getByText('기사 하나')).toBeTruthy()
+    expect(screen.queryByText('뉴스가 없거나 불러오지 못했습니다.')).toBeNull()
   })
 })

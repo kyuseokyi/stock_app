@@ -103,7 +103,9 @@ export default function MarketDailySurge() {
 
   // 새로 고침·메모 저장 뒤 다시 받는 동안에는 지금처럼 '불러오는 중…', 쪽 넘김은 이전 쪽을 보여 주며 넘긴다
   const listLoading = !!date && (listQ.isPending || (listQ.isFetching && !listQ.isPlaceholderData))
-  const failed = (datesQ.isError && !datesQ.isFetching) || (!!date && listQ.isError && !listQ.isFetching)
+  // 받은 데이터가 있으면 재조회가 실패해도 그대로 보인다 — 오류 안내는 데이터가 없을 때만
+  const failed = (datesQ.isError && !datesQ.isFetching && datesQ.data === undefined)
+    || (!!date && listQ.isError && !listQ.isFetching && listQ.data === undefined)
   const state: 'loading' | 'ok' | 'failed' = failed ? 'failed' : datesQ.isPending || listLoading ? 'loading' : 'ok'
 
   const refreshList = () => { if (date) void listQ.refetch() }

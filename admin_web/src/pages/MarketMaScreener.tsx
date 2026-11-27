@@ -46,7 +46,9 @@ export default function MarketMaScreener() {
   const date = last?.date ?? null
   const total = firstPage.data?.total ?? 0
   const items = firstPage.data ? (more.key === condKey ? [...firstPage.data.items, ...more.items] : firstPage.data.items) : []
-  const state: 'loading' | 'ready' | 'failed' = firstPage.isPending ? 'loading' : firstPage.isError ? 'failed' : 'ready'
+  // 받은 데이터가 있으면 재조회가 실패해도 그대로 보인다 — 오류 안내는 데이터가 없을 때만
+  const state: 'loading' | 'ready' | 'failed' =
+    firstPage.data !== undefined ? 'ready' : firstPage.isError && !firstPage.isFetching ? 'failed' : 'loading'
 
   // 넓은 화면은 첫 종목을 오른쪽에 바로 보여준다(좁은 화면은 누를 때만 펼침)
   const shownTicker = selected ?? (wide ? items[0]?.ticker ?? null : null)

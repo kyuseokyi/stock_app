@@ -3,7 +3,7 @@
 // 데이터 조회 방식을 바꿔도 이 테스트는 그대로 통과해야 한다(쪽 넘김 중 '불러오는 중…' 여부는 단언하지 않는다 — 설계상 의도한 변화).
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
-import { deferred, renderWithClient } from '../test/query'
+import { deferred, refetchActiveFailing, renderWithClient } from '../test/query'
 import type * as Api from '../api/dailySurge'
 import { useMeStore } from '../store/me'
 import type { UserOut } from '../types/api'
@@ -194,5 +194,27 @@ describe('MarketDailySurge', () => {
     fireEvent.click(screen.getByRole('button', { name: '집계 실행' }))
     await waitFor(() => expect(showToast).toHaveBeenCalledTimes(2))
     expect(api.listGroups.mock.calls.length).toBe(groupsBefore)
+  })
+
+  it('캐시된 데이터가 있을 때 재조회가 실패해도 목록이 그대로', async () => {
+    api.listDates.mockResolvedValue([D1])
+    api.listGroups.mockResolvedValue(groupsPage(['반도체']))
+    api.getThemeDetail.mockResolvedValue(themeDetail('수출 호조'))
+    const { client } = renderWithClient(<MarketDailySurge />)
+    fireEvent.click(await screen.findByRole('button', { name: /반도체/ }))
+    const sheet = await screen.findByRole('dialog', { name: '상세' })
+    await within(sheet).findByText('수출 호조')
+    await refetchActiveFailing(client, () => {
+      api.listDates.mockRejectedValue(new Error('x'))
+      api.listGroups.mockRejectedValue(new Error('x'))
+      api.getThemeDetail.mockRejectedValue(new Error('x'))
+      api.getNews.mockRejectedValue(new Error('x'))
+    })
+    expect(api.listGroups).toHaveBeenCalledTimes(2)
+    expect(api.getThemeDetail).toHaveBeenCalledTimes(2)
+    expect(screen.getAllByText('반도체').length).toBeGreaterThan(0)
+    expect(within(sheet).getByText('수출 호조')).toBeTruthy()
+    expect(screen.queryByText('자료를 불러오지 못했습니다.')).toBeNull()
+    expect(within(sheet).queryByText('상세를 불러오지 못했습니다.')).toBeNull()
   })
 })

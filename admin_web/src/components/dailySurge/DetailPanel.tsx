@@ -42,9 +42,9 @@ export default function DetailPanel({ date, selection, onChanged }: {
   const qc = useQueryClient()
   const detail = screenerQueries.dailySurge.detail(date, selection)
   const q = useQuery(detail)
-  // 고를 때·메모 저장 뒤 다시 받는 동안은 지금처럼 '불러오는 중…'
+  // 고를 때·메모 저장 뒤 다시 받는 동안은 지금처럼 '불러오는 중…'. 받은 상세가 있으면 재조회가 실패해도 그대로 보인다
   const state: 'idle' | 'loading' | 'ok' | 'failed' =
-    !selection ? 'idle' : q.isPending || q.isFetching ? 'loading' : q.isError ? 'failed' : 'ok'
+    !selection ? 'idle' : q.isPending || q.isFetching ? 'loading' : q.isError && q.data === undefined ? 'failed' : 'ok'
   const theme = q.data?.kind === 'theme' ? q.data.theme : null
   const stock = q.data?.kind === 'stock' ? q.data.stock : null
 

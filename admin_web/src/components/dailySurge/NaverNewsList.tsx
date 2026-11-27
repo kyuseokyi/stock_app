@@ -11,7 +11,8 @@ export default function NaverNewsList({ kind, date, target }: { kind: 'stock' | 
   // 마지막으로 받은 결과 — 대상이 바뀌어 다시 받는 동안에도 머리글 검색어는 직전 값(지금 동작)
   const [data, setData] = useState<NewsResult | null>(null)
   if (q.data !== undefined && q.data !== data) setData(q.data)
-  const state: 'loading' | 'ok' | 'failed' = q.isPending ? 'loading' : q.isError ? 'failed' : 'ok'
+  // 받은 결과가 있으면 재조회가 실패해도 그대로 보인다 — 실패 안내는 결과가 없을 때만
+  const state: 'loading' | 'ok' | 'failed' = q.isPending ? 'loading' : q.isError && q.data === undefined ? 'failed' : 'ok'
 
   return (
     <section className="flex flex-col gap-2" aria-label="네이버 뉴스 검색 결과">

@@ -56,9 +56,10 @@ export default function MarketPatterns() {
   const items = firstPage.data ? (sameKey ? [...firstPage.data.items, ...more.items] : firstPage.data.items) : []
   const loadingMore = sameKey && more.loading
   const moreFailed = sameKey && more.failed
-  // [다시 시도] 중에도 지금처럼 스켈레톤
+  // 받은 데이터가 있으면 재조회가 실패해도 그대로 보인다 — 오류 안내는 데이터가 없을 때만
+  // ([다시 시도] 중에는 지금처럼 스켈레톤)
   const state: 'loading' | 'ready' | 'failed' =
-    firstPage.isPending || (firstPage.isError && firstPage.isFetching) ? 'loading' : firstPage.isError ? 'failed' : 'ready'
+    firstPage.data !== undefined ? 'ready' : firstPage.isError && !firstPage.isFetching ? 'failed' : 'loading'
 
   const update = (patch: Partial<PatternQuery>) => setQuery((cur) => ({ ...cur, ...patch }))
 

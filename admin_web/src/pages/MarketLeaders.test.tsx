@@ -3,7 +3,7 @@
 // 데이터 조회 방식을 바꿔도 이 테스트는 그대로 통과해야 한다.
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { fireEvent, screen, waitFor } from '@testing-library/react'
-import { deferred, renderWithClient } from '../test/query'
+import { deferred, refetchActiveFailing, renderWithClient } from '../test/query'
 import type { CanslimItem, CanslimMarket, CanslimScreen, ScreenFilters } from '../leaders/types/screener'
 
 type R = { markets: CanslimMarket[]; screen: CanslimScreen }
@@ -102,5 +102,15 @@ describe('MarketLeaders', () => {
     fireEvent.click(screen.getByRole('button', { name: '필터 바꾸기' }))
     await waitFor(() => expect(getCanslimScreen).toHaveBeenCalledTimes(2))
     expect(await screen.findByText('상세 A')).toBeTruthy()
+  })
+
+  it('캐시된 데이터가 있을 때 재조회가 실패해도 목록이 그대로', async () => {
+    getCanslimScreen.mockResolvedValue(res('2026-11-26', 1, ['A']))
+    const { client } = renderWithClient(<MarketLeaders />)
+    await screen.findByText('종목A')
+    await refetchActiveFailing(client, () => getCanslimScreen.mockRejectedValue(new Error('x')))
+    expect(getCanslimScreen).toHaveBeenCalledTimes(2)
+    expect(screen.getByText('종목A')).toBeTruthy()
+    expect(screen.queryByText('목록을 불러오지 못했어요')).toBeNull()
   })
 })
