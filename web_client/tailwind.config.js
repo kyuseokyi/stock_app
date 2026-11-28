@@ -1,3 +1,5 @@
+import defaultTheme from 'tailwindcss/defaultTheme'
+
 /** @type {import('tailwindcss').Config} */
 export default {
   content: ['./index.html', './src/**/*.{js,jsx,ts,tsx}'],
@@ -23,6 +25,8 @@ export default {
         naver: '#03C75A', // 네이버 로그인 버튼(공급자 가이드 색 — 흰 글자 대비는 낮지만 공식 가이드가 정한 조합이라 유지)
       },
       borderRadius: { card: '20px', btn: '14px', field: '12px' },
+      // 기준 글꼴 Pretendard — 받기 전·실패 시엔 시스템 글꼴
+      fontFamily: { sans: ['"Pretendard Variable"', 'Pretendard', ...defaultTheme.fontFamily.sans] },
     },
   },
   plugins: [],

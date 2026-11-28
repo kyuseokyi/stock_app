@@ -57,3 +57,16 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .api-progress-bar { animation: none; width: 100%; opacity: 0.6; }
 }
+
+/* 넓은 화면(lg, 1024px+)은 작은 글자를 한 단계 키운다 — 휴대폰 크기 그대로면 1366px 화면에서 글자가 작아 보인다.
+   유틸리티(@tailwind utilities) 뒤에 두어 같은 선택자 우선순위에서 이긴다. 휴대폰 폭은 그대로. */
+@media (min-width: 1024px) {
+  .text-xs {
+    font-size: 0.875rem; /* 12 → 14px */
+    line-height: 1.25rem;
+  }
+  .text-sm {
+    font-size: 1rem; /* 14 → 16px */
+    line-height: 1.5rem;
+  }
+}
