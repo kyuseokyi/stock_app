@@ -291,12 +291,12 @@ async def test_reports_paging_shape(api, env):
 
 # ---------------- 일괄 분석(서비스 — Celery 태스크 본문) ----------------
 
-def _surge(factory, d, rows):
+def _surge(factory, d, rows, close=10_000, value=5_000_000_000):
     with factory() as s:
         for t, rank in rows:
-            s.add(DailySurgeStock(trade_date=d, ticker=t, name=t, market="KOSDAQ", close=1, prev_close=1,
-                                  change_price=0, change_rate=10, volume=1, trading_value=1, is_surge=rank is not None,
-                                  surge_rank=rank))
+            s.add(DailySurgeStock(trade_date=d, ticker=t, name=t, market="KOSDAQ", close=close, prev_close=close,
+                                  change_price=0, change_rate=10, volume=1, trading_value=value,
+                                  is_surge=rank is not None, surge_rank=rank))
         s.commit()
 
 
@@ -305,6 +305,16 @@ def test_batch_surge_targets_latest_day(env):
     _surge(env["factory"], date(2026, 11, 26), [("B", 2), ("A", 1), ("C", None)])
     assert rs.batch_targets("surge", 5) == ["A", "B"]
     assert rs.batch_targets("surge", 1) == ["A"]
+
+
+def test_batch_surge_skips_illiquid_penny_stocks(env):
+    """동전주(1,000원 미만)이면서 거래대금 10억 미만이면 대상에서 뺀다. 둘 중 하나만 해당하면 남긴다."""
+    d = date(2026, 11, 26)
+    _surge(env["factory"], d, [("PENNY", 1)], close=850, value=300_000_000)       # 빠짐
+    _surge(env["factory"], d, [("PENNYOK", 2)], close=850, value=2_000_000_000)   # 동전주지만 거래 많음
+    _surge(env["factory"], d, [("THIN", 3)], close=15_000, value=300_000_000)     # 거래 적지만 동전주 아님
+    _surge(env["factory"], d, [("EDGE", 4)], close=1_000, value=999_999_999)      # 1,000원은 동전주 아님
+    assert rs.batch_targets("surge", 5) == ["PENNYOK", "THIN", "EDGE"]
 
 
 def test_batch_leaders_uses_canslim_screen(env, monkeypatch):
