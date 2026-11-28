@@ -38,6 +38,16 @@ export function formatShortDate(iso: string | null | undefined): string {
   return m ? `${m[1]}.${m[2]}` : iso
 }
 
+/** 브리핑 배지·창 제목 — 토요일 날짜면 주간 마감 브리핑(백엔드가 토요일 행으로 저장, 응답에 따로 구분 값이 없다) */
+export function briefLabel(iso: string | null | undefined): { badge: string; title: string } {
+  const m = iso ? /^(\d{4})-(\d{2})-(\d{2})/.exec(iso) : null
+  // 날짜만 있는 값 — UTC 로 요일을 구해 기기 시간대에 따라 하루 밀리지 않게
+  const saturday = m ? new Date(Date.UTC(+m[1], +m[2] - 1, +m[3])).getUTCDay() === 6 : false
+  return saturday
+    ? { badge: 'AI 주간 마감 브리핑', title: 'AI 주간 마감 브리핑' }
+    : { badge: 'AI 장전 브리핑 (08:30)', title: 'AI 장전 브리핑' }
+}
+
 type IndexClock = Pick<MarketIndex, 'region' | 'date' | 'live' | 'asOf'>
 const HHMM = /^\d{2}:\d{2}$/
 

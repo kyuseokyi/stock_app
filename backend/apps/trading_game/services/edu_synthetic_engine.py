@@ -236,19 +236,19 @@ def build_edu_comment(candles: list[dict], prev: dict | None) -> tuple[str, str]
     elif ma20 and prev_ma20 and prev_close < prev_ma20 and c > ma20:
         tag, advice = "20일선 돌파", "20일선 위에서 종가가 유지되는지 다음 봉을 확인하세요."
     elif ma20 and prev_ma20 and prev_close > prev_ma20 and c < ma20:
-        tag, advice = "20일선 이탈", "20일선 아래로 내려왔습니다. 추세 약화 신호인지 확인하세요."
+        tag, advice = "20일선 이탈", "20일선 아래로 내려왔어요. 추세가 약해지는 신호인지 확인해 보세요."
     elif poc and prev_close <= poc < c:
-        tag, advice = "POC 매물대 돌파", f"매물대 중심({_fmt(poc)}) 위 안착 여부가 관건입니다."
+        tag, advice = "POC 매물대 돌파", f"매물대 중심({_fmt(poc)}) 위에 자리 잡는지가 관건이에요."
     elif poc and prev_close >= poc > c:
-        tag, advice = "POC 매물대 이탈", f"매물대 중심({_fmt(poc)})이 이제 저항이 될 수 있습니다."
+        tag, advice = "POC 매물대 이탈", f"매물대 중심({_fmt(poc)})이 이제 저항이 될 수 있어요."
     elif bearish and upper_wick >= 2 * max(body, 1):
         tag, advice = "윗꼬리 음봉", "위쪽 매도 물량이 많았다는 뜻 — 저항선 근처라면 추격 매수를 조심하세요."
     elif bullish and lower_wick >= 2 * max(body, 1):
-        tag, advice = "아래꼬리 양봉", "아래에서 받쳐 주는 매수세가 있었습니다. 지지선 확인 신호인지 살펴보세요."
+        tag, advice = "아래꼬리 양봉", "아래에서 받쳐 주는 매수세가 있었어요. 지지선 확인 신호인지 살펴보세요."
     elif heavy and bullish:
-        tag, advice = "거래량 급증 양봉", "거래량이 실린 상승은 신뢰도가 높습니다. 다음 봉 지지 여부를 확인하세요."
+        tag, advice = "거래량 급증 양봉", "거래량이 실린 상승은 신뢰도가 높아요. 다음 봉에서 지지되는지 확인해 보세요."
     elif heavy and bearish:
-        tag, advice = "거래량 급증 음봉", "거래량이 실린 하락입니다. 무리한 물타기보다 손절 기준을 먼저 세우세요."
+        tag, advice = "거래량 급증 음봉", "거래량이 실린 하락이에요. 무리한 물타기보다 손절 기준을 먼저 세워 보세요."
     elif ma5 and ma20 and ma60 and ma5 > ma20 > ma60:
         tag, advice = "정배열 유지", f"단기 지지선({_fmt(sup)}) 유지 여부를 확인하세요."
     elif ma5 and ma20 and ma60 and ma5 < ma20 < ma60:
@@ -264,12 +264,12 @@ def build_edu_comment(candles: list[dict], prev: dict | None) -> tuple[str, str]
     if refs and all(above for _, above in refs):
         where = " 위에서 "
         names = "과 ".join(n for n, _ in refs)
-        first = f"{names}{where}{vol_txt}{shape}이 출현했습니다."
+        first = f"{names}{where}{vol_txt}{shape}이 나왔어요."
     elif refs and not any(above for _, above in refs):
         names = "과 ".join(n for n, _ in refs)
-        first = f"{names} 아래에서 {vol_txt}{shape}이 출현했습니다."
+        first = f"{names} 아래에서 {vol_txt}{shape}이 나왔어요."
     else:
-        first = f"주요 기준선 사이에서 {vol_txt}{shape}이 출현했습니다."
+        first = f"주요 기준선 사이에서 {vol_txt}{shape}이 나왔어요."
     return tag, f"{first} {advice}"
 
 

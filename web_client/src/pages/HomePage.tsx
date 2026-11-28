@@ -15,29 +15,32 @@ export default function HomePage() {
   const wide = useMediaQuery('(min-width: 1024px)')
   const ads = useAdConfig()
   return (
-    <div className="space-y-8">
-      {/* 탭 제목·스크린리더용 페이지 제목(화면에는 섹션 제목이 보인다) */}
+    <>
+      {/* 탭 제목·스크린리더용 페이지 제목(화면에는 섹션 제목이 보인다).
+          space-y-8 밖에 둔다 — 안에 두면 보이지 않는 이 제목이 '앞 형제'가 되어 첫 섹션 위에 여백 32px 이 더 붙는다 */}
       <h1 className="sr-only">FunNote 홈</h1>
+      <div className="space-y-8">
+        <HomeFundCard />
 
-      <HomeFundCard />
+        {/* 옆 칸(교육 카드·광고)이 둘 다 없으면 aside 가 비므로 숨기고, 넓은 화면도 1단으로 — 빈 20rem 칸이 남지 않게 */}
+        <div className="space-y-8 lg:grid lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-start lg:gap-8 lg:space-y-0 lg:[&:has(>aside:empty)]:grid-cols-1">
+          <FeaturedPosts
+            limit={wide ? 4 : 2}
+            title={
+              <>
+                <span aria-hidden>📌 </span>추천 블로그 글
+              </>
+            }
+            moreLabel="블로그 전체 보기 ›"
+          />
+          <aside aria-label="실전 투자 교육" className="empty:hidden">
+            <HomeGameEduCard />
+            <AdSlot config={ads} slotKey="WEB_HOME_SIDEBAR" className="mt-3" />
+          </aside>
+        </div>
 
-      <div className="space-y-8 lg:grid lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-start lg:gap-8 lg:space-y-0">
-        <FeaturedPosts
-          limit={wide ? 4 : 2}
-          title={
-            <>
-              <span aria-hidden>📌 </span>추천 블로그 글
-            </>
-          }
-          moreLabel="블로그 전체 보기 ›"
-        />
-        <aside aria-label="실전 투자 교육">
-          <HomeGameEduCard />
-          <AdSlot config={ads} slotKey="WEB_HOME_SIDEBAR" className="mt-3" />
-        </aside>
+        <HomeMarketReference />
       </div>
-
-      <HomeMarketReference />
-    </div>
+    </>
   )
 }

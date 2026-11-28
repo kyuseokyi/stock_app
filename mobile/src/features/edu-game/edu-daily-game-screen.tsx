@@ -20,7 +20,7 @@ import type { EduActionRequest, EduLeaderboard, EduState } from './types';
 
 const CLOCK_TICK_MS = 30_000; // 남은 시간 문구 갱신
 const SETTLE_GRACE_MS = 2 * 60_000; // 정산 시각이 이만큼 지나면 새 캔들을 받으러 한 번 다시 묻는다
-const DEFAULT_DISCLAIMER = '본 차트는 투자 교육을 위해 서버가 자체 생성한 가상 일봉 데이터이며 실제 상장 종목과 무관합니다.';
+const DEFAULT_DISCLAIMER = '본 차트는 투자 교육을 위해 서버가 자체 생성한 가상 일봉 데이터로, 실제 상장 종목과 관계없어요.';
 
 /**
  * 교육용 합성 종가 게임 화면(docs/edu_synthetic_daily_game_spec_and_plan.md 5절) — 실시간 게임(GameScreen)과 완전히 별개.

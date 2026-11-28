@@ -34,7 +34,7 @@ DISABLED_DETAIL = "edu_game_disabled"
 
 DEFAULT_TITLE = "[교육 지수] AI·반도체 모멘텀 가상그룹"
 DEFAULT_THEME = "IT/반도체"
-DISCLAIMER = "본 차트는 투자 교육을 위해 서버가 자체 생성한 가상 일봉 데이터이며 실제 상장 종목과 무관합니다."
+DISCLAIMER = "본 차트는 투자 교육을 위해 서버가 자체 생성한 가상 일봉 데이터로, 실제 상장 종목과 관계없어요."
 
 RATIOS = (Decimal("0.25"), Decimal("0.5"), Decimal("1.0"))
 BASE_LEVERAGES = (1, 2)
@@ -565,7 +565,7 @@ async def submit_daily_action(
     if action in ENTER_ACTIONS and payload.get("leverage", 1) == academy_service.ACADEMY_LEVERAGE \
             and not await academy_service.is_unlocked(db, user_id):
         raise EduGameError(
-            "LEVERAGE_LOCKED", "5배 레버리지는 아카데미 리스크 관리 퀴즈를 통과해야 사용할 수 있습니다.", 403,
+            "LEVERAGE_LOCKED", "5배 레버리지는 아카데미 리스크 관리 퀴즈를 통과해야 쓸 수 있어요.", 403,
         )
     await _ensure_account(db, user_id, season)
 
@@ -617,7 +617,7 @@ async def submit_daily_action(
         acc.pos_opened_day_index = day
         row.ratio, row.leverage = ratio, leverage
         row.stop_loss_price, row.take_profit_price = Decimal(sl), Decimal(tp)
-        message = f"{'상승' if side == LONG else '하락'} 진입을 예약했어요. 다음 종가 캔들에서 손익이 정산됩니다."
+        message = f"{'상승' if side == LONG else '하락'} 진입을 예약했어요. 다음 종가 캔들에서 손익이 정산돼요."
     elif action == "HOLD_WATCH":
         bonus = HOLD_WATCH_BONUS
         refresh_totals(acc, season, price)  # 관망은 무포지션 — 지급 직전 ROI 를 현재 값으로
@@ -640,7 +640,7 @@ async def submit_daily_action(
             acc.pos_stop_loss, acc.pos_take_profit = new_sl, new_tp
         row.leverage = acc.pos_leverage
         row.stop_loss_price, row.take_profit_price = acc.pos_stop_loss, acc.pos_take_profit
-        message = "포지션을 유지해요. 다음 종가 캔들에서 다시 평가됩니다."
+        message = "포지션을 유지해요. 다음 종가 캔들에서 다시 평가해요."
     elif action == "PARTIAL_CLOSE":
         size = Decimal(acc.pos_size_amount)
         half = (size / 2).quantize(CENT, rounding=ROUND_DOWN)
@@ -649,7 +649,7 @@ async def submit_daily_action(
         acc.pos_size_amount = size - half
         row.leverage, row.realized_pnl = acc.pos_leverage, pnl
         row.stop_loss_price, row.take_profit_price = acc.pos_stop_loss, acc.pos_take_profit
-        message = "절반을 오늘 종가로 확정했어요. 나머지 50%는 계속 보유합니다."
+        message = "절반을 오늘 종가로 확정했어요. 나머지 50%는 계속 보유해요."
     else:  # FULL_CLOSE
         size = Decimal(acc.pos_size_amount)
         pnl = position_pnl(acc.pos_side, acc.pos_entry_price, price, size, acc.pos_leverage)

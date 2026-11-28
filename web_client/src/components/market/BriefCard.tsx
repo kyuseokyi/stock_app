@@ -3,7 +3,7 @@ import Card from '../ui/Card'
 import Modal from '../ui/Modal'
 import { AI_NOTICE } from './SectionHead'
 import NewsSources from '../ai/NewsSources'
-import { formatShortDate } from '../../lib/marketDashboard'
+import { briefLabel, formatShortDate } from '../../lib/marketDashboard'
 import type { MorningBrief, SectorNote } from '../../types/marketRest'
 
 function Block({ title, children }: { title: string; children: React.ReactNode }) {
@@ -31,15 +31,16 @@ function Sectors({ title, items, cls }: { title: string; items: SectorNote[]; cl
   )
 }
 
-// AI 장전 브리핑 — 블루 배너에 헤드라인만, 누르면 수혜·주의 섹터·체크포인트·요약(앱 BriefCard 와 같은 구성).
+// AI 장전 브리핑(토요일은 주간 마감 브리핑) — 블루 배너에 헤드라인만, 누르면 수혜·주의 섹터·체크포인트·요약(앱 BriefCard 와 같은 구성).
 export default function BriefCard({ brief }: { brief: MorningBrief }) {
   const [open, setOpen] = useState(false)
+  const label = briefLabel(brief.date) // 토요일은 주간 마감 브리핑 — 문구를 고정하면 주간 내용에 '장전'이 붙는다
   return (
     <>
-      <Card as="section" aria-label="AI 장전 브리핑" padding="none" className="bg-sky-soft">
+      <Card as="section" aria-label={label.title} padding="none" className="bg-sky-soft">
         <button type="button" onClick={() => setOpen(true)} className="block w-full rounded-card p-4 text-left">
           <span className="flex items-center gap-2">
-            <span className="rounded-full bg-surface px-2 py-0.5 text-xs font-bold text-brand-strong">AI 장전 브리핑 (08:30)</span>
+            <span className="rounded-full bg-surface px-2 py-0.5 text-xs font-bold text-brand-strong">{label.badge}</span>
             {brief.date && <span className="text-xs text-ink-muted">{formatShortDate(brief.date)}</span>}
           </span>
           <span className="mt-2 block text-pretty text-base font-bold text-ink">{brief.headline}</span>
@@ -49,7 +50,7 @@ export default function BriefCard({ brief }: { brief: MorningBrief }) {
         <NewsSources sources={brief.sources} className="-mt-1 px-4 pb-4" />
       </Card>
       {open && (
-        <Modal title="AI 장전 브리핑" onClose={() => setOpen(false)}>
+        <Modal title={label.title} onClose={() => setOpen(false)}>
           <div className="space-y-4">
             <p className="text-pretty text-base font-bold text-ink">{brief.headline}</p>
             <Sectors title="수혜 예상 섹터" items={brief.bullishSectors} cls="text-up" />

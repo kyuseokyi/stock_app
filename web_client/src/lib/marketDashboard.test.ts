@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { MacroValue, MarketIndex } from '../types/market'
 import { normalizeInvestorFlow, normalizeMovers } from './marketRest'
-import { flowCaption, formatBasis, formatEok, formatShortDate, hasFlowData, indexHeaderBasis, marketSession, moversTitle, parseKst, splitOverview, tickerNames } from './marketDashboard'
+import { briefLabel, flowCaption, formatBasis, formatEok, formatShortDate, hasFlowData, indexHeaderBasis, marketSession, moversTitle, parseKst, splitOverview, tickerNames } from './marketDashboard'
 
 describe('formatBasis (KST 기준 시각)', () => {
   it('오프셋 있는 ISO', () => {
@@ -138,5 +138,16 @@ describe('moversTitle', () => {
   it('원인이 없으면(서버 기본 꺼짐) "급등락" 만', () => {
     expect(moversTitle([row(null)], [])).toBe('급등락')
     expect(moversTitle([], [])).toBe('급등락')
+  })
+})
+
+describe('briefLabel (브리핑 배지 문구)', () => {
+  it('토요일 날짜는 주간 마감 브리핑', () => {
+    expect(briefLabel('2026-11-28')).toEqual({ badge: 'AI 주간 마감 브리핑', title: 'AI 주간 마감 브리핑' })
+  })
+  it('평일·날짜 없음은 장전 브리핑', () => {
+    expect(briefLabel('2026-11-27')).toEqual({ badge: 'AI 장전 브리핑 (08:30)', title: 'AI 장전 브리핑' })
+    expect(briefLabel(null)).toEqual({ badge: 'AI 장전 브리핑 (08:30)', title: 'AI 장전 브리핑' })
+    expect(briefLabel('잘못된 값')).toEqual({ badge: 'AI 장전 브리핑 (08:30)', title: 'AI 장전 브리핑' })
   })
 })
