@@ -9,6 +9,7 @@ import { MARKET_REQUEST_TIMEOUT_MS } from '../../lib/marketLive'
 import type { MacroValue, MarketIndex } from '../../types/market'
 import Card from '../ui/Card'
 import { Skeleton } from '../ui/Skeleton'
+import { ODD_LAST_FULL, smColsFor } from '../../lib/tileGrid'
 
 // 홈 최하단 '오늘 시장 참고' — 코스피 · 코스닥 · 미국 대표 지수 · 원/달러만 작게. 전체 시장은 시장 탭(/market).
 // 이 칸만 따로 불러와 실패해도 위 펀드·교육 카드는 그대로 보이고, 이 칸에서만 다시 시도한다.
@@ -64,7 +65,8 @@ function MarketReferenceBody({ access }: { access: MarketAccessFlags | null }) {
       {load.state === 'loading' && (
         <div aria-busy="true" className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           <p role="status" className="sr-only">오늘 시장을 불러오고 있어요</p>
-          {[0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-[76px] rounded-card" />)}
+          {/* 휴대폰은 한 줄(2개)만 — 실제 카드가 2~4개로 바뀌어 4칸을 그리면 다 불러온 뒤 높이가 줄어든다 */}
+          {[0, 1, 2, 3].map((i) => <Skeleton key={i} className={`h-[76px] rounded-card ${i >= 2 ? 'hidden sm:block' : ''}`} />)}
         </div>
       )}
 
@@ -90,7 +92,8 @@ function MarketReferenceBody({ access }: { access: MarketAccessFlags | null }) {
             <p className="text-sm text-ink-muted">시장 데이터는 매일 장 마감 후 갱신돼요.</p>
           </Card>
         ) : (
-          <ul className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          // 열 수를 카드 개수에 맞춘다(주말·시세 비노출은 2~3개) — 늘 4열이면 오른쪽이 빈다
+          <ul className={`grid grid-cols-2 gap-2 ${smColsFor(indices.length + macro.length)} ${ODD_LAST_FULL}`}>
             {indices.map((ix) => (
               <li key={ix.code}>
                 <Card padding="sm" className="h-full">

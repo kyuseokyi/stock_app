@@ -132,12 +132,23 @@ export default function EduDailyGamePage() {
             <h1 className="truncate text-lg font-bold text-ink">{s.season.display_name}</h1>
             {!s.season.hide_name && s.season.theme_category && <p className="text-xs text-ink-muted">{s.season.theme_category}</p>}
           </div>
-          <div className="text-right">
+          {/* 휴대폰에서 이름이 길어 아래 줄로 내려가면 왼쪽 정렬 — 오른쪽 정렬이면 등락률이 어중간하게 들여쓰기돼 보인다 */}
+          <div className="text-left sm:text-right">
             <p className="text-xl font-bold text-ink">{formatPrice(s.today.close)}원</p>
             <p className={`text-sm font-semibold ${pnlClass(s.today.change_pct)}`}>{formatPct(s.today.change_pct)}</p>
           </div>
         </div>
-        <span className={`mt-2 inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${chip.cls}`}>{chip.text}</span>
+        {/* 비로그인 — 좁은 화면은 참가 패널이 첫 화면 밖(차트 아래)이라 여기서 바로 로그인 버튼. 넓은 화면은 옆 패널에 버튼이 보이므로 안내 칩 */}
+        {!s.logged_in && (
+          <Button className="mt-2 lg:hidden" onClick={() => setLoginOpen(true)}>
+            로그인하고 참가하기
+          </Button>
+        )}
+        <span
+          className={`mt-2 rounded-full px-2.5 py-1 text-xs font-semibold ${chip.cls} ${s.logged_in ? 'inline-flex' : 'hidden lg:inline-flex'}`}
+        >
+          {chip.text}
+        </span>
         {acc && (
           <dl className="mt-3 grid grid-cols-3 gap-2 border-t border-line pt-3 text-center text-xs">
             <div>

@@ -3,6 +3,7 @@ import { indexBadge } from '../../lib/marketLive'
 import { THEME } from '../../lib/themeColors'
 import type { MacroValue, MarketIndex } from '../../types/market'
 import Card from '../ui/Card'
+import { ODD_LAST_FULL } from '../../lib/tileGrid'
 
 // 지수 카드(종가·등락·20일 스파크라인) + 미국 거시 지표 카드. 국내·미국은 기준일이 달라 카드마다 날짜를 둔다.
 
@@ -68,7 +69,7 @@ export function MacroCards({ macro }: { macro: MacroValue[] }) {
   return (
     <div>
       <h2 className="mb-2 text-sm font-bold text-ink">미국 경제지표</h2>
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
+      <div className={`grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5 ${ODD_LAST_FULL}`}>
         {macro.map((m) => {
           const diff = m.prev == null ? null : m.value - m.prev
           return (
