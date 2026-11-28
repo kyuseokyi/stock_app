@@ -82,13 +82,21 @@ def list_page(session: Session, *, page: int, page_size: int, ticker: str | None
             "pages": pages}
 
 
+# 거래가 거의 없는 동전주는 일괄 분석에서 뺀다 — 몇 주 체결로 급등이 찍혀 분석 가치가 낮고 AI 비용만 든다.
+# 두 조건을 모두 만족할 때만 뺀다(거래가 활발한 동전주, 거래가 적은 일반 종목은 남긴다).
+PENNY_CLOSE = 1_000            # 원, 종가가 이보다 낮으면 동전주
+PENNY_MIN_VALUE = 1_000_000_000  # 원, 동전주의 당일 거래대금이 이보다 적으면 제외
+
+
 def surge_top(session: Session, limit: int) -> list[str]:
-    """최신 급등락 집계일의 급등 상위 종목코드(surge_rank 오름차순)."""
+    """최신 급등락 집계일의 급등 상위 종목코드(surge_rank 오름차순). 거래 적은 동전주는 뺀다."""
     d = session.scalar(select(func.max(DailySurgeStock.trade_date)))  # 최신 집계일(그날 급등이 없으면 빈 목록)
     if d is None:
         return []
+    illiquid_penny = (DailySurgeStock.close < PENNY_CLOSE) & (DailySurgeStock.trading_value < PENNY_MIN_VALUE)
     rows = session.scalars(
-        select(DailySurgeStock.ticker).where(DailySurgeStock.trade_date == d, DailySurgeStock.is_surge.is_(True))
+        select(DailySurgeStock.ticker).where(DailySurgeStock.trade_date == d, DailySurgeStock.is_surge.is_(True),
+                                             ~illiquid_penny)
         .order_by(DailySurgeStock.surge_rank.asc().nulls_last(), DailySurgeStock.change_rate.desc())
         .limit(limit)
     ).all()
