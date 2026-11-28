@@ -5,6 +5,8 @@ import ReactDOM from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
 import App from './App'
 import ApiProgressBar from './components/ApiProgressBar'
+// Pretendard(가변·한글 부분 글꼴) — 화면에 나온 글자 조각만 내려받는다. 디자인 기준 글꼴(docs/mobile_design_language.md 3장)
+import 'pretendard/dist/web/variable/pretendardvariable-dynamic-subset.css'
 import './index.css'
 import { installChunkReload } from './lib/chunkReload'
 import { installRetry } from './lib/retry'
